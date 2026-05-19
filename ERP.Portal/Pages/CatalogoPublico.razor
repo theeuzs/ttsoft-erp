@@ -1,0 +1,320 @@
+@page "/catalogo"
+@using ERP.Portal.Services
+@inject ApiClient Api
+@inject IJSRuntime JS
+@layout ERP.Portal.Pages.EmptyLayout
+
+<PageTitle>Catálogo de Produtos</PageTitle>
+
+<div style="background:#F8FAFC; min-height:100vh; font-family:'Segoe UI',sans-serif;">
+
+    <!-- Header público -->
+    <div style="background:white; padding:16px 32px; box-shadow:0 2px 8px rgba(0,0,0,.06);
+                display:flex; justify-content:space-between; align-items:center;
+                position:sticky; top:0; z-index:100;">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:28px;">🏗️</span>
+            <div>
+                <div style="font-weight:800; font-size:18px; color:#1E293B;">@_nomeLoja</div>
+                <div style="font-size:12px; color:#94A3B8;">Catálogo de Produtos</div>
+            </div>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center;">
+            <a href="/calculadora-publica"
+               style="background:#1E62A6; color:white; padding:10px 16px; border-radius:8px;
+                      font-weight:700; font-size:13px; text-decoration:none; display:flex;
+                      align-items:center; gap:6px;">
+                🧮 Calculadora de Materiais
+            </a>
+            <a href="@_whatsappLoja" target="_blank"
+               style="background:#25D366; color:white; padding:10px 20px; border-radius:8px;
+                      font-weight:700; font-size:14px; text-decoration:none; display:flex;
+                      align-items:center; gap:6px;">
+                💬 Falar no WhatsApp
+            </a>
+        </div>
+    </div>
+
+    <div style="max-width:1200px; margin:0 auto; padding:24px 16px;">
+
+        <!-- Banner da Calculadora — lead generation -->
+        <div style="background:linear-gradient(135deg,#1E3A5F,#1E62A6); border-radius:14px;
+                    padding:24px 28px; margin-bottom:24px; display:flex;
+                    justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+            <div style="color:white;">
+                <div style="font-size:22px; font-weight:900; margin-bottom:4px;">
+                    🧮 Não sabe quanto material precisa?
+                </div>
+                <div style="opacity:.85; font-size:14px;">
+                    Use nossa calculadora gratuita — informe a metragem e receba a lista completa
+                    de materiais com as quantidades certas para sua obra.
+                </div>
+            </div>
+            <a href="/calculadora-publica"
+               style="background:white; color:#1E62A6; padding:14px 24px; border-radius:10px;
+                      font-weight:800; font-size:14px; text-decoration:none; white-space:nowrap;
+                      display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                Calcular agora →
+            </a>
+        </div>
+
+        <!-- Busca e filtros -->
+        <div style="background:white; border-radius:12px; padding:16px; margin-bottom:24px;
+                    box-shadow:0 2px 8px rgba(0,0,0,.06); display:flex; gap:12px; flex-wrap:wrap;">
+            <input @bind="_busca" @bind:event="oninput" @onkeyup="OnBuscaKeyUp"
+                   placeholder="🔍  Buscar produto..."
+                   style="flex:1; min-width:200px; padding:10px 14px; border:1px solid #E2E8F0;
+                          border-radius:8px; font-size:14px;"/>
+            <select @bind="_categoriaFiltro" @bind:after="BuscarAsync"
+                    style="padding:10px 14px; border:1px solid #E2E8F0; border-radius:8px;
+                           font-size:14px; min-width:160px; background:white;">
+                <option value="">Todas as categorias</option>
+                @foreach (var cat in _categorias)
+                {
+                    <option value="@cat">@cat</option>
+                }
+            </select>
+            <button @onclick="BuscarAsync"
+                    style="background:#1E62A6; color:white; border:none; padding:10px 20px;
+                           border-radius:8px; font-weight:700; cursor:pointer;">
+                Buscar
+            </button>
+        </div>
+
+        <!-- Contador -->
+        <div style="margin-bottom:16px; color:#64748B; font-size:13px;">
+            @_total produto(s) encontrado(s)
+        </div>
+
+        <!-- Grid de produtos -->
+        @if (_loading)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">
+                <div style="font-size:32px; margin-bottom:8px;">⏳</div>
+                Carregando produtos...
+            </div>
+        }
+        else if (_produtos.Count == 0)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">
+                <div style="font-size:40px; margin-bottom:12px;">📦</div>
+                Nenhum produto encontrado.
+            </div>
+        }
+        else
+        {
+            <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:16px;">
+                @foreach (var p in _produtos)
+                {
+                    <div style="background:white; border-radius:12px; overflow:hidden;
+                                box-shadow:0 2px 8px rgba(0,0,0,.06);
+                                transition:transform .2s, box-shadow .2s;"
+                         onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(0,0,0,.10)'"
+                         onmouseout="this.style.transform='';this.style.boxShadow='0 2px 8px rgba(0,0,0,.06)'">
+
+                        <!-- Imagem -->
+                        <div style="background:linear-gradient(135deg,#EFF6FF,#DBEAFE);
+                                    height:160px; display:flex; align-items:center; justify-content:center;">
+                            @if (!string.IsNullOrEmpty(p.ImageUrl))
+                            {
+                                <img src="@p.ImageUrl" alt="@p.Name"
+                                     style="max-height:140px; max-width:100%; object-fit:contain; padding:8px;"/>
+                            }
+                            else
+                            {
+                                <span style="font-size:48px;">🧱</span>
+                            }
+                        </div>
+
+                        <!-- Detalhes -->
+                        <div style="padding:14px;">
+                            <div style="font-weight:700; font-size:14px; color:#1E293B;
+                                        white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
+                                 title="@p.Name">@p.Name</div>
+
+                            @if (!string.IsNullOrEmpty(p.CategoryName))
+                            {
+                                <div style="font-size:11px; color:#94A3B8; margin:3px 0;">@p.CategoryName</div>
+                            }
+
+                            <div style="font-size:22px; font-weight:900; color:#1E62A6; margin:8px 0 4px;">
+                                @p.SalePrice.ToString("C")
+                            </div>
+
+                            <div style="font-size:11px; color:#64748B; margin-bottom:12px;">
+                                por @p.Unit
+                                @if (p.Stock > 0)
+                                {
+                                    <span style="color:#10B981; font-weight:600;">  ✓ Em estoque</span>
+                                }
+                                else
+                                {
+                                    <span style="color:#EF4444;">  ✗ Indisponível</span>
+                                }
+                            </div>
+
+                            <!-- Botão WhatsApp -->
+                            <button @onclick="() => PedirWhatsApp(p)"
+                                    style="width:100%; background:#25D366; color:white; border:none;
+                                           padding:9px; border-radius:8px; font-weight:700;
+                                           font-size:12px; cursor:pointer; margin-bottom:6px;
+                                           display:flex; align-items:center; justify-content:center; gap:5px;">
+                                💬 Pedir por WhatsApp
+                            </button>
+
+                            <!-- Botão Calculadora — sugere o template pelo nome da categoria -->
+                            <a href="@UrlCalculadoraProduto(p)"
+                               style="width:100%; background:#EFF6FF; color:#1E62A6; border:none;
+                                      padding:9px; border-radius:8px; font-weight:700; font-size:12px;
+                                      cursor:pointer; display:flex; align-items:center;
+                                      justify-content:center; gap:5px; text-decoration:none;">
+                                🧮 Calcular quantidade
+                            </a>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Paginação -->
+            @if (_totalPaginas > 1)
+            {
+                <div style="display:flex; justify-content:center; gap:8px; margin-top:32px;">
+                    <button @onclick="PaginaAnterior" disabled="@(_pagina <= 1)"
+                            style="padding:8px 16px; border:1px solid #E2E8F0; border-radius:8px;
+                                   background:white; cursor:pointer;">← Anterior</button>
+                    <span style="padding:8px 16px; color:#64748B; font-size:14px;">
+                        Página @_pagina de @_totalPaginas
+                    </span>
+                    <button @onclick="ProximaPagina" disabled="@(_pagina >= _totalPaginas)"
+                            style="padding:8px 16px; border:1px solid #E2E8F0; border-radius:8px;
+                                   background:white; cursor:pointer;">Próxima →</button>
+                </div>
+            }
+        }
+    </div>
+
+    <!-- Rodapé -->
+    <div style="text-align:center; padding:24px; color:#94A3B8; font-size:12px;
+                border-top:1px solid #E2E8F0; margin-top:32px;">
+        Preços em R$ · Sujeitos a alteração ·
+        <a href="@_whatsappLoja" target="_blank" style="color:#25D366;">
+            Confirme disponibilidade via WhatsApp
+        </a>
+        ·
+        <a href="/calculadora-publica" style="color:#1E62A6;">
+            Calculadora de materiais
+        </a>
+    </div>
+</div>
+
+@code {
+    private List<ProdutoPublico> _produtos   = new();
+    private List<string>        _categorias = new();
+    private string   _busca           = "";
+    private string   _categoriaFiltro = "";
+    private int      _pagina          = 1;
+    private int      _totalPaginas    = 1;
+    private int      _total           = 0;
+    private bool     _loading         = true;
+    private string   _nomeLoja        = "ConstruTTor";
+    private string   _whatsappLoja    = "https://wa.me/";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var cfg = await Api.GetAsync<ConfigPublica>("api/Config/public");
+            if (cfg != null)
+            {
+                _nomeLoja = cfg.NomeFantasia;
+                var tel = new string(cfg.Telefone?.Where(char.IsDigit).ToArray() ?? []);
+                if (tel.Length >= 10)
+                {
+                    if (!tel.StartsWith("55")) tel = "55" + tel;
+                    _whatsappLoja = $"https://wa.me/{tel}";
+                }
+            }
+        }
+        catch { }
+
+        await CarregarAsync();
+    }
+
+    private async Task CarregarAsync()
+    {
+        _loading = true;
+        try
+        {
+            var url = $"api/Products/catalogo?page={_pagina}&pageSize=24" +
+                      $"&search={Uri.EscapeDataString(_busca)}" +
+                      $"&categoria={Uri.EscapeDataString(_categoriaFiltro)}";
+
+            var result = await Api.GetAsync<PagedPublico>(url);
+            _produtos     = result?.Items?.ToList() ?? new();
+            _total        = result?.TotalItems ?? 0;
+            _totalPaginas = _total == 0 ? 1 : (int)Math.Ceiling((double)_total / 24);
+
+            if (_categorias.Count == 0 && _produtos.Count > 0)
+                _categorias = _produtos
+                    .Select(p => p.CategoryName)
+                    .Where(c => !string.IsNullOrEmpty(c))
+                    .Distinct()
+                    .OrderBy(c => c)
+                    .ToList()!;
+        }
+        catch { }
+        finally { _loading = false; }
+    }
+
+    private async Task BuscarAsync()      { _pagina = 1; await CarregarAsync(); }
+    private async Task PaginaAnterior()   { if (_pagina > 1) { _pagina--; await CarregarAsync(); } }
+    private async Task ProximaPagina()    { if (_pagina < _totalPaginas) { _pagina++; await CarregarAsync(); } }
+    private async Task OnBuscaKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") await BuscarAsync(); }
+
+    /// <summary>
+    /// Sugere o template da Calculadora com base na categoria do produto.
+    /// Ex: produto de "Piso" → /calculadora-publica#piso_ceramico
+    /// </summary>
+    private string UrlCalculadoraProduto(ProdutoPublico p)
+    {
+        var cat = (p.CategoryName ?? "").ToLower();
+        var template = cat switch
+        {
+            var c when c.Contains("piso")     || c.Contains("cerâmic") || c.Contains("porcelan") => "piso_ceramico",
+            var c when c.Contains("tinta")    || c.Contains("pintura")                            => "pintura_latex",
+            var c when c.Contains("tijolo")   || c.Contains("alvenar")                            => "alvenaria",
+            var c when c.Contains("reboco")   || c.Contains("argamas") || c.Contains("massa")     => "reboco_interno",
+            var c when c.Contains("telhado")  || c.Contains("telha")                              => "telhado_ceramica",
+            var c when c.Contains("elétric")  || c.Contains("fio")     || c.Contains("eletro")    => "eletrica_residencial",
+            var c when c.Contains("hidrául")  || c.Contains("tubo")    || c.Contains("cano")      => "hidraulica_residencial",
+            var c when c.Contains("imperm")   || c.Contains("manta")                              => "impermeabilizacao",
+            var c when c.Contains("forro")                                                         => "forro_pvc",
+            _                                                                                       => ""
+        };
+
+        return string.IsNullOrEmpty(template)
+            ? "/calculadora-publica"
+            : $"/calculadora-publica?template={template}";
+    }
+
+    private async Task PedirWhatsApp(ProdutoPublico p)
+    {
+        var texto = $"Olá! Tenho interesse no produto:\n\n" +
+                    $"📦 *{p.Name}*\n" +
+                    $"💰 Preço: {p.SalePrice:C} por {p.Unit}\n" +
+                    (p.Barcode != null ? $"🔢 Código: {p.Barcode}\n" : "") +
+                    $"\nPoderia me informar disponibilidade e prazo de entrega?";
+
+        var enc = Uri.EscapeDataString(texto);
+        var url = _whatsappLoja.Contains("?")
+            ? _whatsappLoja + "&text=" + enc
+            : _whatsappLoja + "?text=" + enc;
+
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    record ProdutoPublico(Guid Id, string Name, string? CategoryName, string? Barcode,
+        string Unit, decimal SalePrice, decimal Stock, string? ImageUrl);
+    record PagedPublico(IEnumerable<ProdutoPublico> Items, int TotalItems);
+    record ConfigPublica(string NomeFantasia, string? Telefone);
+}

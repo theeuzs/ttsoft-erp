@@ -1,0 +1,229 @@
+@page "/motorista"
+@using ERP.Portal.Services
+@inject ApiClient Api
+@inject AuthService Auth
+@inject IJSRuntime JS
+
+<PageTitle>🚚 Entregas — Motorista</PageTitle>
+
+<!-- PWA: instala como app no celular (add-to-homescreen) -->
+<div style="background:#0F172A; min-height:100vh; color:white; font-family:'Segoe UI',sans-serif;">
+
+    <!-- Header -->
+    <div style="background:#1E293B; padding:16px 20px; display:flex; justify-content:space-between;
+                align-items:center; position:sticky; top:0; z-index:100; box-shadow:0 2px 8px rgba(0,0,0,.3);">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:24px;">🚚</span>
+            <div>
+                <div style="font-weight:800; font-size:16px;">Minhas Entregas</div>
+                <div style="color:#64748B; font-size:12px;">@DateTime.Today.ToString("dd/MM/yyyy (dddd)")</div>
+            </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-size:13px; color:#64748B;">@_pendentes pendentes</span>
+            <button @onclick="CarregarAsync"
+                    style="background:#1E62A6; color:white; border:none; width:36px; height:36px;
+                           border-radius:50%; font-size:16px; cursor:pointer;">↻</button>
+        </div>
+    </div>
+
+    <!-- KPIs compactos -->
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:#0F172A;
+                border-bottom:1px solid #1E293B;">
+        @KpiMini("✅", "Entregues", _entregues.ToString(), "#10B981")
+        @KpiMini("⏳", "Pendentes", _pendentes.ToString(), "#F59E0B")
+        @KpiMini("📍", "Total", _total.ToString(), "#1E62A6")
+    </div>
+
+    <!-- Loading -->
+    @if (_loading)
+    {
+        <div style="text-align:center; padding:60px; color:#64748B;">
+            <div style="font-size:32px; margin-bottom:8px;">⏳</div>
+            Carregando rotas...
+        </div>
+    }
+    else if (_entregas.Count == 0)
+    {
+        <div style="text-align:center; padding:60px; color:#64748B;">
+            <div style="font-size:40px; margin-bottom:12px;">🎉</div>
+            <div style="font-size:16px; font-weight:700;">Sem entregas para hoje!</div>
+        </div>
+    }
+    else
+    {
+        <!-- Lista de paradas -->
+        <div style="padding:16px; display:flex; flex-direction:column; gap:12px;">
+            @for (int i = 0; i < _entregas.Count; i++)
+            {
+                var e = _entregas[i];
+                var idx = i;
+                <div style="background:#1E293B; border-radius:14px; overflow:hidden;
+                            border-left:4px solid @CorStatus(e.Status);">
+
+                    <!-- Cabeçalho da parada -->
+                    <div style="padding:16px; display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div style="flex:1;">
+                            <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+                                <span style="background:#0F172A; color:white; width:28px; height:28px;
+                                             border-radius:50%; display:flex; align-items:center; justify-content:center;
+                                             font-size:13px; font-weight:800; flex-shrink:0;">
+                                    @(idx + 1)
+                                </span>
+                                <span style="font-weight:800; font-size:15px;">@e.ClienteNome</span>
+                            </div>
+                            <div style="color:#94A3B8; font-size:13px; margin-bottom:4px;">
+                                📍 @e.EnderecoCompleto
+                            </div>
+                            @if (!string.IsNullOrEmpty(e.Referencia))
+                            {
+                                <div style="color:#64748B; font-size:12px;">Ref: @e.Referencia</div>
+                            }
+                            @if (!string.IsNullOrEmpty(e.JanelaHorario))
+                            {
+                                <div style="color:#F59E0B; font-size:12px; margin-top:4px;">🕐 @e.JanelaHorario</div>
+                            }
+                        </div>
+                        <span style="background:@BgStatus(e.Status); color:@CorStatus(e.Status);
+                                     padding:4px 10px; border-radius:20px; font-size:11px;
+                                     font-weight:700; white-space:nowrap; margin-left:10px;">
+                            @e.StatusTexto
+                        </span>
+                    </div>
+
+                    <!-- Ações -->
+                    @if (e.Status is "Pendente" or "EmRota")
+                    {
+                        <div style="padding:0 16px 16px; display:flex; gap:8px;">
+                            <button @onclick="() => AbrirMaps(e.EnderecoCompleto)"
+                                    style="flex:1; background:#0F172A; color:#64748B; border:none; padding:10px;
+                                           border-radius:8px; font-size:13px; font-weight:600; cursor:pointer;">
+                                🗺️ Navegar
+                            </button>
+                            <button @onclick="() => MarcarEntregue(e.Id)"
+                                    style="flex:2; background:#10B981; color:white; border:none; padding:10px;
+                                           border-radius:8px; font-size:13px; font-weight:700; cursor:pointer;">
+                                ✅ Confirmar Entrega
+                            </button>
+                        </div>
+                    }
+                    @if (e.Status == "Entregue")
+                    {
+                        <div style="padding:0 16px 12px; color:#10B981; font-size:12px; font-weight:600;">
+                            ✅ Entregue com sucesso
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Toast de confirmação -->
+    @if (_toastVisivel)
+    {
+        <div style="position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+                    background:#10B981; color:white; padding:12px 24px; border-radius:12px;
+                    font-weight:700; font-size:14px; box-shadow:0 8px 24px rgba(0,0,0,.3);
+                    z-index:999; animation:slidein .3s ease;">
+            ✅ Entrega confirmada!
+        </div>
+    }
+</div>
+
+<style>
+    @@keyframes slidein { from { opacity:0; transform:translate(-50%, 20px); } to { opacity:1; transform:translateX(-50%); } }
+    * { box-sizing: border-box; }
+    body { margin:0; }
+</style>
+
+@code {
+    private List<EntregaItem> _entregas = new();
+    private bool _loading = true;
+    private bool _toastVisivel = false;
+
+    private int _total     => _entregas.Count;
+    private int _entregues => _entregas.Count(e => e.Status == "Entregue");
+    private int _pendentes => _entregas.Count(e => e.Status is "Pendente" or "EmRota");
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _loading = true;
+        try
+        {
+            // Busca entregas do dia atual — o motorista vê só as dele
+            var hoje = DateTime.Today.ToString("yyyy-MM-dd");
+            var result = await Api.GetAsync<EntregaItem[]>($"api/Entregas?data={hoje}");
+            _entregas = result?.OrderBy(e => e.JanelaHorario ?? "")
+                                .ThenBy(e => e.Status == "Entregue" ? 1 : 0)
+                                .ToList() ?? new();
+        }
+        catch { /* modo offline - mantém dados em cache */ }
+        finally { _loading = false; }
+    }
+
+    private async Task MarcarEntregue(Guid id)
+    {
+        try
+        {
+            await Api.PutAsync($"api/Entregas/{id}/status",
+                new { status = 2 }); // 2 = Entregue
+
+            var e = _entregas.FirstOrDefault(x => x.Id == id);
+            if (e != null)
+            {
+                var idx = _entregas.IndexOf(e);
+                _entregas[idx] = e with { Status = "Entregue", StatusTexto = "Entregue" };
+            }
+
+            // Toast de confirmação
+            _toastVisivel = true;
+            StateHasChanged();
+            await Task.Delay(2000);
+            _toastVisivel = false;
+        }
+        catch
+        {
+            await JS.InvokeVoidAsync("alert", "Erro ao confirmar entrega. Verifique sua conexão.");
+        }
+    }
+
+    private async Task AbrirMaps(string endereco)
+    {
+        var enc = Uri.EscapeDataString(endereco);
+        await JS.InvokeVoidAsync("open",
+            $"https://www.google.com/maps/search/?api=1&query={enc}", "_blank");
+    }
+
+    private static string CorStatus(string s) => s switch
+    {
+        "Entregue"   => "#10B981",
+        "EmRota"     => "#1E62A6",
+        "Cancelada"  => "#EF4444",
+        "Reagendada" => "#8B5CF6",
+        _            => "#F59E0B"
+    };
+
+    private static string BgStatus(string s) => s switch
+    {
+        "Entregue"  => "#064E3B",
+        "EmRota"    => "#1E3A8A",
+        "Cancelada" => "#7F1D1D",
+        _           => "#78350F"
+    };
+
+    private RenderFragment KpiMini(string icon, string label, string valor, string cor) =>
+        @<div style="background:#1E293B; padding:12px; text-align:center;">
+            <span style="font-size:18px;">@icon</span>
+            <div style="color:@cor; font-size:18px; font-weight:800; line-height:1.2;">@valor</div>
+            <div style="color:#64748B; font-size:10px; font-weight:700; text-transform:uppercase;">@label</div>
+        </div>;
+
+    record EntregaItem(Guid Id, string ClienteNome, string EnderecoCompleto,
+        string? Referencia, string? JanelaHorario, string Status, string StatusTexto)
+    {
+        public string Status     { get; init; } = Status;
+        public string StatusTexto { get; init; } = StatusTexto;
+    }
+}

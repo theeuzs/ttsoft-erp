@@ -1,0 +1,344 @@
+@page "/relatorios"
+@using System.Text
+@using ERP.Portal.Services
+@inject ApiClient Api
+@inject IJSRuntime JS
+
+<div style="padding:0 0 24px;">
+    <h2 style="color:#1E293B; font-weight:800; margin:0 0 24px;">📄 Relatórios</h2>
+
+    <div class="relatorios-grid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px;">
+        
+        <div style="background:white; border-radius:12px; padding:24px; box-shadow:0 2px 8px rgba(0,0,0,.06); display:flex; flex-direction:column;">
+            <div style="font-size:32px; margin-bottom:12px;">💰</div>
+            <h3 style="font-size:16px; font-weight:700; color:#1E293B; margin:0 0 8px;">Relatório de Vendas</h3>
+            <p style="font-size:13px; color:#94A3B8; margin:0 0 16px; flex-grow:1;">Vendas por período com totais, vendedores e formas de pagamento.</p>
+            
+            <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
+                <input type="date" @bind="_vendaDe" style="flex:1; padding:8px; border:1px solid #E2E8F0; border-radius:6px; font-size:13px;"/>
+                <input type="date" @bind="_vendaAte" style="flex:1; padding:8px; border:1px solid #E2E8F0; border-radius:6px; font-size:13px;"/>
+            </div>
+            <button @onclick="GerarRelatorioVendas" disabled="@_gerando" style="@BtnStyle">
+                @(_gerando ? "Gerando..." : "📥 Gerar PDF")
+            </button>
+        </div>
+
+        <div style="background:white; border-radius:12px; padding:24px; box-shadow:0 2px 8px rgba(0,0,0,.06); display:flex; flex-direction:column;">
+            <div style="font-size:32px; margin-bottom:12px;">📦</div>
+            <h3 style="font-size:16px; font-weight:700; color:#1E293B; margin:0 0 8px;">Inventário de Estoque</h3>
+            <p style="font-size:13px; color:#94A3B8; margin:0 0 16px; flex-grow:1;">Posição atual do estoque com valor total e produtos críticos.</p>
+            
+            <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; visibility:hidden;">
+                <input type="date" style="flex:1; padding:8px; border:1px solid transparent; height:34px;"/>
+            </div>
+            <button @onclick="GerarRelatorioEstoque" style="@BtnStyle">📥 Gerar PDF</button>
+        </div>
+
+        <div style="background:white; border-radius:12px; padding:24px; box-shadow:0 2px 8px rgba(0,0,0,.06); display:flex; flex-direction:column;">
+            <div style="font-size:32px; margin-bottom:12px;">📊</div>
+            <h3 style="font-size:16px; font-weight:700; color:#1E293B; margin:0 0 8px;">DRE — Resultado</h3>
+            <p style="font-size:13px; color:#94A3B8; margin:0 0 16px; flex-grow:1;">Demonstração do resultado do exercício com margens e despesas.</p>
+            
+            <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
+                <input type="date" @bind="_dreDe" style="flex:1; padding:8px; border:1px solid #E2E8F0; border-radius:6px; font-size:13px;"/>
+                <input type="date" @bind="_dreAte" style="flex:1; padding:8px; border:1px solid #E2E8F0; border-radius:6px; font-size:13px;"/>
+            </div>
+            <button @onclick="GerarRelatorioDRE" style="@BtnStyle">📥 Gerar PDF</button>
+        </div>
+
+        <div style="background:white; border-radius:12px; padding:24px; box-shadow:0 2px 8px rgba(0,0,0,.06); display:flex; flex-direction:column;">
+            <div style="font-size:32px; margin-bottom:12px;">🔵</div>
+            <h3 style="font-size:16px; font-weight:700; color:#1E293B; margin:0 0 8px;">Curva ABC</h3>
+            <p style="font-size:13px; color:#94A3B8; margin:0 0 16px; flex-grow:1;">Classificação de produtos por representatividade no faturamento.</p>
+            
+            <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
+                <input type="date" @bind="_abcDe" style="flex:1; padding:8px; border:1px solid #E2E8F0; border-radius:6px; font-size:13px;"/>
+                <input type="date" @bind="_abcAte" style="flex:1; padding:8px; border:1px solid #E2E8F0; border-radius:6px; font-size:13px;"/>
+            </div>
+            <button @onclick="GerarRelatorioABC" style="@BtnStyle">📥 Gerar PDF</button>
+        </div>
+
+        <div style="background:white; border-radius:12px; padding:24px; box-shadow:0 2px 8px rgba(0,0,0,.06); display:flex; flex-direction:column;">
+            <div style="font-size:32px; margin-bottom:12px;">🔴</div>
+            <h3 style="font-size:16px; font-weight:700; color:#1E293B; margin:0 0 8px;">Inadimplência</h3>
+            <p style="font-size:13px; color:#94A3B8; margin:0 0 16px; flex-grow:1;">Clientes com contas vencidas e valores em aberto.</p>
+            
+            <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; visibility:hidden;">
+                <input type="date" style="flex:1; padding:8px; border:1px solid transparent; height:34px;"/>
+            </div>
+            <button @onclick="GerarRelatorioInadimplencia" style="@BtnStyle">📥 Gerar PDF</button>
+        </div>
+
+        <div style="background:white; border-radius:12px; padding:24px; box-shadow:0 2px 8px rgba(0,0,0,.06); display:flex; flex-direction:column;">
+            <div style="font-size:32px; margin-bottom:12px;">📋</div>
+            <h3 style="font-size:16px; font-weight:700; color:#1E293B; margin:0 0 8px;">SPED EFD</h3>
+            <p style="font-size:13px; color:#94A3B8; margin:0 0 16px; flex-grow:1;">Arquivo EFD-ICMS/IPI para entrega à Receita Federal.</p>
+            
+            <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
+                <input type="date" @bind="_spedDe" style="flex:1; padding:8px; border:1px solid #E2E8F0; border-radius:6px; font-size:13px;"/>
+                <input type="date" @bind="_spedAte" style="flex:1; padding:8px; border:1px solid #E2E8F0; border-radius:6px; font-size:13px;"/>
+            </div>
+            <button @onclick="BaixarSped" style="@BtnStyle background:#8B5CF6;">📥 Baixar .TXT</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_htmlRelatorio))
+    {
+        <div style="margin-top:24px; background:white; border-radius:12px; padding:0; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 24px; border-bottom:1px solid #F1F5F9;">
+                <span style="font-weight:700; color:#1E293B;">Pré-visualização</span>
+                <button @onclick="ImprimirRelatorio" style="background:#1E62A6; color:white; border:none; padding:8px 16px; border-radius:8px; font-weight:700; cursor:pointer;">
+                    🖨️ Imprimir / Salvar PDF
+                </button>
+            </div>
+            <div id="relatorio-preview" style="padding:24px;">
+                @((MarkupString)_htmlRelatorio)
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    @@media print {
+        .erp-shell nav, .erp-shell header, button { display: none !important; }
+        #relatorio-preview { padding: 0 !important; }
+    }
+    @@media (max-width: 768px) {
+        .relatorios-grid { grid-template-columns: 1fr !important; }
+    }
+</style>
+
+@code {
+    private DateTime _vendaDe  = DateTime.Today.AddDays(-30);
+    private DateTime _vendaAte = DateTime.Today;
+    private DateTime _dreDe    = DateTime.Today.AddDays(-30);
+    private DateTime _dreAte   = DateTime.Today;
+    private DateTime _abcDe    = DateTime.Today.AddDays(-30);
+    private DateTime _abcAte   = DateTime.Today;
+    private DateTime _spedDe   = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime _spedAte  = DateTime.Today;
+
+    private string _htmlRelatorio = "";
+    private bool   _gerando       = false;
+
+    private const string BtnStyle = "width:100%; background:#1E62A6; color:white; border:none; padding:10px; border-radius:8px; font-weight:700; cursor:pointer; font-size:14px;";
+
+    private async Task GerarRelatorioVendas()
+    {
+        _gerando = true;
+        // 👇 Correção Fuso Horário 👇
+        var ateCorrigido = _vendaAte.AddDays(1);
+        var vendas = await Api.GetAsync<VendaItem[]>($"api/Sales?from={_vendaDe:yyyy-MM-dd}&to={ateCorrigido:yyyy-MM-dd}") ?? [];
+
+        var sb = new StringBuilder();
+        sb.Append("<h2 style='color:#1E293B;'>Relatório de Vendas</h2>");
+        sb.Append($"<p style='color:#94A3B8;'>Período: {_vendaDe:dd/MM/yyyy} a {_vendaAte:dd/MM/yyyy}</p>");
+        sb.Append("<table style='width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;'>");
+        sb.Append("<thead><tr style='background:#F8FAFC;'>");
+        sb.Append("<th style='padding:8px;text-align:left;border-bottom:2px solid #E2E8F0;'>Data</th>");
+        sb.Append("<th style='padding:8px;text-align:left;border-bottom:2px solid #E2E8F0;'>Cliente</th>");
+        sb.Append("<th style='padding:8px;text-align:left;border-bottom:2px solid #E2E8F0;'>Vendedor</th>");
+        sb.Append("<th style='padding:8px;text-align:right;border-bottom:2px solid #E2E8F0;'>Total</th>");
+        sb.Append("<th style='padding:8px;text-align:center;border-bottom:2px solid #E2E8F0;'>Status</th>");
+        sb.Append("</tr></thead><tbody>");
+
+        foreach (var v in vendas)
+        {
+            sb.Append("<tr style='border-bottom:1px solid #F1F5F9;'>");
+            sb.Append($"<td style='padding:8px;'>{v.SaleDate:dd/MM/yyyy HH:mm}</td>");
+            sb.Append($"<td style='padding:8px;'>{(v.CustomerName ?? "Consumidor Final")}</td>");
+            sb.Append($"<td style='padding:8px;'>{(v.SellerName ?? "—")}</td>");
+            sb.Append($"<td style='padding:8px;text-align:right;font-weight:700;'>{v.Total:C}</td>");
+            sb.Append($"<td style='padding:8px;text-align:center;'>{v.Status}</td>");
+            sb.Append("</tr>");
+        }
+
+        sb.Append("</tbody><tfoot><tr style='background:#F8FAFC;font-weight:800;'>");
+        sb.Append($"<td colspan='3' style='padding:8px;'>TOTAL ({vendas.Length} vendas)</td>");
+        sb.Append($"<td style='padding:8px;text-align:right;color:#27AE60;font-size:16px;'>{vendas.Sum(v => v.Total):C}</td>");
+        sb.Append("<td></td></tr></tfoot></table>");
+
+        _htmlRelatorio = sb.ToString();
+        _gerando = false;
+    }
+
+    private async Task GerarRelatorioEstoque()
+    {
+        var items = await Api.GetAsync<EstoqueItem[]>($"api/Stock") ?? [];
+        
+        var sb = new StringBuilder();
+        sb.Append("<h2 style='color:#1E293B;'>Inventário de Estoque</h2>");
+        sb.Append($"<p style='color:#94A3B8;'>Data: {DateTime.Now:dd/MM/yyyy HH:mm}</p>");
+        sb.Append("<table style='width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;'>");
+        sb.Append("<thead><tr style='background:#F8FAFC;'>");
+        sb.Append("<th style='padding:8px;text-align:left;border-bottom:2px solid #E2E8F0;'>Produto</th>");
+        sb.Append("<th style='padding:8px;text-align:right;border-bottom:2px solid #E2E8F0;'>Estoque</th>");
+        sb.Append("<th style='padding:8px;text-align:right;border-bottom:2px solid #E2E8F0;'>Mínimo</th>");
+        sb.Append("<th style='padding:8px;text-align:right;border-bottom:2px solid #E2E8F0;'>Valor</th>");
+        sb.Append("</tr></thead><tbody>");
+
+        foreach (var p in items)
+        {
+            var bg = p.Stock <= p.MinStock ? "#FFF5F5" : "white";
+            var color = p.Stock <= p.MinStock ? "#EF4444" : "#27AE60";
+            
+            sb.Append($"<tr style='border-bottom:1px solid #F1F5F9;background:{bg};'>");
+            sb.Append($"<td style='padding:8px;font-weight:600;'>{p.Name}</td>");
+            sb.Append($"<td style='padding:8px;text-align:right;color:{color};font-weight:700;'>{p.Stock:F0} {p.Unit}</td>");
+            sb.Append($"<td style='padding:8px;text-align:right;color:#94A3B8;'>{p.MinStock:F0}</td>");
+            sb.Append($"<td style='padding:8px;text-align:right;'>{(p.Stock * p.CostPrice):C}</td>");
+            sb.Append("</tr>");
+        }
+
+        sb.Append("</tbody><tfoot><tr style='background:#F8FAFC;font-weight:800;'>");
+        sb.Append("<td colspan='3' style='padding:8px;'>VALOR TOTAL EM ESTOQUE</td>");
+        sb.Append($"<td style='padding:8px;text-align:right;color:#1E62A6;font-size:16px;'>{items.Sum(p => p.Stock * p.CostPrice):C}</td>");
+        sb.Append("</tr></tfoot></table>");
+
+        _htmlRelatorio = sb.ToString();
+    }
+
+    private async Task GerarRelatorioDRE()
+    {
+        // 👇 Correção Fuso Horário 👇
+        var ateCorrigido = _dreAte.AddDays(1);
+        var dre = await Api.GetAsync<DreDetalhado>($"api/Bi/dre-detalhado?inicio={_dreDe:yyyy-MM-dd}&fim={ateCorrigido:yyyy-MM-dd}");
+        if (dre == null) return;
+
+        var lucroColor = dre.LucroLiquido >= 0 ? "#27AE60" : "#EF4444";
+
+        var sb = new StringBuilder();
+        sb.Append("<h2 style='color:#1E293B;'>DRE — Demonstração do Resultado</h2>");
+        sb.Append($"<p style='color:#94A3B8;'>Período: {_dreDe:dd/MM/yyyy} a {_dreAte:dd/MM/yyyy}</p>");
+        sb.Append("<table style='width:100%;border-collapse:collapse;margin-top:16px;font-size:14px;'>");
+        
+        sb.Append(Linha("Receita Bruta", dre.ReceitaBruta, false));
+        sb.Append(Linha("(-) Descontos", -dre.Descontos, false));
+        sb.Append(LinhaDestaque("(=) Receita Líquida", dre.ReceitaLiquida));
+        sb.Append(Linha("(-) Custo das Mercadorias", -dre.CustoMercadorias, false));
+        sb.Append(LinhaDestaque("(=) Lucro Bruto", dre.LucroBruto));
+        sb.Append(Linha("Margem Bruta", dre.MargemBruta, true));
+        sb.Append(Linha("(-) Despesas Operacionais", -dre.DespesasOperacionais, false));
+        sb.Append(LinhaDestaque("(=) EBITDA", dre.Ebitda));
+        sb.Append(LinhaDestaque("(=) Lucro Líquido", dre.LucroLiquido, lucroColor));
+        sb.Append(Linha("Margem Líquida", dre.MargemLiquida, true));
+        
+        sb.Append("</table>");
+
+        _htmlRelatorio = sb.ToString();
+    }
+
+    private string Linha(string desc, decimal val, bool pct)
+    {
+        var valorFormatado = pct ? $"{val:F1}%" : val.ToString("C");
+        return $"<tr style='border-bottom:1px solid #F1F5F9;'><td style='padding:10px;color:#64748B;'>{desc}</td><td style='padding:10px;text-align:right;font-weight:600;'>{valorFormatado}</td></tr>";
+    }
+
+    private string LinhaDestaque(string desc, decimal val, string? cor = null)
+    {
+        var finalCor = cor ?? "#1E293B";
+        return $"<tr style='background:#F8FAFC;border-bottom:2px solid #E2E8F0;'><td style='padding:10px;font-weight:800;color:#1E293B;'>{desc}</td><td style='padding:10px;text-align:right;font-weight:800;font-size:16px;color:{finalCor};'>{val:C}</td></tr>";
+    }
+
+    private async Task GerarRelatorioABC()
+    {
+        // 👇 Correção Fuso Horário 👇
+        var ateCorrigido = _abcAte.AddDays(1);
+        var abc = await Api.GetAsync<AbcItem[]>($"api/Bi/abc?inicio={_abcDe:yyyy-MM-dd}&fim={ateCorrigido:yyyy-MM-dd}") ?? [];
+
+        var sb = new StringBuilder();
+        sb.Append("<h2 style='color:#1E293B;'>Curva ABC de Produtos</h2>");
+        sb.Append($"<p style='color:#94A3B8;'>Período: {_abcDe:dd/MM/yyyy} a {_abcAte:dd/MM/yyyy}</p>");
+        sb.Append("<table style='width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;'>");
+        sb.Append("<thead><tr style='background:#F8FAFC;'>");
+        sb.Append("<th style='padding:8px;text-align:left;'>Classe</th>");
+        sb.Append("<th style='padding:8px;text-align:left;'>Produto</th>");
+        sb.Append("<th style='padding:8px;text-align:right;'>Total</th>");
+        sb.Append("<th style='padding:8px;text-align:right;'>% Acum.</th>");
+        sb.Append("<th style='padding:8px;text-align:right;'>Margem</th>");
+        sb.Append("</tr></thead><tbody>");
+
+        foreach (var p in abc.Take(30))
+        {
+            var bg = p.Classe == "A" ? "#D1FAE5" : p.Classe == "B" ? "#FEF3C7" : "#F1F5F9";
+            var color = p.Classe == "A" ? "#065F46" : p.Classe == "B" ? "#92400E" : "#64748B";
+            
+            sb.Append("<tr style='border-bottom:1px solid #F1F5F9;'>");
+            sb.Append($"<td style='padding:8px;'><span style='background:{bg};color:{color};padding:2px 8px;border-radius:4px;font-weight:700;'>{p.Classe}</span></td>");
+            sb.Append($"<td style='padding:8px;font-weight:600;'>{p.Nome}</td>");
+            sb.Append($"<td style='padding:8px;text-align:right;'>{p.TotalFinanceiro:C}</td>");
+            sb.Append($"<td style='padding:8px;text-align:right;'>{p.PercentualAcumulado:F1}%</td>");
+            sb.Append($"<td style='padding:8px;text-align:right;'>{p.MargemPercent:F1}%</td>");
+            sb.Append("</tr>");
+        }
+
+        sb.Append("</tbody></table>");
+        _htmlRelatorio = sb.ToString();
+    }
+
+    private async Task GerarRelatorioInadimplencia()
+    {
+        var contas = await Api.GetAsync<ContaItem[]>("api/contas-receber/inadimplentes") ?? [];
+        
+        var sb = new StringBuilder();
+        sb.Append("<h2 style='color:#EF4444;'>Relatório de Inadimplência</h2>");
+        sb.Append($"<p style='color:#94A3B8;'>Data: {DateTime.Now:dd/MM/yyyy} — {contas.Length} contas vencidas</p>");
+        sb.Append("<table style='width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;'>");
+        sb.Append("<thead><tr style='background:#FFF5F5;'>");
+        sb.Append("<th style='padding:8px;text-align:left;'>Descrição</th>");
+        sb.Append("<th style='padding:8px;text-align:left;'>Vencimento</th>");
+        sb.Append("<th style='padding:8px;text-align:right;'>Valor</th>");
+        sb.Append("<th style='padding:8px;text-align:right;'>Recebido</th>");
+        sb.Append("<th style='padding:8px;text-align:right;'>Restante</th>");
+        sb.Append("</tr></thead><tbody>");
+
+        foreach (var c in contas)
+        {
+            sb.Append("<tr style='border-bottom:1px solid #FEE2E2;'>");
+            sb.Append($"<td style='padding:8px;'>{c.Descricao}</td>");
+            sb.Append($"<td style='padding:8px;color:#EF4444;font-weight:700;'>{c.DataVencimento:dd/MM/yyyy}</td>");
+            sb.Append($"<td style='padding:8px;text-align:right;'>{c.ValorTotal:C}</td>");
+            sb.Append($"<td style='padding:8px;text-align:right;color:#27AE60;'>{c.ValorRecebido:C}</td>");
+            sb.Append($"<td style='padding:8px;text-align:right;font-weight:800;color:#EF4444;'>{(c.ValorTotal-c.ValorRecebido):C}</td>");
+            sb.Append("</tr>");
+        }
+
+        sb.Append("</tbody><tfoot><tr style='background:#FFF5F5;font-weight:800;'>");
+        sb.Append("<td colspan='4' style='padding:8px;'>TOTAL EM ATRASO</td>");
+        sb.Append($"<td style='padding:8px;text-align:right;color:#EF4444;font-size:16px;'>{contas.Sum(c => c.ValorTotal - c.ValorRecebido):C}</td>");
+        sb.Append("</tr></tfoot></table>");
+
+        _htmlRelatorio = sb.ToString();
+    }
+
+    private async Task BaixarSped()
+    {
+        // 👇 Correção Fuso Horário 👇
+        var ateCorrigido = _spedAte.AddDays(1);
+        var url = $"api/fiscal/sped/gerar?dataInicio={_spedDe:yyyy-MM-dd}&dataFim={ateCorrigido:yyyy-MM-dd}&razaoSocial=Vila Verde Materiais&cnpj=11222333000181";
+        await JS.InvokeVoidAsync("window.open", url, "_blank");
+    }
+
+    private async Task ImprimirRelatorio()
+        => await JS.InvokeVoidAsync("window.print");
+
+    // Models 
+    // 👇 ATENÇÃO: Se as variáveis JSON voltarem nulas, me avise que trocamos para 'public class' igual no Estoque! 👇
+    record VendaItem(System.Guid Id, DateTime SaleDate, string? CustomerName, string? SellerName, decimal Subtotal, decimal Total, string Status);
+    record EstoqueItem(System.Guid Id, string Name, string? Barcode, string? CategoryName, string Unit, decimal Stock, decimal MinStock, decimal CostPrice);
+    record AbcItem(string Nome, string SKU, string Classe, decimal TotalFinanceiro, decimal PercentualAcumulado, decimal MargemPercent);
+    record ContaItem(System.Guid Id, System.Guid CustomerId, string Descricao, decimal ValorTotal, decimal ValorRecebido, DateTime DataVencimento, string Status, int NumeroParcela, int TotalParcelas);
+    class DreDetalhado
+    {
+        public decimal ReceitaBruta { get; set; }
+        public decimal Descontos { get; set; }
+        public decimal ReceitaLiquida { get; set; }
+        public decimal CustoMercadorias { get; set; }
+        public decimal LucroBruto { get; set; }
+        public decimal MargemBruta { get; set; }
+        public decimal DespesasOperacionais { get; set; }
+        public decimal Ebitda { get; set; }
+        public decimal LucroLiquido { get; set; }
+        public decimal MargemLiquida { get; set; }
+    }
+}

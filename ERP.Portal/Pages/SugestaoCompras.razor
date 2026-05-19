@@ -1,0 +1,291 @@
+@page "/sugestao-compras"
+@using ERP.Portal.Services
+@inject ApiClient Api
+
+<div style="padding:0 0 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">🛒 Sugestão de Compras</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">
+                Baseada no giro dos últimos 30 dias — @(_sugestoes?.Length ?? 0) produto(s) para repor
+            </p>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center;">
+            @if (_selecionados.Any())
+            {
+                <button @onclick="GerarPedido"
+                        style="background:#10B981; color:white; border:none; padding:10px 20px;
+                               border-radius:8px; font-weight:700; cursor:pointer; font-size:14px;">
+                    📦 Gerar Pedido (@_selecionados.Count selecionado@(_selecionados.Count > 1 ? "s" : ""))
+                </button>
+            }
+            <button @onclick="CarregarAsync"
+                    style="background:#F1F5F9; border:none; padding:8px 16px; border-radius:8px;
+                    cursor:pointer; font-size:13px; color:#64748B; font-weight:600;">
+                🔄 Atualizar
+            </button>
+        </div>
+    </div>
+
+    <div style="display:flex; gap:16px; margin-bottom:16px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:#64748B;">
+            <span style="width:12px; height:12px; border-radius:50%; background:#EF4444; display:inline-block;"></span>
+            Crítico — ruptura em até 3 dias
+        </div>
+        <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:#64748B;">
+            <span style="width:12px; height:12px; border-radius:50%; background:#F59E0B; display:inline-block;"></span>
+            Alerta — ruptura em até 7 dias
+        </div>
+        <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:#64748B;">
+            <span style="width:12px; height:12px; border-radius:50%; background:#3B82F6; display:inline-block;"></span>
+            Normal — ruptura em até 45 dias
+        </div>
+        <button @onclick="SelecionarTodos"
+                style="margin-left:auto; background:none; border:1px solid #E2E8F0; padding:4px 12px;
+                       border-radius:20px; font-size:12px; cursor:pointer; color:#64748B;">
+            @(_selecionados.Count == (_sugestoes?.Length ?? -1) ? "Desmarcar todos" : "Selecionar todos")
+        </button>
+    </div>
+
+    @if (_loading)
+    {
+        <div style="text-align:center; padding:60px; color:#94A3B8;">Calculando sugestões...</div>
+    }
+    else if (_sugestoes?.Length == 0)
+    {
+        <div style="text-align:center; padding:60px; background:white; border-radius:12px;
+                    box-shadow:0 2px 8px rgba(0,0,0,.06);">
+            <div style="font-size:48px; margin-bottom:12px;">✅</div>
+            <div style="font-weight:700; color:#1E293B; font-size:16px;">Estoque em dia!</div>
+            <div style="color:#94A3B8; font-size:13px; margin-top:8px;">
+                Nenhum produto com risco de ruptura nos próximos 45 dias.
+            </div>
+        </div>
+    }
+    else
+    {
+        <div style="background:white; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
+            <table style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                        <th style="@Th; width:36px; text-align:center;">
+                            <input type="checkbox"
+                                   checked="@(_selecionados.Count == _sugestoes?.Length)"
+                                   @onchange="SelecionarTodos"/>
+                        </th>
+                        <th style="@Th">PRODUTO</th>
+                        <th style="@Th; text-align:center;">URGÊNCIA</th>
+                        <th style="@Th; text-align:right;">ESTOQUE ATUAL</th>
+                        <th style="@Th; text-align:right;">GIRO/DIA</th>
+                        <th style="@Th; text-align:right;">DIAS RESTANTES</th>
+                        <th style="@Th; text-align:right;">QTD. SUGERIDA</th>
+                        <th style="@Th; text-align:right;">CUSTO TOTAL</th>
+                        <th style="@Th">FORNECEDOR</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in _sugestoes!)
+                    {
+                        var selecionado = _selecionados.Contains(s.ProductId);
+                        var cor = s.Urgencia switch
+                        {
+                            "Critico" => "#EF4444",
+                            "Alerta"  => "#F59E0B",
+                            _         => "#3B82F6"
+                        };
+                        var bg = s.Urgencia switch
+                        {
+                            "Critico" => "#FEF2F2",
+                            "Alerta"  => "#FFFBEB",
+                            _         => "white"
+                        };
+
+                        <tr style="border-bottom:1px solid #F1F5F9; background:@(selecionado ? "#EFF6FF" : bg);">
+                            <td style="@Td; text-align:center;">
+                                <input type="checkbox" checked="@selecionado"
+                                       @onchange="() => ToggleSelecionado(s.ProductId)"/>
+                            </td>
+                            <td style="@Td; font-weight:600; color:#1E293B;">
+                                @s.Nome
+                                @if (!string.IsNullOrEmpty(s.SKU))
+                                {
+                                    <div style="font-size:11px; color:#94A3B8; font-weight:400;">@s.SKU</div>
+                                }
+                            </td>
+                            <td style="@Td; text-align:center;">
+                                <span style="background:@cor; color:white; padding:3px 10px;
+                                             border-radius:20px; font-size:11px; font-weight:700;">
+                                    @s.Urgencia
+                                </span>
+                            </td>
+                            <td style="@Td; text-align:right; font-weight:600;
+                                color:@(s.EstoqueAtual <= s.EstoqueMinimo ? "#EF4444" : "#1E293B");">
+                                @s.EstoqueAtual.ToString("F2")
+                                @if (s.EstoqueAtual <= s.EstoqueMinimo)
+                                {
+                                    <div style="font-size:10px; color:#EF4444;">abaixo do mín.</div>
+                                }
+                            </td>
+                            <td style="@Td; text-align:right; color:#64748B;">
+                                @s.MediaVendas30Dias.ToString("F3")
+                            </td>
+                            <td style="@Td; text-align:right; font-weight:700; color:@cor;">
+                                @(s.DiasParaRuptura == 999 ? "∞" : s.DiasParaRuptura.ToString()) d
+                            </td>
+                            <td style="@Td; text-align:right; font-weight:700; color:#1E62A6;">
+                                @s.QuantidadeSugerida.ToString("F2")
+                            </td>
+                            <td style="@Td; text-align:right;">
+                                @((s.QuantidadeSugerida * s.CustoUnitario).ToString("C"))
+                            </td>
+                            <td style="@Td; font-size:12px; color:#64748B;">@(s.FornecedorNome ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr style="background:#F8FAFC; border-top:2px solid #E2E8F0;">
+                        <td colspan="7" style="@Td; font-weight:700; color:#1E293B; text-align:right;">
+                            Total estimado (@_selecionados.Count selecionado@(_selecionados.Count != 1 ? "s" : "")):
+                        </td>
+                        <td style="@Td; font-weight:800; color:#1E62A6; text-align:right; font-size:15px;">
+                            @(_sugestoes!.Where(s => _selecionados.Contains(s.ProductId)).Sum(s => s.QuantidadeSugerida * s.CustoUnitario).ToString("C"))
+                        </td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    }
+</div>
+
+@if (_mensagem != null)
+{
+    <div style="position:fixed; bottom:24px; right:24px; background:#1E293B; color:white;
+         padding:14px 20px; border-radius:10px; font-size:14px; font-weight:600;
+         box-shadow:0 4px 20px rgba(0,0,0,.3); z-index:500;">
+        @_mensagem
+    </div>
+}
+
+@code {
+    private SugestaoItem[]?     _sugestoes;
+    private HashSet<System.Guid> _selecionados = new();
+    private bool                _loading  = true;
+    private string?             _mensagem;
+
+    private const string Th = "padding:12px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td = "padding:12px 16px; font-size:13px;";
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _loading   = true;
+        _selecionados.Clear();
+        // 👇 A API de Sugestão estava batendo numa URL que o Back-End não conhece. 
+        // 👇 O padrão do nosso Controller é api/Bi/previsao-demanda
+        var previsao = await Api.GetAsync<PrevisaoItem[]>("api/Bi/previsao-demanda") ?? [];
+        
+        // Convertendo o formato da API para o formato esperado pela tela
+        _sugestoes = previsao.Select(p => new SugestaoItem
+        {
+            ProductId          = p.ProductId,
+            Nome               = p.Nome,
+            SKU                = p.Sku,
+            SupplierId         = p.SupplierId,
+            FornecedorNome     = p.SupplierName,
+            EstoqueAtual       = p.EstoqueAtual,
+            EstoqueMinimo      = p.MinStock,
+            MediaVendas30Dias  = p.MediaMensal / 30m, // Estimativa de Giro por Dia
+            DiasParaRuptura    = p.DiasEstoque,
+            QuantidadeSugerida = p.SugestaoCompra,
+            CustoUnitario      = p.CostPrice,
+            Urgencia           = p.DiasEstoque <= 3 ? "Critico" : p.DiasEstoque <= 7 ? "Alerta" : "Normal"
+        }).ToArray();
+        
+        _loading   = false;
+    }
+
+    private void ToggleSelecionado(System.Guid id)
+    {
+        if (!_selecionados.Remove(id)) _selecionados.Add(id);
+    }
+
+    private void SelecionarTodos()
+    {
+        if (_selecionados.Count == _sugestoes?.Length)
+            _selecionados.Clear();
+        else
+        {
+            _selecionados.Clear();
+            foreach (var s in _sugestoes ?? []) _selecionados.Add(s.ProductId);
+        }
+    }
+
+    private async Task GerarPedido()
+    {
+        if (!_selecionados.Any()) return;
+
+        var itens = _sugestoes!
+            .Where(s => _selecionados.Contains(s.ProductId))
+            .Select(s => new
+            {
+                productId    = s.ProductId,
+                productName  = s.Nome,
+                supplierId   = s.SupplierId,
+                quantidade   = s.QuantidadeSugerida,
+                precoUnitario = s.CustoUnitario
+            }).ToList();
+
+        var resp = await Api.PostAsync("api/PurchaseOrder/generate-from-suggestions",
+            new { Items = itens, Notes = "Gerado automaticamente pela sugestão de compras do Portal Web." });
+
+        if (resp.IsSuccessStatusCode)
+        {
+            _mensagem = $"✅ Pedido(s) de compra gerado(s) com sucesso!";
+            _selecionados.Clear();
+            await Task.Delay(3000);
+            _mensagem = null;
+        }
+        else
+        {
+            _mensagem = "❌ Erro ao gerar pedido. Tente novamente.";
+            await Task.Delay(3000);
+            _mensagem = null;
+        }
+    }
+
+    // 👇 O DTO INTERNO DA TELA 👇
+    class SugestaoItem
+    {
+        public System.Guid  ProductId          { get; set; }
+        public string       Nome               { get; set; } = "";
+        public string?      SKU                { get; set; }
+        public System.Guid? SupplierId         { get; set; }
+        public string       FornecedorNome     { get; set; } = "";
+        public decimal      EstoqueAtual       { get; set; }
+        public decimal      EstoqueMinimo      { get; set; }
+        public decimal      MediaVendas30Dias  { get; set; }
+        public int          DiasParaRuptura    { get; set; }
+        public decimal      QuantidadeSugerida { get; set; }
+        public decimal      CustoUnitario      { get; set; }
+        public string       Urgencia           { get; set; } = "";
+    }
+    
+    // 👇 O DTO QUE VEM DA API (Cópia exata do Controller de BI) 👇
+    class PrevisaoItem
+    {
+        public System.Guid ProductId { get; set; }
+        public string Nome { get; set; } = string.Empty;
+        public string? Sku { get; set; }
+        public System.Guid? SupplierId { get; set; }
+        public string? SupplierName { get; set; }
+        public decimal MediaMensal { get; set; }
+        public decimal EstoqueAtual { get; set; }
+        public decimal MinStock { get; set; }
+        public int DiasEstoque { get; set; }
+        public bool AbaixoDoMinimo { get; set; }
+        public decimal SugestaoCompra { get; set; }
+        public decimal CostPrice { get; set; }
+    }
+}

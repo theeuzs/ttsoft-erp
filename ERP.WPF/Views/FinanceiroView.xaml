@@ -1,0 +1,150 @@
+<UserControl x:Class="ERP.WPF.Views.FinanceiroView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource CardBgAlt}">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid>
+            <StackPanel>
+                <TextBlock Text="Contas a Receber" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource TextDark}"/>
+                <TextBlock Text="Controle de fiado, inadimplência e recebimentos" FontSize="13" Foreground="{DynamicResource TextMuted}" Margin="0,4,0,0"/>
+            </StackPanel>
+            <Button Content="↻ Atualizar" Command="{Binding CarregarCommand}"
+                    HorizontalAlignment="Right" VerticalAlignment="Center"
+                    Background="{DynamicResource CorAcento}" Foreground="White"
+                    FontWeight="Bold" Height="34" Padding="16,0" BorderThickness="0" Cursor="Hand">
+                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+            </Button>
+        </Grid>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Background="#F0F9FF" BorderBrush="#BAE6FD" BorderThickness="1" CornerRadius="12" Padding="20">
+                <Border.Effect><DropShadowEffect BlurRadius="10" Opacity="0.05" ShadowDepth="2" Color="Black"/></Border.Effect>
+                <StackPanel>
+                    <TextBlock Text="💰 TOTAL PENDENTE" FontSize="11" FontWeight="Bold" Foreground="#0284C7"/>
+                    <TextBlock Text="{Binding TotalPendente, StringFormat='R$ {0:N2}'}"
+                               FontSize="28" FontWeight="Black" Foreground="#0369A1" Margin="0,8,0,0"/>
+                    <TextBlock Text="Total a receber" FontSize="12" Foreground="#0284C7" Opacity="0.75" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2" Background="#FEF2F2" BorderBrush="#FECACA" BorderThickness="1" CornerRadius="12" Padding="20">
+                <Border.Effect><DropShadowEffect BlurRadius="10" Opacity="0.05" ShadowDepth="2" Color="Black"/></Border.Effect>
+                <StackPanel>
+                    <TextBlock Text="⚠️ TOTAL VENCIDO" FontSize="11" FontWeight="Bold" Foreground="#DC2626"/>
+                    <TextBlock Text="{Binding TotalVencido, StringFormat='R$ {0:N2}'}"
+                               FontSize="28" FontWeight="Black" Foreground="#B91C1C" Margin="0,8,0,0"/>
+                    <TextBlock Text="Vencido e não pago" FontSize="12" Foreground="#DC2626" Opacity="0.75" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="4" Background="#FFFBEB" BorderBrush="#FDE68A" BorderThickness="1" CornerRadius="12" Padding="20">
+                <Border.Effect><DropShadowEffect BlurRadius="10" Opacity="0.05" ShadowDepth="2" Color="Black"/></Border.Effect>
+                <StackPanel>
+                    <TextBlock Text="👥 CLIENTES DEVEDORES" FontSize="11" FontWeight="Bold" Foreground="#D97706"/>
+                    <TextBlock Text="{Binding QtdClientes}"
+                               FontSize="28" FontWeight="Black" Foreground="#B45309" Margin="0,8,0,0"/>
+                    <TextBlock Text="Com pendências" FontSize="12" Foreground="#D97706" Opacity="0.75" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <DataGrid Grid.Row="4" ItemsSource="{Binding ClientesDevedores}" AutoGenerateColumns="False" IsReadOnly="True" 
+                  Background="White" RowHeight="50" BorderThickness="0"
+                  GridLinesVisibility="None" AlternatingRowBackground="{DynamicResource CardBgAlt}" CanUserResizeRows="False">
+            
+            <DataGrid.ColumnHeaderStyle>
+                <Style TargetType="DataGridColumnHeader">
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="Foreground" Value="#1E62A6"/>
+                    <Setter Property="Padding" Value="12"/>
+                    <Setter Property="FontWeight" Value="Bold"/>
+                    <Setter Property="FontSize" Value="13"/>
+                    <Setter Property="BorderThickness" Value="0,0,0,2"/>
+                    <Setter Property="BorderBrush" Value="#E2E8F0"/>
+                </Style>
+            </DataGrid.ColumnHeaderStyle>
+
+            <DataGrid.CellStyle>
+                <Style TargetType="DataGridCell">
+                    <Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Padding" Value="12,0"/>
+                    <Setter Property="VerticalAlignment" Value="Center"/>
+                    <Style.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="#EFF6FF"/> <Setter Property="Foreground" Value="#0F172A"/> </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.CellStyle>
+
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="CLIENTE" Binding="{Binding CustomerName}" Width="*">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="FontWeight" Value="Bold"/>
+                            <Setter Property="VerticalAlignment" Value="Center"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                
+                <DataGridTextColumn Header="QTD. CONTAS" Binding="{Binding QtdContas}" Width="120">
+                    <DataGridTextColumn.HeaderStyle>
+                        <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+                            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                        </Style>
+                    </DataGridTextColumn.HeaderStyle>
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock"><Setter Property="HorizontalAlignment" Value="Center"/></Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                
+                <DataGridTextColumn Header="TOTAL DEVENDO" Binding="{Binding TotalPendente, StringFormat=C}" Width="160">
+                    <DataGridTextColumn.HeaderStyle>
+                        <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+                            <Setter Property="HorizontalContentAlignment" Value="Right"/>
+                            <Setter Property="Padding" Value="0,10,12,10"/>
+                        </Style>
+                    </DataGridTextColumn.HeaderStyle>
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="HorizontalAlignment" Value="Right"/>
+                            <Setter Property="Foreground" Value="#E74C3C"/>
+                            <Setter Property="FontWeight" Value="Bold"/>
+                            <Setter Property="FontSize" Value="14"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                
+                <DataGridTemplateColumn Width="150">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button Content="📂 VER CONTAS" 
+                                    Command="{Binding DataContext.AbrirDetalhesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                                    CommandParameter="{Binding}" 
+                                    Background="#1E293B" Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0" Padding="10,5" Margin="5">
+                                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                            </Button>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+    </Grid>
+</UserControl>

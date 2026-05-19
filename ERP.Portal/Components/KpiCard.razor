@@ -1,0 +1,14 @@
+@* Componente reutilizável de KPI *@
+<div style="background:white; border-radius:12px; padding:20px;
+     box-shadow:0 2px 8px rgba(0,0,0,.06); border-left:4px solid @Cor;">
+    <div style="font-size:24px; margin-bottom:8px;">@Icone</div>
+    <div style="font-size:22px; font-weight:800; color:#1E293B;">@Valor</div>
+    <div style="font-size:12px; color:#94A3B8; margin-top:4px; font-weight:600;">@Titulo</div>
+</div>
+
+@code {
+    [Parameter] public string Titulo { get; set; } = "";
+    [Parameter] public string? Valor  { get; set; } = "—";
+    [Parameter] public string Icone  { get; set; } = "📊";
+    [Parameter] public string Cor    { get; set; } = "#1E62A6";
+}

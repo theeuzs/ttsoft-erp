@@ -1,0 +1,256 @@
+@page "/metas"
+@using ERP.Portal.Services
+@inject ApiClient Api
+
+<div style="padding:0 0 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">🎯 Metas de Vendas</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">
+                Defina e acompanhe metas por vendedor
+            </p>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+            <select @bind="_mes" style="padding:8px; border:1px solid #E2E8F0;
+                    border-radius:8px; font-size:13px;">
+                @for (int m = 1; m <= 12; m++)
+                {
+                    var mm = m;
+                    // 👇 O ARROBA E OS PARÊNTESES SALVADORES AQUI 👇
+                    <option value="@mm">@(System.Globalization.CultureInfo.GetCultureInfo("pt-BR").DateTimeFormat.GetMonthName(mm))</option>
+                }
+            </select>
+            <select @bind="_ano" style="padding:8px; border:1px solid #E2E8F0;
+                    border-radius:8px; font-size:13px;">
+                @for (int a = DateTime.Today.Year - 1; a <= DateTime.Today.Year + 1; a++)
+                {
+                    <option value="@a">@a</option>
+                }
+            </select>
+            <button @onclick="CarregarAsync"
+                    style="background:#1E62A6; color:white; border:none; padding:8px 16px;
+                    border-radius:8px; font-weight:700; cursor:pointer; font-size:13px;">
+                🔍 Ver
+            </button>
+            <button @onclick="() => _modalNova = true"
+                    style="background:#27AE60; color:white; border:none; padding:8px 16px;
+                    border-radius:8px; font-weight:700; cursor:pointer; font-size:13px; white-space:nowrap;">
+                + Nova Meta
+            </button>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div style="text-align:center; padding:60px; color:#94A3B8;">Carregando metas...</div>
+    }
+    else if (_metas?.Length == 0)
+    {
+        <div style="background:white; border-radius:12px; padding:60px; text-align:center;
+             box-shadow:0 2px 8px rgba(0,0,0,.06);">
+            <div style="font-size:48px; margin-bottom:16px;">🎯</div>
+            <div style="font-size:16px; font-weight:700; color:#1E293B; margin-bottom:8px;">
+                Nenhuma meta definida
+            </div>
+            <p style="color:#94A3B8; font-size:13px;">
+                Clique em "+ Nova Meta" para definir metas para este período.
+            </p>
+        </div>
+    }
+    else
+    {
+        <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:16px; margin-bottom:20px;">
+            @foreach (var m in _metas!)
+            {
+                var pct     = Math.Min((double)m.Percentual, 100);
+                var cor     = pct >= 100 ? "#27AE60" : pct >= 75 ? "#1E62A6" : pct >= 50 ? "#F59E0B" : "#EF4444";
+                var bgCard  = m.Atingida ? "#F0FDF4" : "white";
+
+                <div style="background:@bgCard; border-radius:12px; padding:24px;
+                     box-shadow:0 2px 8px rgba(0,0,0,.06);
+                     border:@(m.Atingida ? "2px solid #27AE60" : "1px solid #E2E8F0");">
+
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;
+                         margin-bottom:16px;">
+                        <div>
+                            <div style="font-size:16px; font-weight:800; color:#1E293B;">
+                                @(m.VendedorNome == "Geral" ? "🏪 Meta Geral" : $"👤 {m.VendedorNome}")
+                            </div>
+                            @if (!string.IsNullOrEmpty(m.Descricao))
+                            {
+                                <div style="font-size:12px; color:#94A3B8; margin-top:2px;">@m.Descricao</div>
+                            }
+                        </div>
+                        @if (m.Atingida)
+                        {
+                            <span style="background:#D1FAE5; color:#065F46; padding:4px 10px;
+                                  border-radius:20px; font-size:12px; font-weight:700;">
+                                🏆 ATINGIDA!
+                            </span>
+                        }
+                        else
+                        {
+                            <button @onclick="() => ExcluirMeta(m.Id)"
+                                    style="background:none; border:none; color:#94A3B8;
+                                    cursor:pointer; font-size:16px; padding:4px;">✕</button>
+                        }
+                    </div>
+
+                    <div style="background:#F1F5F9; border-radius:8px; height:12px;
+                         overflow:hidden; margin-bottom:12px;">
+                        <div style="background:@cor; width:@(pct.ToString("F0"))%; height:100%;
+                             border-radius:8px; transition:width .8s ease;
+                             background:linear-gradient(90deg, @cor, @cor)cc;">
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+                        <div style="text-align:center; background:#F8FAFC; border-radius:8px; padding:8px;">
+                            <div style="font-size:10px; color:#94A3B8; font-weight:700;">META</div>
+                            <div style="font-size:14px; font-weight:800; color:#1E293B;">
+                                @m.ValorMeta.ToString("C0")
+                            </div>
+                        </div>
+                        <div style="text-align:center; background:#F8FAFC; border-radius:8px; padding:8px;">
+                            <div style="font-size:10px; color:#94A3B8; font-weight:700;">REALIZADO</div>
+                            <div style="font-size:14px; font-weight:800; color:@cor;">
+                                @m.Realizado.ToString("C0")
+                            </div>
+                        </div>
+                        <div style="text-align:center; background:#F8FAFC; border-radius:8px; padding:8px;">
+                            <div style="font-size:10px; color:#94A3B8; font-weight:700;">%</div>
+                            <div style="font-size:14px; font-weight:800; color:@cor;">
+                                @m.Percentual.ToString("F1")%
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (!m.Atingida && m.Restante > 0)
+                    {
+                        <div style="margin-top:10px; font-size:12px; color:#64748B; text-align:center;">
+                            Faltam <strong style="color:@cor;">@m.Restante.ToString("C0")</strong>
+                            para atingir a meta
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@if (_modalNova)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200;
+         display:flex; align-items:center; justify-content:center; padding:16px;">
+        <div style="background:white; border-radius:16px; padding:28px; width:440px; max-width:100%;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="font-size:18px; font-weight:800; color:#1E293B; margin:0;">🎯 Nova Meta</h3>
+                <button @onclick="() => _modalNova = false"
+                        style="background:none; border:none; font-size:20px; cursor:pointer;">✕</button>
+            </div>
+
+            <div style="margin-bottom:14px;">
+                <label style="font-size:12px; font-weight:700; color:#64748B; display:block; margin-bottom:4px;">
+                    VENDEDOR (deixe "Geral" para meta da loja)
+                </label>
+                <input @bind="_novaVendedor" placeholder="ex: Matheus ou Geral"
+                       style="width:100%; padding:10px; border:1px solid #E2E8F0;
+                       border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#64748B; display:block; margin-bottom:4px;">MÊS</label>
+                    <input type="number" @bind="_novaMes" min="1" max="12"
+                           style="width:100%; padding:10px; border:1px solid #E2E8F0;
+                           border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#64748B; display:block; margin-bottom:4px;">ANO</label>
+                    <input type="number" @bind="_novaAno"
+                           style="width:100%; padding:10px; border:1px solid #E2E8F0;
+                           border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+                </div>
+            </div>
+            <div style="margin-bottom:14px;">
+                <label style="font-size:12px; font-weight:700; color:#64748B; display:block; margin-bottom:4px;">
+                    VALOR DA META (R$)
+                </label>
+                <input type="number" @bind="_novaValor" step="100"
+                       style="width:100%; padding:10px; border:1px solid #E2E8F0;
+                       border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+            </div>
+            <div style="margin-bottom:20px;">
+                <label style="font-size:12px; font-weight:700; color:#64748B; display:block; margin-bottom:4px;">
+                    DESCRIÇÃO (opcional)
+                </label>
+                <input @bind="_novaDescricao" placeholder="ex: Meta Black Friday"
+                       style="width:100%; padding:10px; border:1px solid #E2E8F0;
+                       border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+            </div>
+
+            <button @onclick="SalvarMetaAsync"
+                    style="width:100%; background:#1E62A6; color:white; border:none;
+                    padding:12px; border-radius:8px; font-weight:700; cursor:pointer; font-size:15px;">
+                💾 Salvar Meta
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    private MetaItem[]? _metas;
+    private bool   _loading      = true;
+    private bool   _modalNova    = false;
+    private int    _mes          = DateTime.Today.Month;
+    private int    _ano          = DateTime.Today.Year;
+    private string _novaVendedor = "Geral";
+    private int    _novaMes      = DateTime.Today.Month;
+    private int    _novaAno      = DateTime.Today.Year;
+    private decimal _novaValor   = 0;
+    private string? _novaDescricao;
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _loading = true;
+        _metas   = await Api.GetAsync<MetaItem[]>($"api/Metas?mes={_mes}&ano={_ano}") ?? [];
+        _loading = false;
+    }
+
+    private async Task SalvarMetaAsync()
+    {
+        if (_novaValor <= 0) return;
+        await Api.PostAsync("api/Metas", new
+        {
+            VendedorNome = _novaVendedor,
+            Mes          = _novaMes,
+            Ano          = _novaAno,
+            ValorMeta    = _novaValor,
+            Descricao    = _novaDescricao
+        });
+        _modalNova = false;
+        _mes = _novaMes; _ano = _novaAno;
+        await CarregarAsync();
+    }
+
+    private async Task ExcluirMeta(System.Guid id)
+    {
+        await Api.DeleteAsync($"api/Metas/{id}");
+        await CarregarAsync();
+    }
+
+    class MetaItem
+    {
+        public System.Guid Id            { get; set; }
+        public string      VendedorNome { get; set; } = "";
+        public int         Mes          { get; set; }
+        public int         Ano          { get; set; }
+        public decimal     ValorMeta    { get; set; }
+        public string?     Descricao    { get; set; }
+        public decimal     Realizado    { get; set; }
+        public decimal     Percentual   { get; set; }
+        public decimal     Restante     { get; set; }
+        public bool        Atingida     { get; set; }
+    }
+}

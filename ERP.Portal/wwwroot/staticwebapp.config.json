@@ -1,0 +1,23 @@
+{
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": ["/api/*", "/_framework/*", "/css/*", "/_content/*", "/*.png", "/*.ico", "/*.json"]
+  },
+  "routes": [
+    {
+      "route": "/catalogo",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/tv",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/motorista",
+      "allowedRoles": ["anonymous"]
+    }
+  ],
+  "globalHeaders": {
+    "Cache-Control": "no-cache"
+  }
+}

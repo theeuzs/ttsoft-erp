@@ -1,0 +1,140 @@
+<UserControl x:Class="ERP.WPF.Views.InventarioView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource CardBgAlt}">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="12"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Grid>
+            <StackPanel>
+                <TextBlock Text="Inventário / Contagem de Estoque" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource TextDark}"/>
+                <TextBlock Text="Conte o estoque físico e ajuste as divergências"
+                           FontSize="13" Foreground="{DynamicResource TextMuted}" Margin="0,4,0,0"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Button Content="↻ Recarregar" Command="{Binding CarregarCommand}"
+                        Background="#E2E8F0" Foreground="{DynamicResource TextMuted}"
+                        FontWeight="Bold" Height="34" Padding="16,0" BorderThickness="0" Cursor="Hand" Margin="0,0,8,0">
+                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                </Button>
+                <Button Content="✅ Aplicar Ajustes" Command="{Binding AplicarCommand}"
+                        Background="#16A34A" Foreground="White"
+                        FontWeight="Bold" Height="34" Padding="16,0" BorderThickness="0" Cursor="Hand">
+                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- Cards -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Background="{DynamicResource CardBg}" CornerRadius="12" Padding="20">
+                <StackPanel>
+                    <TextBlock Text="✅ CONFERIDOS" FontSize="11" FontWeight="Bold" Foreground="#16A34A"/>
+                    <TextBlock Text="{Binding TotalConferidos}" FontSize="28" FontWeight="Black" Foreground="#16A34A" Margin="0,8,0,0"/>
+                    <TextBlock Text="produtos contados" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2" Background="#FEF2F2" CornerRadius="12" Padding="20">
+                <StackPanel>
+                    <TextBlock Text="⚠️ DIVERGÊNCIAS" FontSize="11" FontWeight="Bold" Foreground="#DC2626"/>
+                    <TextBlock Text="{Binding TotalDivergentes}" FontSize="28" FontWeight="Black" Foreground="#DC2626" Margin="0,8,0,0"/>
+                    <TextBlock Text="com diferença do sistema" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="4" Background="{DynamicResource CardBg}" CornerRadius="12" Padding="20">
+                <StackPanel>
+                    <TextBlock Text="⏳ PENDENTES" FontSize="11" FontWeight="Bold" Foreground="#F59E0B"/>
+                    <TextBlock Text="{Binding TotalPendentes}" FontSize="28" FontWeight="Black" Foreground="#F59E0B" Margin="0,8,0,0"/>
+                    <TextBlock Text="aguardando contagem" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Busca -->
+        <TextBox Grid.Row="4" Text="{Binding FiltroBusca, UpdateSourceTrigger=PropertyChanged}"
+                 Padding="12" FontSize="14" BorderBrush="{DynamicResource BordaInput}" Background="{DynamicResource CardBg}"
+                 VerticalContentAlignment="Center"/>
+
+        <!-- Tabela -->
+        <Border Grid.Row="6" Background="{DynamicResource CardBg}" CornerRadius="12">
+            <DataGrid ItemsSource="{Binding Itens}"
+                      AutoGenerateColumns="False" IsReadOnly="False"
+                      Background="Transparent" BorderThickness="0"
+                      GridLinesVisibility="Horizontal" RowHeight="44"
+                      AlternatingRowBackground="{DynamicResource CardBgAlt}" CanUserResizeRows="False">
+                <DataGrid.ColumnHeaderStyle>
+                    <Style TargetType="DataGridColumnHeader">
+                        <Setter Property="Background" Value="#F1F5F9"/>
+                        <Setter Property="Foreground" Value="#64748B"/>
+                        <Setter Property="FontWeight" Value="Bold"/>
+                        <Setter Property="Padding" Value="12,8"/>
+                    </Style>
+                </DataGrid.ColumnHeaderStyle>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Produto" Binding="{Binding Nome}" Width="3*" IsReadOnly="True" FontWeight="SemiBold"/>
+                    <DataGridTextColumn Header="SKU" Binding="{Binding SKU}" Width="90" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="Categoria" Binding="{Binding Categoria}" Width="130" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="Estoque Sistema" Binding="{Binding EstoqueSistema, StringFormat='N2'}" Width="130" IsReadOnly="True">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                                <Setter Property="Foreground" Value="#64748B"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Qtd Contada" Binding="{Binding EstoqueContado, UpdateSourceTrigger=LostFocus}" Width="120">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Diferença" Binding="{Binding TextoDiferenca}" Width="100" IsReadOnly="True">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTemplateColumn Header="Conferir" Width="90" IsReadOnly="True">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="{Binding Conferido, Converter={StaticResource BoolToConfirmText}}"
+                                        Background="{Binding Conferido, Converter={StaticResource BoolToGreenGray}}"
+                                        Foreground="White" FontWeight="Bold" Padding="6,3"
+                                        BorderThickness="0" Cursor="Hand"
+                                        Command="{Binding DataContext.ConferirCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}">
+                                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></Button.Resources>
+                                </Button>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,575 @@
+@page "/crm"
+@using ERP.Portal.Services
+@inject ApiClient Api
+@inject IJSRuntime JS
+
+<div style="padding:0 0 24px;">
+
+    @if (_toast != null)
+    {
+        <div style="position:fixed; top:20px; right:20px; z-index:9999;
+                    background:@_toastBg; color:white; padding:14px 20px; border-radius:10px;
+                    box-shadow:0 8px 24px rgba(0,0,0,.20); font-weight:600; font-size:14px;
+                    min-width:280px; display:flex; align-items:center; gap:10px;">
+            <span>@_toast</span>
+            <button @onclick="() => _toast = null"
+                    style="margin-left:auto; background:transparent; border:none;
+                           color:white; font-size:18px; cursor:pointer;">×</button>
+        </div>
+    }
+
+    <!-- Modal: Registrar Contato -->
+    @if (_modalContato != null)
+    {
+        <div style="position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200;
+                    display:flex; align-items:center; justify-content:center;">
+            <div style="background:white; border-radius:16px; padding:28px; max-width:480px;
+                        width:90%; box-shadow:0 20px 60px rgba(0,0,0,.3);">
+                <div style="font-size:16px; font-weight:800; color:#1E293B; margin-bottom:4px;">
+                    📞 Registrar Contato
+                </div>
+                <div style="font-size:12px; color:#94A3B8; margin-bottom:20px;">
+                    Orçamento #@_modalContato.Numero · @(_modalContato.ClienteNome ?? "Sem cliente")
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:12px;">
+                    <div>
+                        <label style="font-size:11px; font-weight:700; color:#64748B; display:block; margin-bottom:6px;">
+                            RESULTADO DO CONTATO
+                        </label>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                            @foreach (var (val, label, cor) in new[]{
+                                ("Contatado",  "✅ Contatado",   "#10B981"),
+                                ("Convertido", "🏆 Convertido", "#8B5CF6"),
+                                ("Perdido",    "❌ Perdido",     "#EF4444"),
+                                ("Pendente",   "⏳ Reagendar",  "#F59E0B")})
+                            {
+                                <button @onclick="() => _statusContato = val"
+                                        style="padding:10px; border:2px solid @(_statusContato == val ? cor : "#E2E8F0");
+                                               background:@(_statusContato == val ? cor + "20" : "white");
+                                               color:@(_statusContato == val ? cor : "#64748B");
+                                               border-radius:8px; font-weight:700; cursor:pointer; font-size:13px;">
+                                    @label
+                                </button>
+                            }
+                        </div>
+                    </div>
+
+                    @if (_statusContato == "Perdido")
+                    {
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#64748B; display:block; margin-bottom:6px;">
+                                MOTIVO DA PERDA
+                            </label>
+                            <select @bind="_motivoPerda"
+                                    style="width:100%; padding:9px 12px; border:1px solid #E2E8F0;
+                                           border-radius:8px; font-size:13px; background:white;">
+                                <option value="">Selecione...</option>
+                                <option>Preço alto</option>
+                                <option>Foi para concorrente</option>
+                                <option>Obra cancelada</option>
+                                <option>Sem orçamento</option>
+                                <option>Não atendeu</option>
+                                <option>Outro</option>
+                            </select>
+                        </div>
+                    }
+
+                    @if (_statusContato == "Pendente")
+                    {
+                        <div>
+                            <label style="font-size:11px; font-weight:700; color:#64748B; display:block; margin-bottom:6px;">
+                                PRÓXIMO CONTATO EM (DIAS)
+                            </label>
+                            <input type="number" @bind="_proximoEmDias" min="1" max="30"
+                                   style="width:100%; padding:9px 12px; border:1px solid #E2E8F0;
+                                          border-radius:8px; font-size:13px;"/>
+                        </div>
+                    }
+
+                    <div>
+                        <label style="font-size:11px; font-weight:700; color:#64748B; display:block; margin-bottom:6px;">
+                            OBSERVAÇÃO
+                        </label>
+                        <textarea @bind="_obsContato" rows="3"
+                                  placeholder="O que foi discutido? Qual o próximo passo?"
+                                  style="width:100%; padding:9px 12px; border:1px solid #E2E8F0;
+                                         border-radius:8px; font-size:13px; resize:none; box-sizing:border-box;"/>
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:10px; margin-top:20px;">
+                    <button @onclick="FecharModalContato"
+                            style="flex:1; padding:12px; background:#F1F5F9; border:none;
+                                   border-radius:8px; cursor:pointer; font-weight:600; color:#64748B;">
+                        Cancelar
+                    </button>
+                    <button @onclick="SalvarContatoAsync" disabled="@_salvando"
+                            style="flex:2; padding:12px; background:#1E62A6; color:white; border:none;
+                                   border-radius:8px; cursor:pointer; font-weight:700; font-size:14px;">
+                        @(_salvando ? "⏳ Salvando..." : "💾 Registrar")
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Cabeçalho -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">📞 CRM — Acompanhamento de Orçamentos</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">
+                Agenda de follow-up · Registro de contatos · Taxa de conversão
+            </p>
+        </div>
+        <button @onclick="CarregarDadosAsync"
+                style="background:#F1F5F9; border:1px solid #E2E8F0; padding:10px 16px;
+                       border-radius:8px; cursor:pointer; font-weight:600; font-size:13px; color:#64748B;">
+            🔄 Atualizar
+        </button>
+    </div>
+
+    <!-- KPIs -->
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:24px;">
+        <div style="background:white; border-radius:12px; padding:18px; box-shadow:0 2px 8px rgba(0,0,0,.06);
+                    border-left:4px solid #EF4444;">
+            <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">HOJE</div>
+            <div style="font-size:28px; font-weight:900; color:#EF4444;">@_agendaHoje.Count</div>
+            <div style="font-size:12px; color:#94A3B8; margin-top:2px;">follow-ups p/ hoje</div>
+        </div>
+        <div style="background:white; border-radius:12px; padding:18px; box-shadow:0 2px 8px rgba(0,0,0,.06);
+                    border-left:4px solid #F59E0B;">
+            <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">PENDENTES</div>
+            <div style="font-size:28px; font-weight:900; color:#F59E0B;">
+                @_todos.Count(o => o.StatusFollowUp == "Pendente")
+            </div>
+            <div style="font-size:12px; color:#94A3B8; margin-top:2px;">orçamentos em aberto</div>
+        </div>
+        <div style="background:white; border-radius:12px; padding:18px; box-shadow:0 2px 8px rgba(0,0,0,.06);
+                    border-left:4px solid #10B981;">
+            <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">CONVERSÃO</div>
+            <div style="font-size:28px; font-weight:900; color:#10B981;">
+                @(_taxa?.Percentual.ToString("F0") ?? "—")%
+            </div>
+            <div style="font-size:12px; color:#94A3B8; margin-top:2px;">últimos 30 dias</div>
+        </div>
+        <div style="background:white; border-radius:12px; padding:18px; box-shadow:0 2px 8px rgba(0,0,0,.06);
+                    border-left:4px solid #8B5CF6;">
+            <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:6px;">CONVERTIDO</div>
+            <div style="font-size:28px; font-weight:900; color:#8B5CF6;">
+                @(_taxa?.ValorConvertido.ToString("C") ?? "—")
+            </div>
+            <div style="font-size:12px; color:#94A3B8; margin-top:2px;">últimos 30 dias</div>
+        </div>
+    </div>
+
+    <!-- Abas -->
+    <div style="display:flex; gap:4px; margin-bottom:20px; background:white; border-radius:12px;
+                padding:6px; box-shadow:0 2px 8px rgba(0,0,0,.06);">
+        @foreach (var (aba, label) in new[]{
+            ("hoje",   $"🔴 Hoje ({_agendaHoje.Count})"),
+            ("todos",  "📋 Todos"),
+            ("perdas", "📊 Motivos de Perda")})
+        {
+            <button @onclick="() => _aba = aba"
+                    style="flex:1; padding:10px; border:none; border-radius:8px; cursor:pointer;
+                           font-weight:700; font-size:13px; transition:all .15s;
+                           background:@(_aba == aba ? "#1E62A6" : "transparent");
+                           color:@(_aba == aba ? "white" : "#64748B");">
+                @label
+            </button>
+        }
+    </div>
+
+    <!-- Aba: Hoje -->
+    @if (_aba == "hoje")
+    {
+        @if (_loading)
+        {
+            <div style="text-align:center; padding:40px; color:#94A3B8;">⏳ Carregando agenda...</div>
+        }
+        else if (_agendaHoje.Count == 0)
+        {
+            <div style="background:white; border-radius:12px; padding:60px; text-align:center;
+                        box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                <div style="font-size:40px; margin-bottom:12px;">🎉</div>
+                <div style="font-size:16px; font-weight:700; color:#10B981;">Agenda limpa!</div>
+                <div style="color:#94A3B8; font-size:13px; margin-top:4px;">
+                    Nenhum follow-up pendente para hoje.
+                </div>
+            </div>
+        }
+        else
+        {
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                @foreach (var o in _agendaHoje)
+                {
+                    @OrcamentoCard(o)
+                }
+            </div>
+        }
+    }
+
+    <!-- Aba: Todos -->
+    @if (_aba == "todos")
+    {
+        <!-- Filtros -->
+        <div style="background:white; border-radius:12px; padding:14px 16px; margin-bottom:16px;
+                    box-shadow:0 2px 8px rgba(0,0,0,.06); display:flex; gap:10px; flex-wrap:wrap;">
+            <select @bind="_filtroStatus"
+                    style="padding:8px 12px; border:1px solid #E2E8F0; border-radius:8px;
+                           font-size:13px; background:white; min-width:160px;">
+                <option value="">Todos os status</option>
+                <option value="Pendente">⏳ Pendente</option>
+                <option value="Contatado">✅ Contatado</option>
+                <option value="Convertido">🏆 Convertido</option>
+                <option value="Perdido">❌ Perdido</option>
+            </select>
+            <input @bind="_filtroCliente" placeholder="🔍 Cliente ou vendedor..."
+                   style="flex:1; min-width:180px; padding:8px 12px; border:1px solid #E2E8F0;
+                          border-radius:8px; font-size:13px;"/>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:10px;">
+            @foreach (var o in OrcamentosFiltrados)
+            {
+                @OrcamentoCard(o)
+            }
+            @if (!OrcamentosFiltrados.Any())
+            {
+                <div style="text-align:center; padding:40px; color:#94A3B8; background:white;
+                            border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                    Nenhum orçamento encontrado para os filtros.
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Aba: Motivos de Perda -->
+    @if (_aba == "perdas")
+    {
+        <div style="background:white; border-radius:12px; padding:24px;
+                    box-shadow:0 2px 8px rgba(0,0,0,.06);">
+            <div style="font-size:15px; font-weight:800; color:#1E293B; margin-bottom:20px;">
+                📊 Motivos de Perda — últimos 30 dias
+            </div>
+            @if (_taxa?.MotivosDePerdaTop == null || !_taxa.MotivosDePerdaTop.Any())
+            {
+                <div style="text-align:center; padding:40px; color:#94A3B8;">
+                    Nenhuma perda registrada no período.
+                </div>
+            }
+            else
+            {
+                var total = _taxa.MotivosDePerdaTop.Sum(m => m.Quantidade);
+                @foreach (var m in _taxa.MotivosDePerdaTop)
+                {
+                    var pct = total > 0 ? m.Quantidade * 100.0 / total : 0;
+                    var w   = pct.ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
+                    <div style="margin-bottom:14px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <span style="font-size:13px; font-weight:600; color:#1E293B;">@m.Motivo</span>
+                            <span style="font-size:13px; color:#64748B;">
+                                @m.Quantidade × · @pct.ToString("F0")%
+                            </span>
+                        </div>
+                        <div style="background:#F1F5F9; border-radius:20px; height:10px; overflow:hidden;">
+                            <div style="background:#EF4444; width:@(w)%; height:100%; border-radius:20px;
+                                        transition:width .6s ease;">
+                            </div>
+                        </div>
+                    </div>
+                }
+                <div style="margin-top:20px; padding:14px; background:#FEF3C7; border-radius:8px;
+                            border-left:4px solid #F59E0B; font-size:13px; color:#92400E;">
+                    <strong>💡 Insight:</strong>
+                    O maior motivo de perda é
+                    "<strong>@_taxa.MotivosDePerdaTop.First().Motivo</strong>"
+                    com @_taxa.MotivosDePerdaTop.First().Quantidade ocorrência(s).
+                    @if (_taxa.MotivosDePerdaTop.First().Motivo == "Preço alto")
+                    {
+                        <span> Considere criar uma faixa de desconto para fechar mais rápido.</span>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- Template de card de orçamento (reutilizado nas duas abas) -->
+@code {
+    private RenderFragment OrcamentoCard(OrcDto o) =>
+        @<div style="background:white; border-radius:12px; padding:18px 20px;
+                     box-shadow:0 2px 8px rgba(0,0,0,.06);
+                     border-left:4px solid @CorStatus(o.StatusFollowUp);">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
+                <div style="flex:1;">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+                        <span style="font-weight:800; color:#1E293B; font-size:15px;">
+                            #@o.Numero
+                        </span>
+                        <span style="background:@CorStatus(o.StatusFollowUp)20; color:@CorStatus(o.StatusFollowUp);
+                              font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px;">
+                            @EmojiStatus(o.StatusFollowUp) @o.StatusFollowUp
+                        </span>
+                        @if (o.FollowUpVencido)
+                        {
+                            <span style="background:#FEE2E2; color:#991B1B; font-size:11px;
+                                  font-weight:700; padding:3px 9px; border-radius:20px;">
+                                🚨 ATRASADO
+                            </span>
+                        }
+                    </div>
+                    <div style="font-size:13px; color:#1E293B; font-weight:600; margin-bottom:2px;">
+                        @(o.ClienteNome ?? "Sem cliente") · @o.ValorTotal.ToString("C")
+                    </div>
+                    <div style="font-size:12px; color:#94A3B8;">
+                        Vendedor: @(o.VendedorNome ?? "—") ·
+                        Emitido: @o.DataEmissao.ToString("dd/MM") ·
+                        Validade: @o.DataValidade.ToString("dd/MM")
+                    </div>
+                    @if (o.DataFollowUp.HasValue)
+                    {
+                        <div style="font-size:12px; color:#F59E0B; font-weight:600; margin-top:4px;">
+                            📅 Follow-up: @o.DataFollowUp.Value.ToString("dd/MM/yyyy")
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(o.ObservacaoFollowUp))
+                    {
+                        <div style="font-size:12px; color:#64748B; margin-top:4px;
+                             background:#F8FAFC; padding:6px 10px; border-radius:6px;">
+                            💬 @o.ObservacaoFollowUp
+                        </div>
+                    }
+                </div>
+
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <!-- Agendar follow-up -->
+                    @if (o.StatusFollowUp is "Pendente" or "Contatado")
+                    {
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <input type="date"
+                                   value="@(_datasFollowUp.GetValueOrDefault(o.Id, DateTime.Today.AddDays(1)).ToString("yyyy-MM-dd"))"
+                                   @onchange="e => SetDataFollowUp(o.Id, e.Value?.ToString())"
+                                   style="padding:6px 10px; border:1px solid #E2E8F0; border-radius:6px;
+                                          font-size:12px;"/>
+                            <button @onclick="() => AgendarFollowUpAsync(o)"
+                                    style="background:#EFF6FF; color:#1E62A6; border:1px solid #BFDBFE;
+                                           padding:6px 12px; border-radius:6px; cursor:pointer;
+                                           font-weight:600; font-size:12px; white-space:nowrap;">
+                                📅 Agendar
+                            </button>
+                        </div>
+                    }
+
+                    <!-- Registrar contato -->
+                    @if (o.StatusFollowUp is "Pendente" or "Contatado")
+                    {
+                        <button @onclick="() => AbrirModalContato(o)"
+                                style="background:#1E62A6; color:white; border:none; padding:8px 16px;
+                                       border-radius:8px; cursor:pointer; font-weight:700; font-size:13px;">
+                            📞 Contato
+                        </button>
+                    }
+
+                    <!-- WhatsApp rápido -->
+                    @if (!string.IsNullOrEmpty(o.ClienteTelefone))
+                    {
+                        var tel = o.ClienteTelefone.All(char.IsDigit) ? o.ClienteTelefone : new string(o.ClienteTelefone.Where(char.IsDigit).ToArray());
+                        if (!tel.StartsWith("55")) tel = "55" + tel;
+                        var msg = Uri.EscapeDataString($"Olá {o.ClienteNome}, estou entrando em contato sobre o orçamento #{o.Numero} no valor de {o.ValorTotal:C}. Podemos conversar?");
+                        <a href="https://wa.me/@tel?text=@msg" target="_blank"
+                           style="background:#25D366; color:white; border:none; padding:8px 14px;
+                                  border-radius:8px; text-decoration:none; font-weight:700; font-size:13px;">
+                            💬
+                        </a>
+                    }
+                </div>
+            </div>
+        </div>;
+
+    private string _aba = "hoje";
+    private bool   _loading  = true;
+    private bool   _salvando = false;
+
+    private List<OrcDto> _agendaHoje = [];
+    private List<OrcDto> _todos      = [];
+    private TaxaDto?     _taxa;
+
+    private string _filtroStatus  = "";
+    private string _filtroCliente = "";
+
+    private OrcDto?  _modalContato;
+    private string   _statusContato  = "Contatado";
+    private string?  _motivoPerda;
+    private string?  _obsContato;
+    private int?     _proximoEmDias  = 7;
+
+    private Dictionary<Guid, DateTime> _datasFollowUp = new();
+
+    private string? _toast;
+    private string  _toastBg = "#10B981";
+
+    private IEnumerable<OrcDto> OrcamentosFiltrados => _todos
+        .Where(o =>
+            (string.IsNullOrEmpty(_filtroStatus) || o.StatusFollowUp == _filtroStatus) &&
+            (string.IsNullOrEmpty(_filtroCliente) ||
+             (o.ClienteNome?.Contains(_filtroCliente, StringComparison.OrdinalIgnoreCase) == true) ||
+             (o.VendedorNome?.Contains(_filtroCliente, StringComparison.OrdinalIgnoreCase) == true)));
+
+    protected override async Task OnInitializedAsync()
+        => await CarregarDadosAsync();
+
+    private async Task CarregarDadosAsync()
+    {
+        _loading = true;
+        try
+        {
+            var hoje  = DateTime.Today;
+            var ini   = hoje.AddDays(-30);
+
+            var tasks = Task.WhenAll(
+                Api.GetAsync<OrcDto[]>("api/Orcamentos/agenda-hoje"),
+                Api.GetAsync<OrcDto[]>("api/Orcamentos/crm"),
+                Api.GetAsync<TaxaDto>($"api/Orcamentos/taxa-conversao?inicio={ini:yyyy-MM-dd}&fim={hoje:yyyy-MM-dd}"));
+
+            await tasks;
+            _agendaHoje = (await Api.GetAsync<OrcDto[]>("api/Orcamentos/agenda-hoje"))?.ToList() ?? [];
+            _todos      = (await Api.GetAsync<OrcDto[]>("api/Orcamentos/crm"))?.ToList() ?? [];
+            _taxa       = await Api.GetAsync<TaxaDto>($"api/Orcamentos/taxa-conversao?inicio={ini:yyyy-MM-dd}&fim={hoje:yyyy-MM-dd}");
+
+            // Inicializa datas de follow-up para amanhã
+            foreach (var o in _todos.Where(o => !_datasFollowUp.ContainsKey(o.Id)))
+                _datasFollowUp[o.Id] = DateTime.Today.AddDays(1);
+        }
+        catch { }
+        finally { _loading = false; }
+    }
+
+    private void SetDataFollowUp(Guid id, string? valor)
+    {
+        if (DateTime.TryParse(valor, out var dt))
+            _datasFollowUp[id] = dt;
+    }
+
+    private async Task AgendarFollowUpAsync(OrcDto o)
+    {
+        var data = _datasFollowUp.GetValueOrDefault(o.Id, DateTime.Today.AddDays(1));
+        var resp = await Api.PutAsync($"api/Orcamentos/{o.Id}/agendar-followup",
+            new { DataFollowUp = data.ToString("yyyy-MM-dd"), Observacao = (string?)null });
+
+        if (resp.IsSuccessStatusCode)
+        {
+            o.DataFollowUp = data;
+            await Toast($"📅 Follow-up agendado para {data:dd/MM/yyyy}", "#1E62A6");
+            StateHasChanged();
+        }
+        else
+            await Toast("❌ Erro ao agendar follow-up.", "#EF4444");
+    }
+
+    private void AbrirModalContato(OrcDto o)
+    {
+        _modalContato   = o;
+        _statusContato  = "Contatado";
+        _motivoPerda    = null;
+        _obsContato     = null;
+        _proximoEmDias  = 7;
+    }
+
+    private void FecharModalContato() => _modalContato = null;
+
+    private async Task SalvarContatoAsync()
+    {
+        if (_modalContato == null) return;
+        _salvando = true;
+
+        var payload = new
+        {
+            StatusFollowUp       = _statusContato,
+            ObservacaoFollowUp   = _obsContato,
+            MotivoPerda          = _statusContato == "Perdido" ? _motivoPerda : null,
+            ProximoFollowUpEmDias = _statusContato == "Pendente" ? _proximoEmDias : (int?)null
+        };
+
+        var resp = await Api.PutAsync(
+            $"api/Orcamentos/{_modalContato.Id}/registrar-contato", payload);
+
+        _salvando = false;
+
+        if (resp.IsSuccessStatusCode)
+        {
+            var emoji = _statusContato switch
+            {
+                "Convertido" => "🏆",
+                "Perdido"    => "❌",
+                _            => "✅"
+            };
+            await Toast($"{emoji} Contato registrado como {_statusContato}.", "#10B981");
+            FecharModalContato();
+            await CarregarDadosAsync();
+        }
+        else
+            await Toast("❌ Erro ao salvar contato.", "#EF4444");
+    }
+
+    private static string CorStatus(string? status) => status switch
+    {
+        "Convertido" => "#8B5CF6",
+        "Perdido"    => "#EF4444",
+        "Contatado"  => "#10B981",
+        _            => "#F59E0B"
+    };
+
+    private static string EmojiStatus(string? status) => status switch
+    {
+        "Convertido" => "🏆",
+        "Perdido"    => "❌",
+        "Contatado"  => "✅",
+        _            => "⏳"
+    };
+
+    private async Task Toast(string msg, string bg)
+    {
+        _toast   = msg;
+        _toastBg = bg;
+        StateHasChanged();
+        await Task.Delay(4000);
+        _toast = null;
+        StateHasChanged();
+    }
+
+    // ── DTOs locais ────────────────────────────────────────────────────────────
+    class OrcDto
+    {
+        public Guid      Id                 { get; set; }
+        public string    Numero             { get; set; } = "";
+        public string?   ClienteNome        { get; set; }
+        public string?   ClienteTelefone    { get; set; }
+        public string?   VendedorNome       { get; set; }
+        public decimal   ValorTotal         { get; set; }
+        public DateTime  DataEmissao        { get; set; }
+        public DateTime  DataValidade       { get; set; }
+        public DateTime? DataFollowUp       { get; set; }
+        public string    StatusFollowUp     { get; set; } = "Pendente";
+        public string?   MotivoPerda        { get; set; }
+        public string?   ObservacaoFollowUp { get; set; }
+        public DateTime? DataUltimoContato  { get; set; }
+        public bool      FollowUpVencido    { get; set; }
+    }
+
+    class TaxaDto
+    {
+        public int                   Total            { get; set; }
+        public int                   Convertidos      { get; set; }
+        public decimal               Percentual       { get; set; }
+        public decimal               ValorConvertido  { get; set; }
+        public List<MotivoPerdaDto>  MotivosDePerdaTop { get; set; } = [];
+    }
+
+    class MotivoPerdaDto
+    {
+        public string Motivo    { get; set; } = "";
+        public int    Quantidade { get; set; }
+    }
+}

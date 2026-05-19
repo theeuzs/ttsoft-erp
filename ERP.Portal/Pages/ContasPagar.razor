@@ -1,0 +1,283 @@
+@page "/contas-pagar"
+@using ERP.Portal.Services
+@inject ApiClient Api
+
+<div style="padding:0 0 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">💸 Contas a Pagar</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">Gestão de despesas e fornecedores</p>
+        </div>
+        <button @onclick="() => _modalNova = true"
+                style="background:#1E62A6; color:white; border:none; padding:10px 20px;
+                border-radius:8px; font-weight:700; cursor:pointer; font-size:14px;">
+            + Nova Conta
+        </button>
+    </div>
+
+    <!-- Resumo -->
+    @if (_resumo != null)
+    {
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px;">
+            <div style="background:white; border-radius:12px; padding:20px;
+                 box-shadow:0 2px 8px rgba(0,0,0,.06); border-left:4px solid #F59E0B;">
+                <div style="font-size:11px; color:#94A3B8; font-weight:700;">TOTAL PENDENTE</div>
+                <div style="font-size:22px; font-weight:800; color:#1E293B; margin:4px 0;">
+                    @_resumo.TotalPendente.ToString("C0")
+                </div>
+                <div style="font-size:12px; color:#F59E0B;">@_resumo.QtdContas contas</div>
+            </div>
+            <div style="background:white; border-radius:12px; padding:20px;
+                 box-shadow:0 2px 8px rgba(0,0,0,.06); border-left:4px solid #EF4444;">
+                <div style="font-size:11px; color:#94A3B8; font-weight:700;">TOTAL VENCIDO</div>
+                <div style="font-size:22px; font-weight:800; color:#EF4444; margin:4px 0;">
+                    @_resumo.TotalVencido.ToString("C0")
+                </div>
+                <div style="font-size:12px; color:#EF4444;">@_resumo.QtdVencidas vencidas</div>
+            </div>
+        </div>
+    }
+
+    <!-- Tabs -->
+    <div style="display:flex; gap:4px; margin-bottom:16px;">
+        @foreach (var (tab, label) in new[]{("pendentes","⏳ Pendentes"),("vencidas","🔴 Vencidas")})
+        {
+            <button @onclick="@(() => MudarTab(tab))"
+                    style="padding:10px 20px; border:none; border-radius:8px; font-weight:700;
+                    font-size:14px; cursor:pointer;
+                    background:@(_tab == tab ? "#1E62A6" : "#F1F5F9");
+                    color:@(_tab == tab ? "white" : "#64748B");">
+                @label
+            </button>
+        }
+    </div>
+
+    <!-- Tabela -->
+    <div style="background:white; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
+        @if (_loading)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">Carregando...</div>
+        }
+        else if (_contas?.Length == 0)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">
+                @(_tab == "vencidas" ? "🎉 Nenhuma conta vencida!" : "Nenhuma conta pendente.")
+            </div>
+        }
+        else
+        {
+            <table style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                        <th style="@Th">DESCRIÇÃO</th>
+                        <th style="@Th">CATEGORIA</th>
+                        <th style="@Th">VENCIMENTO</th>
+                        <th style="@Th; text-align:right;">VALOR</th>
+                        <th style="@Th; text-align:center;">AÇÕES</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in _contas!)
+                    {
+                        var vencida = c.DataVencimento.Date < DateTime.Today;
+                        <tr style="border-bottom:1px solid #F1F5F9;
+                             background:@(vencida ? "#FFF5F5" : "transparent");"
+                            onmouseover="this.style.background='#F8FAFC'"
+                            onmouseout="this.style.background='@(vencida ? "#FFF5F5" : "transparent")'">
+                            <td style="@Td; font-weight:600; color:#1E293B;">@c.Descricao</td>
+                            <td style="@Td;">
+                                <span style="background:#F1F5F9; color:#64748B; padding:2px 8px;
+                                      border-radius:4px; font-size:11px; font-weight:600;">
+                                    @c.Categoria
+                                </span>
+                            </td>
+                            <td style="@Td;">
+                                <span style="color:@(vencida ? "#EF4444" : "#1E293B");
+                                      font-weight:@(vencida ? "700" : "400");">
+                                    @c.DataVencimento.ToString("dd/MM/yyyy")
+                                    @if (vencida) { <text> ⚠️</text> }
+                                </span>
+                            </td>
+                            <td style="@Td; text-align:right; font-weight:800;
+                                color:@(vencida ? "#EF4444" : "#1E293B"); font-size:15px;">
+                                @c.Valor.ToString("C")
+                            </td>
+                            <td style="@Td; text-align:center;">
+                                <div style="display:flex; gap:6px; justify-content:center;">
+                                    <button @onclick="() => PagarConta(c.Id)"
+                                            style="background:#27AE60; color:white; border:none;
+                                            padding:5px 10px; border-radius:6px; cursor:pointer;
+                                            font-size:11px; font-weight:700;">
+                                        ✓ Pagar
+                                    </button>
+                                    <button @onclick="() => CancelarConta(c.Id)"
+                                            style="background:#F1F5F9; color:#64748B; border:none;
+                                            padding:5px 10px; border-radius:6px; cursor:pointer;
+                                            font-size:11px;">
+                                        ✕
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr style="background:#F8FAFC; border-top:2px solid #E2E8F0;">
+                        <td colspan="3" style="@Td; font-weight:700;">TOTAL</td>
+                        <td style="@Td; text-align:right; font-weight:800; font-size:16px;
+                             color:@(_tab == "vencidas" ? "#EF4444" : "#1E293B");">
+                            @_contas!.Sum(c => c.Valor).ToString("C")
+                        </td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        }
+    </div>
+</div>
+
+<!-- Modal nova conta -->
+@if (_modalNova)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200;
+         display:flex; align-items:center; justify-content:center; padding:16px;">
+        <div style="background:white; border-radius:16px; padding:28px; width:440px; max-width:100%;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="font-size:18px; font-weight:800; color:#1E293B; margin:0;">💸 Nova Conta a Pagar</h3>
+                <button @onclick="() => _modalNova = false"
+                        style="background:none; border:none; font-size:20px; cursor:pointer;">✕</button>
+            </div>
+
+            <div style="margin-bottom:14px;">
+                <label style="font-size:12px; font-weight:700; color:#64748B; display:block; margin-bottom:4px;">DESCRIÇÃO</label>
+                <input @bind="_novaDescricao" placeholder="ex: Fornecedor Cimento João"
+                       style="width:100%; padding:10px; border:1px solid #E2E8F0; border-radius:8px;
+                       font-size:14px; box-sizing:border-box;"/>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#64748B; display:block; margin-bottom:4px;">VALOR (R$)</label>
+                    <input type="number" @bind="_novaValor" step="0.01"
+                           style="width:100%; padding:10px; border:1px solid #E2E8F0; border-radius:8px;
+                           font-size:14px; box-sizing:border-box;"/>
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#64748B; display:block; margin-bottom:4px;">VENCIMENTO</label>
+                    <input type="date" @bind="_novaVencimento"
+                           style="width:100%; padding:10px; border:1px solid #E2E8F0; border-radius:8px;
+                           font-size:14px; box-sizing:border-box;"/>
+                </div>
+            </div>
+            <div style="margin-bottom:20px;">
+                <label style="font-size:12px; font-weight:700; color:#64748B; display:block; margin-bottom:4px;">CATEGORIA</label>
+                <select @bind="_novaCategoria"
+                        style="width:100%; padding:10px; border:1px solid #E2E8F0; border-radius:8px;
+                        font-size:14px; box-sizing:border-box;">
+                    <option>Fornecedor</option>
+                    <option>Aluguel</option>
+                    <option>Energia</option>
+                    <option>Água</option>
+                    <option>Internet</option>
+                    <option>Salários</option>
+                    <option>Impostos</option>
+                    <option>Variável</option>
+                    <option>Outros</option>
+                </select>
+            </div>
+
+            <button @onclick="SalvarContaAsync"
+                    style="width:100%; background:#1E62A6; color:white; border:none; padding:12px;
+                    border-radius:8px; font-weight:700; cursor:pointer; font-size:15px;">
+                💾 Salvar Conta
+            </button>
+        </div>
+    </div>
+}
+
+@if (_mensagem != null)
+{
+    <div style="position:fixed; bottom:24px; right:24px; background:#1E293B; color:white;
+         padding:14px 20px; border-radius:10px; font-size:14px; font-weight:600; z-index:500;">
+        @_mensagem
+    </div>
+}
+
+@code {
+    private ContaItem[]? _contas;
+    private ResumoDto?   _resumo;
+    private string  _tab          = "pendentes";
+    private bool    _loading      = true;
+    private bool    _modalNova    = false;
+    private string  _novaDescricao = "";
+    private decimal _novaValor     = 0;
+    private DateTime _novaVencimento = DateTime.Today.AddDays(30);
+    private string  _novaCategoria  = "Fornecedor";
+    private string? _mensagem;
+
+    private const string Th = "padding:12px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td = "padding:12px 16px; font-size:13px;";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _resumo = await Api.GetAsync<ResumoDto>("api/contas-pagar/resumo");
+        await CarregarAsync();
+    }
+
+    private async Task MudarTab(string tab) { _tab = tab; await CarregarAsync(); }
+
+    private async Task CarregarAsync()
+    {
+        _loading = true;
+        var url  = _tab == "vencidas" ? "api/contas-pagar/vencidas" : "api/contas-pagar/pendentes";
+        _contas  = await Api.GetAsync<ContaItem[]>(url) ?? [];
+        _loading = false;
+    }
+
+    private async Task PagarConta(Guid id)
+    {
+        await Api.PostAsync($"api/contas-pagar/{id}/pagar", new {});
+        _mensagem = "✅ Conta paga!";
+        _resumo   = await Api.GetAsync<ResumoDto>("api/contas-pagar/resumo");
+        await CarregarAsync();
+        await Task.Delay(2500);
+        _mensagem = null;
+    }
+
+    private async Task CancelarConta(Guid id)
+    {
+        await Api.PostAsync($"api/contas-pagar/{id}/cancelar", new {});
+        await CarregarAsync();
+    }
+
+    private async Task SalvarContaAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_novaDescricao) || _novaValor <= 0) return;
+        await Api.PostAsync("api/contas-pagar", new
+        {
+            Descricao      = _novaDescricao,
+            Valor          = _novaValor,
+            DataVencimento = _novaVencimento,
+            Categoria      = _novaCategoria
+        });
+        _modalNova = false;
+        _resumo    = await Api.GetAsync<ResumoDto>("api/contas-pagar/resumo");
+        await CarregarAsync();
+    }
+
+    class ContaItem
+    {
+        public Guid     Id             { get; set; }
+        public string   Descricao      { get; set; } = "";
+        public string   Categoria      { get; set; } = "";
+        public decimal  Valor          { get; set; }
+        public DateTime DataVencimento { get; set; }
+        public string   Status         { get; set; } = "";
+    }
+    class ResumoDto
+    {
+        public decimal TotalPendente { get; set; }
+        public decimal TotalVencido  { get; set; }
+        public int     QtdContas     { get; set; }
+        public int     QtdVencidas   { get; set; }
+    }
+}

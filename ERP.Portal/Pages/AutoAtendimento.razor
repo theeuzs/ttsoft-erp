@@ -1,0 +1,580 @@
+@page "/cliente"
+@using System.Text
+@inject HttpClient Http
+@inject IJSRuntime JS
+@layout ERP.Portal.Pages.EmptyLayout
+
+<PageTitle>Portal do Cliente — ConstruTTor</PageTitle>
+
+<div style="background:#F8FAFC; min-height:100vh; font-family:'Segoe UI',sans-serif;">
+
+    <!-- Header -->
+    <div style="background:white; padding:16px 32px; box-shadow:0 2px 8px rgba(0,0,0,.06);
+                display:flex; justify-content:space-between; align-items:center;
+                position:sticky; top:0; z-index:100;">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:28px;">🏗️</span>
+            <div>
+                <div style="font-weight:800; font-size:18px; color:#1E293B;">ConstruTTor</div>
+                <div style="font-size:12px; color:#94A3B8;">Portal do Cliente</div>
+            </div>
+        </div>
+        @if (_cliente != null)
+        {
+            <button @onclick="Sair"
+                    style="background:#F1F5F9; border:none; padding:8px 16px; border-radius:8px;
+                           cursor:pointer; font-size:13px; color:#64748B; font-weight:600;">
+                ← Sair
+            </button>
+        }
+    </div>
+
+    <div style="max-width:960px; margin:0 auto; padding:24px 16px;">
+
+        <!-- ── Etapa 1: Identificação por CPF/CNPJ ───────────────────────── -->
+        @if (_cliente == null)
+        {
+            <div style="max-width:480px; margin:60px auto;">
+                <div style="background:white; border-radius:16px; padding:32px;
+                            box-shadow:0 4px 20px rgba(0,0,0,.08); text-align:center;">
+                    <div style="font-size:48px; margin-bottom:16px;">👋</div>
+                    <h2 style="color:#1E293B; font-weight:800; margin:0 0 8px;">
+                        Bem-vindo ao Portal do Cliente
+                    </h2>
+                    <p style="color:#94A3B8; font-size:14px; margin:0 0 28px;">
+                        Consulte seu saldo Haver, pontos de fidelidade e orçamentos.<br/>
+                        Digite seu CPF ou CNPJ para entrar.
+                    </p>
+
+                    <div style="text-align:left; margin-bottom:16px;">
+                        <label style="font-size:11px; font-weight:700; color:#64748B; display:block; margin-bottom:6px;">
+                            CPF ou CNPJ
+                        </label>
+                        <input @bind="_documento" @bind:event="oninput"
+                               @onkeyup="OnDocKeyUp"
+                               placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                               maxlength="18"
+                               style="width:100%; padding:12px 16px; border:2px solid #E2E8F0;
+                                      border-radius:10px; font-size:16px; box-sizing:border-box;
+                                      text-align:center; letter-spacing:.05em;"/>
+                    </div>
+
+                    <button @onclick="IdentificarAsync" disabled="@_identificando"
+                            style="width:100%; padding:14px; background:@(_identificando ? "#94A3B8" : "#1E62A6");
+                                   color:white; border:none; border-radius:10px; font-weight:700;
+                                   font-size:15px; cursor:@(_identificando ? "not-allowed" : "pointer");">
+                        @(_identificando ? "⏳ Buscando..." : "Entrar →")
+                    </button>
+
+                    @if (_erroIdentificacao != null)
+                    {
+                        <div style="margin-top:14px; padding:12px 16px; background:#FEE2E2;
+                                    border-radius:8px; color:#991B1B; font-size:13px; font-weight:600;">
+                            @_erroIdentificacao
+                        </div>
+                    }
+                </div>
+
+                <!-- Info pública da loja -->
+                <div style="text-align:center; margin-top:24px;">
+                    <a href="/catalogo"
+                       style="color:#1E62A6; font-size:13px; font-weight:600; text-decoration:none;">
+                        🛒 Ver Catálogo de Produtos
+                    </a>
+                    <span style="color:#E2E8F0; margin:0 10px;">|</span>
+                    <a href="/calculadora-publica"
+                       style="color:#1E62A6; font-size:13px; font-weight:600; text-decoration:none;">
+                        🧮 Calculadora de Materiais
+                    </a>
+                </div>
+            </div>
+        }
+        else
+        {
+            <!-- ── Etapa 2: Dashboard do cliente ──────────────────────────── -->
+
+            <!-- Boas-vindas -->
+            <div style="background:linear-gradient(135deg,#1E3A5F,#1E62A6); border-radius:14px;
+                        padding:24px 28px; margin-bottom:24px; display:flex;
+                        justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                <div style="color:white;">
+                    <div style="font-size:20px; font-weight:900; margin-bottom:4px;">
+                        Olá, @_cliente.Name! 👋
+                    </div>
+                    <div style="opacity:.8; font-size:13px;">
+                        @_cliente.Document · @(_cliente.City ?? "")
+                    </div>
+                </div>
+                <div style="display:flex; gap:12px;">
+                    <div style="background:rgba(255,255,255,.15); border-radius:10px;
+                                padding:12px 20px; text-align:center;">
+                        <div style="color:rgba(255,255,255,.7); font-size:11px; font-weight:700;">
+                            SALDO HAVER
+                        </div>
+                        <div style="color:white; font-size:22px; font-weight:900; margin-top:4px;">
+                            @_saldoHaver.ToString("C")
+                        </div>
+                    </div>
+                    <div style="background:rgba(255,255,255,.15); border-radius:10px;
+                                padding:12px 20px; text-align:center;">
+                        <div style="color:rgba(255,255,255,.7); font-size:11px; font-weight:700;">
+                            PONTOS
+                        </div>
+                        <div style="color:#FCD34D; font-size:22px; font-weight:900; margin-top:4px;">
+                            @_pontos ⭐
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Abas -->
+            <div style="display:flex; gap:4px; margin-bottom:20px; background:white;
+                        border-radius:12px; padding:6px; box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                @foreach (var (aba, label, icon) in new[]{
+                    ("haver",      "Extrato Haver",     "💰"),
+                    ("fidelidade", "Fidelidade",         "⭐"),
+                    ("orcamentos", "Meus Orçamentos",    "📋")})
+                {
+                    <button @onclick="() => _aba = aba"
+                            style="flex:1; padding:10px; border:none; border-radius:8px; cursor:pointer;
+                                   font-weight:700; font-size:13px; transition:all .15s;
+                                   background:@(_aba == aba ? "#1E62A6" : "transparent");
+                                   color:@(_aba == aba ? "white" : "#64748B");">
+                        @icon @label
+                    </button>
+                }
+            </div>
+
+            <!-- ── ABA: Extrato Haver ──────────────────────────────────────── -->
+            @if (_aba == "haver")
+            {
+                <div style="background:white; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06);
+                            overflow:hidden;">
+                    <div style="padding:16px 20px; border-bottom:2px solid #F1F5F9;
+                                display:flex; justify-content:space-between; align-items:center;">
+                        <div style="font-size:15px; font-weight:800; color:#1E293B;">
+                            💰 Extrato de Haver
+                        </div>
+                        <div style="font-size:13px; font-weight:700;
+                                    color:@(_saldoHaver >= 0 ? "#10B981" : "#EF4444");">
+                            Saldo: @_saldoHaver.ToString("C")
+                        </div>
+                    </div>
+
+                    @if (_loadingHaver)
+                    {
+                        <div style="text-align:center; padding:40px; color:#94A3B8;">⏳ Carregando...</div>
+                    }
+                    else if (_historicoHaver.Count == 0)
+                    {
+                        <div style="text-align:center; padding:40px; color:#94A3B8;">
+                            Nenhuma movimentação encontrada.
+                        </div>
+                    }
+                    else
+                    {
+                        <table style="width:100%; border-collapse:collapse;">
+                            <thead>
+                                <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                                    <th style="@Th">DATA</th>
+                                    <th style="@Th">TIPO</th>
+                                    <th style="@Th">DESCRIÇÃO</th>
+                                    <th style="@Th; text-align:right;">VALOR</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var h in _historicoHaver)
+                                {
+                                    var entrada = h.Tipo == "Entrada";
+                                    <tr style="border-bottom:1px solid #F1F5F9;">
+                                        <td style="@Td; color:#64748B; white-space:nowrap;">
+                                            @h.Data.ToString("dd/MM/yyyy")
+                                        </td>
+                                        <td style="@Td;">
+                                            <span style="background:@(entrada ? "#D1FAE5" : "#FEE2E2");
+                                                  color:@(entrada ? "#065F46" : "#991B1B");
+                                                  font-size:11px; font-weight:700; padding:3px 8px;
+                                                  border-radius:20px;">
+                                                @(entrada ? "⬆ Crédito" : "⬇ Débito")
+                                            </span>
+                                        </td>
+                                        <td style="@Td; color:#1E293B;">@h.Descricao</td>
+                                        <td style="@Td; text-align:right; font-weight:800;
+                                             color:@(entrada ? "#10B981" : "#EF4444"); font-size:15px;">
+                                            @(entrada ? "+" : "-")@h.Valor.ToString("C")
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            }
+
+            <!-- ── ABA: Fidelidade ────────────────────────────────────────── -->
+            @if (_aba == "fidelidade")
+            {
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
+                    <div style="background:white; border-radius:12px; padding:24px;
+                                box-shadow:0 2px 8px rgba(0,0,0,.06); text-align:center;">
+                        <div style="font-size:40px; margin-bottom:8px;">⭐</div>
+                        <div style="font-size:13px; color:#64748B; font-weight:700; margin-bottom:6px;">
+                            PONTOS DISPONÍVEIS
+                        </div>
+                        <div style="font-size:40px; font-weight:900; color:#F59E0B;">@_pontos</div>
+                        <div style="font-size:12px; color:#94A3B8; margin-top:6px;">
+                            Equivale a @(_pontos / 100m) R$ em desconto na próxima compra
+                        </div>
+                    </div>
+                    <div style="background:white; border-radius:12px; padding:24px;
+                                box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                        <div style="font-size:15px; font-weight:800; color:#1E293B; margin-bottom:12px;">
+                            Como funciona?
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:10px; font-size:13px; color:#475569;">
+                            <div>🛒 <strong>Ganhe pontos</strong> a cada compra realizada</div>
+                            <div>⭐ <strong>100 pontos</strong> = R$ 1,00 de desconto</div>
+                            <div>💰 <strong>Resgate</strong> no caixa na sua próxima visita</div>
+                            <div>📅 Pontos não expiram</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="background:white; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
+                    <div style="padding:16px 20px; border-bottom:2px solid #F1F5F9;">
+                        <div style="font-size:15px; font-weight:800; color:#1E293B;">
+                            ⭐ Histórico de Pontos
+                        </div>
+                    </div>
+                    @if (_loadingFidelidade)
+                    {
+                        <div style="text-align:center; padding:40px; color:#94A3B8;">⏳ Carregando...</div>
+                    }
+                    else if (_historicoFidelidade.Count == 0)
+                    {
+                        <div style="text-align:center; padding:40px; color:#94A3B8;">
+                            Nenhuma movimentação de pontos encontrada.
+                        </div>
+                    }
+                    else
+                    {
+                        <table style="width:100%; border-collapse:collapse;">
+                            <thead>
+                                <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                                    <th style="@Th">DATA</th>
+                                    <th style="@Th">TIPO</th>
+                                    <th style="@Th">DESCRIÇÃO</th>
+                                    <th style="@Th; text-align:right;">PONTOS</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var f in _historicoFidelidade)
+                                {
+                                    var credito = f.Tipo == "Credito";
+                                    <tr style="border-bottom:1px solid #F1F5F9;">
+                                        <td style="@Td; color:#64748B;">@f.Data.ToString("dd/MM/yyyy")</td>
+                                        <td style="@Td;">
+                                            <span style="background:@(credito ? "#FEF3C7" : "#FEE2E2");
+                                                  color:@(credito ? "#92400E" : "#991B1B");
+                                                  font-size:11px; font-weight:700; padding:3px 8px;
+                                                  border-radius:20px;">
+                                                @(credito ? "⭐ Ganho" : "🎁 Resgate")
+                                            </span>
+                                        </td>
+                                        <td style="@Td; color:#1E293B;">@f.Descricao</td>
+                                        <td style="@Td; text-align:right; font-weight:800;
+                                             color:@(credito ? "#F59E0B" : "#EF4444"); font-size:15px;">
+                                            @(credito ? "+" : "-")@f.Pontos
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            }
+
+            <!-- ── ABA: Orçamentos ────────────────────────────────────────── -->
+            @if (_aba == "orcamentos")
+            {
+                <div style="background:white; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
+                    <div style="padding:16px 20px; border-bottom:2px solid #F1F5F9;">
+                        <div style="font-size:15px; font-weight:800; color:#1E293B;">📋 Meus Orçamentos</div>
+                    </div>
+                    @if (_loadingOrcamentos)
+                    {
+                        <div style="text-align:center; padding:40px; color:#94A3B8;">⏳ Carregando...</div>
+                    }
+                    else if (_orcamentos.Count == 0)
+                    {
+                        <div style="text-align:center; padding:60px; color:#94A3B8;">
+                            <div style="font-size:40px; margin-bottom:12px;">📋</div>
+                            Nenhum orçamento encontrado.
+                            <br/>
+                            <a href="/calculadora-publica"
+                               style="color:#1E62A6; font-weight:600; margin-top:8px; display:inline-block;">
+                                🧮 Criar orçamento com a Calculadora →
+                            </a>
+                        </div>
+                    }
+                    else
+                    {
+                        <table style="width:100%; border-collapse:collapse;">
+                            <thead>
+                                <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                                    <th style="@Th">Nº</th>
+                                    <th style="@Th">DATA</th>
+                                    <th style="@Th; text-align:right;">VALOR</th>
+                                    <th style="@Th; text-align:center;">STATUS</th>
+                                    <th style="@Th; text-align:center;">VALIDADE</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var orc in _orcamentos)
+                                {
+                                    var vencido  = orc.Validade < DateTime.Today;
+                                    var (bgSt, corSt, txSt) = orc.Status switch
+                                    {
+                                        "Aprovado"  => ("#D1FAE5", "#065F46", "✅ Aprovado"),
+                                        "Cancelado" => ("#FEE2E2", "#991B1B", "❌ Cancelado"),
+                                        "Expirado"  => ("#F1F5F9", "#64748B", "⏰ Expirado"),
+                                        _           => vencido
+                                                        ? ("#FEF3C7", "#92400E", "⚠ Vencido")
+                                                        : ("#EFF6FF", "#1E40AF", "📋 Pendente")
+                                    };
+                                    <tr style="border-bottom:1px solid #F1F5F9;">
+                                        <td style="@Td; font-weight:700; color:#1E62A6;">
+                                            #@orc.Numero
+                                        </td>
+                                        <td style="@Td; color:#64748B;">
+                                            @orc.Data.ToString("dd/MM/yyyy")
+                                        </td>
+                                        <td style="@Td; text-align:right; font-weight:700; color:#1E293B;">
+                                            @orc.Total.ToString("C")
+                                        </td>
+                                        <td style="@Td; text-align:center;">
+                                            <span style="background:@bgSt; color:@corSt;
+                                                  font-size:11px; font-weight:700; padding:4px 10px;
+                                                  border-radius:20px;">
+                                                @txSt
+                                            </span>
+                                        </td>
+                                        <td style="@Td; text-align:center; color:@(vencido ? "#EF4444" : "#64748B");
+                                             font-size:12px;">
+                                            @orc.Validade.ToString("dd/MM/yyyy")
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            }
+
+            <!-- CTA: Falar com vendedor -->
+            <div style="margin-top:20px; padding:16px 20px; background:white; border-radius:12px;
+                        box-shadow:0 2px 8px rgba(0,0,0,.06); display:flex;
+                        justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                <div>
+                    <div style="font-weight:700; color:#1E293B; font-size:14px;">
+                        Precisa de ajuda?
+                    </div>
+                    <div style="color:#94A3B8; font-size:12px; margin-top:2px;">
+                        Fale com um de nossos vendedores pelo WhatsApp
+                    </div>
+                </div>
+                <a href="@_whatsappLoja" target="_blank"
+                   style="background:#25D366; color:white; padding:12px 20px; border-radius:8px;
+                          font-weight:700; font-size:13px; text-decoration:none;">
+                    💬 Falar no WhatsApp
+                </a>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private string  _documento          = "";
+    private bool    _identificando      = false;
+    private string? _erroIdentificacao;
+    private string  _aba                = "haver";
+    private string  _whatsappLoja       = "https://wa.me/";
+
+    // Cliente identificado
+    private ClienteDto? _cliente;
+    private decimal     _saldoHaver     = 0;
+    private int         _pontos         = 0;
+
+    // Dados das abas
+    private List<HaverMovDto>    _historicoHaver      = [];
+    private List<FidelidadeDto>  _historicoFidelidade = [];
+    private List<OrcamentoDto>   _orcamentos          = [];
+
+    private bool _loadingHaver      = false;
+    private bool _loadingFidelidade = false;
+    private bool _loadingOrcamentos = false;
+
+    private const string Th = "padding:10px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td = "padding:12px 16px; font-size:13px;";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var cfg = await Http.GetFromJsonAsync<ConfigPublica>("api/Config/public");
+            if (cfg != null)
+            {
+                var tel = new string(cfg.Telefone?.Where(char.IsDigit).ToArray() ?? []);
+                if (tel.Length >= 10)
+                {
+                    if (!tel.StartsWith("55")) tel = "55" + tel;
+                    _whatsappLoja = $"https://wa.me/{tel}";
+                }
+            }
+        }
+        catch { }
+    }
+
+    private async Task OnDocKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await IdentificarAsync();
+    }
+
+    private async Task IdentificarAsync()
+    {
+        var doc = new string(_documento.Where(char.IsDigit).ToArray());
+        if (doc.Length < 11)
+        {
+            _erroIdentificacao = "Digite um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.";
+            return;
+        }
+
+        _identificando     = true;
+        _erroIdentificacao = null;
+
+        try
+        {
+            // Busca cliente pelo documento via endpoint público
+            var clientes = await Http.GetFromJsonAsync<ClienteDto[]>(
+                $"api/Customers/publico?document={doc}");
+
+            _cliente = clientes?.FirstOrDefault();
+
+            if (_cliente == null)
+            {
+                _erroIdentificacao = "CPF/CNPJ não encontrado. Verifique o número ou entre em contato com a loja.";
+                return;
+            }
+
+            // Carrega dados das abas em paralelo
+            await Task.WhenAll(
+                CarregarHaverAsync(),
+                CarregarFidelidadeAsync(),
+                CarregarOrcamentosAsync());
+        }
+        catch
+        {
+            _erroIdentificacao = "Erro ao buscar seus dados. Tente novamente.";
+        }
+        finally { _identificando = false; }
+    }
+
+    private async Task CarregarHaverAsync()
+    {
+        if (_cliente == null) return;
+        _loadingHaver = true;
+        try
+        {
+            var saldoResp = await Http.GetFromJsonAsync<SaldoDto>($"api/Haver/saldo/{_cliente.Id}");
+            _saldoHaver = saldoResp?.Saldo ?? 0;
+
+            var historico = await Http.GetFromJsonAsync<HaverMovDto[]>($"api/Haver/historico/{_cliente.Id}");
+            _historicoHaver = historico?.OrderByDescending(h => h.Data).ToList() ?? [];
+        }
+        catch { }
+        finally { _loadingHaver = false; }
+    }
+
+    private async Task CarregarFidelidadeAsync()
+    {
+        if (_cliente == null) return;
+        _loadingFidelidade = true;
+        try
+        {
+            var saldo = await Http.GetFromJsonAsync<PontosSaldoDto>($"api/Fidelidade/{_cliente.Id}/saldo");
+            _pontos = saldo?.Saldo ?? 0;
+
+            var historico = await Http.GetFromJsonAsync<FidelidadeDto[]>($"api/Fidelidade/{_cliente.Id}/historico");
+            _historicoFidelidade = historico?.OrderByDescending(h => h.Data).ToList() ?? [];
+        }
+        catch { }
+        finally { _loadingFidelidade = false; }
+    }
+
+    private async Task CarregarOrcamentosAsync()
+    {
+        if (_cliente == null) return;
+        _loadingOrcamentos = true;
+        try
+        {
+            var orcs = await Http.GetFromJsonAsync<OrcamentoDto[]>($"api/Orcamentos/cliente/{_cliente.Id}");
+            _orcamentos = orcs?.OrderByDescending(o => o.Data).ToList() ?? [];
+        }
+        catch { }
+        finally { _loadingOrcamentos = false; }
+    }
+
+    private void Sair()
+    {
+        _cliente             = null;
+        _documento           = "";
+        _erroIdentificacao   = null;
+        _historicoHaver      = [];
+        _historicoFidelidade = [];
+        _orcamentos          = [];
+        _saldoHaver          = 0;
+        _pontos              = 0;
+        _aba                 = "haver";
+    }
+
+    // ── DTOs locais ────────────────────────────────────────────────────────────
+    record ConfigPublica(string NomeFantasia, string? Telefone);
+
+    class ClienteDto
+    {
+        public Guid    Id       { get; set; }
+        public string  Name     { get; set; } = "";
+        public string? Document { get; set; }
+        public string? Phone    { get; set; }
+        public string? City     { get; set; }
+    }
+
+    record SaldoDto(Guid ClienteId, decimal Saldo);
+    record PontosSaldoDto(int Saldo);
+
+    class HaverMovDto
+    {
+        public DateTime Data      { get; set; }
+        public string   Tipo      { get; set; } = "";
+        public string   Descricao { get; set; } = "";
+        public decimal  Valor     { get; set; }
+    }
+
+    class FidelidadeDto
+    {
+        public DateTime Data      { get; set; }
+        public string   Tipo      { get; set; } = "";
+        public string   Descricao { get; set; } = "";
+        public int      Pontos    { get; set; }
+    }
+
+    class OrcamentoDto
+    {
+        public Guid     Id       { get; set; }
+        public string   Numero   { get; set; } = "";
+        public DateTime Data     { get; set; }
+        public decimal  Total    { get; set; }
+        public string   Status   { get; set; } = "";
+        public DateTime Validade { get; set; }
+    }
+}

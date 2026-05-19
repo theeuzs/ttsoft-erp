@@ -1,0 +1,162 @@
+<UserControl x:Class="ERP.WPF.Views.FilialView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource FundoGeral}" FontFamily="Segoe UI">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Cabeçalho -->
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="🏪 Filiais e Transferências" FontSize="26" FontWeight="Bold"
+                       Foreground="#1E62A6"/>
+            <TextBlock Text="Gerencie múltiplas lojas e movimente estoque entre filiais."
+                       FontSize="13" Foreground="{DynamicResource TextMuted}" Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <!-- Conteúdo dividido -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="340"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Coluna: Nova Transferência -->
+            <Border Grid.Column="0" Background="{DynamicResource CardBg}" CornerRadius="12" Padding="20">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.08" Color="Black" Direction="270"/>
+                </Border.Effect>
+                <StackPanel>
+                    <TextBlock Text="NOVA TRANSFERÊNCIA" FontSize="11" FontWeight="Black"
+                               Foreground="{DynamicResource TextMuted}" Margin="0,0,0,16"/>
+
+                    <TextBlock Text="Filial de Origem" FontSize="12" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextMuted}" Margin="0,0,0,4"/>
+                    <ComboBox ItemsSource="{Binding Filiais}"
+                              SelectedItem="{Binding FilialOrigem}"
+                              DisplayMemberPath="Name"
+                              Height="34" Margin="0,0,0,12"/>
+
+                    <TextBlock Text="Filial de Destino" FontSize="12" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextMuted}" Margin="0,0,0,4"/>
+                    <ComboBox ItemsSource="{Binding Filiais}"
+                              SelectedItem="{Binding FilialDestino}"
+                              DisplayMemberPath="Name"
+                              Height="34" Margin="0,0,0,12"/>
+
+                    <TextBlock Text="Observação" FontSize="12" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextMuted}" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding Observacao, UpdateSourceTrigger=PropertyChanged}"
+                             Padding="8" Height="34" Margin="0,0,0,12"/>
+
+                    <TextBlock FontSize="12" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextMuted}" Margin="0,0,0,4">
+                        Itens <Run Foreground="#94A3B8" FontSize="11">(ID_Produto:Quantidade por linha)</Run>
+                    </TextBlock>
+                    <TextBox Text="{Binding ItensTexto, UpdateSourceTrigger=PropertyChanged}"
+                             Padding="8" Height="120" AcceptsReturn="True"
+                             VerticalScrollBarVisibility="Auto"
+                             FontFamily="Consolas" FontSize="12"
+                             Margin="0,0,0,16"/>
+
+                    <Button Content="📦 Criar Transferência"
+                            Command="{Binding CriarTransfCommand}"
+                            Background="#1E62A6" Foreground="White"
+                            FontWeight="Bold" Height="38" BorderThickness="0"
+                            Cursor="Hand">
+                        <Button.Resources>
+                            <Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style>
+                        </Button.Resources>
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <!-- Coluna: Lista de Transferências -->
+            <Border Grid.Column="2" Background="{DynamicResource CardBg}" CornerRadius="12" Padding="20">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.08" Color="Black" Direction="270"/>
+                </Border.Effect>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                        <TextBlock Text="TRANSFERÊNCIAS" FontSize="11" FontWeight="Black"
+                                   Foreground="{DynamicResource TextMuted}" VerticalAlignment="Center"/>
+                        <Button Content="🔄 Atualizar" Command="{Binding CarregarCommand}"
+                                Background="#E2E8F0" Foreground="{DynamicResource TextMuted}"
+                                FontWeight="Bold" Height="30" Padding="12,0"
+                                BorderThickness="0" Cursor="Hand" Margin="12,0,0,0">
+                            <Button.Resources>
+                                <Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>
+                            </Button.Resources>
+                        </Button>
+                    </StackPanel>
+
+                    <DataGrid Grid.Row="1"
+                              ItemsSource="{Binding Transferencias}"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              CanUserSortColumns="True"
+                              GridLinesVisibility="Horizontal"
+                              HeadersVisibility="Column"
+                              BorderThickness="0"
+                              Background="Transparent"
+                              RowBackground="Transparent"
+                              AlternatingRowBackground="#F8FAFC">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Data"
+                                Width="120"
+                                Binding="{Binding DataTransferencia, StringFormat=dd/MM/yyyy HH:mm}"/>
+                            <DataGridTextColumn Header="Origem"  Width="*"
+                                Binding="{Binding Origem.Name}"/>
+                            <DataGridTextColumn Header="Destino" Width="*"
+                                Binding="{Binding Destino.Name}"/>
+                            <DataGridTextColumn Header="Operador" Width="130"
+                                Binding="{Binding OperadorNome}"/>
+                            <DataGridTextColumn Header="Status"  Width="100"
+                                Binding="{Binding Status}"/>
+                            <DataGridTemplateColumn Header="Ações" Width="180">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="✔ Confirmar"
+                                                    Command="{Binding DataContext.ConfirmarCommand,
+                                                        RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    Background="#27AE60" Foreground="White"
+                                                    FontSize="11" Height="26" Padding="8,0"
+                                                    BorderThickness="0" Cursor="Hand" Margin="0,0,4,0">
+                                                <Button.Resources>
+                                                    <Style TargetType="Border"><Setter Property="CornerRadius" Value="5"/></Style>
+                                                </Button.Resources>
+                                            </Button>
+                                            <Button Content="✖ Cancelar"
+                                                    Command="{Binding DataContext.CancelarCommand,
+                                                        RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    Background="#E74C3C" Foreground="White"
+                                                    FontSize="11" Height="26" Padding="8,0"
+                                                    BorderThickness="0" Cursor="Hand">
+                                                <Button.Resources>
+                                                    <Style TargetType="Border"><Setter Property="CornerRadius" Value="5"/></Style>
+                                                </Button.Resources>
+                                            </Button>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

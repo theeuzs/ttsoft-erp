@@ -1,0 +1,367 @@
+@page "/clientes"
+@using ERP.Portal.Services
+@inject ApiClient Api
+@inject IJSRuntime JS
+
+<div style="padding:0 0 24px;">
+
+    <!-- Cabeçalho -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">👤 Clientes</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">@_total clientes cadastrados</p>
+        </div>
+        <button @onclick="NovoCliente"
+                style="background:#1E62A6; color:white; border:none; padding:10px 20px;
+                       border-radius:8px; font-weight:700; cursor:pointer; font-size:14px;">
+            + Novo Cliente
+        </button>
+    </div>
+
+    <!-- Busca -->
+    <div style="background:white; border-radius:12px; padding:16px; margin-bottom:16px;
+         box-shadow:0 2px 8px rgba(0,0,0,.06); display:flex; gap:12px;">
+        <input @bind="_busca" @bind:event="oninput" @onkeyup="OnKeyUp"
+               placeholder="Buscar por nome, CPF ou CNPJ..."
+               style="flex:1; padding:10px 14px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px;"/>
+        <button @onclick="BuscarAsync"
+                style="background:#1E62A6; color:white; border:none; padding:10px 20px;
+                border-radius:8px; font-weight:700; cursor:pointer;">🔍 Buscar</button>
+        <button @onclick="LimparAsync"
+                style="background:#F1F5F9; color:#64748B; border:none; padding:10px 16px;
+                border-radius:8px; font-weight:600; cursor:pointer;">✕ Limpar</button>
+    </div>
+
+    <!-- Tabela -->
+    <div style="background:white; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
+        @if (_loading)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">Carregando...</div>
+        }
+        else
+        {
+            <table style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                        <th style="@Th">NOME</th>
+                        <th style="@Th">CPF / CNPJ</th>
+                        <th style="@Th">TELEFONE</th>
+                        <th style="@Th">CIDADE</th>
+                        <th style="@Th; text-align:center;">GRUPO</th>
+                        <th style="@Th; text-align:right;">HAVER</th>
+                        <th style="@Th; text-align:right;">LIMITE</th>
+                        <th style="@Th; text-align:center;">AÇÕES</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in _clientes ?? [])
+                    {
+                        <tr style="border-bottom:1px solid #F1F5F9;"
+                            onmouseover="this.style.background='#F8FAFC'"
+                            onmouseout="this.style.background=''">
+                            <td style="@Td; font-weight:600; color:#1E293B;">@c.Name</td>
+                            <td style="@Td; font-family:monospace; font-size:12px; color:#64748B;">@(c.Document ?? "—")</td>
+                            <td style="@Td; color:#64748B;">@(c.Phone ?? "—")</td>
+                            <td style="@Td; color:#64748B;">@(c.City ?? "—")</td>
+                            <td style="@Td; text-align:center;">
+                                <span style="background:@GrupoBg(c.GrupoPreco); color:@GrupoColor(c.GrupoPreco);
+                                             padding:2px 8px; border-radius:20px; font-size:11px; font-weight:700;">
+                                    @GrupoLabel(c.GrupoPreco)
+                                </span>
+                            </td>
+                            <td style="@Td; text-align:right; font-weight:700; color:@(c.HaverBalance > 0 ? "#27AE60" : "#1E293B");">
+                                @c.HaverBalance.ToString("C")
+                            </td>
+                            <td style="@Td; text-align:right; color:#64748B;">
+                                @(c.LimiteCredito > 0 ? c.LimiteCredito.ToString("C") : "—")
+                            </td>
+                            <td style="@Td; text-align:center;">
+                                <button @onclick="() => EditarCliente(c)"
+                                        style="background:#F1F5F9; color:#1E293B; border:none;
+                                               padding:5px 12px; border-radius:6px; font-size:12px;
+                                               font-weight:600; cursor:pointer;">
+                                    ✏️ Editar
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <!-- Paginação -->
+            <div style="display:flex; justify-content:space-between; align-items:center;
+                 padding:16px 20px; border-top:1px solid #F1F5F9;">
+                <span style="font-size:13px; color:#94A3B8;">
+                    Página @_pagina de @_totalPaginas — @_total clientes
+                </span>
+                <div style="display:flex; gap:8px;">
+                    <button @onclick="PaginaAnterior" disabled="@(_pagina <= 1)" style="@BtnPag">← Anterior</button>
+                    <button @onclick="ProximaPagina" disabled="@(_pagina >= _totalPaginas)" style="@BtnPag">Próxima →</button>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- ── MODAL DE EDIÇÃO / CRIAÇÃO ─────────────────────────────────────────────── -->
+@if (_modalAberto)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; display:flex;
+                align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:16px; padding:32px; width:560px; max-height:90vh;
+                    overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.3);">
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+                <h3 style="margin:0; font-weight:800; color:#1E293B; font-size:18px;">
+                    @(_editandoId == null ? "➕ Novo Cliente" : "✏️ Editar Cliente")
+                </h3>
+                <button @onclick="FecharModal"
+                        style="background:none; border:none; font-size:20px; cursor:pointer; color:#64748B;">✕</button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_erro))
+            {
+                <div style="background:#FEE2E2; color:#991B1B; padding:10px 14px; border-radius:8px; margin-bottom:16px; font-size:13px;">
+                    @_erro
+                </div>
+            }
+
+            <!-- Campos -->
+            @Campo("Nome *", "text", _form.Name, v => _form = _form with { Name = v })
+            @Campo("CPF / CNPJ", "text", _form.Document, v => _form = _form with { Document = v })
+            @Campo("Telefone", "tel", _form.Phone ?? "", v => _form = _form with { Phone = v })
+            @Campo("E-mail", "email", _form.Email ?? "", v => _form = _form with { Email = v })
+            @Campo("CEP", "text", _form.ZipCode ?? "", v => _form = _form with { ZipCode = v })
+            @Campo("Rua / Logradouro", "text", _form.Street ?? "", v => _form = _form with { Street = v })
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                @Campo("Número", "text", _form.Number ?? "", v => _form = _form with { Number = v }, inline: true)
+                @Campo("Cidade", "text", _form.City ?? "", v => _form = _form with { City = v }, inline: true)
+            </div>
+
+            <div style="margin-bottom:12px;">
+                <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">
+                    Grupo de Preço
+                </label>
+                <select @onchange="OnGrupoChange"
+                        style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px;
+                               font-size:14px; margin-top:4px; background:white;">
+                    <option value="A" selected="@(_form.GrupoPreco == "A")">A — Varejo (preço normal)</option>
+                    <option value="B" selected="@(_form.GrupoPreco == "B")">B — Revendedor / Empreiteiro</option>
+                    <option value="C" selected="@(_form.GrupoPreco == "C")">C — Atacadista / Grande conta</option>
+                </select>
+            </div>
+
+            @CampoDecimal("Limite de Crédito (R$)", _form.LimiteCredito, v => _form = _form with { LimiteCredito = v })
+
+            <!-- Botões -->
+            <div style="display:flex; gap:12px; margin-top:24px;">
+                <button @onclick="SalvarAsync"
+                        disabled="@_salvando"
+                        style="flex:1; background:#1E62A6; color:white; border:none; padding:12px;
+                               border-radius:8px; font-weight:700; font-size:14px; cursor:pointer;">
+                    @(_salvando ? "Salvando..." : (_editandoId == null ? "💾 Cadastrar" : "💾 Salvar"))
+                </button>
+                <button @onclick="FecharModal"
+                        style="padding:12px 24px; background:#F1F5F9; color:#64748B; border:none;
+                               border-radius:8px; font-weight:600; cursor:pointer;">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    // ── Estado ────────────────────────────────────────────────────────────────
+    private ClienteItem[]? _clientes;
+    private string _busca        = "";
+    private int    _pagina       = 1;
+    private int    _totalPaginas = 1;
+    private int    _total        = 0;
+    private bool   _loading      = true;
+
+    // Modal
+    private bool       _modalAberto = false;
+    private Guid?      _editandoId  = null;
+    private FormCliente _form       = new();
+    private bool       _salvando    = false;
+    private string     _erro        = "";
+
+    private const string Th     = "padding:12px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td     = "padding:12px 16px; font-size:13px;";
+    private const string BtnPag = "padding:8px 16px; border:1px solid #E2E8F0; border-radius:8px; background:white; cursor:pointer; font-size:13px;";
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _loading = true;
+        var url    = $"api/Customers?page={_pagina}&pageSize=20&search={Uri.EscapeDataString(_busca)}";
+        var result = await Api.GetAsync<PagedResult<ClienteItem>>(url);
+        _clientes     = result?.Items?.ToArray() ?? [];
+        _total        = result?.TotalItems ?? 0;
+        // PagedResult.TotalPages é calculado server-side mas não serializado — calcular local
+        var pageSize  = 20;
+        _totalPaginas = _total == 0 ? 1 : (int)Math.Ceiling((double)_total / pageSize);
+        _loading      = false;
+    }
+
+    private async Task BuscarAsync() { _pagina = 1; await CarregarAsync(); }
+    private async Task LimparAsync() { _busca = ""; _pagina = 1; await CarregarAsync(); }
+    private async Task PaginaAnterior() { if (_pagina > 1) { _pagina--; await CarregarAsync(); } }
+    private async Task ProximaPagina() { if (_pagina < _totalPaginas) { _pagina++; await CarregarAsync(); } }
+    private async Task OnKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") await BuscarAsync(); }
+
+    // ── Modal ─────────────────────────────────────────────────────────────────
+    private void NovoCliente()
+    {
+        _editandoId = null;
+        _form       = new();
+        _erro       = "";
+        _modalAberto = true;
+    }
+
+    private void EditarCliente(ClienteItem c)
+    {
+        _editandoId = c.Id;
+        _form = new FormCliente
+        {
+            Name          = c.Name,
+            Document      = c.Document ?? "",
+            Phone         = c.Phone ?? "",
+            Email         = c.Email ?? "",
+            City          = c.City ?? "",
+            GrupoPreco    = c.GrupoPreco == 1 ? "B" : c.GrupoPreco == 2 ? "C" : "A",
+            LimiteCredito = c.LimiteCredito
+        };
+        _erro        = "";
+        _modalAberto = true;
+    }
+
+    private void FecharModal() => _modalAberto = false;
+
+    private void OnGrupoChange(ChangeEventArgs e)
+        => _form = _form with { GrupoPreco = e.Value?.ToString() ?? "A" };
+
+    private async Task SalvarAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_form.Name))
+        {
+            _erro = "O campo Nome é obrigatório.";
+            return;
+        }
+
+        _salvando = true;
+        _erro     = "";
+
+        try
+        {
+            var body = new
+            {
+                name          = _form.Name,
+                document      = _form.Document,
+                phone         = _form.Phone,
+                email         = _form.Email,
+                city          = _form.City,
+                zipCode       = _form.ZipCode,
+                street        = _form.Street,
+                number        = _form.Number,
+                grupoPreco    = _form.GrupoPreco == "B" ? 1 : _form.GrupoPreco == "C" ? 2 : 0, // 0=A, 1=B, 2=C
+                limiteCredito = _form.LimiteCredito
+            };
+
+            HttpResponseMessage resp;
+            if (_editandoId == null)
+                resp = await Api.PostAsync("api/Customers", body);
+            else
+                resp = await Api.PutAsync($"api/Customers/{_editandoId}", body);
+
+            if (resp.IsSuccessStatusCode)
+            {
+                _modalAberto = false;
+                await CarregarAsync();
+            }
+            else
+            {
+                _erro = $"Erro ao salvar: {resp.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _erro = ex.Message;
+        }
+        finally { _salvando = false; }
+    }
+
+    // ── Helpers visuais ───────────────────────────────────────────────────────
+    private static string GrupoBg(int g) => g switch
+    {
+        1 => "#EDE9FE",  // B = Revendedor
+        2 => "#FEF3C7",  // C = Atacadista
+        _ => "#F1F5F9"   // A = Varejo
+    };
+    private static string GrupoColor(int g) => g switch
+    {
+        1 => "#7C3AED",
+        2 => "#92400E",
+        _ => "#64748B"
+    };
+    private static string GrupoLabel(int g) => g switch
+    {
+        1 => "B",
+        2 => "C",
+        _ => "A"
+    };
+
+    // ── Render helpers ────────────────────────────────────────────────────────
+    private RenderFragment Campo(string label, string type, string value,
+        Action<string> onChange, bool inline = false) =>
+        @<div style="margin-bottom:@(inline ? "0" : "12px");">
+            <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">
+                @label
+            </label>
+            <input type="@type" value="@value"
+                   @onchange="e => onChange(e.Value?.ToString() ?? string.Empty)"
+                   style="width:100%; padding:10px 12px; border:1px solid #E2E8F0;
+                          border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
+        </div>;
+
+    private RenderFragment CampoDecimal(string label, decimal value, Action<decimal> onChange) =>
+        @<div style="margin-bottom:12px;">
+            <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">
+                @label
+            </label>
+            <input type="number" step="0.01" min="0" value="@value"
+                   @onchange="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) onChange(v); }"
+                   style="width:100%; padding:10px 12px; border:1px solid #E2E8F0;
+                          border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
+        </div>;
+
+    // ── DTOs locais ───────────────────────────────────────────────────────────
+    record ClienteItem(Guid Id, string Name, string? Document, string? Phone,
+        string? Email, string? City, decimal HaverBalance,
+        int GrupoPreco = 0, decimal LimiteCredito = 0);
+
+    record FormCliente
+    {
+        public string  Name          { get; init; } = "";
+        public string  Document      { get; init; } = "";
+        public string  Phone         { get; init; } = "";
+        public string  Email         { get; init; } = "";
+        public string  City          { get; init; } = "";
+        public string  ZipCode       { get; init; } = "";
+        public string  Street        { get; init; } = "";
+        public string  Number        { get; init; } = "";
+        public string  GrupoPreco    { get; init; } = "A";
+        public decimal LimiteCredito { get; init; } = 0;
+    }
+
+    class PagedResult<T>
+    {
+        public IEnumerable<T> Items      { get; set; } = [];
+        public int            TotalItems { get; set; }
+        public int            Page       { get; set; }
+        public int            PageSize   { get; set; }
+    }
+}

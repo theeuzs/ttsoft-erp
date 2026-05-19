@@ -1,0 +1,139 @@
+using ERP.Application.DTOs;
+using ERP.Application.Interfaces;
+using ERP.WPF.Commands;
+using ERP.WPF.State;
+using System;
+using System.Threading.Tasks;
+using System.Windows.Input;
+
+namespace ERP.WPF.ViewModels;
+
+public class LoginViewModel : BaseViewModel
+{
+    private readonly IAuthService _authService;
+    
+    // Evento para avisar a tela que o login deu certo e ela pode fechar
+    public event EventHandler<bool> OnLoginResult;
+
+    public LoginViewModel(IAuthService authService)
+    {
+        _authService = authService;
+        
+        // O botão de login só libera se tiver algo digitado no usuário
+        LoginCommand = new AsyncRelayCommand(_ => RealizarLoginAsync(), _ => !string.IsNullOrWhiteSpace(Usuario));
+        
+        // MÁGICA: Assim que a tela abre, ele garante que o usuário "admin" exista no banco!
+        _ = _authService.EnsureDefaultAdminCreatedAsync();
+    }
+
+    private string _usuario = string.Empty;
+    public string Usuario 
+    { 
+        get => _usuario; 
+        set 
+        { 
+            SetProperty(ref _usuario, value); 
+            CommandManager.InvalidateRequerySuggested(); 
+        } 
+    }
+    // A senha não usa Binding automático por segurança do WPF, ela vem do Code-Behind
+    public string Senha { get; set; } = string.Empty;
+
+    private string _mensagemErro = string.Empty;
+    public string MensagemErro 
+    { 
+        get => _mensagemErro; 
+        set { SetProperty(ref _mensagemErro, value); OnPropertyChanged(nameof(TemErro)); } 
+    }
+    
+    public bool TemErro => !string.IsNullOrEmpty(MensagemErro);
+
+    public ICommand LoginCommand { get; }
+
+    private async Task RealizarLoginAsync()
+    {
+        IsBusy = true;
+        MensagemErro = string.Empty;
+
+        try
+        {
+            // ========================================================
+            // 🔒 TRAVA DE LICENÇA (PHONE HOME) DINÂMICA
+            // ========================================================
+            string cnpjCliente = "";
+            try
+            {
+                // Lê o arquivinho licenca.json que está na mesma pasta do sistema
+                string caminhoArquivo = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "licenca.json");
+                string conteudoJson = System.IO.File.ReadAllText(caminhoArquivo);
+                
+                // Extrai só o CNPJ lá de dentro
+                var config = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string, string>>(conteudoJson);
+                if (config != null && config.ContainsKey("Cnpj"))
+                {
+                    cnpjCliente = config["Cnpj"];
+                }
+            }
+            catch
+            {
+                System.Windows.MessageBox.Show("Arquivo de licença (licenca.json) não encontrado ou corrompido!", "Erro", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                IsBusy = false;
+                return;
+            }
+
+            // 👇 MUDANÇA: Agora recebe a Tupla (IsValid e DataVencimento)
+            var resultadoLicenca = await ERP.WPF.Security.LicenseManager.VerificarLicencaAsync(cnpjCliente);
+            
+            if (!resultadoLicenca.IsValid) // 👇 Verifica se é válido
+            {
+                // 👇 PEGA O CÓDIGO DA MÁQUINA PARA MOSTRAR NA TELA 👇
+                string codigoDestaMaquina = ERP.WPF.Security.MachineFingerprint.GetMachineId();
+
+                System.Windows.MessageBox.Show(
+                    $"SISTEMA NÃO AUTORIZADO!\n\nSua licença expirou ou esta máquina não está registrada.\n\n" +
+                    $"Tire uma foto desta tela e envie para o suporte TTSoft:\n" +
+                    $"CNPJ: {cnpjCliente}\n" +
+                    $"MÁQUINA: {codigoDestaMaquina}", 
+                    "Acesso Negado", 
+                    System.Windows.MessageBoxButton.OK, 
+                    System.Windows.MessageBoxImage.Error);
+                
+                IsBusy = false;
+                return; // Chuta o usuário daqui e aborta o login!
+            }
+            // ========================================================
+
+            // Se passou da trava, faz o login normal no banco de dados local...
+            var dto      = new LoginDto { Username = this.Usuario, Password = this.Senha };
+            var resultado = await _authService.LoginAsync(dto);
+
+            if (resultado.Sucedeu && resultado.Usuario is { } user)
+            {
+                AppSession.Login(
+                    user.Id,
+                    user.Name,
+                    user.RoleName,
+                    user.Permissions ?? new System.Collections.Generic.List<string>(),
+                    user.MaxDiscountPercentage,
+                    user.MaxSangriaValue);
+
+                ERP.Persistence.Context.AppDbContext.SetCurrentUser(user.Id, user.Name);
+                ERP.WPF.State.AppSession.DataVencimentoLicenca = resultadoLicenca.DataVencimento;
+
+                OnLoginResult?.Invoke(this, true);
+            }
+            else
+            {
+                MensagemErro = resultado.Mensagem ?? "Usuário ou senha incorretos.";
+            }
+        }
+        catch (Exception ex)
+        {
+            MensagemErro = $"Erro de conexão: {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+}

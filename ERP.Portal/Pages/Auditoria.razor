@@ -1,0 +1,177 @@
+@page "/auditoria"
+@using ERP.Portal.Services
+@inject ApiClient Api
+
+<div style="padding:0 0 24px;">
+    <h2 style="color:#1E293B; font-weight:800; margin:0 0 24px;">🔍 Auditoria</h2>
+
+    <div style="background:white; border-radius:12px; padding:16px; margin-bottom:16px;
+         box-shadow:0 2px 8px rgba(0,0,0,.06); display:flex; gap:12px; flex-wrap:wrap;">
+        <input @bind="_filtroUsuario" placeholder="Filtrar por usuário..."
+               style="flex:1; min-width:160px; padding:9px 14px; border:1px solid #E2E8F0;
+               border-radius:8px; font-size:13px;"/>
+        <input @bind="_filtroAcao" placeholder="Filtrar por ação..."
+               style="flex:1; min-width:160px; padding:9px 14px; border:1px solid #E2E8F0;
+               border-radius:8px; font-size:13px;"/>
+        <button @onclick="CarregarAsync"
+                style="background:#1E62A6; color:white; border:none; padding:9px 20px;
+                border-radius:8px; font-weight:700; cursor:pointer; font-size:13px;">
+            🔍 Filtrar
+        </button>
+        <button @onclick="LimparAsync"
+                style="background:#F1F5F9; color:#64748B; border:none; padding:9px 14px;
+                border-radius:8px; font-weight:600; cursor:pointer; font-size:13px;">
+            ✕ Limpar
+        </button>
+    </div>
+
+    <div style="background:white; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
+        @if (_loading)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">Carregando auditoria...</div>
+        }
+        else
+        {
+            <table style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                        <th style="@Th">DATA/HORA</th>
+                        <th style="@Th">USUÁRIO</th>
+                        <th style="@Th">AÇÃO</th>
+                        <th style="@Th">ENTIDADE</th>
+                        <th style="@Th">DETALHES</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var log in _logs ?? [])
+                    {
+                        var corAcao = log.Action?.ToLower() switch {
+                            var a when a?.Contains("delete") == true || a?.Contains("cancel") == true => "#EF4444",
+                            // 👇 Adicionado o "insert" para a badge ficar verdinha 👇
+                            var a when a?.Contains("create") == true || a?.Contains("add") == true || a?.Contains("insert") == true => "#27AE60",
+                            var a when a?.Contains("update") == true || a?.Contains("edit") == true   => "#F59E0B",
+                            _ => "#64748B"
+                        };
+                        <tr style="border-bottom:1px solid #F1F5F9; font-size:13px;"
+                            onmouseover="this.style.background='#F8FAFC'"
+                            onmouseout="this.style.background=''">
+                            <td style="@Td; color:#64748B; font-size:11px; white-space:nowrap;">
+                                @log.CreatedAt.ToString("dd/MM/yy HH:mm:ss")
+                            </td>
+                            <td style="@Td; font-weight:600; color:#1E293B;">
+                                @(log.UserName ?? "—")
+                            </td>
+                            <td style="@Td;">
+                                <span style="background:@(corAcao)20; color:@corAcao;
+                                      padding:2px 8px; border-radius:4px; font-size:11px;
+                                      font-weight:700; white-space:nowrap;">
+                                    @(log.Action ?? "—")
+                                </span>
+                            </td>
+                            
+                            <td style="@Td; color:#64748B; font-size:12px;">
+                                @(log.TableName ?? log.EntityName ?? "—")
+                            </td>
+                            
+                            <td style="@Td; color:#94A3B8; font-size:11px; max-width:300px;
+                                 overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                @(log.Changes ?? log.Details ?? "—")
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <div style="display:flex; justify-content:space-between; align-items:center;
+                 padding:14px 20px; border-top:1px solid #F1F5F9;">
+                <span style="font-size:13px; color:#94A3B8;">
+                    @_total registros — página @_pagina de @_totalPages
+                </span>
+                <div style="display:flex; gap:8px;">
+                    <button @onclick="PaginaAnterior" disabled="@(_pagina <= 1)"
+                            style="@BtnPag">← Anterior</button>
+                    <button @onclick="ProximaPagina" disabled="@(_pagina >= _totalPages)"
+                            style="@BtnPag">Próxima →</button>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private AuditItem[]? _logs;
+    private string  _filtroUsuario = "";
+    private string  _filtroAcao    = "";
+    private int     _pagina        = 1;
+    private int     _total         = 0;
+    private int     _totalPages    = 1;
+    private bool    _loading       = true;
+
+    private const string Th = "padding:12px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td = "padding:10px 16px;";
+    private const string BtnPag = "padding:7px 14px; border:1px solid #E2E8F0; border-radius:8px; background:white; cursor:pointer; font-size:12px;";
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _loading = true;
+        var url = $"api/Auditoria?pagina={_pagina}&tam=50" +
+                  (!string.IsNullOrEmpty(_filtroUsuario) ? $"&usuario={Uri.EscapeDataString(_filtroUsuario)}" : "") +
+                  (!string.IsNullOrEmpty(_filtroAcao)    ? $"&acao={Uri.EscapeDataString(_filtroAcao)}" : "");
+
+        var result = await Api.GetAsync<AuditResult>(url);
+        _logs       = result?.Items ?? [];
+        _total      = result?.Total ?? 0;
+        _totalPages = result?.TotalPages ?? 1;
+        _loading    = false;
+    }
+
+    private async Task LimparAsync()
+    {
+        _filtroUsuario = ""; _filtroAcao = ""; _pagina = 1;
+        await CarregarAsync();
+    }
+
+    private async Task PaginaAnterior() { if (_pagina > 1) { _pagina--; await CarregarAsync(); } }
+    private async Task ProximaPagina() { if (_pagina < _totalPages) { _pagina++; await CarregarAsync(); } }
+
+    class AuditResult
+    {
+        public AuditItem[] Items      { get; set; } = [];
+        public int         Total      { get; set; }
+        public int         TotalPages { get; set; }
+    }
+    
+    // Mapeamento exato dos campos do AuditLog da API
+    public class AuditItem
+    {
+        public Guid Id { get; set; }
+
+        // BaseEntity: createdAt / AuditLog: timestamp (ambos mapeados)
+        public DateTime CreatedAt { get; set; }
+        public DateTime Timestamp { set { CreatedAt = value; } }
+        public DateTime DataCriacao { set { CreatedAt = value; } }
+
+        // action
+        public string? Action { get; set; }
+        public string Acao { set { Action = value; } }
+
+        // userName
+        public string? UserName { get; set; }
+        public string Usuario { set { UserName = value; } }
+
+        // entityType → EntityName e TableName
+        public string? EntityName { get; set; }
+        public string? TableName  { get => EntityName; set { EntityName = value; } }
+        public string  EntityType { set { EntityName = value; TableName = value; } }
+        public string  Tabela     { set { EntityName = value; TableName = value; } }
+
+        // oldValues + newValues → Details (mostra ambos concatenados)
+        public string? Details   { get; set; }
+        public string? OldValues { set { if (!string.IsNullOrEmpty(value)) Details = "ANTES: " + value; } }
+        public string? NewValues { set { if (!string.IsNullOrEmpty(value)) Details = (Details != null ? Details + " | " : "") + "DEPOIS: " + value; } }
+        public string? Changes   { get => Details; set { Details = value; } }
+        public string  Detalhes  { set { Details = value; } }
+    }
+}

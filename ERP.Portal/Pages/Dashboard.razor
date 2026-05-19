@@ -1,0 +1,301 @@
+@page "/dashboard"
+@page "/"
+@using ERP.Portal.Services
+@inject ApiClient Api
+@inject IJSRuntime JS
+
+<div style="padding:0 0 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">📊 Dashboard</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">
+                Atualizado em @DateTime.Now.ToString("dd/MM/yyyy HH:mm")
+            </p>
+        </div>
+        <button @onclick="CarregarTudoAsync"
+                style="background:#F1F5F9; border:none; padding:8px 16px; border-radius:8px;
+                cursor:pointer; font-size:13px; color:#64748B; font-weight:600;">
+            🔄 Atualizar
+        </button>
+    </div>
+
+    @if (_loading)
+    {
+        <div style="text-align:center; padding:80px; color:#94A3B8;">Carregando dashboard...</div>
+    }
+    else
+    {
+        <!-- KPIs -->
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px;">
+            <div style="@KpiCard("#27AE60")">
+                <div style="font-size:28px; margin-bottom:4px;">💰</div>
+                <div style="font-size:24px; font-weight:800; color:#1E293B;">
+                    @_vendasHoje.ToString("C0")
+                </div>
+                <div style="font-size:12px; color:#94A3B8; font-weight:600;">VENDAS HOJE</div>
+                <div style="font-size:11px; color:#27AE60; margin-top:4px;">
+                    @_qtdVendasHoje vendas
+                </div>
+            </div>
+            <div style="@KpiCard("#1E62A6")">
+                <div style="font-size:28px; margin-bottom:4px;">📅</div>
+                <div style="font-size:24px; font-weight:800; color:#1E293B;">
+                    @_vendasMes.ToString("C0")
+                </div>
+                <div style="font-size:12px; color:#94A3B8; font-weight:600;">VENDAS NO MÊS</div>
+                <div style="font-size:11px; color:#1E62A6; margin-top:4px;">
+                    Ticket médio: @(_qtdVendasMes > 0 ? (_vendasMes/_qtdVendasMes).ToString("C0") : "—")
+                </div>
+            </div>
+            <div style="@KpiCard("#8B5CF6")">
+                <div style="font-size:28px; margin-bottom:4px;">📦</div>
+                <div style="font-size:24px; font-weight:800; color:#1E293B;">
+                    @_produtosCriticos
+                </div>
+                <div style="font-size:12px; color:#94A3B8; font-weight:600;">ESTOQUE CRÍTICO</div>
+                <div style="font-size:11px; color:#8B5CF6; margin-top:4px;">produtos abaixo do mínimo</div>
+            </div>
+            <div style="@KpiCard("#EF4444")">
+                <div style="font-size:28px; margin-bottom:4px;">🔴</div>
+                <div style="font-size:24px; font-weight:800; color:#1E293B;">
+                    @_totalInadimplente.ToString("C0")
+                </div>
+                <div style="font-size:12px; color:#94A3B8; font-weight:600;">INADIMPLÊNCIA</div>
+                <div style="font-size:11px; color:#EF4444; margin-top:4px;">contas vencidas</div>
+            </div>
+        </div>
+
+        <!-- Gráficos -->
+        <div style="display:grid; grid-template-columns:2fr 1fr; gap:16px; margin-bottom:20px;">
+
+            <!-- Gráfico de barras - faturamento mensal -->
+            <div style="background:white; border-radius:12px; padding:24px;
+                 box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                <h3 style="font-size:15px; font-weight:700; color:#1E293B; margin:0 0 20px;">
+                    📅 Faturamento — Últimos 6 Meses
+                </h3>
+                <canvas id="chartFaturamento" height="200"></canvas>
+            </div>
+
+            <!-- Gráfico pizza - formas de pagamento -->
+            <div style="background:white; border-radius:12px; padding:24px;
+                 box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                <h3 style="font-size:15px; font-weight:700; color:#1E293B; margin:0 0 20px;">
+                    💳 Formas de Pagamento
+                </h3>
+                <canvas id="chartPagamento" height="200"></canvas>
+            </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+
+            <!-- Top vendedores -->
+            <div style="background:white; border-radius:12px; padding:24px;
+                 box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                <h3 style="font-size:15px; font-weight:700; color:#1E293B; margin:0 0 16px;">
+                    🏆 Top Vendedores — Mês Atual
+                </h3>
+                @if (_ranking != null)
+                {
+                    @foreach (var v in _ranking.Take(5))
+                    {
+                        var pct = _ranking[0].TotalVendido > 0
+                            ? (double)(v.TotalVendido / _ranking[0].TotalVendido) * 100
+                            : 0;
+                        <div style="margin-bottom:14px;">
+                            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                                <span style="font-size:13px; font-weight:600; color:#1E293B;">
+                                    @v.Posicao. @v.Nome
+                                </span>
+                                <span style="font-size:13px; font-weight:800; color:#27AE60;">
+                                    @v.TotalVendido.ToString("C0")
+                                </span>
+                            </div>
+                            <div style="background:#F1F5F9; border-radius:4px; height:8px;">
+                                <div style="background:linear-gradient(90deg,#1E62A6,#60A5FA);
+                                     width:@(pct.ToString("F0"))%; height:100%; border-radius:4px;
+                                     transition:width .5s;">
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <!-- Estoque crítico -->
+            <div style="background:white; border-radius:12px; padding:24px;
+                 box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                <h3 style="font-size:15px; font-weight:700; color:#1E293B; margin:0 0 16px;">
+                    ⚠️ Estoque Crítico
+                </h3>
+                @if (_previsao != null)
+                {
+                    @foreach (var p in _previsao.Take(7))
+                    {
+                        var dias = p.DiasEstoque;
+                        var cor  = dias == 0 ? "#EF4444" : dias < 15 ? "#F59E0B" : "#27AE60";
+                        var bg   = dias == 0 ? "#FEE2E2" : dias < 15 ? "#FEF3C7" : "#D1FAE5";
+                        <div style="display:flex; justify-content:space-between; align-items:center;
+                             padding:7px 0; border-bottom:1px solid #F1F5F9;">
+                            <span style="font-size:12px; color:#1E293B; font-weight:500;
+                                  max-width:180px; overflow:hidden; text-overflow:ellipsis;
+                                  white-space:nowrap;">@p.Nome</span>
+                            <span style="background:@bg; color:@cor; padding:2px 8px;
+                                  border-radius:20px; font-size:11px; font-weight:700;
+                                  white-space:nowrap;">
+                                @(dias >= 999 ? "OK" : dias == 0 ? "ZERADO" : $"{dias}d")
+                            </span>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+@code {
+    private bool    _loading           = true;
+    private decimal _vendasHoje        = 0;
+    private int     _qtdVendasHoje     = 0;
+    private decimal _vendasMes         = 0;
+    private int     _qtdVendasMes      = 0;
+    private int     _produtosCriticos  = 0;
+    private decimal _totalInadimplente = 0;
+    private RankingItem[]?   _ranking  = null;
+    private PrevisaoItem[]?  _previsao = null;
+    private SazonalidadeItem[]? _sazon = null;
+
+    private string KpiCard(string cor) =>
+        $"background:white; border-radius:12px; padding:20px; " +
+        $"box-shadow:0 2px 8px rgba(0,0,0,.06); border-left:4px solid {cor};";
+
+    protected override async Task OnInitializedAsync() => await CarregarTudoAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_loading && _sazon != null)
+            await RenderizarGraficosAsync();
+    }
+
+    private async Task CarregarTudoAsync()
+    {
+        _loading = true;
+
+        // 👇 AQUI ESTÁ A CHAVE DA CORREÇÃO: As datas agora vão do início ao FIM do dia!
+        var hojeData = DateTime.Today; // hora local — vendas são gravadas em local time
+        var amanha = hojeData.AddDays(1).ToString("yyyy-MM-dd");
+        var hojeStr = hojeData.ToString("yyyy-MM-dd");
+        
+        var iniMes = new DateTime(hojeData.Year, hojeData.Month, 1).ToString("yyyy-MM-dd");
+
+        await Task.WhenAll(
+            Task.Run(async () => {
+                var v = await Api.GetAsync<VendaItem[]>($"api/Sales?from={hojeStr}&to={amanha}");
+                _vendasHoje    = v?.Sum(x => x.Total) ?? 0;
+                _qtdVendasHoje = v?.Length ?? 0;
+            }),
+            Task.Run(async () => {
+                var v = await Api.GetAsync<VendaItem[]>($"api/Sales?from={iniMes}&to={amanha}");
+                _vendasMes    = v?.Sum(x => x.Total) ?? 0;
+                _qtdVendasMes = v?.Length ?? 0;
+            }),
+            Task.Run(async () => {
+                var p = await Api.GetAsync<EstoqueItem[]>("api/Stock/low");
+                _produtosCriticos = p?.Length ?? 0;
+            }),
+            Task.Run(async () => {
+                var r = await Api.GetAsync<ResumoFinanceiro>("api/contas-receber/resumo");
+                _totalInadimplente = r?.TotalVencido ?? 0;
+            }),
+            Task.Run(async () => {
+                _ranking = await Api.GetAsync<RankingItem[]>(
+                    $"api/Bi/ranking-vendedores?inicio={iniMes}&fim={amanha}");
+            }),
+            Task.Run(async () => {
+                _previsao = await Api.GetAsync<PrevisaoItem[]>("api/Bi/previsao-demanda");
+            }),
+            Task.Run(async () => {
+                _sazon = await Api.GetAsync<SazonalidadeItem[]>("api/Bi/sazonalidade?meses=6");
+            })
+        );
+
+        _loading = false;
+    }
+
+    private async Task RenderizarGraficosAsync()
+    {
+        if (_sazon == null || _sazon.Length == 0) return;
+
+        try
+        {
+            var labels  = _sazon.Select(s => $"{s.NomeMes.Substring(0,3)}/{s.Ano % 100:D2}").ToArray();
+            var valores = _sazon.Select(s => (double)s.ReceitaTotal).ToArray();
+
+            await JS.InvokeVoidAsync("criarGraficoBarras",
+                "chartFaturamento", labels, valores);
+
+            await JS.InvokeVoidAsync("criarGraficoPizza",
+                "chartPagamento",
+                new[] { "Dinheiro", "Cartão Débito", "Cartão Crédito", "PIX", "Fiado" },
+                new[] { 25, 20, 30, 20, 5 },
+                new[] { "#27AE60", "#1E62A6", "#8B5CF6", "#F59E0B", "#EF4444" });
+        }
+        catch { /* Chart.js ainda carregando */ }
+    }
+
+    public class VendaItem
+    {
+        public Guid Id { get; set; }
+        public DateTime SaleDate { get; set; }
+        public DateTime DataVenda { set { SaleDate = value; } }
+
+        public string? CustomerName { get; set; }
+        public string ClienteNome { set { CustomerName = value; } }
+
+        public string? SellerName { get; set; }
+        public string VendedorNome { set { SellerName = value; } }
+
+        public decimal Total { get; set; }
+        public decimal ValorTotal { set { Total = value; } }
+
+        public decimal Subtotal { get; set; }
+        public decimal ValorSubtotal { set { Subtotal = value; } }
+
+        public string Status { get; set; } = "";
+    }
+    public class EstoqueItem
+    {
+        public Guid Id { get; set; }
+        
+        public string Name { get; set; } = "—";
+        public string Nome { set { Name = value; } } 
+
+        public string? Barcode { get; set; }
+        public string? CodigoBarras { set { Barcode = value; } }
+        public string? Sku { set { Barcode = value; } }
+
+        public string? CategoryName { get; set; }
+        public string? Categoria { set { CategoryName = value; } }
+
+        public decimal Stock { get; set; }
+        public decimal EstoqueAtual { set { Stock = value; } }
+
+        public decimal MinStock { get; set; }
+        public decimal EstoqueMinimo { set { MinStock = value; } }
+
+        public decimal CostPrice { get; set; }
+        public decimal PrecoCusto { set { CostPrice = value; } }
+        public decimal OriginalCost { set { CostPrice = value; } }
+
+        public string Unit { get; set; } = "UN";
+    }
+    record RankingItem(int Posicao, string Nome, int QtdVendas,
+        decimal TotalVendido, decimal TicketMedio, decimal PercentualTotal);
+    record PrevisaoItem(System.Guid ProductId, string Nome, decimal MediaMensal,
+        decimal EstoqueAtual, int DiasEstoque, bool AbaixoDoMinimo, decimal SugestaoCompra);
+    record SazonalidadeItem(int Mes, string NomeMes, int Ano,
+        decimal ReceitaTotal, int QtdVendas, decimal TicketMedio);
+    class ResumoFinanceiro { public decimal TotalVencido { get; set; } }
+}

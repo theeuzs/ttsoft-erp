@@ -1,0 +1,115 @@
+<Window x:Class="ERP.WPF.Views.ComissaoView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Relatório de Comissões"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource FundoRodape}"
+        ShowInTaskbar="False"
+        ResizeMode="CanResize"
+        Width="860"
+        MinWidth="700"
+        MaxHeight="580"
+        SizeToContent="Height">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Título -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock Text="Fechamento de Comissões" FontSize="22" FontWeight="Bold"
+                       Foreground="{DynamicResource TextDark}"/>
+            <TextBlock Text="Cálculo de repasse para vendedores" FontSize="13"
+                       Foreground="{DynamicResource TextMuted}" Margin="0,3,0,0"/>
+        </StackPanel>
+
+        <!-- Filtros em linha compacta -->
+        <Border Grid.Row="1" Background="{DynamicResource CardBg}" CornerRadius="8"
+                BorderBrush="{DynamicResource BordaCard}" BorderThickness="1"
+                Padding="14,10" Margin="0,0,0,12">
+            <WrapPanel Orientation="Horizontal" ItemHeight="35">
+
+                <TextBlock Text="Comissão (%):" VerticalAlignment="Center" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextDark}" Margin="0,0,6,0"/>
+                <TextBox Text="{Binding PercentualComissao, UpdateSourceTrigger=PropertyChanged}"
+         Width="80" Padding="5,2" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+         FontWeight="Bold" Margin="0,0,20,0"/>
+
+                <TextBlock Text="De:" VerticalAlignment="Center" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextDark}" Margin="0,0,6,0"/>
+                <DatePicker SelectedDate="{Binding DataInicio}" Width="110" Margin="0,0,8,0"/>
+
+                <TextBlock Text="até" VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextMuted}" Margin="0,0,8,0"/>
+                <DatePicker SelectedDate="{Binding DataFim}" Width="110" Margin="0,0,16,0"/>
+
+                <Button Content="▶ CALCULAR" Command="{Binding CalcularCommand}"
+                        Width="110" Height="32" Background="#F59E0B" Foreground="White"
+                        FontWeight="Bold" BorderThickness="0" Cursor="Hand" Margin="0,0,8,0">
+                    <Button.Resources>
+                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style>
+                    </Button.Resources>
+                </Button>
+
+                <Button Content="📄 PDF" Command="{Binding ExportarPdfCommand}"
+                        Width="80" Height="32" Background="#DC2626" Foreground="White"
+                        FontWeight="Bold" BorderThickness="0" Cursor="Hand">
+                    <Button.Resources>
+                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style>
+                    </Button.Resources>
+                </Button>
+            </WrapPanel>
+        </Border>
+
+        <!-- Tabela -->
+        <Border Grid.Row="2" Background="{DynamicResource CardBg}" CornerRadius="8"
+                BorderThickness="1" BorderBrush="{DynamicResource BordaCard}" Padding="1">
+            <DataGrid ItemsSource="{Binding ListaComissoes}" AutoGenerateColumns="False"
+                      CanUserAddRows="False" IsReadOnly="True" HeadersVisibility="Column"
+                      Background="Transparent" BorderThickness="0" RowHeight="40"
+                      GridLinesVisibility="Horizontal"
+                      HorizontalGridLinesBrush="{DynamicResource BordaCard}"
+                      AlternatingRowBackground="{DynamicResource CardBgAlt}">
+                <DataGrid.Resources>
+                    <!-- Override local do header para não perder o estilo -->
+                    <Style TargetType="DataGridColumnHeader">
+                        <Setter Property="Background" Value="{DynamicResource CardBgAlt}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource CorAcento}"/>
+                        <Setter Property="FontWeight" Value="Bold"/>
+                        <Setter Property="Padding" Value="15,10"/>
+                        <Setter Property="BorderThickness" Value="0,0,0,2"/>
+                        <Setter Property="BorderBrush" Value="{DynamicResource BordaCard}"/>
+                    </Style>
+                </DataGrid.Resources>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="VENDEDOR"      Binding="{Binding Vendedor}"    Width="*"   FontWeight="Bold"/>
+                    <DataGridTextColumn Header="QTD. VENDAS"   Binding="{Binding QtdVendas}"   Width="110"/>
+                    <DataGridTextColumn Header="TOTAL VENDIDO" Binding="{Binding TotalVendido, StringFormat=C}" Width="140" Foreground="#3B82F6" FontWeight="SemiBold"/>
+                    <DataGridTextColumn Header="A PAGAR"       Binding="{Binding ValorComissao, StringFormat=C}" Width="130" FontWeight="Black" Foreground="#10B981"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+
+        <!-- Rodapé de totais -->
+        <Border Grid.Row="3" Margin="0,12,0,0" Background="#1E293B" CornerRadius="8" Padding="16,12">
+            <Grid>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                    <TextBlock Text="Total Vendido:" Foreground="#94A3B8" FontSize="14"
+                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock Text="{Binding TotalVendidoGeral, StringFormat=C}"
+                               Foreground="White" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <TextBlock Text="Comissões a Pagar:" Foreground="#94A3B8" FontSize="14"
+                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock Text="{Binding TotalComissaoPagar, StringFormat=C}"
+                               Foreground="#10B981" FontWeight="Black" FontSize="20" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

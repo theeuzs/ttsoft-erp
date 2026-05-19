@@ -1,0 +1,549 @@
+@page "/entregas"
+@using ERP.Portal.Services
+@inject ApiClient Api
+@inject IJSRuntime JS
+
+<div style="padding:0 0 24px;">
+    <!-- Header -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">🚚 Entregas</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">
+                @_data.ToString("dd/MM/yyyy") — @(_entregas?.Length ?? 0) entrega(s)
+            </p>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <input type="date" @bind="_data" @bind:event="oninput" @onchange="CarregarAsync"
+                   style="padding:8px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:13px;"/>
+            <div style="display:flex; gap:8px;">
+                <button @onclick="AbrirRomaneioAsync"
+                        style="background:#1E293B; color:white; border:none; padding:8px 18px;
+                               border-radius:8px; font-weight:700; cursor:pointer; font-size:13px;">
+                    🖨️ Romaneio
+                </button>
+                <button @onclick="() => _modalNovaEntrega = true"
+                        style="background:#1E62A6; color:white; border:none; padding:8px 18px;
+                               border-radius:8px; font-weight:700; cursor:pointer; font-size:13px;">
+                    + Nova Entrega
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPIs do dia -->
+    @if (_relatorio != null)
+    {
+        <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:20px;">
+            @foreach (var (label, valor, cor, icon) in new[]{
+                ("Total", _relatorio.TotalDia.ToString(),         "#1E62A6", "📦"),
+                ("Em rota",  _relatorio.EmRota.ToString(),        "#F59E0B", "🚚"),
+                ("Entregues", _relatorio.Entregues.ToString(),    "#10B981", "✅"),
+                ("Pendentes", _relatorio.Pendentes.ToString(),    "#8B5CF6", "⏳"),
+                ("Taxa",     _relatorio.TaxaEntrega + "%",        "#1E293B", "📊")})
+            {
+                <div style="background:white; border-radius:10px; padding:14px; text-align:center;
+                     box-shadow:0 2px 6px rgba(0,0,0,.05); border-top:3px solid @cor;">
+                    <div style="font-size:20px; margin-bottom:4px;">@icon</div>
+                    <div style="font-size:22px; font-weight:800; color:#1E293B;">@valor</div>
+                    <div style="font-size:11px; font-weight:700; color:#94A3B8;">@label.ToUpper()</div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Filtro de status -->
+    <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+        @foreach (var s in new[]{"Todos","Pendente","EmRota","Entregue","Cancelada","Reagendada"})
+        {
+            var ativo = _filtroStatus == s;
+            <button @onclick="() => FiltrarStatus(s)"
+                    style="padding:6px 14px; border:none; border-radius:20px; font-size:12px;
+                           font-weight:@(ativo ? "700" : "500"); cursor:pointer;
+                           background:@(ativo ? "#1E62A6" : "#F1F5F9");
+                           color:@(ativo ? "white" : "#64748B");">
+                @s.Replace("EmRota","Em Rota")
+            </button>
+        }
+    </div>
+
+    <!-- Lista de entregas -->
+    @if (_loading)
+    {
+        <div style="text-align:center; padding:60px; color:#94A3B8;">Carregando entregas...</div>
+    }
+    else if (!_filtradas.Any())
+    {
+        <div style="text-align:center; padding:60px; background:white; border-radius:12px;">
+            <div style="font-size:40px; margin-bottom:10px;">🚚</div>
+            <div style="color:#64748B; font-size:14px;">Nenhuma entrega para este dia.</div>
+        </div>
+    }
+    else
+    {
+        <div style="display:flex; flex-direction:column; gap:10px;">
+            @foreach (var e in _filtradas)
+            {
+                var (corStatus, bgStatus) = e.Status switch
+                {
+                    "Entregue"   => ("#065F46", "#D1FAE5"),
+                    "EmRota"     => ("#92400E", "#FEF3C7"),
+                    "Cancelada"  => ("#991B1B", "#FEE2E2"),
+                    "Reagendada" => ("#1E3A8A", "#DBEAFE"),
+                    _            => ("#6B7280", "#F3F4F6")
+                };
+
+                <div style="background:white; border-radius:12px; padding:16px 20px;
+                            box-shadow:0 2px 6px rgba(0,0,0,.05);
+                            border-left:4px solid @corStatus; display:flex; gap:16px; align-items:center;">
+
+                    <!-- Info principal -->
+                    <div style="flex:1; min-width:0;">
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:6px;">
+                            <span style="font-weight:700; font-size:14px; color:#1E293B;">@e.ClienteNome</span>
+                            <span style="background:@bgStatus; color:@corStatus; font-size:10px;
+                                         font-weight:700; padding:3px 9px; border-radius:20px;">
+                                @e.Status.Replace("EmRota","Em Rota")
+                            </span>
+                            @if (!string.IsNullOrEmpty(e.JanelaHorario))
+                            {
+                                <span style="font-size:11px; color:#94A3B8;">🕐 @e.JanelaHorario</span>
+                            }
+                        </div>
+                        <div style="font-size:12px; color:#64748B;">
+                            📍 @e.EnderecoCompleto
+                        </div>
+                        @if (!string.IsNullOrEmpty(e.Referencia))
+                        {
+                            <div style="font-size:11px; color:#94A3B8; margin-top:2px;">
+                                Ref: @e.Referencia
+                            </div>
+                        }
+                        <div style="display:flex; gap:16px; margin-top:6px; flex-wrap:wrap;">
+                            @if (!string.IsNullOrEmpty(e.MotoristaNome))
+                            {
+                                <span style="font-size:12px; color:#64748B;">👤 @e.MotoristaNome</span>
+                            }
+                            @if (!string.IsNullOrEmpty(e.VeiculoPlaca))
+                            {
+                                <span style="font-size:12px; color:#64748B;">🚗 @e.VeiculoPlaca</span>
+                            }
+                            @if (e.CustoEntrega > 0)
+                            {
+                                <span style="font-size:12px; color:#64748B;">💰 @e.CustoEntrega.ToString("C")</span>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Ações -->
+                    <div style="display:flex; flex-direction:column; gap:6px; flex-shrink:0;">
+                        @if (e.Status == "Pendente")
+                        {
+                            <button @onclick="() => AbrirAtribuirMotorista(e)"
+                                    style="@BtnAcao("#1E62A6")">👤 Atribuir</button>
+                            <button @onclick="() => ConfirmarEntrega(e.Id)"
+                                    style="@BtnAcao("#10B981")">✅ Confirmar</button>
+                        }
+                        else if (e.Status == "EmRota")
+                        {
+                            <button @onclick="() => ConfirmarEntrega(e.Id)"
+                                    style="@BtnAcao("#10B981")">✅ Entregue</button>
+                            <button @onclick="() => AbrirProblema(e)"
+                                    style="@BtnAcao("#EF4444")">⚠ Problema</button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Relatório por motorista -->
+    @if (_relatorio?.PorMotorista.Any() == true)
+    {
+        <div style="background:white; border-radius:12px; padding:20px; margin-top:20px;
+                    box-shadow:0 2px 8px rgba(0,0,0,.06);">
+            <h3 style="font-size:14px; font-weight:700; color:#1E293B; margin:0 0 14px;">
+                📊 Desempenho por Motorista
+            </h3>
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                    <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                        <th style="@Th">MOTORISTA</th>
+                        <th style="@Th; text-align:right;">TOTAL</th>
+                        <th style="@Th; text-align:right;">ENTREGUES</th>
+                        <th style="@Th; text-align:right;">PENDENTES</th>
+                        <th style="@Th; text-align:right;">CUSTO</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var m in _relatorio.PorMotorista)
+                    {
+                        <tr style="border-bottom:1px solid #F1F5F9;">
+                            <td style="@Td; font-weight:600;">@m.MotoristaNome</td>
+                            <td style="@Td; text-align:right;">@m.TotalEntregas</td>
+                            <td style="@Td; text-align:right; color:#10B981; font-weight:700;">@m.Entregues</td>
+                            <td style="@Td; text-align:right; color:#F59E0B;">@m.Pendentes</td>
+                            <td style="@Td; text-align:right;">@m.CustoTotal.ToString("C")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<!-- Toast -->
+@if (_msg != null)
+{
+    <div style="position:fixed; bottom:24px; right:24px; background:#1E293B; color:white;
+         padding:14px 20px; border-radius:10px; font-size:14px; font-weight:600;
+         box-shadow:0 4px 20px rgba(0,0,0,.3); z-index:500;">@_msg</div>
+}
+
+<!-- Modal: Nova Entrega -->
+@if (_modalNovaEntrega)
+{
+    <div @onclick="() => _modalNovaEntrega = false"
+         style="position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:900;"/>
+    <div style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+                background:white; border-radius:16px; padding:28px; width:500px; max-height:85vh;
+                overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.2); z-index:901;">
+        <h3 style="margin:0 0 20px; color:#1E293B;">🚚 Nova Entrega</h3>
+
+        <label style="@Label">Venda ID (GUID)</label>
+        <input @bind="_form.SaleId" placeholder="ID da venda..." style="@Input" />
+
+        <label style="@Label">Nome do cliente</label>
+        <input @bind="_form.ClienteNome" style="@Input" />
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div><label style="@Label">Logradouro</label><input @bind="_form.Logradouro" style="@Input"/></div>
+            <div><label style="@Label">Número</label><input @bind="_form.Numero" style="@Input"/></div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div><label style="@Label">Bairro</label><input @bind="_form.Bairro" style="@Input"/></div>
+            <div><label style="@Label">Cidade</label><input @bind="_form.Cidade" style="@Input"/></div>
+        </div>
+        <div style="display:grid; grid-template-columns:2fr 1fr; gap:10px;">
+            <div><label style="@Label">CEP</label><input @bind="_form.CEP" style="@Input"/></div>
+            <div><label style="@Label">UF</label><input @bind="_form.UF" maxlength="2" style="@Input"/></div>
+        </div>
+
+        <label style="@Label">Ponto de referência</label>
+        <input @bind="_form.Referencia" placeholder="Casa amarela, portão de ferro..." style="@Input"/>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div>
+                <label style="@Label">Data prevista</label>
+                <input type="date" @bind="_form.DataPrevista" style="@Input"/>
+            </div>
+            <div>
+                <label style="@Label">Janela de horário</label>
+                <select @bind="_form.JanelaHorario" style="@Input">
+                    <option value="">Qualquer hora</option>
+                    <option>08:00-12:00</option>
+                    <option>12:00-18:00</option>
+                    <option>08:00-18:00</option>
+                </select>
+            </div>
+        </div>
+
+        <label style="@Label">Custo de entrega (R$)</label>
+        <input type="number" @bind="_form.CustoEntrega" step="0.01" style="@Input"/>
+
+        <label style="@Label">Observações</label>
+        <textarea @bind="_form.Observacoes" style="@Input; height:60px; resize:vertical;"/>
+
+        <div style="display:flex; gap:10px; margin-top:20px;">
+            <button @onclick="SalvarNovaEntrega"
+                    style="flex:1; background:#1E62A6; color:white; border:none; padding:11px;
+                           border-radius:8px; font-weight:700; cursor:pointer; font-size:14px;">
+                Salvar Entrega
+            </button>
+            <button @onclick="() => _modalNovaEntrega = false"
+                    style="padding:11px 20px; background:#F1F5F9; border:none; border-radius:8px;
+                           color:#64748B; font-weight:600; cursor:pointer;">Cancelar</button>
+        </div>
+    </div>
+}
+
+<!-- Modal: Atribuir Motorista -->
+@if (_entregaAtribuir != null)
+{
+    <div @onclick="() => _entregaAtribuir = null"
+         style="position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:900;"/>
+    <div style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+                background:white; border-radius:16px; padding:28px; width:400px;
+                box-shadow:0 20px 60px rgba(0,0,0,.2); z-index:901;">
+        <h3 style="margin:0 0 18px; color:#1E293B;">👤 Atribuir Motorista</h3>
+        <div style="font-size:13px; color:#64748B; margin-bottom:16px;">@_entregaAtribuir.ClienteNome</div>
+
+        <label style="@Label">Motorista (User ID)</label>
+        <input @bind="_motoristaId" placeholder="ID do motorista..." style="@Input"/>
+
+        <label style="@Label">Veículo</label>
+        <select @bind="_veiculoId" style="@Input">
+            <option value="">Sem veículo</option>
+            @foreach (var v in _veiculos)
+            {
+                <option value="@v.Id">@v.Placa — @v.Modelo (@v.Tipo)</option>
+            }
+        </select>
+
+        <div style="display:flex; gap:10px; margin-top:18px;">
+            <button @onclick="SalvarAtribuicao"
+                    style="flex:1; background:#1E62A6; color:white; border:none; padding:10px;
+                           border-radius:8px; font-weight:700; cursor:pointer;">Salvar</button>
+            <button @onclick="() => _entregaAtribuir = null"
+                    style="padding:10px 20px; background:#F1F5F9; border:none; border-radius:8px;
+                           color:#64748B; cursor:pointer;">Cancelar</button>
+        </div>
+    </div>
+}
+
+<!-- Modal: Problema (Cancelar/Reagendar) -->
+@if (_entregaProblema != null)
+{
+    <div @onclick="() => _entregaProblema = null"
+         style="position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:900;"/>
+    <div style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+                background:white; border-radius:16px; padding:28px; width:420px;
+                box-shadow:0 20px 60px rgba(0,0,0,.2); z-index:901;">
+        <h3 style="margin:0 0 18px; color:#1E293B;">⚠ Registrar Problema</h3>
+
+        <label style="@Label">Tipo</label>
+        <select @bind="_tipoProblema" style="@Input">
+            <option value="Cancelada">Cancelar entrega</option>
+            <option value="Reagendada">Reagendar</option>
+        </select>
+
+        <label style="@Label">Motivo</label>
+        <select @bind="_motivoProblema" style="@Input">
+            <option value="">Selecione...</option>
+            <option>Cliente ausente</option>
+            <option>Endereço não encontrado</option>
+            <option>Cliente recusou</option>
+            <option>Problema no veículo</option>
+            <option>Endereço errado</option>
+            <option>Cliente pediu reagendamento</option>
+        </select>
+
+        @if (_tipoProblema == "Reagendada")
+        {
+            <label style="@Label">Nova data</label>
+            <input type="date" @bind="_novaDataEntrega" style="@Input"/>
+        }
+
+        <div style="display:flex; gap:10px; margin-top:18px;">
+            <button @onclick="SalvarProblema"
+                    style="flex:1; background:#EF4444; color:white; border:none; padding:10px;
+                           border-radius:8px; font-weight:700; cursor:pointer;">Confirmar</button>
+            <button @onclick="() => _entregaProblema = null"
+                    style="padding:10px 20px; background:#F1F5F9; border:none; border-radius:8px;
+                           color:#64748B; cursor:pointer;">Cancelar</button>
+        </div>
+    </div>
+}
+
+@code {
+    private EntregaItem[]       _entregas  = [];
+    private EntregaItem[]       _filtradas = [];
+    private VeiculoItem[]       _veiculos  = [];
+    private RelatorioItem?      _relatorio;
+    private DateTime            _data          = DateTime.Today;
+    private string              _filtroStatus  = "Todos";
+    private bool                _loading       = true;
+    private bool                _modalNovaEntrega;
+    private string?             _msg;
+
+    // Formulário nova entrega
+    private EntregaForm         _form          = new();
+
+    // Atribuir motorista
+    private EntregaItem?        _entregaAtribuir;
+    private string              _motoristaId   = "";
+    private string              _veiculoId     = "";
+
+    // Problema
+    private EntregaItem?        _entregaProblema;
+    private string              _tipoProblema  = "Cancelada";
+    private string              _motivoProblema = "";
+    private DateTime            _novaDataEntrega = DateTime.Today.AddDays(1);
+
+    private const string Th    = "padding:10px 14px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td    = "padding:10px 14px; font-size:13px;";
+    private const string Label = "font-size:11px; font-weight:600; color:#64748B; display:block; margin-bottom:4px; margin-top:12px;";
+    private const string Input = "width:100%; padding:9px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:13px; box-sizing:border-box;";
+
+    private string BtnAcao(string cor) =>
+        $"background:{cor}; color:white; border:none; padding:6px 12px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap;";
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task AbrirRomaneioAsync()
+    {
+        // Usa a BaseAddress do HttpClient injetado via ApiClient
+        var base_ = Api.GetBaseUrl();
+        var url   = $"{base_.TrimEnd('/')}/api/Entregas/romaneio?data={_data:yyyy-MM-dd}";
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    private async Task CarregarAsync()
+    {
+        _loading = true;
+        await Task.WhenAll(
+            Task.Run(async () =>
+                _entregas = await Api.GetAsync<EntregaItem[]>($"api/Entregas?data={_data:yyyy-MM-dd}") ?? []),
+            Task.Run(async () =>
+                _relatorio = await Api.GetAsync<RelatorioItem>($"api/Entregas/relatorio?data={_data:yyyy-MM-dd}")),
+            Task.Run(async () =>
+                _veiculos = await Api.GetAsync<VeiculoItem[]>("api/Entregas/veiculos") ?? [])
+        );
+        FiltrarStatus(_filtroStatus);
+        _loading = false;
+    }
+
+    private void FiltrarStatus(string s)
+    {
+        _filtroStatus = s;
+        _filtradas = s == "Todos" ? _entregas
+            : _entregas.Where(e => e.Status == s).ToArray();
+    }
+
+    private async Task SalvarNovaEntrega()
+    {
+        var resp = await Api.PostAsync("api/Entregas", _form);
+        if (resp.IsSuccessStatusCode)
+        {
+            _modalNovaEntrega = false;
+            _form = new EntregaForm();
+            await Toast("🚚 Entrega criada!");
+            await CarregarAsync();
+        }
+    }
+
+    private async Task ConfirmarEntrega(System.Guid id)
+    {
+        var resp = await Api.PutAsync($"api/Entregas/{id}/status", new { status = 2, assinadoPor = "" });
+        if (resp.IsSuccessStatusCode) { await Toast("✅ Entrega confirmada!"); await CarregarAsync(); }
+    }
+
+    private void AbrirAtribuirMotorista(EntregaItem e)
+    {
+        _entregaAtribuir = e;
+        _motoristaId     = "";
+        _veiculoId       = "";
+    }
+
+    private async Task SalvarAtribuicao()
+    {
+        if (_entregaAtribuir is null || string.IsNullOrWhiteSpace(_motoristaId)) return;
+        if (!System.Guid.TryParse(_motoristaId, out var mId)) return;
+
+        System.Guid? vId = System.Guid.TryParse(_veiculoId, out var vid) ? vid : null;
+        var resp = await Api.PutAsync($"api/Entregas/{_entregaAtribuir.Id}/motorista",
+            new { motoristaId = mId, veiculoId = vId });
+        if (resp.IsSuccessStatusCode)
+        {
+            _entregaAtribuir = null;
+            await Toast("👤 Motorista atribuído — status: Em Rota");
+            await CarregarAsync();
+        }
+    }
+
+    private void AbrirProblema(EntregaItem e)
+    {
+        _entregaProblema = e;
+        _tipoProblema    = "Cancelada";
+        _motivoProblema  = "";
+        _novaDataEntrega = DateTime.Today.AddDays(1);
+    }
+
+    private async Task SalvarProblema()
+    {
+        if (_entregaProblema is null) return;
+        var statusNum = _tipoProblema == "Reagendada" ? 4 : 3;
+        var resp = await Api.PutAsync($"api/Entregas/{_entregaProblema.Id}/status", new
+        {
+            status          = statusNum,
+            motivoProblema  = _motivoProblema,
+            novaDataPrevista = _tipoProblema == "Reagendada" ? (DateTime?)_novaDataEntrega : null
+        });
+        if (resp.IsSuccessStatusCode)
+        {
+            _entregaProblema = null;
+            await Toast(_tipoProblema == "Reagendada" ? "📅 Entrega reagendada." : "❌ Entrega cancelada.");
+            await CarregarAsync();
+        }
+    }
+
+    private async Task Toast(string msg)
+    {
+        _msg = msg;
+        StateHasChanged();
+        await Task.Delay(3000);
+        _msg = null;
+    }
+
+    // ── Records / Classes ─────────────────────────────────────────────────────
+
+    class EntregaItem
+    {
+        public System.Guid Id              { get; set; }
+        public System.Guid SaleId          { get; set; }
+        public string      ClienteNome     { get; set; } = "";
+        public string      EnderecoCompleto{ get; set; } = "";
+        public string?     Referencia      { get; set; }
+        public string?     JanelaHorario   { get; set; }
+        public string      Status          { get; set; } = "";
+        public string?     MotoristaNome   { get; set; }
+        public string?     VeiculoPlaca    { get; set; }
+        public decimal     CustoEntrega    { get; set; }
+    }
+
+    class RelatorioItem
+    {
+        public int     TotalDia     { get; set; }
+        public int     Entregues    { get; set; }
+        public int     Pendentes    { get; set; }
+        public int     EmRota       { get; set; }
+        public int     Canceladas   { get; set; }
+        public decimal CustoTotal   { get; set; }
+        public decimal TaxaEntrega  { get; set; }
+        public List<RelatorioMotoristaItem> PorMotorista { get; set; } = new();
+    }
+
+    class RelatorioMotoristaItem
+    {
+        public string  MotoristaNome { get; set; } = "";
+        public int     TotalEntregas { get; set; }
+        public int     Entregues     { get; set; }
+        public int     Pendentes     { get; set; }
+        public decimal CustoTotal    { get; set; }
+    }
+
+    class VeiculoItem
+    {
+        public System.Guid Id     { get; set; }
+        public string      Placa  { get; set; } = "";
+        public string      Modelo { get; set; } = "";
+        public string      Tipo   { get; set; } = "";
+    }
+
+    class EntregaForm
+    {
+        public System.Guid SaleId        { get; set; }
+        public string      ClienteNome   { get; set; } = "";
+        public string?     Logradouro    { get; set; }
+        public string?     Numero        { get; set; }
+        public string?     Complemento   { get; set; }
+        public string?     Bairro        { get; set; }
+        public string?     Cidade        { get; set; }
+        public string?     UF            { get; set; }
+        public string?     CEP           { get; set; }
+        public string?     Referencia    { get; set; }
+        public DateTime    DataPrevista  { get; set; } = DateTime.Today.AddDays(1);
+        public string?     JanelaHorario { get; set; }
+        public decimal     CustoEntrega  { get; set; }
+        public string?     Observacoes   { get; set; }
+    }
+}

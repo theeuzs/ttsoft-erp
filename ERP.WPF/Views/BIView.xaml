@@ -1,0 +1,182 @@
+<UserControl x:Class="ERP.WPF.Views.BIView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource FundoGeral}" FontFamily="Segoe UI">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Cabeçalho -->
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="📊 Business Intelligence" FontSize="26" FontWeight="Bold"
+                       Foreground="#1E62A6"/>
+            <TextBlock Text="Análises avançadas de vendas, produtos e desempenho."
+                       FontSize="13" Foreground="{DynamicResource TextMuted}" Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <!-- Filtros de período -->
+        <Border Grid.Row="2" Background="{DynamicResource CardBg}" CornerRadius="10" Padding="16">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="Período:" VerticalAlignment="Center" Margin="0,0,12,0"
+                           FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}"/>
+                <DatePicker x:Name="DpInicio" Width="140" Margin="0,0,8,0"
+                            SelectedDate="{Binding DataInicio}"/>
+                <TextBlock Text="até" VerticalAlignment="Center" Margin="0,0,8,0"
+                           Foreground="{DynamicResource TextMuted}"/>
+                <DatePicker x:Name="DpFim" Width="140" Margin="0,0,16,0"
+                            SelectedDate="{Binding DataFim}"/>
+                <Button Content="🔄 Atualizar" Command="{Binding AtualizarCommand}"
+                        Background="#1E62A6" Foreground="White"
+                        FontWeight="Bold" Height="34" Padding="16,0" BorderThickness="0" Cursor="Hand">
+                    <Button.Resources>
+                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="7"/></Style>
+                    </Button.Resources>
+                </Button>
+                <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center"
+                           Margin="16,0,0,0" FontSize="12"
+                           Foreground="{DynamicResource TextMuted}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Conteúdo em abas -->
+        <TabControl Grid.Row="4" Background="Transparent" BorderThickness="0">
+
+            <!-- ABA: Sazonalidade -->
+            <TabItem Header="📅 Sazonalidade">
+                <Border Background="{DynamicResource CardBg}" CornerRadius="10" Padding="20" Margin="0,8,0,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Faturamento Mensal" FontSize="15" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,16"/>
+                        <DataGrid Grid.Row="1" ItemsSource="{Binding Sazonalidade}"
+                                  AutoGenerateColumns="False" IsReadOnly="True"
+                                  GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                                  BorderThickness="0" Background="Transparent">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Mês/Ano"    Width="120"
+                                    Binding="{Binding NomeMes}"/>
+                                <DataGridTextColumn Header="Qtd Vendas" Width="100"
+                                    Binding="{Binding QtdVendas}"/>
+                                <DataGridTextColumn Header="Receita Total" Width="*"
+                                    Binding="{Binding ReceitaTotal, StringFormat=C}"/>
+                                <DataGridTextColumn Header="Ticket Médio" Width="*"
+                                    Binding="{Binding TicketMedio, StringFormat=C}"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </Border>
+            </TabItem>
+
+            <!-- ABA: Curva ABC -->
+            <TabItem Header="🔵 Curva ABC">
+                <Border Background="{DynamicResource CardBg}" CornerRadius="10" Padding="20" Margin="0,8,0,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Classificação ABC de Produtos" FontSize="15"
+                                   FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"
+                                   Margin="0,0,0,16"/>
+                        <DataGrid Grid.Row="1" ItemsSource="{Binding AbcAvancado}"
+                                  AutoGenerateColumns="False" IsReadOnly="True"
+                                  GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                                  BorderThickness="0" Background="Transparent">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="#"     Width="50"
+                                    Binding="{Binding Rank}"/>
+                                <DataGridTextColumn Header="Classe" Width="60"
+                                    Binding="{Binding Classe}"/>
+                                <DataGridTextColumn Header="Produto" Width="*"
+                                    Binding="{Binding Nome}"/>
+                                <DataGridTextColumn Header="Qtd Vendida" Width="110"
+                                    Binding="{Binding Quantidade, StringFormat=F0}"/>
+                                <DataGridTextColumn Header="Total Financeiro" Width="130"
+                                    Binding="{Binding TotalFinanceiro, StringFormat=C}"/>
+                                <DataGridTextColumn Header="% Acum." Width="90"
+                                    Binding="{Binding PercentualAcumulado, StringFormat=F1}"/>
+                                <DataGridTextColumn Header="Margem %" Width="90"
+                                    Binding="{Binding MargemPercent, StringFormat=F1}"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </Border>
+            </TabItem>
+
+            <!-- ABA: Ranking Vendedores -->
+            <TabItem Header="🏆 Vendedores">
+                <Border Background="{DynamicResource CardBg}" CornerRadius="10" Padding="20" Margin="0,8,0,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Ranking de Vendedores" FontSize="15"
+                                   FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"
+                                   Margin="0,0,0,16"/>
+                        <DataGrid Grid.Row="1" ItemsSource="{Binding RankingVendedores}"
+                                  AutoGenerateColumns="False" IsReadOnly="True"
+                                  GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                                  BorderThickness="0" Background="Transparent">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Pos."        Width="50"
+                                    Binding="{Binding Posicao}"/>
+                                <DataGridTextColumn Header="Vendedor"    Width="*"
+                                    Binding="{Binding Nome}"/>
+                                <DataGridTextColumn Header="Qtd Vendas"  Width="100"
+                                    Binding="{Binding QtdVendas}"/>
+                                <DataGridTextColumn Header="Total"       Width="130"
+                                    Binding="{Binding TotalVendido, StringFormat=C}"/>
+                                <DataGridTextColumn Header="Ticket Médio" Width="120"
+                                    Binding="{Binding TicketMedio, StringFormat=C}"/>
+                                <DataGridTextColumn Header="% do Total"  Width="100"
+                                    Binding="{Binding PercentualTotal, StringFormat=F1}"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </Border>
+            </TabItem>
+
+            <!-- ABA: Previsão de Demanda -->
+            <TabItem Header="🔮 Previsão">
+                <Border Background="{DynamicResource CardBg}" CornerRadius="10" Padding="20" Margin="0,8,0,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Previsão de Demanda — Produtos Críticos" FontSize="15"
+                                   FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"
+                                   Margin="0,0,0,16"/>
+                        <DataGrid Grid.Row="1" ItemsSource="{Binding PrevisaoDemanda}"
+                                  AutoGenerateColumns="False" IsReadOnly="True"
+                                  GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                                  BorderThickness="0" Background="Transparent">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Produto"       Width="*"
+                                    Binding="{Binding Nome}"/>
+                                <DataGridTextColumn Header="Estoque Atual" Width="120"
+                                    Binding="{Binding EstoqueAtual, StringFormat=F0}"/>
+                                <DataGridTextColumn Header="Média/Mês"     Width="110"
+                                    Binding="{Binding MediaMensal, StringFormat=F1}"/>
+                                <DataGridTextColumn Header="Dias Restantes" Width="120"
+                                    Binding="{Binding DiasEstoque}"/>
+                                <DataGridTextColumn Header="Sugestão Compra" Width="130"
+                                    Binding="{Binding SugestaoCompra, StringFormat=F0}"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </Border>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>

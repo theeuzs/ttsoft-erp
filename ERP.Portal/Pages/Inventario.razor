@@ -1,0 +1,267 @@
+@page "/inventario"
+@using ERP.Portal.Services
+@inject ApiClient Api
+
+<div style="padding:0 0 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">📦 Inventário</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">
+                Contagem de estoque via tablet — @_contados.Count produto(s) contado(s)
+            </p>
+        </div>
+        <div style="display:flex; gap:8px;">
+            @if (_contados.Any())
+            {
+                <button @onclick="GerarRelatorioAsync"
+                        style="background:#F59E0B; color:white; border:none; padding:10px 16px;
+                        border-radius:8px; font-weight:700; cursor:pointer; font-size:13px;">
+                    📊 Divergências
+                </button>
+                <button @onclick="AplicarAjustesAsync"
+                        style="background:#27AE60; color:white; border:none; padding:10px 16px;
+                        border-radius:8px; font-weight:700; cursor:pointer; font-size:13px;">
+                    ✅ Aplicar Ajustes
+                </button>
+            }
+        </div>
+    </div>
+
+    <!-- Busca -->
+    <div style="background:white; border-radius:12px; padding:16px; margin-bottom:16px;
+         box-shadow:0 2px 8px rgba(0,0,0,.06); display:flex; gap:12px;">
+        <input @bind="_busca" @bind:event="oninput" @onkeyup="Buscar"
+               placeholder="📷 Código de barras, SKU ou nome do produto..."
+               style="flex:1; padding:12px 16px; border:1px solid #E2E8F0; border-radius:8px; font-size:15px;"/>
+        <button @onclick="BuscarAsync"
+                style="background:#1E62A6; color:white; border:none; padding:10px 20px;
+                border-radius:8px; font-weight:700; cursor:pointer;">
+            🔍
+        </button>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 360px; gap:16px;">
+
+        <!-- Lista de produtos -->
+        <div style="background:white; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
+            @if (_loading)
+            {
+                <div style="text-align:center; padding:60px; color:#94A3B8;">Carregando...</div>
+            }
+            else
+            {
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                            <th style="@Th">PRODUTO</th>
+                            <th style="@Th; text-align:right;">ESTOQUE ATUAL</th>
+                            <th style="@Th; text-align:right;">CONTADO</th>
+                            <th style="@Th; text-align:right;">DIFERENÇA</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in _produtos?.Items ?? [])
+                        {
+                            var contado = _contados.TryGetValue(p.Id, out var v) ? v : (decimal?)null;
+                            var diff    = contado.HasValue ? contado.Value - p.EstoqueAtual : (decimal?)null;
+                            var corDiff = diff == null ? "" : diff > 0 ? "#27AE60" : diff < 0 ? "#EF4444" : "#64748B";
+
+                            <tr style="border-bottom:1px solid #F1F5F9; cursor:pointer;"
+                                onmouseover="this.style.background='#F8FAFC'"
+                                onmouseout="this.style.background=''">
+                                <td style="@Td;">
+                                    <div style="font-weight:600; color:#1E293B;">@p.Nome</div>
+                                    <div style="font-size:11px; color:#94A3B8; font-family:monospace;">
+                                        @(p.Barcode ?? p.Sku ?? "—")
+                                    </div>
+                                </td>
+                                <td style="@Td; text-align:right; font-weight:700; color:#64748B;">
+                                    @p.EstoqueAtual.ToString("F0") @p.Unit
+                                </td>
+                                <td style="@Td; text-align:right;">
+                                    <input type="number"
+                                           value="@(contado?.ToString("F0") ?? "")"
+                                           @onchange="e => RegistrarContagem(p.Id, e.Value?.ToString())"
+                                           step="1" min="0"
+                                           style="width:80px; padding:6px; border:1px solid #E2E8F0;
+                                           border-radius:6px; text-align:right; font-size:14px;
+                                           font-weight:700; background:@(contado.HasValue ? "#F0FDF4" : "white");"/>
+                                </td>
+                                <td style="@Td; text-align:right; font-weight:800; color:@corDiff;">
+                                    @(diff.HasValue ? (diff.Value > 0 ? $"+{diff.Value:F0}" : $"{diff.Value:F0}") : "—")
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <!-- Paginação -->
+                <div style="display:flex; justify-content:space-between; padding:12px 20px;
+                     border-top:1px solid #F1F5F9; align-items:center;">
+                    <span style="font-size:13px; color:#94A3B8;">
+                        @_produtos?.Total produtos — página @_pagina
+                    </span>
+                    <div style="display:flex; gap:8px;">
+                        <button @onclick="PaginaAnterior" disabled="@(_pagina <= 1)"
+                                style="@BtnPag">← Anterior</button>
+                        <button @onclick="ProximaPagina"
+                                disabled="@(_pagina >= (_produtos?.TotalPages ?? 1))"
+                                style="@BtnPag">Próxima →</button>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Painel de divergências -->
+        <div style="background:white; border-radius:12px; padding:20px;
+             box-shadow:0 2px 8px rgba(0,0,0,.06); align-self:start;">
+            <h3 style="font-size:14px; font-weight:700; color:#1E293B; margin:0 0 16px;">
+                📊 Resumo da Contagem
+            </h3>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px;">
+                <div style="background:#F0FDF4; border-radius:8px; padding:12px; text-align:center;">
+                    <div style="font-size:20px; font-weight:800; color:#27AE60;">@_contados.Count</div>
+                    <div style="font-size:11px; color:#27AE60;">Contados</div>
+                </div>
+                <div style="background:#FEF3C7; border-radius:8px; padding:12px; text-align:center;">
+                    <div style="font-size:20px; font-weight:800; color:#F59E0B;">@Divergencias</div>
+                    <div style="font-size:11px; color:#F59E0B;">Divergências</div>
+                </div>
+            </div>
+
+            @if (_relatorio != null)
+            {
+                <h4 style="font-size:12px; font-weight:700; color:#64748B; margin:0 0 8px;">
+                    MAIORES DIVERGÊNCIAS
+                </h4>
+                @foreach (var d in _relatorio.Take(8))
+                {
+                    var cor = d.Diferenca > 0 ? "#27AE60" : "#EF4444";
+                    <div style="display:flex; justify-content:space-between; padding:6px 0;
+                         border-bottom:1px solid #F1F5F9; font-size:12px;">
+                        <span style="color:#1E293B; overflow:hidden; text-overflow:ellipsis;
+                              white-space:nowrap; max-width:180px;">@d.Nome</span>
+                        <span style="font-weight:700; color:@cor;">
+                            @(d.Diferenca > 0 ? "+" : "")@d.Diferenca.ToString("F0")
+                        </span>
+                    </div>
+                }
+            }
+
+            @if (_mensagem != null)
+            {
+                <div style="margin-top:12px; padding:10px; background:#D1FAE5;
+                     border-radius:8px; font-size:13px; color:#065F46; font-weight:600;">
+                    @_mensagem
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private PagedResult? _produtos;
+    private Dictionary<Guid, decimal> _contados = new();
+    private List<DivergenciaItem>?    _relatorio;
+    private string  _busca      = "";
+    private int     _pagina     = 1;
+    private bool    _loading    = true;
+    private string? _mensagem;
+
+    private int Divergencias => _contados.Count(kv =>
+        _produtos?.Items.FirstOrDefault(p => p.Id == kv.Key) is { } p &&
+        kv.Value != p.EstoqueAtual);
+
+    private const string Th = "padding:12px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td = "padding:12px 16px; font-size:13px;";
+    private const string BtnPag = "padding:7px 14px; border:1px solid #E2E8F0; border-radius:8px; background:white; cursor:pointer; font-size:12px;";
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task Buscar(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await BuscarAsync();
+    }
+
+    private async Task BuscarAsync() { _pagina = 1; await CarregarAsync(); }
+
+    private async Task CarregarAsync()
+    {
+        _loading = true;
+        var url  = $"api/Inventario/produtos?pagina={_pagina}&tam=30";
+        if (!string.IsNullOrEmpty(_busca)) url += $"&search={Uri.EscapeDataString(_busca)}";
+        _produtos = await Api.GetAsync<PagedResult>(url);
+        _loading  = false;
+    }
+
+    private void RegistrarContagem(Guid produtoId, string? valor)
+    {
+        if (decimal.TryParse(valor, out var qtd))
+            _contados[produtoId] = qtd;
+        else
+            _contados.Remove(produtoId);
+        _relatorio = null;
+    }
+
+    private async Task GerarRelatorioAsync()
+    {
+        var itens = _contados.Select(kv => new { ProdutoId = kv.Key, QuantidadeContada = kv.Value }).ToList();
+        var resp  = await Api.PostAsync("api/Inventario/relatorio-divergencias", itens);
+        if (resp.IsSuccessStatusCode)
+        {
+            var result = await resp.Content.ReadFromJsonAsync<RelatorioResult>();
+            _relatorio = result?.Divergencias
+                .Where(d => d.Diferenca != 0)
+                .OrderByDescending(d => Math.Abs(d.Diferenca))
+                .ToList();
+        }
+    }
+
+    private async Task AplicarAjustesAsync()
+    {
+        var payload = new
+        {
+            Itens = _contados.Select(kv => new
+            {
+                ProdutoId = kv.Key, QuantidadeContada = kv.Value
+            }).ToList()
+        };
+        var resp = await Api.PostAsync("api/Inventario/aplicar-ajustes", payload);
+        if (resp.IsSuccessStatusCode)
+        {
+            _mensagem = $"✅ {_contados.Count} ajustes aplicados!";
+            _contados.Clear();
+            _relatorio = null;
+            await Task.Delay(3000);
+            _mensagem = null;
+        }
+    }
+
+    private async Task PaginaAnterior() { if (_pagina > 1) { _pagina--; await CarregarAsync(); } }
+    private async Task ProximaPagina() { _pagina++; await CarregarAsync(); }
+
+    class PagedResult
+    {
+        public ProdutoItem[] Items      { get; set; } = [];
+        public int           Total      { get; set; }
+        public int           TotalPages { get; set; }
+    }
+    class ProdutoItem
+    {
+        public Guid    Id           { get; set; }
+        public string  Nome         { get; set; } = "";
+        public string? Barcode      { get; set; }
+        public string? Sku          { get; set; }
+        public string  Unit         { get; set; } = "";
+        public decimal EstoqueAtual { get; set; }
+    }
+    class RelatorioResult
+    {
+        public List<DivergenciaItem> Divergencias { get; set; } = [];
+    }
+    class DivergenciaItem
+    {
+        public string  Nome      { get; set; } = "";
+        public decimal Diferenca { get; set; }
+    }
+}

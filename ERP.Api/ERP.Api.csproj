@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore"                  Version="6.6.2" />
+    <PackageReference Include="Serilog.AspNetCore"                      Version="8.0.2" />
+    <PackageReference Include="AutoMapper"                               Version="14.0.0" />
+    <PackageReference Include="FluentValidation.AspNetCore"             Version="11.3.0" />
+    <PackageReference Include="AspNetCoreRateLimit"                     Version="5.0.0" />
+    <PackageReference Include="AspNetCore.HealthChecks.SqlServer"       Version="8.0.2" />
+    <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.22.0" />
+
+    <!--
+      Sprint 2B — SignalR backplane Azure
+      Permite escalar a API para múltiplas instâncias sem perder mensagens entre hubs.
+      Ativa apenas quando AzureSignalRConnectionString está configurada (produção).
+      Em desenvolvimento local, o AddSignalR() padrão (in-memory) é usado.
+    -->
+    <PackageReference Include="Microsoft.Azure.SignalR" Version="1.30.2" />
+
+    <!--
+      Sprint 2B — Response Compression
+      Brotli e Gzip já fazem parte do ASP.NET Core 8 via Microsoft.AspNetCore.ResponseCompression,
+      sem pacote NuGet adicional. A linha abaixo é um lembrete — pode ser removida.
+      Brotli: redução ~70% em JSON; Gzip: ~60%. Ambos com CompressionLevel.Fastest.
+    -->
+    <!-- Já incluso no SDK: Microsoft.AspNetCore.ResponseCompression -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ERP.Application\ERP.Application.csproj" />
+    <ProjectReference Include="..\ERP.Infrastructure\ERP.Infrastructure.csproj" />
+    <ProjectReference Include="..\ERP.Persistence\ERP.Persistence.csproj" />
+  </ItemGroup>
+
+</Project>

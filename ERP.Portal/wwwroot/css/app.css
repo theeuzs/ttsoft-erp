@@ -1,0 +1,32 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #F1F5F9; }
+
+@media (max-width: 768px) {
+    /* Tabelas com scroll horizontal */
+    table { display: block; overflow-x: auto; white-space: nowrap; font-size: 12px; }
+
+    /* Grids viram colunas */
+    div[style*="grid-template-columns"] {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 12px !important;
+    }
+
+    /* Cada card do grid ocupa linha inteira */
+    div[style*="grid-template-columns"] > div {
+        flex: 1 1 calc(50% - 12px) !important;
+        min-width: 140px !important;
+    }
+
+    /* Filtros quebram linha */
+    div[style*="display:flex"][style*="gap:12px"],
+    div[style*="display:flex"][style*="gap:8px"] {
+        flex-wrap: wrap !important;
+    }
+
+    /* Inputs full width */
+    input { width: 100% !important; }
+
+    /* Padding menor nas páginas */
+    div[style*="padding:0 0 24px"] { padding: 0 0 16px !important; }
+}

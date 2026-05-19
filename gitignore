@@ -1,0 +1,35 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.vscode/
+*.swp
+
+## Logs
+Logs/
+*.log
+*.json.log
+
+## Publicações
+publish/
+
+## Dados locais
+offline.db
+licenca.json
+config.enc
+
+## Segredos — nunca subir ao GitHub
+appsettings.Production.json
+appsettings.Local.json
+google-credentials.json
+
+## Android / Mobile
+*.keystore
+*.apk
+*.aab
+
+## Pacotes restaurados
+packages/
+*.nupkg

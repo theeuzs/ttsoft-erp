@@ -1,0 +1,78 @@
+<Window x:Class="ERP.WPF.Views.SenhaGerenteView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Autorização" Height="400" Width="400"
+        WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent"
+        Topmost="True">
+
+    <Border Background="{DynamicResource CardBg}" CornerRadius="12"
+            BorderBrush="{DynamicResource BordaCard}" BorderThickness="1"
+            Margin="10" Padding="25">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="15" Opacity="0.15" ShadowDepth="4"/>
+        </Border.Effect>
+        <StackPanel>
+            <!-- Cabeçalho -->
+            <TextBlock Text="🔒 Acesso Restrito" FontSize="20" FontWeight="Black"
+                       Foreground="#E74C3C" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+            <TextBlock x:Name="TxtContexto"
+                       Text="Identifique-se para autorizar esta operação."
+                       Foreground="{DynamicResource TextMuted}" FontSize="12"
+                       TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,20"/>
+
+            <!-- Seleção de usuário autorizador -->
+            <TextBlock Text="QUEM ESTÁ AUTORIZANDO" FontSize="10" FontWeight="Black"
+                       Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+            <ComboBox x:Name="CmbUsuario" Height="36" FontSize="13"
+                      DisplayMemberPath="Name"
+                      Margin="0,0,0,14"
+                      SelectionChanged="CmbUsuario_SelectionChanged">
+                <ComboBox.Resources>
+                    <Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>
+                </ComboBox.Resources>
+            </ComboBox>
+
+            <!-- Senha -->
+            <TextBlock Text="SENHA" FontSize="10" FontWeight="Black"
+                       Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+            <PasswordBox x:Name="TxtSenha" Height="42" FontSize="18"
+                         Padding="10,5" Margin="0,0,0,8"
+                         HorizontalContentAlignment="Center"
+                         Background="{DynamicResource FundoRodape}"
+                         BorderBrush="{DynamicResource BordaInput}"
+                         IsEnabled="False">
+                <PasswordBox.Resources>
+                    <Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>
+                </PasswordBox.Resources>
+            </PasswordBox>
+
+            <!-- Aviso de erros -->
+            <TextBlock x:Name="TxtErro" Text="" Foreground="#E74C3C"
+                       FontSize="12" TextAlignment="Center"
+                       Visibility="Collapsed" Margin="0,0,0,10"
+                       TextWrapping="Wrap"/>
+
+            <!-- Botões -->
+            <Grid Margin="0,6,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Content="CANCELAR" Click="BtnCancelar_Click"
+                        Background="{DynamicResource CardBgAlt}"
+                        Foreground="{DynamicResource TextMuted}"
+                        FontWeight="Bold" Height="40" BorderThickness="0" Cursor="Hand">
+                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                </Button>
+                <Button Grid.Column="2" Content="✔ AUTORIZAR" Click="BtnAutorizar_Click"
+                        Background="#1E62A6" Foreground="White"
+                        FontWeight="Bold" Height="40" BorderThickness="0" Cursor="Hand"
+                        IsDefault="True">
+                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                </Button>
+            </Grid>
+        </StackPanel>
+    </Border>
+</Window>

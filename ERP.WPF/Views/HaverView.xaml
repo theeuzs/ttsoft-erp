@@ -1,0 +1,159 @@
+<UserControl x:Class="ERP.WPF.Views.HaverView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource CardBgAlt}">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Card de saldo -->
+        <Border Grid.Row="0" CornerRadius="14" Padding="24,20">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Background" Value="#F0FDF4"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding SaldoAtual, Converter={StaticResource NegativoConverter}}" Value="True">
+                            <Setter Property="Background" Value="#FEF2F2"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="💳 SALDO HAVER DO CLIENTE" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextMuted}"/>
+                    <TextBlock Text="{Binding SaldoAtual, StringFormat='R$ {0:N2}'}"
+                               FontSize="32" FontWeight="Black" Foreground="{Binding CorSaldo}" Margin="0,6,0,0"/>
+                    <TextBlock Text="disponível para uso nas próximas compras"
+                               FontSize="12" Foreground="{DynamicResource TextMuted}" Margin="0,4,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1" Content="↻ Atualizar" Command="{Binding CarregarCommand}"
+                        Background="{DynamicResource CorAcento}" Foreground="White"
+                        FontWeight="Bold" Height="34" Padding="16,0" BorderThickness="0"
+                        Cursor="Hand" VerticalAlignment="Center">
+                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Formulário de lançamento -->
+        <Border Grid.Row="2" Background="{DynamicResource CardBg}" CornerRadius="14" Padding="20">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="160"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="160"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="150"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Descrição -->
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Descrição (opcional)" FontSize="11" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,6"/>
+                    <TextBox Text="{Binding DescricaoLancamento, UpdateSourceTrigger=PropertyChanged}"
+                             Padding="10,8" FontSize="13" BorderBrush="{DynamicResource BordaInput}" BorderThickness="1"
+                             Background="{DynamicResource FundoRodape}"/>
+                </StackPanel>
+
+                <!-- Valor -->
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="Valor (R$)" FontSize="11" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,6"/>
+                    <TextBox Text="{Binding ValorLancamento, UpdateSourceTrigger=PropertyChanged, StringFormat='N2'}"
+                             Padding="10,8" FontSize="14" FontWeight="Bold"
+                             BorderBrush="{DynamicResource BordaInput}" BorderThickness="1" Background="{DynamicResource FundoRodape}"
+                             TextAlignment="Right"/>
+                </StackPanel>
+
+                <!-- Botão Adicionar -->
+                <Button Grid.Column="4" Content="+ Adicionar Haver"
+                        Command="{Binding AdicionarCommand}"
+                        Background="#16A34A" Foreground="White" FontWeight="Bold"
+                        Height="38" BorderThickness="0" Cursor="Hand" VerticalAlignment="Bottom">
+                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                </Button>
+
+                <!-- Botão Descontar -->
+                <Button Grid.Column="6" Content="- Descontar Haver"
+                        Command="{Binding DescontarCommand}"
+                        Background="#DC2626" Foreground="White" FontWeight="Bold"
+                        Height="38" BorderThickness="0" Cursor="Hand" VerticalAlignment="Bottom">
+                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Histórico de movimentos -->
+        <Border Grid.Row="4" Background="{DynamicResource CardBg}" CornerRadius="14">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Background="{DynamicResource CorAcento}" CornerRadius="14,14,0,0" Padding="20,12">
+                    <TextBlock Text="Histórico de Movimentações" FontSize="13" FontWeight="Bold" Foreground="White"/>
+                </Border>
+
+                <DataGrid Grid.Row="1" ItemsSource="{Binding Movimentos}"
+                          AutoGenerateColumns="False" IsReadOnly="True"
+                          Background="Transparent" BorderThickness="0"
+                          GridLinesVisibility="Horizontal" RowHeight="44"
+                          AlternatingRowBackground="{DynamicResource CardBgAlt}" CanUserResizeRows="False"
+                          HeadersVisibility="Column">
+                    <DataGrid.ColumnHeaderStyle>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="Background" Value="#F8FAFC"/>
+                            <Setter Property="Foreground" Value="#64748B"/>
+                            <Setter Property="FontWeight" Value="Bold"/>
+                            <Setter Property="FontSize" Value="11"/>
+                            <Setter Property="Padding" Value="16,10"/>
+                            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                            <Setter Property="BorderBrush" Value="#E2E8F0"/>
+                        </Style>
+                    </DataGrid.ColumnHeaderStyle>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Data" Binding="{Binding DataFormatada}" Width="140"/>
+                        <DataGridTextColumn Header="Tipo" Binding="{Binding Tipo}" Width="90">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="Descrição" Binding="{Binding Descricao}" Width="*"/>
+                        <DataGridTextColumn Header="Operador" Binding="{Binding Operador}" Width="120"/>
+                        <DataGridTextColumn Header="Valor" Binding="{Binding ValorFormatado}" Width="120">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="Saldo após" Binding="{Binding SaldoApos, StringFormat='R$ {0:N2}'}" Width="120">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="#3B82F6"/>
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

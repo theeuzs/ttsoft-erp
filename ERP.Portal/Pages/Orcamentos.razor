@@ -1,0 +1,446 @@
+@page "/orcamentos"
+@using ERP.Portal.Services
+@inject ApiClient Api
+
+<div style="padding:0 0 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">📋 Orçamentos</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">
+                @_orcamentos?.Length orçamentos — @_orcamentos?.Where(o => o.Status == "Pendente").Count() pendentes
+            </p>
+        </div>
+        <button @onclick="CarregarAsync"
+                style="background:#F1F5F9; border:none; padding:8px 16px; border-radius:8px;
+                cursor:pointer; font-size:13px; color:#64748B; font-weight:600;">
+            🔄 Atualizar
+        </button>
+    </div>
+
+    <!-- ── Agenda de Follow-Up do dia ────────────────────────────────────── -->
+    @if (_agendaHoje != null && _agendaHoje.Length > 0)
+    {
+        <div style="background:#FEF3C7; border:1px solid #F59E0B; border-radius:12px;
+                    padding:16px 20px; margin-bottom:20px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                <span style="font-size:18px;">📅</span>
+                <span style="font-weight:700; color:#92400E; font-size:15px;">
+                    Agenda de hoje — @_agendaHoje.Length follow-up(s) pendente(s)
+                </span>
+            </div>
+            @foreach (var f in _agendaHoje)
+            {
+                <div style="display:flex; align-items:center; background:white; border-radius:8px;
+                            padding:10px 14px; margin-bottom:8px; gap:12px;
+                            border-left:4px solid @(f.FollowUpVencido ? "#EF4444" : "#F59E0B");">
+                    <div style="flex:1;">
+                        <div style="font-weight:600; font-size:13px; color:#1E293B;">
+                            @f.Numero — @(f.ClienteNome ?? "Consumidor Final")
+                        </div>
+                        <div style="font-size:12px; color:#64748B; margin-top:2px;">
+                            @f.ValorTotal.ToString("C") · 
+                            Follow-up: @(f.DataFollowUp.HasValue ? f.DataFollowUp.Value.ToString("dd/MM") : "—")
+                            @if (f.FollowUpVencido) { <span style="color:#EF4444; font-weight:600;"> ⚠ VENCIDO</span> }
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                        <button @onclick="() => AbrirRegistroContato(f)"
+                                style="background:#1E62A6; color:white; border:none; padding:6px 12px;
+                                       border-radius:6px; font-size:12px; font-weight:600; cursor:pointer;">
+                            📞 Registrar
+                        </button>
+                        <button @onclick="() => ConverterVenda(f.Id)"
+                                style="background:#10B981; color:white; border:none; padding:6px 12px;
+                                       border-radius:6px; font-size:12px; font-weight:600; cursor:pointer;">
+                            💰 Converter
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- ── Taxa de Conversão ─────────────────────────────────────────────── -->
+    @if (_taxaConversao != null)
+    {
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:20px;">
+            <div style="background:white; border-radius:10px; padding:14px; border-top:3px solid #1E62A6;
+                        box-shadow:0 2px 6px rgba(0,0,0,.05); text-align:center;">
+                <div style="font-size:22px; font-weight:800; color:#1E293B;">@_taxaConversao.TaxaConversaoPercent%</div>
+                <div style="font-size:11px; color:#64748B; font-weight:700;">TAXA DE CONVERSÃO</div>
+            </div>
+            <div style="background:white; border-radius:10px; padding:14px; border-top:3px solid #10B981;
+                        box-shadow:0 2px 6px rgba(0,0,0,.05); text-align:center;">
+                <div style="font-size:22px; font-weight:800; color:#1E293B;">@_taxaConversao.Convertidos</div>
+                <div style="font-size:11px; color:#64748B; font-weight:700;">CONVERTIDOS</div>
+                <div style="font-size:11px; color:#10B981;">@_taxaConversao.ValorConvertido.ToString("C0")</div>
+            </div>
+            <div style="background:white; border-radius:10px; padding:14px; border-top:3px solid #EF4444;
+                        box-shadow:0 2px 6px rgba(0,0,0,.05); text-align:center;">
+                <div style="font-size:22px; font-weight:800; color:#1E293B;">@_taxaConversao.Perdidos</div>
+                <div style="font-size:11px; color:#64748B; font-weight:700;">PERDIDOS</div>
+                <div style="font-size:11px; color:#EF4444;">@_taxaConversao.ValorPerdido.ToString("C0")</div>
+            </div>
+            <div style="background:white; border-radius:10px; padding:14px; border-top:3px solid #F59E0B;
+                        box-shadow:0 2px 6px rgba(0,0,0,.05); text-align:center;">
+                <div style="font-size:22px; font-weight:800; color:#1E293B;">@_taxaConversao.Pendentes</div>
+                <div style="font-size:11px; color:#64748B; font-weight:700;">EM ABERTO</div>
+            </div>
+        </div>
+    }
+
+    <!-- Resumo cards -->
+    @if (_orcamentos != null)
+    {
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px;">
+            @foreach (var (status, cor, bg, icone) in new[]{
+                ("Pendente","#92400E","#FEF3C7","⏳"),
+                ("Aprovado","#065F46","#D1FAE5","✅"),
+                ("Vendido","#1E3A8A","#DBEAFE","💰"),
+                ("Cancelado","#991B1B","#FEE2E2","❌")})
+            {
+                var count = _orcamentos.Count(o => o.Status == status);
+                var total = _orcamentos.Where(o => o.Status == status).Sum(o => o.Total);
+                <div style="background:white; border-radius:10px; padding:16px;
+                     box-shadow:0 2px 8px rgba(0,0,0,.05); border-top:3px solid @cor;">
+                    <div style="font-size:20px;">@icone</div>
+                    <div style="font-size:20px; font-weight:800; color:#1E293B; margin:4px 0;">@count</div>
+                    <div style="font-size:11px; font-weight:700; color:#94A3B8;">@status.ToUpper()</div>
+                    <div style="font-size:12px; color:@cor; font-weight:600;">@total.ToString("C0")</div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Tabela -->
+    <div style="background:white; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
+        @if (_loading)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">Carregando orçamentos...</div>
+        }
+        else if (_filtrados?.Length == 0)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">Nenhum orçamento encontrado.</div>
+        }
+        else
+        {
+            <!-- Filtro por status -->
+            <div style="padding:12px 20px; border-bottom:1px solid #F1F5F9; display:flex; gap:8px; flex-wrap:wrap;">
+                @foreach (var s in new[]{"Todos","Pendente","Aprovado","Vendido","Cancelado"})
+                {
+                    <button @onclick="@(() => FiltrarStatus(s))"
+                            style="padding:6px 14px; border:none; border-radius:20px; font-size:12px;
+                            font-weight:700; cursor:pointer;
+                            background:@(_filtroStatus == s ? "#1E62A6" : "#F1F5F9");
+                            color:@(_filtroStatus == s ? "white" : "#64748B");">
+                        @s
+                    </button>
+                }
+            </div>
+
+            <table style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                        <th style="@Th">DATA</th>
+                        <th style="@Th">CLIENTE</th>
+                        <th style="@Th">VENDEDOR</th>
+                        <th style="@Th">ITENS</th>
+                        <th style="@Th; text-align:right;">TOTAL</th>
+                        <th style="@Th; text-align:center;">STATUS</th>
+                        <th style="@Th; text-align:center;">AÇÕES</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var o in _filtrados!)
+                    {
+                        var (statusCor, statusBg) = o.Status switch {
+                            "Aprovado" => ("#065F46","#D1FAE5"),
+                            "Vendido"  => ("#1E3A8A","#DBEAFE"),
+                            "Cancelado"=> ("#991B1B","#FEE2E2"),
+                            _          => ("#92400E","#FEF3C7")
+                        };
+                        <tr style="border-bottom:1px solid #F1F5F9;"
+                            onmouseover="this.style.background='#F8FAFC'"
+                            onmouseout="this.style.background=''">
+                            <td style="@Td; color:#64748B; font-size:12px;">
+                                @o.DataCriacao.ToString("dd/MM/yyyy")
+                            </td>
+                            <td style="@Td; font-weight:600; color:#1E293B;">
+                                @(o.ClienteNome ?? "Sem cliente")
+                            </td>
+                            <td style="@Td; color:#64748B;">@(o.VendedorNome ?? "—")</td>
+                            <td style="@Td; color:#64748B; font-size:12px;">
+                                @o.TotalItens itens
+                            </td>
+                            <td style="@Td; text-align:right; font-weight:800; color:#1E293B;">
+                                @o.Total.ToString("C")
+                            </td>
+                            <td style="@Td; text-align:center;">
+                                <span style="background:@statusBg; color:@statusCor;
+                                      padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700;">
+                                    @o.Status
+                                </span>
+                            </td>
+                            <td style="@Td; text-align:center;">
+                                @if (o.Status == "Aprovado")
+                                {
+                                    <button @onclick="() => ConverterVenda(o.Id)"
+                                            style="background:#27AE60; color:white; border:none;
+                                            padding:5px 10px; border-radius:6px; cursor:pointer;
+                                            font-size:11px; font-weight:700;">
+                                        💰 Converter
+                                    </button>
+                                }
+                                else
+                                {
+                                    <span style="color:#94A3B8; font-size:12px;">—</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <div style="padding:12px 20px; border-top:1px solid #F1F5F9;
+                 display:flex; justify-content:flex-end; align-items:center; gap:16px;">
+                <span style="font-size:13px; color:#94A3B8;">
+                    @_filtrados!.Length orçamentos
+                </span>
+                <span style="font-size:14px; font-weight:800; color:#1E293B;">
+                    Total: @_filtrados!.Sum(o => o.Total).ToString("C")
+                </span>
+            </div>
+        }
+    </div>
+</div>
+
+@if (_mensagem != null)
+{
+    <div style="position:fixed; bottom:24px; right:24px; background:#1E293B; color:white;
+         padding:14px 20px; border-radius:10px; font-size:14px; font-weight:600;
+         box-shadow:0 4px 20px rgba(0,0,0,.3); z-index:500;">
+        @_mensagem
+    </div>
+}
+
+<!-- ── Modal: Registrar Contato ─────────────────────────────────────────── -->
+@if (_orcamentoSelecionado != null)
+{
+    <div @onclick="FecharModal"
+         style="position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:900;"/>
+    <div style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+                background:white; border-radius:16px; padding:28px; width:460px;
+                box-shadow:0 20px 60px rgba(0,0,0,.2); z-index:901;">
+        <h3 style="margin:0 0 16px; color:#1E293B; font-size:16px;">
+            📞 Registrar Contato — @_orcamentoSelecionado.Numero
+        </h3>
+        <div style="font-size:13px; color:#64748B; margin-bottom:16px;">
+            @(_orcamentoSelecionado.ClienteNome ?? "Consumidor Final") · @_orcamentoSelecionado.ValorTotal.ToString("C")
+        </div>
+
+        <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">Resultado do contato</label>
+        <select @bind="_novoStatus"
+                style="width:100%; padding:9px 12px; border:1px solid #E2E8F0; border-radius:8px;
+                       font-size:13px; margin-bottom:14px;">
+            <option value="1">Contatado — continuará pensando</option>
+            <option value="2">Convertido — vai comprar!</option>
+            <option value="3">Perdido — não vai comprar</option>
+        </select>
+
+        @if (_novoStatus == "3")
+        {
+            <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">Motivo da perda</label>
+            <select @bind="_motivoPerda"
+                    style="width:100%; padding:9px 12px; border:1px solid #E2E8F0; border-radius:8px;
+                           font-size:13px; margin-bottom:14px;">
+                <option value="">Selecione...</option>
+                <option>Preço alto</option>
+                <option>Comprou no concorrente</option>
+                <option>Não tinha o produto</option>
+                <option>Prazo de entrega</option>
+                <option>Sem interesse / desistiu</option>
+                <option>Sem contato / não atendeu</option>
+                <option>Orçamento vencido</option>
+            </select>
+        }
+
+        @if (_novoStatus == "1")
+        {
+            <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">Agendar próximo contato (dias)</label>
+            <select @bind="_proximoEmDias"
+                    style="width:100%; padding:9px 12px; border:1px solid #E2E8F0; border-radius:8px;
+                           font-size:13px; margin-bottom:14px;">
+                <option value="0">Não agendar</option>
+                <option value="2">Em 2 dias</option>
+                <option value="3">Em 3 dias</option>
+                <option value="5">Em 5 dias</option>
+                <option value="7">Em 1 semana</option>
+            </select>
+        }
+
+        <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">Observação</label>
+        <textarea @bind="_observacaoContato"
+                  style="width:100%; padding:9px 12px; border:1px solid #E2E8F0; border-radius:8px;
+                         font-size:13px; height:80px; resize:vertical; box-sizing:border-box;"
+                  placeholder="O cliente disse que..."/>
+
+        <div style="display:flex; gap:10px; margin-top:18px;">
+            <button @onclick="SalvarContato"
+                    style="flex:1; background:#1E62A6; color:white; border:none; padding:10px;
+                           border-radius:8px; font-weight:700; cursor:pointer; font-size:13px;">
+                Salvar
+            </button>
+            <button @onclick="FecharModal"
+                    style="padding:10px 20px; background:#F1F5F9; border:none; border-radius:8px;
+                           color:#64748B; font-weight:600; cursor:pointer; font-size:13px;">
+                Cancelar
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    private OrcamentoItem[]?        _orcamentos;
+    private OrcamentoItem[]?        _filtrados;
+    private FollowUpItem[]?         _agendaHoje;
+    private TaxaConversaoItem?      _taxaConversao;
+    private string                  _filtroStatus = "Todos";
+    private bool                    _loading      = true;
+    private string?                 _mensagem;
+
+    // Modal de registro de contato
+    private FollowUpItem? _orcamentoSelecionado;
+    private string        _novoStatus       = "1";
+    private string        _motivoPerda      = "";
+    private string        _observacaoContato = "";
+    private string        _proximoEmDias    = "0";
+
+    private const string Th = "padding:12px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td = "padding:12px 16px; font-size:13px;";
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _loading = true;
+        await Task.WhenAll(
+            Task.Run(async () => {
+                _orcamentos = await Api.GetAsync<OrcamentoItem[]>("api/Orcamentos") ?? [];
+                FiltrarStatus(_filtroStatus);
+            }),
+            Task.Run(async () =>
+                _agendaHoje = await Api.GetAsync<FollowUpItem[]>("api/Orcamentos/agenda-hoje") ?? []),
+            Task.Run(async () =>
+                _taxaConversao = await Api.GetAsync<TaxaConversaoItem>("api/Orcamentos/taxa-conversao"))
+        );
+        _loading = false;
+    }
+
+    private void FiltrarStatus(string status)
+    {
+        _filtroStatus = status;
+        _filtrados = status == "Todos"
+            ? _orcamentos
+            : _orcamentos?.Where(o => o.Status == status).ToArray();
+    }
+
+    private async Task ConverterVenda(System.Guid id)
+    {
+        var resp = await Api.PostAsync($"api/Orcamentos/{id}/converter", new {});
+        if (resp.IsSuccessStatusCode)
+        {
+            _mensagem = "✅ Orçamento convertido em venda!";
+            await CarregarAsync();
+            await Task.Delay(3000);
+            _mensagem = null;
+        }
+    }
+
+    private async Task AgendarFollowUp(System.Guid id, DateTime data)
+    {
+        var resp = await Api.PutAsync($"api/Orcamentos/{id}/agendar-followup",
+            new { dataFollowUp = data, observacao = "" });
+        if (resp.IsSuccessStatusCode)
+        {
+            _mensagem = "📅 Follow-up agendado!";
+            await CarregarAsync();
+            await Task.Delay(2000);
+            _mensagem = null;
+        }
+    }
+
+    private void AbrirRegistroContato(FollowUpItem f)
+    {
+        _orcamentoSelecionado = f;
+        _novoStatus           = "1";
+        _motivoPerda          = "";
+        _observacaoContato    = "";
+        _proximoEmDias        = "0";
+    }
+
+    private void FecharModal() => _orcamentoSelecionado = null;
+
+    private async Task SalvarContato()
+    {
+        if (_orcamentoSelecionado is null) return;
+
+        var payload = new
+        {
+            statusFollowUp     = int.Parse(_novoStatus),
+            observacaoFollowUp = _observacaoContato,
+            motivoPerda        = _novoStatus == "3" ? _motivoPerda : null as string,
+            proximoFollowUpEmDias = _novoStatus == "1" ? int.Parse(_proximoEmDias) : 0
+        };
+
+        var resp = await Api.PutAsync(
+            $"api/Orcamentos/{_orcamentoSelecionado.Id}/registrar-contato", payload);
+
+        if (resp.IsSuccessStatusCode)
+        {
+            _mensagem = _novoStatus switch
+            {
+                "2" => "🎉 Ótimo! Orçamento marcado como convertido.",
+                "3" => "📌 Perda registrada.",
+                _   => "✅ Contato registrado."
+            };
+            FecharModal();
+            await CarregarAsync();
+            await Task.Delay(3000);
+            _mensagem = null;
+        }
+    }
+
+    class OrcamentoItem
+    {
+        public System.Guid Id           { get; set; }
+        public DateTime    DataCriacao  { get; set; }
+        public string?     ClienteNome  { get; set; }
+        public string?     VendedorNome { get; set; }
+        public int         TotalItens   { get; set; }
+        public decimal     Total        { get; set; }
+        public string      Status       { get; set; } = "";
+    }
+
+    class FollowUpItem
+    {
+        public System.Guid Id                 { get; set; }
+        public string      Numero             { get; set; } = "";
+        public string?     ClienteNome        { get; set; }
+        public decimal     ValorTotal         { get; set; }
+        public DateTime?   DataFollowUp       { get; set; }
+        public int         StatusFollowUp     { get; set; }
+        public bool        FollowUpVencido    { get; set; }
+        public string?     ObservacaoFollowUp { get; set; }
+    }
+
+    class TaxaConversaoItem
+    {
+        public int     TotalOrcamentos      { get; set; }
+        public int     Convertidos          { get; set; }
+        public int     Perdidos             { get; set; }
+        public int     Pendentes            { get; set; }
+        public decimal TaxaConversaoPercent { get; set; }
+        public decimal ValorConvertido      { get; set; }
+        public decimal ValorPerdido         { get; set; }
+    }
+}

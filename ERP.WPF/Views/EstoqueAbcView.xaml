@@ -1,0 +1,107 @@
+<Window x:Class="ERP.WPF.Views.EstoqueAbcView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Curva ABC de Estoque" Height="650" Width="1100"
+        WindowStartupLocation="CenterScreen" Background="{DynamicResource FundoRodape}"
+        ShowInTaskbar="False">
+
+    <Grid Margin="25">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,20">
+            <StackPanel HorizontalAlignment="Left">
+                <TextBlock Text="Curva ABC de Vendas" FontSize="26" FontWeight="Bold" Foreground="{DynamicResource TextDark}"/>
+                <TextBlock Text="Classificação de produtos por relevância financeira (80/20)" FontSize="14" Foreground="{DynamicResource TextMuted}" Margin="0,5,0,0"/>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
+                <TextBlock Text="Período:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,10,0"/>
+                <DatePicker SelectedDate="{Binding DataInicio}" Width="110" Margin="0,0,10,0"/>
+                <TextBlock Text="até" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <DatePicker SelectedDate="{Binding DataFim}" Width="110" Margin="0,0,15,0"/>
+                <Button Content="PROCESSAR" Command="{Binding GerarRelatorioCommand}" Width="110" Height="35" Background="#1E293B" Foreground="White" FontWeight="Bold">
+                    <Button.Resources> <Style TargetType="Border"> <Setter Property="CornerRadius" Value="4"/> </Style> </Button.Resources>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <Border Grid.Row="1" Background="{DynamicResource CardBg}" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource BordaCard}" Padding="1">
+            <DataGrid ItemsSource="{Binding ListaAbc}" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" 
+                      HeadersVisibility="Column" Background="Transparent" BorderThickness="0" RowHeight="40"
+                      GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#F1F5F9" AlternatingRowBackground="{DynamicResource CardBgAlt}">
+                
+                <DataGrid.Resources>
+                    <Style TargetType="DataGridColumnHeader">
+                        <Setter Property="Background" Value="#F1F5F9"/>
+                        <Setter Property="Foreground" Value="#64748B"/>
+                        <Setter Property="FontWeight" Value="SemiBold"/>
+                        <Setter Property="Padding" Value="15,10"/>
+                    </Style>
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="DataGridCell">
+                                    <Border Padding="15,0" Background="{TemplateBinding Background}">
+                                        <ContentPresenter VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </DataGrid.Resources>
+
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="#" Binding="{Binding Rank}" Width="50" FontWeight="Bold" Foreground="{DynamicResource TextMuted}"/>
+                    
+                    <DataGridTextColumn Header="PRODUTO" Binding="{Binding Nome}" Width="*" FontWeight="SemiBold" Foreground="{DynamicResource TextDark}"/>
+                    
+                    <DataGridTextColumn Header="QTD. VENDIDA" Binding="{Binding Quantidade, StringFormat={}{0:N2}}" Width="120"/>
+                    
+                    <DataGridTextColumn Header="TOTAL GERADO" Binding="{Binding ValorTotal, StringFormat=C}" Width="140" FontWeight="Bold" Foreground="#10B981"/>
+                    
+                    <DataGridTextColumn Header="% ACUMULADO" Binding="{Binding PercentualAcumulado, StringFormat={}{0:N2}%}" Width="120" Foreground="{DynamicResource TextMuted}"/>
+                    
+                    <DataGridTemplateColumn Header="CLASSE" Width="100">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Ellipse Width="10" Height="10" Fill="{Binding CorClasse}" Margin="0,0,8,0"/>
+                                    <TextBlock Text="{Binding Classe}" FontWeight="Black" FontSize="16" Foreground="{Binding CorClasse}"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+        <Border Grid.Row="2" Margin="0,15,0,0" Background="{DynamicResource CardBg}" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource BordaCard}" Padding="15">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                
+                <TextBlock Text="Entenda a Classificação:" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextDark}" VerticalAlignment="Center" Margin="0,0,25,0"/>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,30,0">
+                    <Ellipse Width="12" Height="12" Fill="#10B981" Margin="0,0,6,0"/>
+                    <TextBlock Text="Classe A:" FontWeight="Black" Foreground="#10B981" Margin="0,0,5,0"/>
+                    <TextBlock Text="Até 80% do faturamento (Foco Total)" Foreground="{DynamicResource TextMuted}"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,30,0">
+                    <Ellipse Width="12" Height="12" Fill="#F59E0B" Margin="0,0,6,0"/>
+                    <TextBlock Text="Classe B:" FontWeight="Black" Foreground="#F59E0B" Margin="0,0,5,0"/>
+                    <TextBlock Text="Próximos 15% do faturamento" Foreground="{DynamicResource TextMuted}"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse Width="12" Height="12" Fill="#EF4444" Margin="0,0,6,0"/>
+                    <TextBlock Text="Classe C:" FontWeight="Black" Foreground="#EF4444" Margin="0,0,5,0"/>
+                    <TextBlock Text="Últimos 5% (Giro Baixo)" Foreground="{DynamicResource TextMuted}"/>
+                </StackPanel>
+                
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

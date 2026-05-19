@@ -1,0 +1,110 @@
+<UserControl x:Class="ERP.WPF.Views.NfeImportView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:ERP.WPF"
+             Background="{DynamicResource CardBg}">
+    
+    <UserControl.Resources>
+        <local:NullToCollapsedConverter x:Key="NullToCollapsed" />
+    </UserControl.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,20">
+            <TextBlock Text="Importação de Nota Fiscal (XML)" FontSize="26" FontWeight="Bold" Foreground="#2C3E50" VerticalAlignment="Center"/>
+            
+            <Button Content="📁 Selecionar Arquivo XML" Command="{Binding SelecionarXmlCommand}" 
+                    Margin="30,0,0,0" Padding="15,8" Background="#2980B9" Foreground="White" FontWeight="Bold" Cursor="Hand" FontSize="14"/>
+
+            <Button Content="💾 Cadastrar Produtos no Estoque" Command="{Binding SalvarEstoqueCommand}" 
+                    Margin="15,0,0,0" Padding="15,8" Background="#27AE60" Foreground="White" FontWeight="Bold" Cursor="Hand" FontSize="14"/>
+
+            <Button Content="📄 Ver Pedido Gerado" Command="{Binding VerPedidoGeradoCommand}" 
+                    Visibility="{Binding PedidoGeradoId, Converter={StaticResource NullToCollapsed}}"
+                    Margin="15,0,0,0" Padding="15,8" Background="#8E44AD" Foreground="White" FontWeight="Bold" Cursor="Hand" FontSize="14"/>
+        </StackPanel>
+
+        <Border Grid.Row="1" Background="{DynamicResource CardBgAlt}" BorderBrush="#E9ECEF" BorderThickness="1" CornerRadius="8" Padding="15" Margin="0,0,0,20">
+            <WrapPanel>
+                <StackPanel Margin="0,0,40,0">
+                    <TextBlock Text="FORNECEDOR" Foreground="Gray" FontSize="11" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding NotaFiscal.FornecedorNome, FallbackValue='---'}" FontSize="16" FontWeight="SemiBold" Foreground="#34495E"/>
+                </StackPanel>
+                
+                <StackPanel Margin="0,0,40,0">
+                    <TextBlock Text="CNPJ" Foreground="Gray" FontSize="11" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding NotaFiscal.FornecedorCnpj, FallbackValue='---'}" FontSize="16" FontWeight="SemiBold" Foreground="#34495E"/>
+                </StackPanel>
+                
+                <StackPanel Margin="0,0,40,0">
+                    <TextBlock Text="Nº DA NOTA" Foreground="Gray" FontSize="11" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding NotaFiscal.NumeroNota, FallbackValue='---'}" FontSize="16" FontWeight="SemiBold" Foreground="#34495E"/>
+                </StackPanel>
+                
+                <StackPanel>
+                    <TextBlock Text="TOTAL DA NOTA" Foreground="Gray" FontSize="11" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding NotaFiscal.ValorTotal, StringFormat=c, FallbackValue='R$ 0,00'}" FontSize="18" FontWeight="Bold" Foreground="#27AE60"/>
+                </StackPanel>
+            </WrapPanel>
+        </Border>
+
+        <DataGrid Grid.Row="2" ItemsSource="{Binding Itens}" AutoGenerateColumns="False" 
+                  CanUserAddRows="False" IsReadOnly="True" HeadersVisibility="Column"
+                  GridLinesVisibility="Horizontal" RowHeight="35" BorderBrush="#E9ECEF">
+            
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding ProdutoJaCadastrado}" Value="True">
+                            <Setter Property="Background" Value="#EAFAF1"/> 
+                            <Setter Property="Foreground" Value="#1D8348"/>
+                            <Setter Property="ToolTip" Value="Produto já cadastrado no sistema da Vila Verde!"/>
+                        </DataTrigger>
+                        
+                        <DataTrigger Binding="{Binding ProdutoJaCadastrado}" Value="False">
+                            <Setter Property="Background" Value="#FEF9E7"/>
+                            <Setter Property="Foreground" Value="#B9770E"/>
+                            <Setter Property="ToolTip" Value="Produto NOVO! Precisará ser cadastrado ou vinculado."/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.RowStyle>
+
+            <DataGrid.Columns>
+                <DataGridCheckBoxColumn Header="Já Tem?" Binding="{Binding ProdutoJaCadastrado}" Width="70"/>
+                
+                <DataGridTextColumn Header="Cód. Barras (EAN)" Binding="{Binding CodigoBarrasFornecedor}" Width="150"/>
+                <DataGridTextColumn Header="Descrição do Produto" Binding="{Binding NomeProdutoFornecedor}" Width="*"/>
+                <DataGridTextColumn Header="UN" Binding="{Binding UnidadeMedida}" Width="60"/>
+                <DataGridTextColumn Header="Qtd" Binding="{Binding QuantidadeComprada}" Width="80"/>
+                <DataGridTextColumn Header="Custo Un." Binding="{Binding ValorCustoUnitario, StringFormat=c}" Width="100"/>
+                <DataGridTemplateColumn Header="Ação" Width="100">
+    <DataGridTemplateColumn.CellTemplate>
+        <DataTemplate>
+            <Button Content="🔗 Vincular" 
+                    Command="{Binding DataContext.VincularProdutoCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                    CommandParameter="{Binding}"
+                    Background="#F39C12" Foreground="White" FontWeight="Bold" Padding="5,2" BorderThickness="0" Cursor="Hand">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding ProdutoJaCadastrado}" Value="False">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </DataTemplate>
+    </DataGridTemplateColumn.CellTemplate>
+</DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</UserControl>
