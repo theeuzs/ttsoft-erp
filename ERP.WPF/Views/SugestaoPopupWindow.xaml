@@ -1,0 +1,193 @@
+<Window x:Class="ERP.WPF.Views.SugestaoPopupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Vai precisar também de..."
+        Height="Auto" Width="480"
+        MinHeight="180" MaxHeight="560"
+        WindowStartupLocation="Manual"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        AllowsTransparency="True"
+        WindowStyle="None"
+        Background="Transparent">
+
+    <Window.Resources>
+        <!-- Sombra do painel principal -->
+        <DropShadowEffect x:Key="CardShadow" BlurRadius="24" ShadowDepth="4"
+                          Color="#000000" Opacity="0.18"/>
+
+        <!-- Botão de adicionar individual -->
+        <Style x:Key="BtnAdd" TargetType="Button">
+            <Setter Property="Background"   Value="#1E62A6"/>
+            <Setter Property="Foreground"   Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding"      Value="10 5"/>
+            <Setter Property="FontSize"     Value="12"/>
+            <Setter Property="FontWeight"   Value="SemiBold"/>
+            <Setter Property="Cursor"       Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#1750A0"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="#133E80"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Botão fechar -->
+        <Style x:Key="BtnFechar" TargetType="Button">
+            <Setter Property="Background"   Value="#F1F5F9"/>
+            <Setter Property="Foreground"   Value="#475569"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding"      Value="12 6"/>
+            <Setter Property="FontSize"     Value="12"/>
+            <Setter Property="FontWeight"   Value="SemiBold"/>
+            <Setter Property="Cursor"       Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#E2E8F0"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <!-- Painel com sombra e cantos arredondados -->
+    <Border CornerRadius="14" Background="White" Effect="{StaticResource CardShadow}"
+            Margin="12">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>  <!-- Header -->
+                <RowDefinition Height="*"/>     <!-- Lista -->
+                <RowDefinition Height="Auto"/>  <!-- Rodapé -->
+            </Grid.RowDefinitions>
+
+            <!-- ── Header ─────────────────────────────────────────────── -->
+            <Border Grid.Row="0" Background="#1E62A6" CornerRadius="14 14 0 0" Padding="16 12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="💡 Vai precisar também de..."
+                                   Foreground="White" FontSize="14" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtProdutoPrincipal"
+                                   Foreground="#B3D4F7" FontSize="11" Margin="0 2 0 0"/>
+                    </StackPanel>
+
+                    <!-- Botão X para fechar -->
+                    <Button Grid.Column="1" x:Name="BtnX" Content="✕"
+                            Width="28" Height="28"
+                            Background="Transparent" Foreground="White"
+                            BorderThickness="0" FontSize="14" FontWeight="Bold"
+                            Cursor="Hand" Click="BtnX_Click"
+                            VerticalAlignment="Top"/>
+                </Grid>
+            </Border>
+
+            <!-- ── Lista de sugestões ───────────────────────────────────── -->
+            <ItemsControl Grid.Row="1" x:Name="ListaSugestoes"
+                          Margin="12 10 12 4">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0 4" Padding="10 10" CornerRadius="10"
+                                Background="#F8FAFC"
+                                BorderBrush="#E2E8F0" BorderThickness="1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="44"/>   <!-- Imagem -->
+                                    <ColumnDefinition Width="*"/>    <!-- Info -->
+                                    <ColumnDefinition Width="Auto"/> <!-- Botão -->
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Imagem ou ícone padrão -->
+                                <Border Grid.Column="0" Width="40" Height="40"
+                                        CornerRadius="8" Background="#E8F0FA"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="📦" FontSize="20"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+
+                                <!-- Nome, preço, estoque -->
+                                <StackPanel Grid.Column="1" Margin="10 0 8 0"
+                                            VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Nome}"
+                                               FontWeight="SemiBold" FontSize="13"
+                                               Foreground="#1E293B"
+                                               TextTrimming="CharacterEllipsis"/>
+
+                                    <StackPanel Orientation="Horizontal" Margin="0 2 0 0">
+                                        <TextBlock Text="{Binding Preco, StringFormat=R$ {0:N2}}"
+                                                   Foreground="#1E62A6" FontWeight="Bold"
+                                                   FontSize="13"/>
+                                        <TextBlock Text=" · " Foreground="#94A3B8" FontSize="12"/>
+                                        <TextBlock FontSize="11" Foreground="#64748B">
+                                            <TextBlock.Text>
+                                                <MultiBinding StringFormat="Estoque: {0} {1}">
+                                                    <Binding Path="Estoque"/>
+                                                    <Binding Path="Unit"/>
+                                                </MultiBinding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- Botão + Adicionar -->
+                                <Button Grid.Column="2"
+                                        Content="+ Adicionar"
+                                        Style="{StaticResource BtnAdd}"
+                                        VerticalAlignment="Center"
+                                        Tag="{Binding}"
+                                        Click="BtnAdicionar_Click"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- ── Rodapé ────────────────────────────────────────────────── -->
+            <Border Grid.Row="2" Padding="12 8 12 14">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Timer de auto-close -->
+                    <TextBlock Grid.Column="0" x:Name="TxtTimer"
+                               Foreground="#94A3B8" FontSize="11"
+                               VerticalAlignment="Center"
+                               Text="Fechando em 12s..."/>
+
+                    <Button Grid.Column="1" Content="Pular sugestões"
+                            Style="{StaticResource BtnFechar}"
+                            Click="BtnFechar_Click"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

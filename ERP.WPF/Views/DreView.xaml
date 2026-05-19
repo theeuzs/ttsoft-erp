@@ -1,0 +1,90 @@
+<Window x:Class="ERP.WPF.Views.DreView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="DRE - Demonstrativo de Resultado" Width="820" MinHeight="550"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterScreen" Background="{DynamicResource FundoRodape}"
+        ResizeMode="NoResize" ShowInTaskbar="False">
+
+    <Grid Margin="30">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <RowDefinition Height="Auto"/> <RowDefinition Height="*"/>    </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,15">
+            <TextBlock Text="DRE Simplificado" FontSize="26" FontWeight="Bold" Foreground="{DynamicResource TextDark}"/>
+            <TextBlock Text="Demonstrativo de Resultado do Exercício" FontSize="14" Foreground="{DynamicResource TextMuted}" Margin="0,3,0,0"/>
+        </StackPanel>
+
+        <Border Grid.Row="1" Background="{DynamicResource CardBg}" CornerRadius="8"
+                BorderBrush="{DynamicResource BordaCard}" BorderThickness="1"
+                Padding="15,10" Margin="0,0,0,20">
+            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="Período:" VerticalAlignment="Center" FontWeight="SemiBold" Foreground="{DynamicResource TextDark}" Margin="0,0,10,0"/>
+                <DatePicker SelectedDate="{Binding DataInicio}" Width="115" Margin="0,0,10,0"/>
+                
+                <TextBlock Text="até" VerticalAlignment="Center" Foreground="{DynamicResource TextMuted}" Margin="0,0,10,0"/>
+                <DatePicker SelectedDate="{Binding DataFim}" Width="115" Margin="0,0,20,0"/>
+                
+                <Button Content="▶ CALCULAR" Command="{Binding GerarDreCommand}" 
+                        Width="110" Height="32" Background="#3B82F6" Foreground="White" 
+                        FontWeight="Bold" BorderThickness="0" Cursor="Hand" Margin="0,0,8,0">
+                    <Button.Resources>
+                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style>
+                    </Button.Resources>
+                </Button>
+                
+                <Button Content="📄 PDF" Command="{Binding ExportarPdfCommand}" 
+                        Background="#DC2626" Foreground="White" FontWeight="Bold" 
+                        Height="32" Width="80" BorderThickness="0" Cursor="Hand">
+                    <Button.Resources>
+                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style>
+                    </Button.Resources>
+                </Button>
+            </WrapPanel>
+        </Border>
+
+        <Border Grid.Row="2" Background="{DynamicResource CardBg}" CornerRadius="12" Padding="30" BorderThickness="1" BorderBrush="{DynamicResource BordaCard}">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="15" ShadowDepth="4" Opacity="0.05" Color="Black"/>
+            </Border.Effect>
+
+            <StackPanel>
+                <Grid Margin="0,0,0,15">
+                    <TextBlock Text="(+) Receita Bruta (Vendas Totais)" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource TextDark}"/>
+                    <TextBlock Text="{Binding ReceitaBruta, StringFormat=C}" FontSize="18" FontWeight="Bold" Foreground="#10B981" HorizontalAlignment="Right"/>
+                </Grid>
+
+                <Grid Margin="0,0,0,15">
+                    <TextBlock Text="(-) Custo das Mercadorias Vendidas (CMV)" FontSize="16" Foreground="{DynamicResource TextMuted}"/>
+                    <TextBlock Text="{Binding CustoMercadorias, StringFormat=C}" FontSize="16" FontWeight="SemiBold" Foreground="#EF4444" HorizontalAlignment="Right"/>
+                </Grid>
+
+                <Separator Margin="0,10,0,15" Background="{DynamicResource BordaCard}"/>
+
+                <Grid Margin="0,0,0,25">
+                    <TextBlock Text="(=) Lucro Bruto Operacional" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextDark}"/>
+                    <TextBlock Text="{Binding LucroBruto, StringFormat=C}" FontSize="18" FontWeight="Bold" Foreground="#3B82F6" HorizontalAlignment="Right"/>
+                </Grid>
+
+                <Grid Margin="0,0,0,15">
+                    <TextBlock Text="(-) Despesas Operacionais (Contas a Pagar)" FontSize="16" Foreground="{DynamicResource TextMuted}"/>
+                    <TextBlock Text="{Binding DespesasOperacionais, StringFormat=C}" FontSize="16" FontWeight="SemiBold" Foreground="#EF4444" HorizontalAlignment="Right"/>
+                </Grid>
+
+                <Separator Margin="0,15,0,20" Background="{DynamicResource BordaCard}" Height="2"/>
+
+                <Grid>
+                    <StackPanel>
+                        <TextBlock Text="(=) LUCRO LÍQUIDO" FontSize="24" FontWeight="Black" Foreground="{DynamicResource TextDark}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                            <TextBlock Text="Margem de Lucratividade:" FontSize="14" Foreground="{DynamicResource TextMuted}" Margin="0,0,5,0"/>
+                            <TextBlock Text="{Binding MargemLucratividade, StringFormat={}{0:N2}%}" FontSize="14" FontWeight="Bold" Foreground="#10B981"/>
+                        </StackPanel>
+                    </StackPanel>
+                    
+                    <TextBlock Text="{Binding LucroLiquido, StringFormat=C}" FontSize="28" FontWeight="Black" Foreground="#10B981" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

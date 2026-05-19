@@ -1,0 +1,44 @@
+<Application x:Class="ERP.WPF.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:ERP.WPF"
+             xmlns:conv="clr-namespace:ERP.WPF.Converters"
+             DispatcherUnhandledException="Application_DispatcherUnhandledException">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/DarkModeStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <local:NegativoConverter x:Key="NegativoConverter"/>
+            <local:DecimalConverter  x:Key="DecimalConverter"/>
+            <local:NullToCollapsedConverter x:Key="NullToCollapsed"/>
+            <conv:InverseBoolConverter      x:Key="InverseBool"/>
+
+            <!-- Sprint 5: converters do PDV (barra de meta + destaque de item) -->
+            <conv:EqualConverter          x:Key="EqualConverter"/>
+            <conv:PercentToColorConverter x:Key="PercentToColorConverter"/>
+            <conv:PercentToWidthConverter x:Key="PercentToWidthConverter"/>
+            <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
+            <!-- Defaults de tema (modo claro) — sobrescritos pelo ThemeService em runtime -->
+            <SolidColorBrush x:Key="CardBg"         Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="TextDark"        Color="#2D3436"/>
+            <SolidColorBrush x:Key="TextMuted"       Color="#636E72"/>
+            <SolidColorBrush x:Key="FundoGeral"      Color="#F0F4F8"/>
+            <SolidColorBrush x:Key="FundoInput"      Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="BordaInput"      Color="#CBD5E1"/>
+            <SolidColorBrush x:Key="BordaCard"       Color="#E2E8F0"/>
+            <SolidColorBrush x:Key="RowHoverBg"      Color="#EFF6FF"/>
+            <SolidColorBrush x:Key="RowSelectedBg"   Color="#2563EB"/>
+            <SolidColorBrush x:Key="FundoRodape"     Color="#F8FAFC"/>
+            <SolidColorBrush x:Key="BordaRodape"     Color="#E2E8F0"/>
+            <SolidColorBrush x:Key="FundoPopup"      Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="BordaPopup"      Color="#CBD5E1"/>
+            <SolidColorBrush x:Key="HoverPopup"      Color="#F8FAFC"/>
+            <SolidColorBrush x:Key="CardBgAlt"       Color="#F8F9FA"/>
+            <DropShadowEffect x:Key="CardShadow" BlurRadius="12" ShadowDepth="2"
+                              Opacity="0.08" Color="Black" Direction="270"/>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

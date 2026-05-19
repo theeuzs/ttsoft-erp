@@ -1,0 +1,198 @@
+<Window x:Class="ERP.WPF.Views.CustomerHistoryView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Histórico do Cliente" Height="620" Width="960"
+        WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent">
+
+    <Border Background="{DynamicResource CardBg}" CornerRadius="16" Margin="10">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="20" Opacity="0.2" ShadowDepth="4"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <Border Grid.Row="0" Background="{DynamicResource CorAcento}" CornerRadius="16,16,0,0" Padding="28,20">
+                <Grid>
+                    <StackPanel>
+                        <TextBlock Text="Histórico do Cliente" FontSize="12" Foreground="#FFFFFF99" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding NomeCliente}" FontSize="22" FontWeight="Black" Foreground="White" Margin="0,4,0,0"/>
+                    </StackPanel>
+                    <Button Content="✕" HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Click="BtnFechar_Click"
+                            Background="Transparent" BorderThickness="0"
+                            Foreground="#FFFFFF99" FontSize="18" Cursor="Hand"
+                            ToolTip="Fechar"/>
+                </Grid>
+            </Border>
+
+            <!-- Cards de resumo -->
+            <Grid Grid.Row="1" Margin="24,20,24,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Background="#F0FDF4" CornerRadius="10" Padding="16,12">
+                    <StackPanel>
+                        <TextBlock Text="🧾 VENDAS" FontSize="10" FontWeight="Bold" Foreground="#16A34A"/>
+                        <TextBlock Text="{Binding ListaVendas.Count}" FontSize="24" FontWeight="Black" Foreground="#16A34A" Margin="0,4,0,0"/>
+                        <TextBlock Text="realizadas" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="2" Background="{DynamicResource CardBgAlt}" CornerRadius="10" Padding="16,12">
+                    <StackPanel>
+                        <TextBlock Text="💰 TOTAL COMPRADO" FontSize="10" FontWeight="Bold" Foreground="#3B82F6"/>
+                        <TextBlock Text="{Binding TotalComprado, StringFormat='R$ {0:N2}'}" FontSize="18" FontWeight="Black" Foreground="#3B82F6" Margin="0,4,0,0"/>
+                        <TextBlock Text="em vendas realizadas" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="4" Background="#FFF7ED" CornerRadius="10" Padding="16,12">
+                    <StackPanel>
+                        <TextBlock Text="📑 ORÇAMENTOS" FontSize="10" FontWeight="Bold" Foreground="#F59E0B"/>
+                        <TextBlock Text="{Binding ListaOrcamentos.Count}" FontSize="24" FontWeight="Black" Foreground="#F59E0B" Margin="0,4,0,0"/>
+                        <TextBlock Text="elaborados" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Abas -->
+            <TabControl Grid.Row="2" Margin="24,16,24,24" BorderThickness="0" Background="Transparent">
+                <TabControl.Resources>
+                    <Style TargetType="TabItem">
+                        <Setter Property="Padding" Value="16,8"/>
+                        <Setter Property="FontWeight" Value="SemiBold"/>
+                        <Setter Property="FontSize" Value="13"/>
+                        <Setter Property="Foreground" Value="#64748B"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Style.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource CorAcento}"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </TabControl.Resources>
+
+                <!-- Vendas -->
+                <TabItem Header="🧾  Vendas Realizadas">
+                    <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BordaCard}" BorderThickness="1" CornerRadius="10">
+                        <DataGrid ItemsSource="{Binding ListaVendas}" AutoGenerateColumns="False"
+                                  IsReadOnly="True" Background="Transparent" BorderThickness="0"
+                                  RowHeight="46" GridLinesVisibility="Horizontal"
+                                  HorizontalGridLinesBrush="#F1F5F9" AlternatingRowBackground="{DynamicResource CardBgAlt}"
+                                  CanUserResizeRows="False" HeadersVisibility="Column">
+                            <DataGrid.ColumnHeaderStyle>
+                                <Style TargetType="DataGridColumnHeader">
+                                    <Setter Property="Background" Value="#F8FAFC"/>
+                                    <Setter Property="Foreground" Value="#64748B"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                    <Setter Property="FontSize" Value="11"/>
+                                    <Setter Property="Padding" Value="16,10"/>
+                                    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                    <Setter Property="BorderBrush" Value="#E2E8F0"/>
+                                </Style>
+                            </DataGrid.ColumnHeaderStyle>
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="NÚMERO" Binding="{Binding SaleNumber}" Width="160" FontWeight="SemiBold"/>
+                                <DataGridTextColumn Header="DATA" Binding="{Binding SaleDate, StringFormat=dd/MM/yyyy HH:mm}" Width="150"/>
+                                <DataGridTextColumn Header="FORMA PGTO" Binding="{Binding PaymentMethod}" Width="*"/>
+                                <DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="100"/>
+                                <DataGridTextColumn Header="TOTAL" Binding="{Binding Total, StringFormat='R$ {0:N2}'}" Width="130">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontWeight" Value="Bold"/>
+                                            <Setter Property="Foreground" Value="#16A34A"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTemplateColumn Header="AÇÕES" Width="120">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Content="👁️ Ver"
+                                                    Command="{Binding DataContext.VisualizarVendaCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"
+                                                    Background="{DynamicResource CorAcento}" Foreground="White"
+                                                    FontWeight="Bold" Padding="12,5"
+                                                    BorderThickness="0" Cursor="Hand">
+                                                <Button.Resources>
+                                                    <Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>
+                                                </Button.Resources>
+                                            </Button>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+                </TabItem>
+
+                <!-- Orçamentos -->
+                <TabItem Header="📑  Orçamentos Feitos">
+                    <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BordaCard}" BorderThickness="1" CornerRadius="10">
+                        <DataGrid ItemsSource="{Binding ListaOrcamentos}" AutoGenerateColumns="False"
+                                  IsReadOnly="True" Background="Transparent" BorderThickness="0"
+                                  RowHeight="46" GridLinesVisibility="Horizontal"
+                                  HorizontalGridLinesBrush="#F1F5F9" AlternatingRowBackground="{DynamicResource CardBgAlt}"
+                                  CanUserResizeRows="False" HeadersVisibility="Column">
+                            <DataGrid.ColumnHeaderStyle>
+                                <Style TargetType="DataGridColumnHeader">
+                                    <Setter Property="Background" Value="#F8FAFC"/>
+                                    <Setter Property="Foreground" Value="#64748B"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                    <Setter Property="FontSize" Value="11"/>
+                                    <Setter Property="Padding" Value="16,10"/>
+                                    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                    <Setter Property="BorderBrush" Value="#E2E8F0"/>
+                                </Style>
+                            </DataGrid.ColumnHeaderStyle>
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="NÚMERO" Binding="{Binding Numero}" Width="160" FontWeight="SemiBold"/>
+                                <DataGridTextColumn Header="EMISSÃO" Binding="{Binding DataEmissao, StringFormat=dd/MM/yyyy}" Width="130"/>
+                                <DataGridTextColumn Header="VALIDADE" Binding="{Binding DataValidade, StringFormat=dd/MM/yyyy}" Width="130"/>
+                                <DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="*"/>
+                                <DataGridTextColumn Header="TOTAL" Binding="{Binding ValorTotal, StringFormat='R$ {0:N2}'}" Width="130">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontWeight" Value="Bold"/>
+                                            <Setter Property="Foreground" Value="#F59E0B"/>
+                                            <Setter Property="VerticalAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTemplateColumn Header="AÇÕES" Width="120">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Content="👁️ Ver"
+                                                    Command="{Binding DataContext.VisualizarOrcamentoCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"
+                                                    Background="#F59E0B" Foreground="White"
+                                                    FontWeight="Bold" Padding="12,5"
+                                                    BorderThickness="0" Cursor="Hand">
+                                                <Button.Resources>
+                                                    <Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>
+                                                </Button.Resources>
+                                            </Button>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+                </TabItem>
+            </TabControl>
+        </Grid>
+    </Border>
+</Window>

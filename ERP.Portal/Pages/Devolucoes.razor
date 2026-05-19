@@ -1,0 +1,400 @@
+@page "/devolucoes"
+@using ERP.Portal.Services
+@inject ApiClient Api
+@inject IJSRuntime JS
+
+<div style="padding:0 0 24px;">
+
+    @if (_toast != null)
+    {
+        <div style="position:fixed; top:20px; right:20px; z-index:9999;
+                    background:@_toastBg; color:white; padding:14px 20px; border-radius:10px;
+                    box-shadow:0 8px 24px rgba(0,0,0,.20); font-weight:600; font-size:14px;
+                    display:flex; align-items:center; gap:10px; min-width:280px;">
+            <span>@_toast</span>
+            <button @onclick="() => _toast = null"
+                    style="margin-left:auto; background:transparent; border:none;
+                           color:white; font-size:18px; cursor:pointer;">×</button>
+        </div>
+    }
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">↩️ Devoluções</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">
+                Devolução rastreada por item · Crédito Haver automático
+            </p>
+        </div>
+    </div>
+
+    <!-- Etapa 1: Buscar venda -->
+    @if (_venda == null)
+    {
+        <div style="background:white; border-radius:12px; padding:28px; max-width:560px;
+                    box-shadow:0 2px 8px rgba(0,0,0,.06);">
+            <div style="font-size:14px; font-weight:700; color:#1E293B; margin-bottom:16px;">
+                🔍 Buscar Venda
+            </div>
+            <div style="display:flex; gap:10px;">
+                <input @bind="_buscaVenda" @bind:event="oninput"
+                       @onkeyup="OnBuscaVendaKeyUp"
+                       placeholder="Número da venda, nome ou CPF do cliente..."
+                       style="flex:1; padding:10px 14px; border:2px solid #E2E8F0;
+                              border-radius:8px; font-size:14px;"/>
+                <button @onclick="BuscarVendaAsync" disabled="@_buscando"
+                        style="background:#1E62A6; color:white; border:none; padding:10px 18px;
+                               border-radius:8px; font-weight:700; cursor:pointer; font-size:14px;">
+                    @(_buscando ? "⏳" : "Buscar")
+                </button>
+            </div>
+
+            @if (_vendasEncontradas.Count > 0)
+            {
+                <div style="margin-top:16px; border:1px solid #E2E8F0; border-radius:8px; overflow:hidden;">
+                    @foreach (var v in _vendasEncontradas)
+                    {
+                        <button @onclick="() => SelecionarVendaAsync(v.Id)"
+                                style="width:100%; text-align:left; padding:12px 16px;
+                                       border:none; border-bottom:1px solid #F1F5F9;
+                                       background:white; cursor:pointer;"
+                                onmouseover="this.style.background='#F8FAFC'"
+                                onmouseout="this.style.background='white'">
+                            <div style="font-weight:700; color:#1E293B;">
+                                #@v.SaleNumber — @(v.CustomerName ?? "Consumidor Final")
+                            </div>
+                            <div style="font-size:12px; color:#94A3B8; margin-top:2px;">
+                                @v.SaleDate.ToString("dd/MM/yyyy HH:mm") · @v.Total.ToString("C")
+                            </div>
+                        </button>
+                    }
+                </div>
+            }
+            else if (_buscaFeita)
+            {
+                <div style="margin-top:12px; color:#94A3B8; font-size:13px;">
+                    Nenhuma venda encontrada.
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <!-- Etapa 2: Selecionar itens a devolver -->
+        <div style="display:grid; grid-template-columns:1fr 340px; gap:20px;">
+
+            <div>
+                <div style="background:white; border-radius:12px; padding:20px;
+                            box-shadow:0 2px 8px rgba(0,0,0,.06); margin-bottom:16px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                        <div>
+                            <div style="font-size:15px; font-weight:800; color:#1E293B;">
+                                Venda #@_venda.SaleNumber
+                            </div>
+                            <div style="font-size:12px; color:#94A3B8;">
+                                @_venda.SaleDate.ToString("dd/MM/yyyy HH:mm") ·
+                                @(_venda.CustomerName ?? "Consumidor Final") ·
+                                Total: @_venda.Total.ToString("C")
+                            </div>
+                        </div>
+                        <button @onclick="VoltarBusca"
+                                style="background:#F1F5F9; border:none; padding:7px 14px;
+                                       border-radius:8px; cursor:pointer; font-size:12px; color:#64748B; font-weight:600;">
+                            ← Outra venda
+                        </button>
+                    </div>
+
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead>
+                            <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                                <th style="@Th">PRODUTO</th>
+                                <th style="@Th; text-align:right;">VENDIDO</th>
+                                <th style="@Th; text-align:right;">JÁ DEVOLVIDO</th>
+                                <th style="@Th; text-align:right;">DEVOLVER</th>
+                                <th style="@Th; text-align:right;">SUBTOTAL</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in _itensVenda)
+                            {
+                                var jaDev       = _jaDevolvido.GetValueOrDefault(item.ProductId, 0);
+                                var dispMax     = item.Quantity - jaDev;
+                                var qtdDev      = _qtdDevolver.GetValueOrDefault(item.ProductId, 0m);
+                                var subtotal    = qtdDev * item.UnitPrice;
+                                var podeDevolver = dispMax > 0;
+
+                                <tr style="border-bottom:1px solid #F1F5F9;
+                                     opacity:@(podeDevolver ? "1" : ".45")">
+                                    <td style="@Td; font-weight:600; color:#1E293B;">
+                                        @item.ProductName
+                                        @if (!podeDevolver)
+                                        {
+                                            <div style="font-size:10px; color:#EF4444; font-weight:700;">
+                                                Já devolvido integralmente
+                                            </div>
+                                        }
+                                    </td>
+                                    <td style="@Td; text-align:right; color:#64748B;">
+                                        @item.Quantity.ToString("F2")
+                                    </td>
+                                    <td style="@Td; text-align:right; color:@(jaDev > 0 ? "#EF4444" : "#94A3B8");">
+                                        @jaDev.ToString("F2")
+                                    </td>
+                                    <td style="@Td; text-align:right;">
+                                        @if (podeDevolver)
+                                        {
+                                            <input type="number"
+                                                   value="@qtdDev"
+                                                   @oninput="e => SetQtdDevolver(item.ProductId, e.Value?.ToString())"
+                                                   min="0" max="@dispMax" step="1"
+                                                   style="width:80px; padding:6px 8px; border:1px solid #E2E8F0;
+                                                          border-radius:6px; font-size:13px; text-align:right;"/>
+                                        }
+                                        else
+                                        {
+                                            <span style="color:#94A3B8; font-size:12px;">—</span>
+                                        }
+                                    </td>
+                                    <td style="@Td; text-align:right; font-weight:700;
+                                         color:@(subtotal > 0 ? "#1E293B" : "#94A3B8");">
+                                        @(subtotal > 0 ? subtotal.ToString("C") : "—")
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Painel de resumo -->
+            <div>
+                <div style="background:white; border-radius:12px; padding:20px;
+                            box-shadow:0 2px 8px rgba(0,0,0,.06); position:sticky; top:70px;">
+                    <div style="font-size:14px; font-weight:800; color:#1E293B; margin-bottom:16px;">
+                        📋 Resumo da Devolução
+                    </div>
+
+                    <div style="font-size:13px; color:#64748B; margin-bottom:8px;">
+                        Itens a devolver: <strong style="color:#1E293B;">@ItensComDevolucao</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:20px;
+                         font-size:18px; font-weight:800; color:#1E293B;">
+                        <span>Total a devolver</span>
+                        <span style="color:#EF4444;">@TotalDevolucao.ToString("C")</span>
+                    </div>
+
+                    <div style="margin-bottom:16px;">
+                        <label style="font-size:11px; font-weight:700; color:#64748B;
+                               display:block; margin-bottom:6px;">DESTINO DO CRÉDITO</label>
+                        <select @bind="_destino"
+                                style="width:100%; padding:9px 12px; border:1px solid #E2E8F0;
+                                       border-radius:8px; font-size:13px; background:white;">
+                            <option value="Haver">💰 Crédito em Haver (conta do cliente)</option>
+                            <option value="Dinheiro">💵 Devolução em dinheiro</option>
+                            <option value="Troca">🔄 Troca de produto</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom:16px;">
+                        <label style="font-size:11px; font-weight:700; color:#64748B;
+                               display:block; margin-bottom:6px;">MOTIVO *</label>
+                        <textarea @bind="_motivo" rows="3"
+                                  placeholder="Descreva o motivo da devolução..."
+                                  style="width:100%; padding:9px 12px; border:1px solid #E2E8F0;
+                                         border-radius:8px; font-size:13px; resize:none;
+                                         box-sizing:border-box;"/>
+                    </div>
+
+                    @if (_destino == "Haver" && _venda.CustomerId.HasValue)
+                    {
+                        <div style="padding:10px 14px; background:#F0FDF4; border-radius:8px;
+                                    border:1px solid #BBF7D0; margin-bottom:16px; font-size:12px;
+                                    color:#065F46;">
+                            💰 O valor será creditado automaticamente na conta Haver do cliente.
+                            Disponível para uso na próxima compra.
+                        </div>
+                    }
+
+                    <button @onclick="ConfirmarDevolucaoAsync"
+                            disabled="@(TotalDevolucao == 0 || _processando || string.IsNullOrWhiteSpace(_motivo))"
+                            style="width:100%; padding:14px; font-weight:700; font-size:15px;
+                                   border:none; border-radius:10px; cursor:pointer;
+                                   background:@(TotalDevolucao > 0 && !string.IsNullOrWhiteSpace(_motivo) ? "#EF4444" : "#94A3B8");
+                                   color:white;">
+                        @(_processando ? "⏳ Processando..." : $"↩️ Confirmar Devolução {TotalDevolucao.ToString("C")}")
+                    </button>
+
+                    @if (TotalDevolucao == 0)
+                    {
+                        <p style="font-size:11px; color:#94A3B8; text-align:center; margin:8px 0 0;">
+                            Informe a quantidade a devolver para cada item
+                        </p>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private string             _buscaVenda        = "";
+    private bool               _buscando          = false;
+    private bool               _buscaFeita        = false;
+    private List<VendaSimples> _vendasEncontradas = [];
+
+    private VendaDetalhe?             _venda;
+    private List<ItemVendaDto>        _itensVenda  = [];
+    private Dictionary<Guid, decimal> _jaDevolvido = new();
+    private Dictionary<Guid, decimal> _qtdDevolver = new();
+
+    private string  _destino     = "Haver";
+    private string  _motivo      = "";
+    private bool    _processando = false;
+    private string? _toast;
+    private string  _toastBg     = "#10B981";
+
+    private const string Th = "padding:10px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td = "padding:10px 16px; font-size:13px;";
+
+    private int     ItensComDevolucao => _qtdDevolver.Count(kv => kv.Value > 0);
+    private decimal TotalDevolucao    =>
+        _itensVenda.Sum(i => _qtdDevolver.GetValueOrDefault(i.ProductId, 0) * i.UnitPrice);
+
+    private async Task OnBuscaVendaKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await BuscarVendaAsync();
+    }
+
+    private void VoltarBusca()
+    {
+        _venda             = null;
+        _vendasEncontradas = [];
+        _buscaFeita        = false;
+    }
+
+    private async Task BuscarVendaAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_buscaVenda)) return;
+        _buscando   = true;
+        _buscaFeita = false;
+        try
+        {
+            var vendas = await Api.GetAsync<VendaSimples[]>(
+                $"api/Sales?search={Uri.EscapeDataString(_buscaVenda)}&pageSize=10");
+            _vendasEncontradas = vendas?.ToList() ?? [];
+        }
+        catch { _vendasEncontradas = []; }
+        finally { _buscando = false; _buscaFeita = true; }
+    }
+
+    private async Task SelecionarVendaAsync(Guid vendaId)
+    {
+        var detalhe = await Api.GetAsync<VendaDetalhe>($"api/Sales/{vendaId}");
+        if (detalhe == null) return;
+
+        _venda       = detalhe;
+        _itensVenda  = detalhe.Items?.ToList() ?? [];
+        _qtdDevolver = new();
+        _jaDevolvido = new();
+
+        foreach (var item in _itensVenda)
+        {
+            try
+            {
+                var jaDev = await Api.GetAsync<decimal>(
+                    $"api/devolucao/ja-devolvido?vendaId={vendaId}&productId={item.ProductId}");
+                _jaDevolvido[item.ProductId] = jaDev;
+            }
+            catch { _jaDevolvido[item.ProductId] = 0; }
+        }
+    }
+
+    private void SetQtdDevolver(Guid productId, string? valor)
+    {
+        if (decimal.TryParse(valor?.Replace(",", "."),
+            System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out var v))
+        {
+            var item    = _itensVenda.FirstOrDefault(i => i.ProductId == productId);
+            var jaDev   = _jaDevolvido.GetValueOrDefault(productId, 0);
+            var maxDisp = (item?.Quantity ?? 0) - jaDev;
+            _qtdDevolver[productId] = Math.Max(0, Math.Min(v, maxDisp));
+        }
+    }
+
+    private async Task ConfirmarDevolucaoAsync()
+    {
+        if (TotalDevolucao == 0 || string.IsNullOrWhiteSpace(_motivo)) return;
+        _processando = true;
+
+        var itens = _itensVenda
+            .Where(i => _qtdDevolver.GetValueOrDefault(i.ProductId, 0) > 0)
+            .Select(i => new
+            {
+                ProductId          = i.ProductId,
+                ProductName        = i.ProductName,
+                QuantidadeVendida  = i.Quantity,
+                QuantidadeDevolver = _qtdDevolver[i.ProductId],
+                UnitPrice          = i.UnitPrice
+            }).ToList();
+
+        var payload = new
+        {
+            VendaId      = _venda!.Id,
+            CustomerId   = _venda.CustomerId,
+            OperadorNome = "Portal Web",
+            Motivo       = _motivo,
+            Destino      = _destino,
+            Itens        = itens
+        };
+
+        var resp = await Api.PostAsync("api/devolucao", payload);
+        _processando = false;
+
+        if (resp.IsSuccessStatusCode)
+        {
+            var msg = _destino == "Haver"
+                ? $"↩️ Devolução de {TotalDevolucao:C} processada! Crédito Haver lançado."
+                : $"↩️ Devolução de {TotalDevolucao:C} processada!";
+            await Toast(msg, "#10B981");
+            VoltarBusca();
+            _buscaVenda = "";
+        }
+        else
+        {
+            var err   = await resp.Content.ReadAsStringAsync();
+            var trunc = err.Length > 80 ? err[..80] : err;
+            await Toast($"❌ Erro: {trunc}", "#EF4444");
+        }
+    }
+
+    private async Task Toast(string msg, string bg)
+    {
+        _toast   = msg;
+        _toastBg = bg;
+        StateHasChanged();
+        await Task.Delay(5000);
+        _toast = null;
+        StateHasChanged();
+    }
+
+    record VendaSimples(Guid Id, string SaleNumber, string? CustomerName, DateTime SaleDate, decimal Total);
+
+    class VendaDetalhe
+    {
+        public Guid               Id           { get; set; }
+        public string             SaleNumber   { get; set; } = "";
+        public string?            CustomerName { get; set; }
+        public Guid?              CustomerId   { get; set; }
+        public DateTime           SaleDate     { get; set; }
+        public decimal            Total        { get; set; }
+        public List<ItemVendaDto> Items        { get; set; } = [];
+    }
+
+    class ItemVendaDto
+    {
+        public Guid    ProductId   { get; set; }
+        public string  ProductName { get; set; } = "";
+        public decimal Quantity    { get; set; }
+        public decimal UnitPrice   { get; set; }
+    }
+}

@@ -1,0 +1,271 @@
+@page "/compras"
+@using ERP.Portal.Services
+@inject ApiClient Api
+
+<div style="padding:0 0 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">🛒 Compras</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">Pedidos de compra e recebimentos</p>
+        </div>
+        <button @onclick="() => _novoModal = true"
+                style="background:#1E62A6; color:white; border:none; padding:10px 20px;
+                border-radius:8px; font-weight:700; cursor:pointer; font-size:14px;">
+            + Novo Pedido
+        </button>
+    </div>
+
+    <div style="display:flex; gap:4px; margin-bottom:16px;">
+        @foreach (var (tab, label) in new[]{("abertos","📋 Em Aberto / Rascunhos"),("recebidos","✅ Recebidos"),("cancelados","❌ Cancelados")})
+        {
+            <button @onclick="@(() => MudarTab(tab))"
+                    style="padding:10px 20px; border:none; border-radius:8px; font-weight:700;
+                    font-size:14px; cursor:pointer;
+                    background:@(_tab == tab ? "#1E62A6" : "#F1F5F9");
+                    color:@(_tab == tab ? "white" : "#64748B");">
+                @label
+            </button>
+        }
+    </div>
+
+    <div style="background:white; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
+        @if (_loading)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">Carregando...</div>
+        }
+        else if (_pedidos?.Length == 0)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">
+                Nenhum pedido @(_tab == "abertos" ? "em aberto" : _tab).
+            </div>
+        }
+        else
+        {
+            <table style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                        <th style="@Th">Nº PEDIDO</th>
+                        <th style="@Th">DATA</th>
+                        <th style="@Th">FORNECEDOR</th>
+                        <th style="@Th">PREVISÃO</th>
+                        <th style="@Th; text-align:right;">TOTAL</th>
+                        <th style="@Th; text-align:center;">STATUS</th>
+                        <th style="@Th; text-align:center;">AÇÕES</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in _pedidos!)
+                    {
+                        var statusCor = p.Status == "Recebido" ? "#065F46" 
+                                      : p.Status == "Cancelado" ? "#EF4444" : "#92400E";
+                                      
+                        var statusBg  = p.Status == "Recebido" ? "#D1FAE5" 
+                                      : p.Status == "Cancelado" ? "#FEE2E2" : "#FEF3C7";
+
+                        <tr style="border-bottom:1px solid #F1F5F9;"
+                            onmouseover="this.style.background='#F8FAFC'"
+                            onmouseout="this.style.background=''">
+                            <td style="@Td; font-weight:700; color:#1E62A6; font-size:12px;">
+                                @(p.OrderNumber ?? "—")
+                            </td>
+                            <td style="@Td; color:#64748B; font-size:12px;">
+                                @p.OrderDate.ToString("dd/MM/yyyy")
+                            </td>
+                            <td style="@Td; font-weight:600; color:#1E293B;">@(p.SupplierName ?? "—")</td>
+                            <td style="@Td; color:#64748B; font-size:12px;">
+                                @(p.ExpectedDeliveryDate.HasValue ? p.ExpectedDeliveryDate.Value.ToString("dd/MM/yyyy") : "—")
+                            </td>
+                            <td style="@Td; text-align:right; font-weight:700; color:#1E293B;">
+                                @p.TotalAmount.ToString("C")
+                            </td>
+                            <td style="@Td; text-align:center;">
+                                <span style="background:@statusBg; color:@statusCor;
+                                      padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700;">
+                                    @p.Status
+                                </span>
+                            </td>
+                            <td style="@Td; text-align:center;">
+                                <button @onclick="() => VerDetalhe(p)"
+                                        style="background:#F1F5F9; border:none; padding:5px 10px;
+                                        border-radius:6px; cursor:pointer; font-size:12px; color:#1E293B;">
+                                    👁 Ver
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <div style="padding:12px 20px; border-top:1px solid #F1F5F9; text-align:right;
+                 font-size:13px; color:#64748B;">
+                Total listado: <strong style="color:#1E293B; font-size:16px;">
+                    @_pedidos.Sum(p => p.TotalAmount).ToString("C")
+                </strong>
+            </div>
+        }
+    </div>
+
+    @if (_detalhe != null)
+    {
+        <div style="position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200;
+             display:flex; align-items:center; justify-content:center; padding:16px;">
+            <div style="background:white; border-radius:16px; padding:28px; width:600px;
+                 max-width:100%; max-height:80vh; overflow-y:auto;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h3 style="font-size:18px; font-weight:800; color:#1E293B; margin:0;">
+                        Pedido @(_detalhe.OrderNumber) — @(_detalhe.SupplierName)
+                    </h3>
+                    <button @onclick="() => _detalhe = null"
+                            style="background:none; border:none; font-size:20px; cursor:pointer;">✕</button>
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px;">
+                    <div style="background:#F8FAFC; border-radius:8px; padding:12px;">
+                        <div style="font-size:11px; color:#94A3B8; font-weight:600;">DATA DO PEDIDO</div>
+                        <div style="font-weight:700;">@_detalhe.OrderDate.ToString("dd/MM/yyyy")</div>
+                    </div>
+                    <div style="background:#F8FAFC; border-radius:8px; padding:12px;">
+                        <div style="font-size:11px; color:#94A3B8; font-weight:600;">STATUS</div>
+                        <div style="font-weight:700;">@_detalhe.Status</div>
+                    </div>
+                </div>
+
+                <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                    <thead>
+                        <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                            <th style="padding:8px; text-align:left;">Produto</th>
+                            <th style="padding:8px; text-align:right;">Qtd</th>
+                            <th style="padding:8px; text-align:right;">Custo Unit.</th>
+                            <th style="padding:8px; text-align:right;">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in _detalhe.Items ?? [])
+                        {
+                            <tr style="border-bottom:1px solid #F1F5F9;">
+                                <td style="padding:8px; font-weight:600;">@item.ProductName</td>
+                                <td style="padding:8px; text-align:right;">@item.Quantity</td>
+                                <td style="padding:8px; text-align:right;">@item.UnitCost.ToString("C")</td>
+                                <td style="padding:8px; text-align:right; font-weight:700;">
+                                    @((item.Quantity * item.UnitCost).ToString("C"))
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr style="background:#F8FAFC; font-weight:800;">
+                            <td colspan="3" style="padding:8px;">TOTAL</td>
+                            <td style="padding:8px; text-align:right; font-size:16px; color:#1E62A6;">
+                                @_detalhe.TotalAmount.ToString("C")
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    }
+
+    @if (_novoModal)
+    {
+        <div style="position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200;
+             display:flex; align-items:center; justify-content:center; padding:16px;">
+            <div style="background:white; border-radius:16px; padding:28px; width:500px; max-width:100%;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h3 style="font-size:18px; font-weight:800; color:#1E293B; margin:0;">Novo Pedido de Compra</h3>
+                    <button @onclick="() => _novoModal = false"
+                            style="background:none; border:none; font-size:20px; cursor:pointer;">✕</button>
+                </div>
+                <p style="color:#94A3B8; font-size:13px; margin:0 0 20px;">
+                    Para criar pedidos de compra completos, acesse o módulo de Compras no sistema desktop (WPF).
+                    O portal exibe e acompanha os pedidos criados no desktop.
+                </p>
+                <button @onclick="() => _novoModal = false"
+                        style="background:#1E62A6; color:white; border:none; padding:10px 20px;
+                        border-radius:8px; font-weight:700; cursor:pointer; width:100%;">
+                    Entendido
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private PedidoItem[]? _pedidos;
+    private PedidoItem?   _detalhe;
+    private string _tab     = "recebidos"; // Mudei o padrão para recebidos, que é onde estão os seus!
+    private bool   _loading = true;
+    private bool   _novoModal = false;
+
+    private const string Th = "padding:12px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td = "padding:12px 16px; font-size:13px;";
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task MudarTab(string tab) { _tab = tab; await CarregarAsync(); }
+
+    private async Task CarregarAsync()
+    {
+        _loading = true;
+        
+        // 👇 Restaurando a URL original correta em português! 👇
+        var todos = await Api.GetAsync<PedidoItem[]>("api/pedidos-compra") ?? [];
+        
+        _pedidos = _tab switch
+        {
+            "abertos"    => todos.Where(p => p.Status == "Rascunho" || p.Status == "Aberto" || p.Status == "Pendente").ToArray(),
+            "recebidos"  => todos.Where(p => p.Status == "Recebido" || p.Status == "Concluido").ToArray(),
+            "cancelados" => todos.Where(p => p.Status == "Cancelado").ToArray(),
+            _            => todos
+        };
+        
+        _loading = false;
+    }
+
+    private void VerDetalhe(PedidoItem p) => _detalhe = p;
+
+    // 👇 CORREÇÃO: Nomes em inglês (PurchaseOrderDto da API) 👇
+    public class PedidoItem
+    {
+        public Guid Id { get; set; }
+
+        // DataPedido → OrderDate
+        public DateTime OrderDate { get; set; }
+        public DateTime DataPedido { set { OrderDate = value; } }
+
+        // FornecedorNome → SupplierName
+        public string SupplierName { get; set; } = "—";
+        public string FornecedorNome { set { SupplierName = value; } }
+
+        // API: Total (não TotalAmount)
+        public decimal TotalAmount { get; set; }
+        public decimal Total { set { TotalAmount = value; } }
+
+        // StatusTexto é string calculada pelo DTO — mapeia direto para Status
+        public string Status { get; set; } = "";
+        public string StatusTexto { set { Status = value; } }
+
+        // Numero → OrderNumber
+        public string? OrderNumber { get; set; }
+        public string Numero { set { OrderNumber = value; } }
+
+        // DataPrevista → ExpectedDeliveryDate
+        public DateTime? ExpectedDeliveryDate { get; set; }
+        public DateTime? DataPrevista { set { ExpectedDeliveryDate = value; } }
+
+        public PedidoItemDetalhe[]? Items { get; set; }
+        public PedidoItemDetalhe[] Itens { set { Items = value; } }
+    }
+    
+    public class PedidoItemDetalhe 
+    {
+        public string ProductName   { get; set; } = "—";
+        public string NomeProduto   { set { ProductName = value; } }
+        
+        public decimal Quantity     { get; set; }
+        public decimal Quantidade   { set { Quantity = value; } }
+        
+        public decimal UnitCost     { get; set; }
+        public decimal PrecoUnitario { set { UnitCost = value; } }
+        public decimal CustoUnitario { set { UnitCost = value; } }
+    }
+}

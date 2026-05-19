@@ -1,0 +1,197 @@
+@page "/financeiro"
+@using ERP.Portal.Services
+@inject ApiClient Api
+@inject IJSRuntime JS
+
+<div style="padding:0 0 24px;">
+    <h2 style="color:#1E293B; font-weight:800; margin:0 0 24px;">💳 Financeiro</h2>
+
+    <!-- Resumo -->
+    @if (_resumo != null)
+    {
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:24px;">
+            <KpiCard Titulo="Total Pendente"    Valor="@_resumo.TotalPendente.ToString("C")"   Icone="⏳" Cor="#F59E0B"/>
+            <KpiCard Titulo="Total Vencido"     Valor="@_resumo.TotalVencido.ToString("C")"    Icone="🔴" Cor="#EF4444"/>
+            <KpiCard Titulo="Clientes Devedores" Valor="@_resumo.QtdClientes.ToString()"        Icone="👤" Cor="#1E62A6"/>
+        </div>
+    }
+
+    <!-- Tabs -->
+    <div style="display:flex; gap:4px; margin-bottom:16px;">
+        @foreach (var (tab, label) in new[]{("pendentes","⏳ Pendentes"),("inadimplentes","🔴 Inadimplentes")})
+        {
+            <button @onclick="@(() => MudarTab(tab))"
+                    style="padding:10px 20px; border:none; border-radius:8px; font-weight:700;
+                    font-size:14px; cursor:pointer;
+                    background:@(_tab == tab ? "#1E62A6" : "#F1F5F9");
+                    color:@(_tab == tab ? "white" : "#64748B");">
+                @label
+            </button>
+        }
+    </div>
+
+    <!-- Contas -->
+    <div style="background:white; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
+        @if (_loading)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">Carregando...</div>
+        }
+        else if (_contas?.Length == 0)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">
+                @(_tab == "inadimplentes" ? "🎉 Nenhum inadimplente!" : "Nenhuma conta pendente.")
+            </div>
+        }
+        else
+        {
+            <table style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                        <th style="@Th">DESCRIÇÃO</th>
+                        <th style="@Th">CLIENTE</th>
+                        <th style="@Th">VENCIMENTO</th>
+                        <th style="@Th; text-align:center;">ATRASO</th>
+                        <th style="@Th; text-align:center;">AÇÕES</th>
+                        <th style="@Th; text-align:right;">VALOR TOTAL</th>
+                        <th style="@Th; text-align:right;">RECEBIDO</th>
+                        <th style="@Th; text-align:right;">RESTANTE</th>
+                        <th style="@Th; text-align:center;">PARCELA</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in _contas!)
+                    {
+                        var vencido = c.DataVencimento.Date < DateTime.Today && c.Status == "Pendente";
+                        <tr style="border-bottom:1px solid #F1F5F9;
+                             background:@(vencido ? "#FFF5F5" : "transparent");">
+                            <td style="@Td; font-weight:500; color:#1E293B;">@c.Descricao</td>
+                            <td style="@Td; color:#64748B; font-size:12px;">@(c.Customer?.Name ?? "Cliente não encontrado")</td>
+                            <td style="@Td;">
+                                <span style="color:@(vencido ? "#EF4444" : "#1E293B"); font-weight:@(vencido ? "700" : "400");">
+                                    @c.DataVencimento.ToString("dd/MM/yyyy")
+                                    @if (vencido) { <text> ⚠️</text> }
+                                </span>
+                            </td>
+                            <td style="@Td; text-align:right; color:#1E293B;">@c.ValorTotal.ToString("C")</td>
+                            <td style="@Td; text-align:right; color:#27AE60;">@c.ValorRecebido.ToString("C")</td>
+                            <td style="@Td; text-align:right; font-weight:800;
+                                color:@(vencido ? "#EF4444" : "#1E293B");">
+                                @((c.ValorTotal - c.ValorRecebido).ToString("C"))
+                            </td>
+                            <td style="@Td; text-align:center; font-size:12px; color:#94A3B8;">
+                                @(c.TotalParcelas > 1 ? $"{c.NumeroParcela}/{c.TotalParcelas}" : "À Vista")
+                            </td>
+                        
+                            <!-- Atraso -->
+                            @{
+                                var diasAtraso = (DateTime.Today - c.DataVencimento).Days;
+                                var emAtraso   = diasAtraso > 0 && c.Status == "Pendente";
+                            }
+                            <td style="@Td; text-align:center;">
+                                @if (emAtraso) {
+                                    <span style="background:#FEE2E2; color:#991B1B; padding:2px 8px;
+                                                 border-radius:20px; font-size:11px; font-weight:700;">
+                                        @diasAtraso d
+                                    </span>
+                                } else {
+                                    <span style="color:#94A3B8;">—</span>
+                                }
+                            </td>
+                            <!-- Ações -->
+                            <td style="@Td; text-align:center;">
+                                <div style="display:flex; gap:4px; justify-content:center;">
+                                    <button @onclick="() => DarBaixaTotal(c.Id)"
+                                            style="background:#D1FAE5; color:#065F46; border:none;
+                                                   padding:4px 8px; border-radius:6px; font-size:11px;
+                                                   font-weight:700; cursor:pointer;"
+                                            title="Quitar parcela">✓ Pago</button>
+                                    <button @onclick="() => CobrarWhatsApp(c)"
+                                            style="background:#D1FAE5; color:#128C7E; border:none;
+                                                   padding:4px 8px; border-radius:6px; font-size:11px;
+                                                   font-weight:700; cursor:pointer;"
+                                            title="Cobrar via WhatsApp Web">💬</button>
+                                </div>
+                            </td></tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@code {
+    private ContaItem[]? _contas;
+    private ResumoFinanceiro? _resumo;
+    private string _tab    = "pendentes";
+    private bool   _loading = true;
+
+    private const string Th = "padding:12px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td = "padding:12px 16px; font-size:13px;";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _resumo = await Api.GetAsync<ResumoFinanceiro>("api/contas-receber/resumo");
+        await CarregarContasAsync();
+    }
+
+    private async Task MudarTab(string tab) { _tab = tab; await CarregarContasAsync(); }
+
+    private async Task CarregarContasAsync()
+    {
+        _loading = true;
+        var url = _tab == "inadimplentes"
+            ? "api/contas-receber/inadimplentes"
+            : "api/contas-receber/pendentes";
+        _contas  = await Api.GetAsync<ContaItem[]>(url) ?? [];
+        _loading = false;
+    }
+
+    class ResumoFinanceiro { public decimal TotalPendente { get; set; } public decimal TotalVencido { get; set; } public int QtdClientes { get; set; } }
+    record ContaItem(System.Guid Id, System.Guid CustomerId, string Descricao, decimal ValorTotal,
+        decimal ValorRecebido, DateTime DataVencimento, string Status, int NumeroParcela, int TotalParcelas,
+        ClienteInfo? Customer, string? CustomerPhone = null);
+
+    record ClienteInfo(string Name, string? Phone = null);
+
+    // ── Sprint O: dar baixa total via Portal ──────────────────────────────────
+    private async Task DarBaixaTotal(Guid contaId)
+    {
+        var resp = await Api.PostAsync($"api/contas-receber/{contaId}/baixa-total", new { });
+        if (resp.IsSuccessStatusCode)
+        {
+            _resumo = await Api.GetAsync<ResumoFinanceiro>("api/contas-receber/resumo");
+            await CarregarContasAsync();
+        }
+    }
+
+    // ── Sprint P: cobrança via WhatsApp Web ───────────────────────────────────
+    private async Task CobrarWhatsApp(ContaItem conta)
+    {
+        var saldo  = conta.ValorTotal - conta.ValorRecebido;
+        var dias   = (DateTime.Today - conta.DataVencimento).Days;
+        var texto  = $"Olá, {conta.Customer?.Name ?? "cliente"}! 👋\n\n" +
+                     $"Identificamos uma parcela em aberto:\n" +
+                     $"📋 {conta.Descricao}\n" +
+                     $"💰 *Valor: {saldo:C}*\n" +
+                     $"📅 Venceu há {dias} dia(s) ({conta.DataVencimento:dd/MM/yyyy})\n\n" +
+                     "Acesse nossa loja para regularizar. Estamos à disposição! 😊";
+
+        var enc = Uri.EscapeDataString(texto);
+        string url;
+
+        // Busca telefone do cliente
+        var cliente = await Api.GetAsync<dynamic>($"api/Customers/{conta.CustomerId}");
+        var phone   = conta.Customer?.Phone ?? "";
+
+        if (!string.IsNullOrEmpty(phone))
+        {
+            var numero = new string(phone.Where(char.IsDigit).ToArray());
+            if (!numero.StartsWith("55")) numero = "55" + numero;
+            url = $"https://wa.me/{numero}?text={enc}";
+        }
+        else
+            url = $"https://web.whatsapp.com/send?text={enc}";
+
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+}

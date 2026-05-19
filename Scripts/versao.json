@@ -1,0 +1,7 @@
+{
+  "versaoAtual": "1.1.0",
+  "obrigatoria": false,
+  "urlDownload": "https://ttsoftupdates.blob.core.windows.net/releases/ERP.WPF.exe",
+  "notas": "Multi-Tenancy ativado. Correções PDV, clientes e orçamentos.",
+  "dataLancamento": "2026-03-27"
+}

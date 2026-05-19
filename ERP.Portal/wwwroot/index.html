@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>TTSoft ERP — Portal Gerencial</title>
+    <base href="/" />
+    <link rel="stylesheet" href="css/app.css" />
+    <style>
+        :root {
+            --bg-primary:   #F1F5F9;
+            --bg-card:      white;
+            --text-primary: #1E293B;
+            --text-muted:   #94A3B8;
+            --border:       #E2E8F0;
+            --sidebar-bg:   #1E293B;
+            --sidebar-text: #CBD5E1;
+        }
+        [data-theme="dark"] {
+            --bg-primary:   #0F172A;
+            --bg-card:      #1E293B;
+            --text-primary: #F1F5F9;
+            --text-muted:   #64748B;
+            --border:       #334155;
+            --sidebar-bg:   #0F172A;
+            --sidebar-text: #94A3B8;
+        }
+        [data-theme="dark"] body { background: var(--bg-primary); color: var(--text-primary); }
+        [data-theme="dark"] table { color: var(--text-primary); }
+        [data-theme="dark"] input, [data-theme="dark"] select {
+            background: #334155 !important;
+            color: #F1F5F9 !important;
+            border-color: #475569 !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div style="display:flex;align-items:center;justify-content:center;height:100vh;
+             font-family:system-ui;background:#1E293B;color:white;">
+            <div style="text-align:center">
+                <div style="font-size:48px;margin-bottom:16px;">🏗️</div>
+                <div style="font-size:18px;font-weight:600;">TTSoft ERP</div>
+                <div style="font-size:13px;color:#94A3B8;margin-top:8px;">Carregando portal...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="_framework/blazor.webassembly.js"></script>
+    <script>
+    // Dark mode
+    window.toggleDarkMode = function() {
+        const html = document.documentElement;
+        const current = html.getAttribute('data-theme');
+        const next = current === 'dark' ? 'light' : 'dark';
+        html.setAttribute('data-theme', next);
+        localStorage.setItem('theme', next);
+        return next;
+    };
+    // Chat scroll
+    window.scrollChatToBottom = function(id) {
+        const el = document.getElementById(id);
+        if (el) el.scrollTop = el.scrollHeight;
+    };
+
+    window.initTheme = function() {
+        const saved = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', saved);
+        return saved;
+    };
+    </script>
+
+    <!-- Chart.js helpers -->
+    <script>
+    let _charts = {};
+
+    window.criarGraficoBarras = function(id, labels, dados) {
+        if (_charts[id]) { _charts[id].destroy(); }
+        const ctx = document.getElementById(id);
+        if (!ctx) return;
+        _charts[id] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Faturamento',
+                    data: dados,
+                    backgroundColor: 'rgba(30, 98, 166, 0.8)',
+                    borderColor: '#1E62A6',
+                    borderWidth: 2,
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: v => 'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits:0})
+                        }
+                    }
+                }
+            }
+        });
+    };
+
+    window.criarGraficoPizza = function(id, labels, dados, cores) {
+        if (_charts[id]) { _charts[id].destroy(); }
+        const ctx = document.getElementById(id);
+        if (!ctx) return;
+        _charts[id] = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: dados,
+                    backgroundColor: cores,
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                cutout: '65%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { font: { size: 11 }, padding: 10 }
+                    }
+                }
+            }
+        });
+    };
+
+    window.criarGraficoLinha = function(id, labels, datasets) {
+        if (_charts[id]) { _charts[id].destroy(); }
+        const ctx = document.getElementById(id);
+        if (!ctx) return;
+        _charts[id] = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets },
+            options: {
+                responsive: true,
+                tension: 0.4,
+                plugins: { legend: { position: 'bottom' } },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    };
+    </script>
+</body>
+</html>

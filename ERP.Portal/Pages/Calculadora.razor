@@ -1,0 +1,532 @@
+@page "/calculadora"
+@using ERP.Portal.Services
+@inject ApiClient Api
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<div style="padding:0 0 24px;">
+
+    <!-- Toast de feedback (substitui alert()) -->
+    @if (_toast != null)
+    {
+        <div style="position:fixed; top:20px; right:20px; z-index:9999; animation:slideIn .3s ease;
+                    background:@_toastBg; color:white; padding:14px 20px; border-radius:10px;
+                    box-shadow:0 8px 24px rgba(0,0,0,.20); font-weight:600; font-size:14px;
+                    display:flex; align-items:center; gap:10px; min-width:280px; max-width:420px;">
+            <span style="font-size:18px;">@_toastIcon</span>
+            <span>@_toast</span>
+            <button @onclick="() => _toast = null"
+                    style="margin-left:auto; background:transparent; border:none; color:white;
+                           font-size:18px; cursor:pointer; opacity:.7; line-height:1;">×</button>
+        </div>
+    }
+
+    <style>
+        @@keyframes slideIn { from { transform:translateX(120%); opacity:0; } to { transform:translateX(0); opacity:1; } }
+        @@media print {
+            .erp-shell nav, .erp-shell header, button, .no-print { display: none !important; }
+            #resultado-calculo { box-shadow: none !important; }
+        }
+    </style>
+
+    <!-- Cabeçalho -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">🏗️ Calculadora de Materiais</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">
+                Calcule tudo que seu cliente precisa em segundos
+            </p>
+        </div>
+        <a href="/calculadora-publica" target="_blank"
+           style="font-size:12px; color:#1E62A6; text-decoration:none; class:no-print">
+            🔗 Versão pública (sem login)
+        </a>
+    </div>
+
+    @if (_loading)
+    {
+        <div style="text-align:center; padding:60px; color:#94A3B8;">Carregando templates...</div>
+    }
+    else
+    {
+        <div style="display:grid; grid-template-columns:300px 1fr; gap:20px;">
+
+            <!-- Painel esquerdo — templates -->
+            <div>
+                <h3 style="font-size:13px; font-weight:700; color:#64748B; margin:0 0 12px;">
+                    TIPO DE OBRA
+                </h3>
+                @foreach (var t in _templates ?? [])
+                {
+                    <button @onclick="() => SelecionarTemplate(t)"
+                            style="width:100%; text-align:left; padding:14px 16px;
+                            border:2px solid @(_templateSelecionado?.Id == t.Id ? "#1E62A6" : "#E2E8F0");
+                            background:@(_templateSelecionado?.Id == t.Id ? "#EFF6FF" : "white");
+                            border-radius:10px; margin-bottom:8px; cursor:pointer; transition:all .15s;">
+                        <div style="font-size:20px; margin-bottom:4px;">@t.Icone</div>
+                        <div style="font-weight:700; font-size:14px; color:#1E293B;">@t.Nome</div>
+                        <div style="font-size:11px; color:#94A3B8; margin-top:2px;">@t.Descricao</div>
+                    </button>
+                }
+            </div>
+
+            <!-- Painel direito -->
+            <div>
+                @if (_templateSelecionado == null)
+                {
+                    <div style="background:white; border-radius:12px; padding:60px;
+                         text-align:center; box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                        <div style="font-size:48px; margin-bottom:16px;">🏗️</div>
+                        <div style="font-size:16px; font-weight:700; color:#1E293B; margin-bottom:8px;">
+                            Selecione o tipo de obra
+                        </div>
+                        <p style="color:#94A3B8; font-size:13px;">
+                            Escolha um template à esquerda para calcular os materiais necessários.
+                        </p>
+                    </div>
+                }
+                else
+                {
+                    <!-- Formulário de parâmetros -->
+                    <div style="background:white; border-radius:12px; padding:24px;
+                         box-shadow:0 2px 8px rgba(0,0,0,.06); margin-bottom:16px;">
+                        <h3 style="font-size:16px; font-weight:800; color:#1E293B; margin:0 0 20px;">
+                            @_templateSelecionado.Icone @_templateSelecionado.Nome
+                        </h3>
+
+                        @foreach (var param in _templateSelecionado.Parametros)
+                        {
+                            <div style="margin-bottom:16px;">
+                                <label style="font-size:12px; font-weight:700; color:#64748B;
+                                       display:block; margin-bottom:6px;">
+                                    @param.Label.ToUpper()
+                                </label>
+                                <div style="display:flex; align-items:center; gap:12px;">
+                                    <input type="number"
+                                           value="@GetParam(param.Nome)"
+                                           @oninput="e => SetParam(param.Nome, e.Value?.ToString())"
+                                           min="@param.Min" max="@param.Max" step="0.5"
+                                           style="flex:1; padding:10px 14px; border:2px solid #E2E8F0;
+                                           border-radius:8px; font-size:16px; font-weight:700;"/>
+                                    <span style="font-size:13px; color:#64748B; min-width:40px;">
+                                        @param.Unidade
+                                    </span>
+                                </div>
+                                <div style="font-size:11px; color:#94A3B8; margin-top:4px;">
+                                    Mínimo: @param.Min @param.Unidade — Máximo: @param.Max @param.Unidade
+                                </div>
+                            </div>
+                        }
+
+                        <!-- Botões de ação -->
+                        <div style="display:flex; gap:12px; margin-top:20px; flex-wrap:wrap;">
+                            <button @onclick="CalcularComEstoqueAsync" disabled="@_calculando"
+                                    style="flex:1; background:@(_calculando ? "#94A3B8" : "#1E62A6");
+                                    color:white; border:none; padding:14px; border-radius:8px;
+                                    font-weight:700; cursor:@(_calculando ? "not-allowed" : "pointer");
+                                    font-size:15px; min-width:160px;">
+                                @(_calculando ? "⏳ Calculando..." : "🧮 Calcular Materiais")
+                            </button>
+                            @if (_resultado != null)
+                            {
+                                <button @onclick="ImprimirAsync"
+                                        style="background:#27AE60; color:white; border:none;
+                                        padding:14px 18px; border-radius:8px; font-weight:700;
+                                        cursor:pointer; font-size:14px;">
+                                    🖨️ Imprimir
+                                </button>
+                                <button @onclick="EnviarWhatsApp"
+                                        style="background:#25D366; color:white; border:none;
+                                        padding:14px 18px; border-radius:8px; font-weight:700;
+                                        cursor:pointer; font-size:14px;">
+                                    📲 WhatsApp
+                                </button>
+                                <button @onclick="GerarOrcamentoAsync" disabled="@_gerando"
+                                        style="background:@(_gerando ? "#94A3B8" : "#8B5CF6");
+                                        color:white; border:none; padding:14px 18px; border-radius:8px;
+                                        font-weight:700; cursor:@(_gerando ? "not-allowed" : "pointer");
+                                        font-size:14px;">
+                                    @(_gerando ? "⏳ Gerando..." : "📋 Gerar Orçamento")
+                                </button>
+                            }
+                        </div>
+
+                        <!-- Campos cliente -->
+                        @if (_resultado != null)
+                        {
+                            <div style="margin-top:16px; padding:14px; background:#F8FAFC;
+                                        border-radius:8px; border:1px solid #E2E8F0;">
+                                <div style="font-size:11px; font-weight:700; color:#64748B; margin-bottom:8px;">
+                                    CLIENTE (opcional — para orçamento e WhatsApp)
+                                </div>
+                                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                                    <!-- Busca de cliente com autocomplete simples -->
+                                    <div style="flex:1; position:relative; min-width:180px;">
+                                        <input value="@_clienteNome"
+       @oninput="OnClienteInput"
+       placeholder="Nome do cliente..."
+       style="width:100%; padding:8px 12px; border:1px solid #E2E8F0;
+              border-radius:6px; font-size:13px; box-sizing:border-box;"/>
+                                        @if (_sugestoesCliente.Count > 0)
+                                        {
+                                            <div style="position:absolute; top:100%; left:0; right:0;
+                                                        background:white; border:1px solid #E2E8F0;
+                                                        border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,.1);
+                                                        z-index:100; max-height:160px; overflow-y:auto;">
+                                                @foreach (var c in _sugestoesCliente)
+                                                {
+                                                    <button @onclick="() => SelecionarCliente(c)"
+                                                            style="width:100%; text-align:left; padding:8px 12px;
+                                                                   border:none; background:transparent; cursor:pointer;
+                                                                   font-size:13px; border-bottom:1px solid #F1F5F9;">
+                                                        <strong>@c.Name</strong>
+                                                        @if (!string.IsNullOrEmpty(c.Phone))
+                                                        {
+                                                            <span style="color:#94A3B8; font-size:11px;"> · @c.Phone</span>
+                                                        }
+                                                    </button>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                    <input @bind="_clienteTelefone" placeholder="Telefone (só números)..."
+                                           style="flex:1; min-width:160px; padding:8px 12px;
+                                                  border:1px solid #E2E8F0; border-radius:6px; font-size:13px;"/>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Resultado -->
+                    @if (_resultado != null)
+                    {
+                        <div id="resultado-calculo" style="background:white; border-radius:12px;
+                             padding:24px; box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                            <div style="display:flex; justify-content:space-between; align-items:center;
+                                 margin-bottom:20px; padding-bottom:16px; border-bottom:2px solid #F1F5F9;">
+                                <div>
+                                    <h3 style="font-size:16px; font-weight:800; color:#1E293B; margin:0;">
+                                        Lista de Materiais
+                                    </h3>
+                                    <p style="font-size:12px; color:#94A3B8; margin:4px 0 0;">
+                                        @_templateSelecionado!.Nome —
+                                        @string.Join(", ", _parametros.Select(p =>
+                                            $"{p.Value} {_templateSelecionado.Parametros.FirstOrDefault(x => x.Nome == p.Key)?.Unidade}"))
+                                    </p>
+                                </div>
+                                <div style="display:flex; gap:10px; align-items:center;">
+                                    @if (_totalEstimado > 0)
+                                    {
+                                        <span style="background:#D1FAE5; color:#065F46; padding:6px 14px;
+                                              border-radius:20px; font-size:13px; font-weight:700;">
+                                            Total: @_totalEstimado.ToString("C")
+                                        </span>
+                                    }
+                                    <span style="background:#EFF6FF; color:#1E62A6; padding:6px 14px;
+                                          border-radius:20px; font-size:12px; font-weight:700;">
+                                        @_resultado.Count materiais
+                                    </span>
+                                </div>
+                            </div>
+
+                            <table style="width:100%; border-collapse:collapse;">
+                                <thead>
+                                    <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                                        <th style="@Th">MATERIAL</th>
+                                        <th style="@Th; text-align:right;">QUANTIDADE</th>
+                                        <th style="@Th">UNIDADE</th>
+                                        <th style="@Th; text-align:right;">PREÇO UNIT.</th>
+                                        <th style="@Th; text-align:right;">TOTAL</th>
+                                        <th style="@Th; text-align:center;">ESTOQUE</th>
+                                        <th style="@Th; color:#94A3B8;">OBSERVAÇÃO</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var (item, idx) in _resultado.Select((x, i) => (x, i)))
+                                    {
+                                        var temEstoque = item.ProdutoEstoque != null;
+                                        var suficiente = item.ProdutoEstoque?.Suficiente ?? false;
+                                        var corEstoque = !temEstoque ? "#94A3B8" : suficiente ? "#10B981" : "#EF4444";
+                                        var bgEstoque  = !temEstoque ? "#F1F5F9" : suficiente ? "#D1FAE5" : "#FEE2E2";
+                                        var txtEstoque = !temEstoque ? "Não cadastrado" : suficiente ? "✅ Suficiente" : "⚠ Insuficiente";
+
+                                        <tr style="border-bottom:1px solid #F1F5F9;
+                                             background:@(idx % 2 == 0 ? "white" : "#FAFAFA")">
+                                            <td style="@Td; font-weight:700; color:#1E293B;">
+                                                @item.Nome
+                                                @if (temEstoque && item.ProdutoEstoque!.Name != item.Nome)
+                                                {
+                                                    <div style="font-size:10px; color:#94A3B8;">
+                                                        → @item.ProdutoEstoque.Name
+                                                    </div>
+                                                }
+                                            </td>
+                                            <td style="@Td; text-align:right; font-size:18px;
+                                                 font-weight:800; color:#1E62A6;">
+                                                @item.Quantidade.ToString("F1")
+                                            </td>
+                                            <td style="@Td; color:#64748B;">@item.Unidade</td>
+                                            <td style="@Td; text-align:right; color:#64748B;">
+                                                @(temEstoque ? item.ProdutoEstoque!.SalePrice.ToString("C") : "—")
+                                            </td>
+                                            <td style="@Td; text-align:right; font-weight:700; color:#1E293B;">
+                                                @(temEstoque ? item.ProdutoEstoque!.TotalEstimado.ToString("C") : "—")
+                                            </td>
+                                            <td style="@Td; text-align:center;">
+                                                <span style="background:@bgEstoque; color:@corEstoque;
+                                                      font-size:11px; font-weight:700; padding:3px 9px;
+                                                      border-radius:20px; white-space:nowrap;">
+                                                    @txtEstoque
+                                                    @if (temEstoque)
+                                                    {
+                                                        <span style="opacity:.8"> (@item.ProdutoEstoque!.Stock.ToString("F1"))</span>
+                                                    }
+                                                </span>
+                                            </td>
+                                            <td style="@Td; color:#94A3B8; font-size:12px;">@item.Observacao</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+
+                            <div style="margin-top:20px; padding:16px; background:#F0F9FF;
+                                 border-radius:8px; border-left:4px solid #1E62A6;">
+                                <div style="font-size:12px; color:#1E62A6; font-weight:700; margin-bottom:4px;">
+                                    💡 DICA PROFISSIONAL
+                                </div>
+                                <div style="font-size:13px; color:#1E293B;">
+                                    As quantidades incluem margem de segurança padrão de 5-10%.
+                                    Para obras grandes, recomende ao cliente comprar 10% a mais para evitar
+                                    diferença de lote. Validade do orçamento: 5 dias úteis.
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private TemplateDto[]?              _templates;
+    private TemplateDto?                _templateSelecionado;
+    private Dictionary<string, decimal> _parametros          = new();
+    private List<MaterialComEstoque>?   _resultado;
+    private decimal                     _totalEstimado;
+    private bool                        _loading             = true;
+    private bool                        _calculando          = false;
+    private bool                        _gerando             = false;
+    private string                      _clienteNome         = "";
+    private string                      _clienteTelefone     = "";
+    private List<ClienteSugestao>       _sugestoesCliente    = [];
+
+    // Toast
+    private string?  _toast;
+    private string   _toastBg   = "#10B981";
+    private string   _toastIcon = "✅";
+    private System.Threading.CancellationTokenSource? _toastCts;
+
+    private const string Th = "padding:12px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td = "padding:12px 16px; font-size:13px;";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _templates = await Api.GetAsync<TemplateDto[]>("api/Calculadora/templates");
+        _loading   = false;
+
+        // Pré-seleciona template via query string: /calculadora?template=piso_ceramico
+        var uri    = new Uri(Nav.Uri);
+        var query  = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var tmplId = query["template"];
+        if (!string.IsNullOrEmpty(tmplId) && _templates != null)
+        {
+            var t = _templates.FirstOrDefault(x =>
+                x.Id.Equals(tmplId, StringComparison.OrdinalIgnoreCase));
+            if (t != null) SelecionarTemplate(t);
+        }
+    }
+
+    private void SelecionarTemplate(TemplateDto t)
+    {
+        _templateSelecionado = t;
+        _resultado           = null;
+        _totalEstimado       = 0;
+        _parametros          = t.Parametros.ToDictionary(p => p.Nome, p => p.Min);
+        _sugestoesCliente    = [];
+    }
+
+    private decimal GetParam(string nome) => _parametros.GetValueOrDefault(nome, 0);
+
+    private void SetParam(string nome, string? valor)
+    {
+        if (decimal.TryParse(valor?.Replace(",", "."),
+            System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out var v))
+            _parametros[nome] = v;
+    }
+
+    private async Task OnClienteInput(ChangeEventArgs e)
+    {
+        _clienteNome = e.Value?.ToString() ?? "";
+        if (_clienteNome.Length < 2) { _sugestoesCliente = []; return; }
+
+        try
+        {
+            var clientes = await Api.GetAsync<ClienteSugestao[]>(
+                $"api/customers?search={Uri.EscapeDataString(_clienteNome)}&pageSize=5");
+            _sugestoesCliente = clientes?.ToList() ?? [];
+        }
+        catch { _sugestoesCliente = []; }
+    }
+
+    private void SelecionarCliente(ClienteSugestao c)
+    {
+        _clienteNome      = c.Name;
+        _clienteTelefone  = c.Phone ?? "";
+        _sugestoesCliente = [];
+    }
+
+    private async Task CalcularComEstoqueAsync()
+    {
+        if (_templateSelecionado == null) return;
+        _calculando = true;
+        try
+        {
+            var resp = await Api.PostAsync("api/Calculadora/calcular-com-estoque", new
+            {
+                Template   = _templateSelecionado.Id,
+                Parametros = _parametros
+            });
+            if (resp.IsSuccessStatusCode)
+            {
+                var result = await resp.Content.ReadFromJsonAsync<CalcComEstoqueResultado>();
+                _resultado     = result?.Materiais ?? [];
+                _totalEstimado = result?.TotalEstimado ?? 0;
+                await MostrarToast("✅", "Cálculo realizado!", "#10B981");
+            }
+            else
+            {
+                await MostrarToast("❌", "Erro ao calcular. Tente novamente.", "#EF4444");
+            }
+        }
+        finally { _calculando = false; }
+    }
+
+    private async Task GerarOrcamentoAsync()
+    {
+        if (_templateSelecionado == null || _resultado == null) return;
+        _gerando = true;
+        try
+        {
+            var resp = await Api.PostAsync("api/Calculadora/gerar-orcamento", new
+            {
+                Template    = _templateSelecionado.Id,
+                Parametros  = _parametros,
+                ClienteNome = string.IsNullOrWhiteSpace(_clienteNome)
+                              ? "Cliente Calculadora" : _clienteNome
+            });
+            if (resp.IsSuccessStatusCode)
+            {
+                var r = await resp.Content.ReadFromJsonAsync<OrcGeradoDto>();
+                await MostrarToast("📋", $"Orçamento {r?.Numero} gerado! Acesse a tela de Orçamentos.", "#8B5CF6");
+            }
+            else
+            {
+                var err = await resp.Content.ReadAsStringAsync();
+                var msg = err.Length > 80 ? err[..80] + "..." : err;
+                await MostrarToast("❌", $"Não foi possível gerar o orçamento. {msg}", "#EF4444");
+            }
+        }
+        finally { _gerando = false; }
+    }
+
+    private async Task EnviarWhatsApp()
+    {
+        if (_resultado == null || _templateSelecionado == null) return;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"Lista de Materiais - {_templateSelecionado.Nome}");
+        if (!string.IsNullOrWhiteSpace(_clienteNome)) sb.AppendLine($"Cliente: {_clienteNome}");
+        sb.AppendLine($"Data: {DateTime.Now:dd/MM/yyyy}");
+        sb.AppendLine();
+        foreach (var m in _resultado)
+            sb.AppendLine($"- {m.Nome}: {m.Quantidade:F1} {m.Unidade}");
+        if (_totalEstimado > 0)
+            sb.AppendLine($"\nTotal estimado: {_totalEstimado:C}");
+        var texto = Uri.EscapeDataString(sb.ToString());
+        var tel   = string.IsNullOrWhiteSpace(_clienteTelefone) ? "" : _clienteTelefone.Trim();
+        if (!string.IsNullOrEmpty(tel) && !tel.StartsWith("55")) tel = "55" + tel;
+        await JS.InvokeVoidAsync("open", $"https://wa.me/{tel}?text={texto}", "_blank");
+    }
+
+    private async Task ImprimirAsync()
+        => await JS.InvokeVoidAsync("window.print");
+
+    private async Task MostrarToast(string icon, string msg, string bg)
+    {
+        _toastCts?.Cancel();
+        _toastCts  = new();
+        _toast     = msg;
+        _toastBg   = bg;
+        _toastIcon = icon;
+        StateHasChanged();
+
+        try
+        {
+            await Task.Delay(4000, _toastCts.Token);
+            _toast = null;
+            StateHasChanged();
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    // ── DTOs locais ───────────────────────────────────────────────────────────
+    class TemplateDto
+    {
+        public string         Id         { get; set; } = "";
+        public string         Nome       { get; set; } = "";
+        public string         Descricao  { get; set; } = "";
+        public string         Icone      { get; set; } = "";
+        public List<ParamDto> Parametros { get; set; } = [];
+    }
+    class ParamDto
+    {
+        public string  Nome    { get; set; } = "";
+        public string  Label   { get; set; } = "";
+        public string  Unidade { get; set; } = "";
+        public decimal Min     { get; set; }
+        public decimal Max     { get; set; }
+    }
+    class MaterialComEstoque
+    {
+        public string             Nome           { get; set; } = "";
+        public decimal            Quantidade     { get; set; }
+        public string             Unidade        { get; set; } = "";
+        public string             Observacao     { get; set; } = "";
+        public ProdutoEstoqueDto? ProdutoEstoque { get; set; }
+    }
+    class ProdutoEstoqueDto
+    {
+        public string  Name          { get; set; } = "";
+        public decimal Stock         { get; set; }
+        public decimal SalePrice     { get; set; }
+        public decimal TotalEstimado { get; set; }
+        public bool    Suficiente    { get; set; }
+    }
+    class CalcComEstoqueResultado
+    {
+        public List<MaterialComEstoque> Materiais     { get; set; } = [];
+        public decimal                  TotalEstimado { get; set; }
+    }
+    class OrcGeradoDto
+    {
+        public Guid   OrcamentoId { get; set; }
+        public string Numero      { get; set; } = "";
+    }
+    class ClienteSugestao
+    {
+        public Guid    Id    { get; set; }
+        public string  Name  { get; set; } = "";
+        public string? Phone { get; set; }
+    }
+}

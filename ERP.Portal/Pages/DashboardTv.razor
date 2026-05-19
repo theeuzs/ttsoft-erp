@@ -1,0 +1,349 @@
+@page "/tv"
+@using ERP.Portal.Services
+@using Microsoft.AspNetCore.SignalR.Client
+@inject ApiClient Api
+@inject NavigationManager Nav
+@inject AuthService Auth
+@implements IAsyncDisposable
+
+<PageTitle>📺 ConstruTTor — Dashboard TV</PageTitle>
+
+<style>
+    @@keyframes fadein    { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+    @@keyframes pulse-red { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+    @@keyframes nova-venda { 0% { transform:scale(1.08); background:#1A3A28; } 100% { transform:scale(1); background:#0F172A; } }
+</style>
+
+<div style="background:#0F172A; min-height:100vh; padding:20px 24px;
+            font-family:'Segoe UI',sans-serif; display:flex; flex-direction:column; gap:16px;">
+
+    <!-- ── Cabeçalho ─────────────────────────────────────────────────────── -->
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; align-items:center; gap:16px;">
+            <span style="font-size:36px;">🏗️</span>
+            <div>
+                <div style="color:white; font-size:24px; font-weight:900; letter-spacing:-.5px;">
+                    ConstruTTor
+                </div>
+                <div style="color:#475569; font-size:12px; letter-spacing:.05em;">
+                    DASHBOARD EM TEMPO REAL
+                </div>
+            </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:24px;">
+            <!-- Relógio com data -->
+            <div style="text-align:right;">
+                <div style="color:white; font-size:28px; font-weight:800; font-variant-numeric:tabular-nums;">
+                    @_agora.ToString("HH:mm:ss")
+                </div>
+                <div style="color:#475569; font-size:12px;">
+                    @_agora.ToString("dddd, dd/MM/yyyy")
+                </div>
+            </div>
+            <!-- Indicador de conexão -->
+            <div style="display:flex; align-items:center; gap:8px; background:#1E293B;
+                        padding:8px 16px; border-radius:20px;">
+                <span style="width:10px; height:10px; border-radius:50%;
+                             background:@(_conectado ? "#10B981" : "#EF4444");
+                             display:inline-block;
+                             animation:@(_conectado ? "none" : "pulse-red 1s infinite");">
+                </span>
+                <span style="color:@(_conectado ? "#10B981" : "#EF4444"); font-size:12px; font-weight:700;">
+                    @(_conectado ? "AO VIVO" : "RECONECTANDO...")
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── KPIs do dia ────────────────────────────────────────────────────── -->
+    <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:14px;">
+        @KpiCard("💰", "Vendas Hoje",   _totalHoje.ToString("C"),         "#10B981")
+        @KpiCard("📦", "Pedidos Hoje",  _pedidosHoje.ToString(),           "#1E62A6")
+        @KpiCard("👤", "Ticket Médio",  _ticketMedio.ToString("C"),        "#8B5CF6")
+        @KpiCard("📈", "Meta do Dia",   $"{_percentualMeta:F0}%",          _corMeta)
+        @KpiCard("🔻", "Estoque Crítico", _estoqueCritico.ToString() + " itens",
+                 _estoqueCritico > 0 ? "#EF4444" : "#10B981")
+    </div>
+
+    <!-- ── Conteúdo principal ─────────────────────────────────────────────── -->
+    <div style="display:grid; grid-template-columns:1fr 1fr 320px; gap:16px; flex:1;">
+
+        <!-- Ranking de vendedores -->
+        <div style="background:#1E293B; border-radius:16px; padding:22px;">
+            <div style="color:white; font-size:15px; font-weight:800; margin-bottom:18px;
+                        display:flex; align-items:center; gap:8px;">
+                🏆 Ranking de Vendedores — Hoje
+            </div>
+            @if (_ranking.Count == 0)
+            {
+                <div style="color:#475569; text-align:center; padding:40px; font-size:14px;">
+                    Nenhuma venda registrada hoje.
+                </div>
+            }
+            else
+            {
+                @for (int i = 0; i < _ranking.Count; i++)
+                {
+                    var v   = _ranking[i];
+                    var pos = i;
+                    var emoji = pos switch { 0 => "🥇", 1 => "🥈", 2 => "🥉", _ => $"{pos + 1}º" };
+                    var pct   = _totalHoje > 0 ? v.Total / _totalHoje * 100 : 0;
+                    var w     = pct.ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
+                    var cor   = pos == 0 ? "#F59E0B" : pos == 1 ? "#94A3B8" : pos == 2 ? "#CD7C2C" : "#10B981";
+                    <div style="margin-bottom:14px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <span style="color:white; font-size:15px; font-weight:700;">
+                                @emoji @v.Nome
+                            </span>
+                            <span style="color:@cor; font-size:15px; font-weight:900;">
+                                @v.Total.ToString("C")
+                            </span>
+                        </div>
+                        <div style="background:#0F172A; border-radius:20px; height:10px; overflow:hidden;">
+                            <div style="background:linear-gradient(90deg,@cor,@cor)cc;
+                                        width:@(w)%; height:100%; border-radius:20px;
+                                        transition:width .8s cubic-bezier(.4,0,.2,1);">
+                            </div>
+                        </div>
+                        <div style="color:#475569; font-size:11px; margin-top:3px;">
+                            @v.QtdVendas venda(s) · @pct.ToString("F1")% do total
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        <!-- Últimas vendas em tempo real -->
+        <div style="background:#1E293B; border-radius:16px; padding:22px; display:flex; flex-direction:column;">
+            <div style="color:white; font-size:15px; font-weight:800; margin-bottom:18px;">
+                ⚡ Últimas Vendas — Tempo Real
+            </div>
+            <div style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:10px;">
+                @if (_ultimasVendas.Count == 0)
+                {
+                    <div style="color:#475569; text-align:center; padding:40px; font-size:13px;">
+                        As vendas aparecerão aqui assim que forem registradas.
+                    </div>
+                }
+                @foreach (var (v, idx) in _ultimasVendas.Select((x,i)=>(x,i)))
+                {
+                    <div style="background:#0F172A; border-radius:10px; padding:12px 16px;
+                                display:flex; justify-content:space-between; align-items:center;
+                                border-left:3px solid #10B981;
+                                animation:@(idx == 0 ? "nova-venda .6s ease" : "fadein .4s ease");">
+                        <div>
+                            <div style="color:white; font-size:13px; font-weight:700;">
+                                @v.Cliente
+                            </div>
+                            <div style="color:#64748B; font-size:11px;">
+                                @v.Vendedor · @v.Hora
+                            </div>
+                        </div>
+                        <div style="color:#10B981; font-size:17px; font-weight:900;">
+                            @v.Valor.ToString("C")
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Painel lateral: estoque crítico -->
+        <div style="background:#1E293B; border-radius:16px; padding:22px; display:flex; flex-direction:column;">
+            <div style="color:white; font-size:15px; font-weight:800; margin-bottom:18px;
+                        display:flex; align-items:center; gap:8px;">
+                <span style="@(_estoqueCritico > 0 ? "animation:pulse-red 1.5s infinite;" : "")">
+                    ⚠️
+                </span>
+                Estoque Crítico
+            </div>
+            @if (_produtosCriticos.Count == 0)
+            {
+                <div style="color:#10B981; text-align:center; padding:20px; font-size:13px;">
+                    ✅ Nenhum produto<br/>abaixo do mínimo.
+                </div>
+            }
+            else
+            {
+                <div style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px;">
+                    @foreach (var p in _produtosCriticos.Take(10))
+                    {
+                        var urgente = p.Estoque == 0;
+                        <div style="background:#0F172A; border-radius:8px; padding:10px 12px;
+                                    border-left:3px solid @(urgente ? "#EF4444" : "#F59E0B");">
+                            <div style="color:white; font-size:12px; font-weight:700;
+                                        overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                                 title="@p.Nome">
+                                @p.Nome
+                            </div>
+                            <div style="display:flex; justify-content:space-between; margin-top:3px;">
+                                <span style="color:@(urgente ? "#EF4444" : "#F59E0B"); font-size:11px; font-weight:700;">
+                                    @(urgente ? "SEM ESTOQUE" : $"{p.Estoque:F0} un")
+                                </span>
+                                <span style="color:#475569; font-size:10px;">
+                                    mín: @p.Minimo
+                                </span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- ── Barra de meta do dia ───────────────────────────────────────────── -->
+    <div style="background:#1E293B; border-radius:12px; padding:18px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <span style="color:white; font-weight:700; font-size:14px;">
+                🎯 Meta do Dia — @_metaDia.ToString("C")
+            </span>
+            <span style="color:@_corMeta; font-weight:900; font-size:14px;">
+                @_totalHoje.ToString("C") · @_percentualMeta.ToString("F0")%
+            </span>
+        </div>
+        <div style="background:#0F172A; border-radius:20px; height:14px; overflow:hidden;">
+            <div style="background:linear-gradient(90deg,@_corMeta,@_corMetaClara);
+                        width:@(Math.Min(100, _percentualMeta).ToString("F0", System.Globalization.CultureInfo.InvariantCulture))%;
+                        height:100%; border-radius:20px; transition:width 1s cubic-bezier(.4,0,.2,1);">
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<RankingItem>    _ranking         = new();
+    private List<UltimaVenda>   _ultimasVendas   = new();
+    private List<CriticoItem>   _produtosCriticos = new();
+    private decimal  _totalHoje       = 0;
+    private int      _pedidosHoje     = 0;
+    private decimal  _ticketMedio     = 0;
+    private decimal  _metaDia         = 0;
+    private decimal  _percentualMeta  = 0;
+    private int      _estoqueCritico  = 0;
+    private bool     _conectado       = false;
+    private DateTime _agora           = DateTime.Now;
+
+    private string _corMeta      => _percentualMeta >= 100 ? "#10B981" : _percentualMeta >= 70 ? "#F59E0B" : "#EF4444";
+    private string _corMetaClara => _percentualMeta >= 100 ? "#34D399" : _percentualMeta >= 70 ? "#FCD34D" : "#FCA5A5";
+
+    private HubConnection?    _hub;
+    private Timer?            _relógio;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CarregarDadosAsync();
+        await ConectarSignalRAsync();
+
+        // Tick a cada segundo — atualiza relógio e dados a cada minuto
+        _relógio = new Timer(async _ =>
+        {
+            _agora = DateTime.Now;
+            await InvokeAsync(StateHasChanged);
+            if (_agora.Second == 0)
+                await InvokeAsync(CarregarDadosAsync);
+        }, null, 0, 1000);
+    }
+
+    private async Task CarregarDadosAsync()
+    {
+        try
+        {
+            var hoje  = DateTime.Today;
+            var amanha = hoje.AddDays(1);
+
+            // Ranking do dia
+            var ranking = await Api.GetAsync<RankingItem[]>(
+                $"api/BI/ranking-vendedores?inicio={hoje:yyyy-MM-dd}&fim={amanha:yyyy-MM-dd}");
+            _ranking     = ranking?.OrderByDescending(r => r.Total).Take(8).ToList() ?? new();
+            _totalHoje   = _ranking.Sum(r => r.Total);
+            _pedidosHoje = _ranking.Sum(r => r.QtdVendas);
+            _ticketMedio = _pedidosHoje > 0 ? _totalHoje / _pedidosHoje : 0;
+
+            // Meta do dia (Geral ÷ dias do mês)
+            var metas = await Api.GetAsync<MetaItem[]>(
+                $"api/Metas?mes={hoje.Month}&ano={hoje.Year}");
+            var metaGeral = metas?.FirstOrDefault(m =>
+                string.Equals(m.VendedorNome, "Geral", StringComparison.OrdinalIgnoreCase));
+            if (metaGeral != null)
+                _metaDia = metaGeral.ValorMeta / DateTime.DaysInMonth(hoje.Year, hoje.Month);
+            _percentualMeta = _metaDia > 0 ? _totalHoje / _metaDia * 100 : 0;
+
+            // Estoque crítico — produtos abaixo do mínimo
+            var criticos = await Api.GetAsync<CriticoItem[]>("api/Stock/low");
+            _produtosCriticos = criticos?.OrderBy(p => p.Estoque).ToList() ?? new();
+            _estoqueCritico   = _produtosCriticos.Count;
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+    }
+
+    private async Task ConectarSignalRAsync()
+    {
+        try
+        {
+            var token   = Auth.Token;
+            var baseUrl = Nav.BaseUri.TrimEnd('/').Replace("/portal", "");
+
+            _hub = new HubConnectionBuilder()
+                .WithUrl($"{baseUrl}/hubs/erp", opt =>
+                {
+                    opt.AccessTokenProvider = () => Task.FromResult<string?>(token);
+                })
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hub.On<NovaVendaPayload>("Notificacao", async payload =>
+            {
+                if (payload.Tipo != "nova_venda") return;
+
+                _ultimasVendas.Insert(0, new UltimaVenda(
+                    payload.Dados.Cliente ?? "Consumidor Final",
+                    payload.Dados.Vendedor ?? "—",
+                    payload.Dados.Valor,
+                    DateTime.Now.ToString("HH:mm")));
+
+                if (_ultimasVendas.Count > 12)
+                    _ultimasVendas.RemoveAt(_ultimasVendas.Count - 1);
+
+                await CarregarDadosAsync();
+            });
+
+            _hub.On<object>("Notificacao", async payload =>
+            {
+                // Alerta de estoque crítico também recarrega painel
+                await InvokeAsync(CarregarDadosAsync);
+            });
+
+            _hub.Reconnected += _ => { _conectado = true;  return InvokeAsync(StateHasChanged); };
+            _hub.Closed      += _ => { _conectado = false; return InvokeAsync(StateHasChanged); };
+
+            await _hub.StartAsync();
+            _conectado = true;
+        }
+        catch { _conectado = false; }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _relógio?.Dispose();
+        if (_hub != null) await _hub.DisposeAsync();
+    }
+
+    private RenderFragment KpiCard(string icon, string label, string valor, string cor) =>
+        @<div style="background:#1E293B; border-radius:12px; padding:18px; text-align:center;">
+            <div style="font-size:26px; margin-bottom:6px;">@icon</div>
+            <div style="color:#475569; font-size:11px; font-weight:700;
+                        text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px;">
+                @label
+            </div>
+            <div style="color:@cor; font-size:22px; font-weight:900;">@valor</div>
+        </div>;
+
+    // ── DTOs locais ────────────────────────────────────────────────────────────
+    record RankingItem(string Nome, int QtdVendas, decimal Total, decimal PercentualTotal);
+    record UltimaVenda(string Cliente, string Vendedor, decimal Valor, string Hora);
+    record MetaItem(Guid Id, string VendedorNome, decimal ValorMeta, decimal Realizado, decimal Percentual);
+    record CriticoItem(Guid Id, string Nome, decimal Estoque, decimal Minimo);
+    record NovaVendaPayload(string Tipo, NovaVendaDados Dados);
+    record NovaVendaDados(string? Cliente, string? Vendedor, decimal Valor);
+}

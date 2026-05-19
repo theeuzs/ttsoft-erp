@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit"                              Version="2.9.0" />
+    <PackageReference Include="xunit.runner.visualstudio"          Version="2.8.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk"             Version="17.10.0" />
+    <PackageReference Include="Moq"                                Version="4.20.72" />
+    <PackageReference Include="FluentAssertions"                   Version="6.12.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory"   Version="8.0.1" />
+    <!-- Sprint 2A: testes de integração via WebApplicationFactory -->
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing"   Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ERP.Application\ERP.Application.csproj" />
+    <ProjectReference Include="..\ERP.Infrastructure\ERP.Infrastructure.csproj" />
+    <ProjectReference Include="..\ERP.Persistence\ERP.Persistence.csproj" />
+    <ProjectReference Include="..\ERP.Domain\ERP.Domain.csproj" />
+    <ProjectReference Include="..\ERP.WPF\ERP.WPF.csproj" />
+    <!-- Sprint 2A: necessário para WebApplicationFactory<Program> -->
+    <ProjectReference Include="..\ERP.Api\ERP.Api.csproj" />
+  </ItemGroup>
+
+</Project>

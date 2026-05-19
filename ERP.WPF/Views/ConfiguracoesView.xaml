@@ -1,0 +1,226 @@
+<UserControl x:Class="ERP.WPF.Views.ConfiguracoesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:ERP.WPF.Views"
+             Background="{DynamicResource FundoGeral}" FontFamily="Segoe UI">
+
+    <Grid Margin="30">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="⚙️ Configurações do Sistema" FontSize="28" FontWeight="Bold" Foreground="#1E62A6"/>
+            <TextBlock Text="Personalize os dados da empresa, integrações fiscais e cargos de acesso." FontSize="14" Foreground="{DynamicResource TextMuted}" Margin="0,5,0,0"/>
+        </StackPanel>
+
+        <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0">
+            <TabControl.Resources>
+                <Style TargetType="TabItem">
+                    <Setter Property="FontSize" Value="14"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                    <Setter Property="Padding" Value="18,10"/>
+                    <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="TabItem">
+                                <Border x:Name="TabBd" Padding="{TemplateBinding Padding}"
+                                        Background="Transparent" BorderThickness="0,0,0,3"
+                                        BorderBrush="Transparent" Margin="0,0,4,0">
+                                    <ContentPresenter ContentSource="Header"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter TargetName="TabBd" Property="BorderBrush" Value="#1E62A6"/>
+                                        <Setter Property="Foreground" Value="#1E62A6"/>
+                                    </Trigger>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="TabBd" Property="Background" Value="#F1F5F9"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </TabControl.Resources>
+
+            <!-- Aba 1: Empresa & Fiscal -->
+            <TabItem Header="🏢  Empresa e Fiscal">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="20"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Background="{DynamicResource CardBg}" CornerRadius="12" Padding="25" VerticalAlignment="Top">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.08" Color="Black" Direction="270"/>
+                    </Border.Effect>
+                    <StackPanel>
+                        <TextBlock Text="CABEÇALHO DO RECIBO E EMPRESA" FontWeight="Black" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,20"/>
+
+                        <TextBlock Text="Logo da Empresa (Aparecerá no topo do recibo)" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                            <Border Width="80" Height="80" BorderBrush="{DynamicResource BordaInput}" BorderThickness="1" CornerRadius="8" Background="{DynamicResource FundoRodape}" Margin="0,0,10,0">
+                                <Image Source="{Binding CaminhoLogo}" Stretch="Uniform" Margin="5"/>
+                            </Border>
+                            <Button Content="📁 Selecionar Imagem" Command="{Binding SelecionarLogoCommand}" 
+                                    Background="#E2E8F0" Foreground="{DynamicResource TextMuted}" FontWeight="Bold" FontSize="13"
+                                    Height="35" Padding="15,0" Cursor="Hand" VerticalAlignment="Center" BorderThickness="0">
+                                <Button.Resources>
+                                    <Style TargetType="Border"> <Setter Property="CornerRadius" Value="6"/> </Style>
+                                </Button.Resources>
+                            </Button>
+                            <Button Content="🗑️" Command="{Binding RemoverLogoCommand}" 
+                                    Background="#EF4444" Foreground="White" FontWeight="Bold" FontSize="14"
+                                    Height="35" Width="40" Cursor="Hand" VerticalAlignment="Center" BorderThickness="0" Margin="5,0,0,0"
+                                    ToolTip="Remover imagem atual">
+                                <Button.Resources>
+                                    <Style TargetType="Border"> <Setter Property="CornerRadius" Value="6"/> </Style>
+                                </Button.Resources>
+                            </Button>
+                        </StackPanel>
+
+                        <TextBlock Text="Razão Social" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                        <TextBox Text="{Binding RazaoSocial, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14" BorderBrush="{DynamicResource BordaInput}" Margin="0,0,0,15"/>
+
+                        <TextBlock Text="Nome Fantasia (Aparece maior na nota)" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                        <TextBox Text="{Binding NomeFantasia, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14" BorderBrush="{DynamicResource BordaInput}" Margin="0,0,0,15"/>
+
+                        <TextBlock Text="Telefone / WhatsApp" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                        <TextBox Text="{Binding Telefone, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14" BorderBrush="{DynamicResource BordaInput}" Margin="0,0,0,15"/>
+
+                        <TextBlock Text="Chave PIX" FontWeight="SemiBold"/>
+<TextBox Text="{Binding ChavePix, UpdateSourceTrigger=PropertyChanged}"
+         Margin="0,5,0,15" Height="30" VerticalContentAlignment="Center"
+         ToolTip="CPF, CNPJ, e-mail, celular ou chave aleatória"/>
+
+                        <TextBlock Text="Endereço Completo" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                        <TextBox Text="{Binding Endereco, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14" BorderBrush="{DynamicResource BordaInput}" Height="60" TextWrapping="Wrap" AcceptsReturn="True" Margin="0,0,0,15"/>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Grid.Column="2">
+                    
+                    <Border Background="{DynamicResource CardBg}" CornerRadius="12" Padding="25" Margin="0,0,0,20">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.08" Color="Black" Direction="270"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <TextBlock Text="RODAPÉ DO RECIBO (Regras da Loja)" FontWeight="Black" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,20"/>
+
+                            <TextBlock Text="Linha 1 (Ex: Obrigado pela preferência!)" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                            <TextBox Text="{Binding RodapeLinha1, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14" BorderBrush="{DynamicResource BordaInput}" Margin="0,0,0,15"/>
+
+                            <TextBlock Text="Linha 2 (Ex: Trocas em até 7 dias)" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                            <TextBox Text="{Binding RodapeLinha2, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14" BorderBrush="{DynamicResource BordaInput}" Margin="0,0,0,15"/>
+
+                            <TextBlock Text="Linha 3 (Aviso extra)" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                            <TextBox Text="{Binding RodapeLinha3, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14" BorderBrush="{DynamicResource BordaInput}" Margin="0,0,0,15"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Background="{DynamicResource CardBg}" CornerRadius="12" Padding="25" Margin="0,0,0,20" BorderBrush="{DynamicResource BordaCard}" BorderThickness="1">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.08" Color="Black" Direction="270"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <TextBlock Text="INTEGRAÇÃO FISCAL (SEFAZ)" FontWeight="Black" Foreground="#1E62A6" Margin="0,0,0,20"/>
+
+                            <TextBlock Text="Token de Acesso (Focus NFe)" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+<Grid Margin="0,0,0,15">
+    <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+    </Grid.ColumnDefinitions>
+
+    <TextBox Text="{Binding TokenMascarado, Mode=OneWay}" IsReadOnly="True" Padding="10" FontSize="14" BorderBrush="{DynamicResource BordaInput}" Background="{DynamicResource FundoRodape}" Foreground="{DynamicResource TextMuted}" FontWeight="Bold">
+        <TextBox.Style>
+            <Style TargetType="TextBox">
+                <Setter Property="Visibility" Value="Visible"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsTokenVisivel}" Value="True">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </TextBox.Style>
+    </TextBox>
+
+    <TextBox Text="{Binding TokenFocusNfe, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14" BorderBrush="#3B82F6" Background="{DynamicResource CardBgAlt}">
+        <TextBox.Style>
+            <Style TargetType="TextBox">
+                <Setter Property="Visibility" Value="Collapsed"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsTokenVisivel}" Value="True">
+                        <Setter Property="Visibility" Value="Visible"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </TextBox.Style>
+    </TextBox>
+
+    <Button Grid.Column="1" Command="{Binding ToggleTokenCommand}" Background="#E2E8F0" Foreground="#334155" FontWeight="Bold" Margin="10,0,0,0" Padding="15,0" Cursor="Hand" BorderThickness="0">
+        <Button.Resources>
+            <Style TargetType="Border"> <Setter Property="CornerRadius" Value="6"/> </Style>
+        </Button.Resources>
+        <Button.Style>
+            <Style TargetType="Button">
+                <Setter Property="Content" Value="👁️ Mostrar"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsTokenVisivel}" Value="True">
+                        <Setter Property="Content" Value="🙈 Ocultar"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Button.Style>
+    </Button>
+</Grid>
+
+                            <CheckBox IsChecked="{Binding UsarAmbienteProducao}" Content="Usar Ambiente de Produção (Valor Fiscal Real)" 
+                                      Foreground="#DC2626" FontWeight="Bold" FontSize="14" Margin="0,5,0,0"
+                                      ToolTip="Atenção: Se marcado, as notas emitidas terão validade fiscal real na Receita!"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Button Content="✓ SALVAR CONFIGURAÇÕES" Command="{Binding SalvarCommand}" 
+                            Background="#27AE60" Foreground="White" FontWeight="Black" FontSize="16" Height="60" Cursor="Hand" BorderThickness="0">
+                        <Button.Resources>
+                            <Style TargetType="Border"> <Setter Property="CornerRadius" Value="8"/> </Style>
+                        </Button.Resources>
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Opacity" Value="0.9"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button Content="💾 Fazer Backup Agora" Command="{Binding BackupManualCommand}"
+        Background="#0EA5E9" Foreground="White" FontWeight="Bold"
+        Height="44" BorderThickness="0" Cursor="Hand" Margin="0,10,0,0">
+    <Button.Resources>
+        <Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>
+    </Button.Resources>
+</Button>
+                    
+                    <TextBlock Text="Propaganda TTSoft no fim da nota gerida pelo código fonte." HorizontalAlignment="Center" Foreground="{DynamicResource TextMuted}" FontSize="11" Margin="0,10,0,0"/>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+            </TabItem>
+
+            <!-- Aba 2: Cargos e Permissões -->
+            <TabItem Header="🔑  Cargos e Permissões">
+                <views:CargosView Margin="0,16,0,0"/>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>

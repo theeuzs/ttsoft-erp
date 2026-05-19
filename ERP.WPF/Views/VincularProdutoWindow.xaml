@@ -1,0 +1,82 @@
+<Window x:Class="ERP.WPF.Views.VincularProdutoWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Vincular Produto" Height="500" Width="700"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        WindowStyle="ToolWindow" Background="#F8F9FA" Loaded="Window_Loaded">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,15">
+            <TextBlock Text="Vínculo Manual de Produto" FontSize="20" FontWeight="Bold" Foreground="#2C3E50"/>
+            <TextBlock Text="Pesquise e selecione o produto correspondente no seu estoque." Foreground="#7F8C8D" FontSize="12"/>
+        </StackPanel>
+
+        <Grid Grid.Row="1" Margin="0,0,0,15">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBox x:Name="TxtBusca" Grid.Column="0" Text="{Binding TermoBusca, UpdateSourceTrigger=PropertyChanged}" 
+                     FontSize="16" Padding="10,8" Margin="0,0,10,0" KeyDown="TxtBusca_KeyDown"
+                     BorderBrush="#BDC3C7" BorderThickness="1" VerticalContentAlignment="Center"/>
+            
+            <Button Grid.Column="1" Content="🔍 Pesquisar" Command="{Binding BuscarCommand}" 
+                    Background="#2980B9" Foreground="White" FontWeight="Bold" Padding="20,0" Cursor="Hand"/>
+        </Grid>
+
+        <DataGrid Grid.Row="2" ItemsSource="{Binding ProdutosEncontrados}" SelectedItem="{Binding ProdutoSelecionado}"
+                  AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeight="35"
+                  BorderBrush="#E9ECEF" Background="White" MouseDoubleClick="DataGrid_MouseDoubleClick">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Cód. Barras" Binding="{Binding Barcode}" Width="120"/>
+                <DataGridTextColumn Header="Descrição" Binding="{Binding Name}" Width="*"/>
+                <DataGridTextColumn Header="UN" Binding="{Binding Unit}" Width="50"/>
+                <DataGridTextColumn Header="Estoque" Binding="{Binding Stock, StringFormat=N2}" Width="80">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="HorizontalAlignment" Value="Right"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="Preço Venda" Binding="{Binding SalePrice, StringFormat=c}" Width="100">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="HorizontalAlignment" Value="Right"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <Border Grid.Row="3" Margin="0,15,0,0" BorderBrush="#E9ECEF" BorderThickness="0,1,0,0" Padding="0,15,0,0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Cancelar" Command="{Binding CancelarCommand}" 
+                        Background="#ECF0F1" Foreground="#34495E" Padding="20,10" Margin="0,0,10,0" FontWeight="Bold" Cursor="Hand"/>
+                
+                <Button Content="✔️ Confirmar Vínculo" Command="{Binding ConfirmarCommand}"
+        Background="#27AE60" Foreground="White" Padding="20,10" FontWeight="Bold" Cursor="Hand">
+    <Button.Style>
+        <Style TargetType="Button">
+            <Setter Property="IsEnabled" Value="True"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding ProdutoSelecionado}" Value="{x:Null}">
+                    <Setter Property="IsEnabled" Value="False"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Button.Style>
+</Button>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

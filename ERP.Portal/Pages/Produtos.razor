@@ -1,0 +1,688 @@
+@page "/produtos"
+@using ERP.Portal.Services
+@using System.Net.Http.Headers
+@using Microsoft.AspNetCore.Components.Forms
+@inject ApiClient Api
+
+<div style="padding:0 0 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">📦 Produtos</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">@_total produtos cadastrados</p>
+        </div>
+        <button @onclick="NovoProduto"
+                style="background:#1E62A6; color:white; border:none; padding:10px 20px;
+                       border-radius:8px; font-weight:700; cursor:pointer; font-size:14px;">
+            + Novo Produto
+        </button>
+    </div>
+
+    <div style="background:white; border-radius:12px; padding:16px; margin-bottom:16px;
+         box-shadow:0 2px 8px rgba(0,0,0,.06); display:flex; gap:12px;">
+        <input @bind="_busca" @bind:event="oninput" @onkeyup="OnKeyUp"
+               placeholder="Buscar por nome, código de barras ou SKU..."
+               style="flex:1; padding:10px 14px; border:1px solid #E2E8F0; border-radius:8px;
+               font-size:14px; outline:none;"/>
+        <button @onclick="BuscarAsync"
+                style="background:#1E62A6; color:white; border:none; padding:10px 20px;
+                border-radius:8px; font-weight:700; cursor:pointer; font-size:14px;">
+            🔍 Buscar
+        </button>
+        <button @onclick="LimparAsync"
+                style="background:#F1F5F9; color:#64748B; border:none; padding:10px 16px;
+                border-radius:8px; font-weight:600; cursor:pointer; font-size:14px;">
+            ✕ Limpar
+        </button>
+    </div>
+
+    <div style="background:white; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
+        @if (_loading)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">Carregando produtos...</div>
+        }
+        else if (_produtos?.Length == 0)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">Nenhum produto encontrado.</div>
+        }
+        else
+        {
+            <table style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                        <th style="@Th">PRODUTO</th>
+                        <th style="@Th">SKU/BARCODE</th>
+                        <th style="@Th">UNIDADE</th>
+                        <th style="@Th; text-align:right;">ESTOQUE</th>
+                        <th style="@Th; text-align:right;">CUSTO</th>
+                        <th style="@Th; text-align:right;">VENDA</th>
+                        <th style="@Th; text-align:right;">MARGEM</th>
+                        <th style="@Th; text-align:center;">STATUS</th>
+                        <th style="@Th; text-align:center;">RELACIONADOS</th>
+                        <th style="@Th; text-align:center;">AÇÕES</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in _produtos!)
+                    {
+                        var margem = p.SalePrice > 0
+                            ? (p.SalePrice - p.OriginalCost) / p.SalePrice * 100
+                            : 0m;
+                        <tr style="border-bottom:1px solid #F1F5F9; transition:background .1s;"
+                            onmouseover="this.style.background='#F8FAFC'"
+                            onmouseout="this.style.background=''">
+                            <td style="@Td; font-weight:600; color:#1E293B;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    @if(!string.IsNullOrEmpty(p.ImageUrl))
+                                    {
+                                        <img src="@p.ImageUrl" style="width:32px; height:32px; border-radius:4px; object-fit:cover;" />
+                                    }
+                                    @p.Name
+                                </div>
+                            </td>
+                            <td style="@Td; color:#64748B; font-size:12px; font-family:monospace;">
+                                @(p.Sku ?? p.Barcode ?? "—")
+                            </td>
+                            <td style="@Td; color:#64748B;">@p.Unit</td>
+                            <td style="@Td; text-align:right; font-weight:700;
+                                color:@(p.Stock <= p.MinStock ? "#EF4444" : "#27AE60");">
+                                @p.Stock.ToString("F0")
+                            </td>
+                            <td style="@Td; text-align:right; color:#64748B;">@p.OriginalCost.ToString("C")</td>
+                            <td style="@Td; text-align:right; font-weight:700; color:#1E293B;">@p.SalePrice.ToString("C")</td>
+                            <td style="@Td; text-align:right;">
+                                <span style="color:@(margem >= 20 ? "#27AE60" : margem >= 10 ? "#F59E0B" : "#EF4444");
+                                      font-weight:700;">
+                                    @margem.ToString("F1")%
+                                </span>
+                            </td>
+                            <td style="@Td; text-align:center;">
+                                <span style="background:@(p.IsActive ? "#D1FAE5" : "#FEE2E2");
+                                      color:@(p.IsActive ? "#065F46" : "#991B1B");
+                                      padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700;">
+                                    @(p.IsActive ? "Ativo" : "Inativo")
+                                </span>
+                            </td>
+                            <td style="@Td; text-align:center;">
+                                <button @onclick="() => AbrirAgregados(p.Id, p.Name)"
+                                        title="Gerenciar produtos relacionados / sugestões do PDV"
+                                        style="background:#EEF2FF; color:#4338CA; border:none;
+                                               padding:5px 10px; border-radius:6px; cursor:pointer;
+                                               font-size:12px; font-weight:600;">
+                                    🔗 Sugestões
+                                </button>
+                            </td>
+                            <td style="@Td; text-align:center;">
+                                <button @onclick="() => EditarProduto(p)"
+                                        style="background:#F1F5F9; color:#1E293B; border:none;
+                                               padding:5px 12px; border-radius:6px; font-size:12px;
+                                               font-weight:600; cursor:pointer;">✏️ Editar</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px;
+                 border-top:1px solid #F1F5F9;">
+                <span style="font-size:13px; color:#94A3B8;">
+                    Página @_pagina de @_totalPaginas — @_total produtos
+                </span>
+                <div style="display:flex; gap:8px;">
+                    <button @onclick="PaginaAnterior" disabled="@(_pagina <= 1)"
+                            style="@BtnPag">← Anterior</button>
+                    <button @onclick="ProximaPagina" disabled="@(_pagina >= _totalPaginas)"
+                            style="@BtnPag">Próxima →</button>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@if (_painelAgregadosAberto && _produtoSelecionadoId.HasValue)
+{
+    <div @onclick="() => _painelAgregadosAberto = false"
+         style="position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:900;"/>
+
+    <div style="position:fixed; top:0; right:0; bottom:0; width:440px; background:white;
+                box-shadow:-8px 0 32px rgba(0,0,0,.15); z-index:901;
+                display:flex; flex-direction:column; overflow:hidden;">
+
+        <div style="background:#1E62A6; padding:20px 24px; flex-shrink:0;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <div style="color:white; font-weight:700; font-size:16px;">
+                        🔗 Produtos Relacionados
+                    </div>
+                    <div style="color:#B3D4F7; font-size:12px; margin-top:4px;">
+                        @_produtoSelecionadoNome
+                    </div>
+                </div>
+                <button @onclick="() => _painelAgregadosAberto = false"
+                        style="background:rgba(255,255,255,.2); border:none; color:white;
+                               width:32px; height:32px; border-radius:8px; cursor:pointer;
+                               font-size:18px; display:flex; align-items:center; justify-content:center;">
+                    ✕
+                </button>
+            </div>
+        </div>
+
+        <div style="flex:1; overflow-y:auto; padding:20px 24px;">
+
+            <div style="margin-bottom:20px;">
+                <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">
+                    Adicionar produto relacionado
+                </label>
+                <div style="display:flex; gap:8px;">
+                    <input @bind="_buscaAgregado" @bind:event="oninput"
+                           @onkeyup="OnBuscaAgregadoKeyUp"
+                           placeholder="Buscar produto para sugerir..."
+                           style="flex:1; padding:9px 12px; border:1px solid #E2E8F0;
+                                  border-radius:8px; font-size:13px; outline:none;"/>
+                    <button @onclick="BuscarProdutosParaAdicionar"
+                            style="background:#1E62A6; color:white; border:none;
+                                   padding:9px 16px; border-radius:8px; cursor:pointer;
+                                   font-size:13px; font-weight:600;">
+                        Buscar
+                    </button>
+                </div>
+
+                @if (_produtosBusca.Any())
+                {
+                    <div style="margin-top:8px; border:1px solid #E2E8F0; border-radius:8px; overflow:hidden;">
+                        @foreach (var p in _produtosBusca)
+                        {
+                            var jaAdicionado = _agregados.Any(a => a.ProdutoRelacionadoId == p.Id);
+                            <div style="display:flex; align-items:center; padding:10px 14px;
+                                        border-bottom:1px solid #F1F5F9;
+                                        background:@(jaAdicionado ? "#F8FAFC" : "white");">
+                                <div style="flex:1;">
+                                    <div style="font-size:13px; font-weight:500; color:#1E293B;">@p.Name</div>
+                                    <div style="font-size:11px; color:#64748B;">
+                                        R$ @p.SalePrice.ToString("N2") · Estoque: @p.Stock @p.Unit
+                                    </div>
+                                </div>
+                                @if (jaAdicionado)
+                                {
+                                    <span style="font-size:11px; color:#64748B; background:#E2E8F0;
+                                                 padding:3px 8px; border-radius:20px;">Já adicionado</span>
+                                }
+                                else
+                                {
+                                    <button @onclick="() => AdicionarAgregado(p)"
+                                            style="background:#10B981; color:white; border:none;
+                                                   padding:6px 14px; border-radius:6px; cursor:pointer;
+                                                   font-size:12px; font-weight:600;">
+                                        + Adicionar
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div>
+                <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:10px;">
+                    Sugestões configuradas (@_agregados.Length)
+                </label>
+
+                @if (_loadingAgregados)
+                {
+                    <div style="text-align:center; padding:32px; color:#94A3B8; font-size:13px;">
+                        Carregando...
+                    </div>
+                }
+                else if (!_agregados.Any())
+                {
+                    <div style="text-align:center; padding:32px; background:#F8FAFC;
+                                border-radius:10px; border:2px dashed #E2E8F0;">
+                        <div style="font-size:28px; margin-bottom:8px;">🔗</div>
+                        <div style="color:#64748B; font-size:13px; font-weight:500;">
+                            Nenhum produto relacionado ainda
+                        </div>
+                        <div style="color:#94A3B8; font-size:12px; margin-top:4px;">
+                            Use a busca acima para adicionar sugestões que aparecerão
+                            no PDV quando este produto for adicionado ao carrinho.
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var (item, idx) in _agregados.Select((a, i) => (a, i)))
+                    {
+                        <div style="display:flex; align-items:center; padding:12px 14px;
+                                    background:#F8FAFC; border-radius:10px; margin-bottom:8px;
+                                    border:1px solid #E2E8F0;">
+                            <div style="width:28px; height:28px; background:#1E62A6; color:white;
+                                        border-radius:50%; display:flex; align-items:center;
+                                        justify-content:center; font-size:12px; font-weight:700;
+                                        flex-shrink:0; margin-right:12px;">
+                                @(idx + 1)
+                            </div>
+
+                            <div style="flex:1; min-width:0;">
+                                <div style="font-size:13px; font-weight:600; color:#1E293B;
+                                            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                    @item.Nome
+                                </div>
+                                <div style="font-size:11px; color:#64748B; margin-top:2px;">
+                                    R$ @item.Preco.ToString("N2") · Estoque: @item.Estoque @item.Unit
+                                </div>
+                            </div>
+
+                            <span style="font-size:10px; padding:3px 8px; border-radius:20px; margin:0 10px;
+                                         background:@(item.Estoque > 0 ? "#D1FAE5" : "#FEE2E2");
+                                         color:@(item.Estoque > 0 ? "#065F46" : "#991B1B");">
+                                @(item.Estoque > 0 ? "Em estoque" : "Sem estoque")
+                            </span>
+
+                            <button @onclick="() => RemoverAgregado(item)"
+                                    title="Remover sugestão"
+                                    style="background:none; border:none; color:#94A3B8;
+                                           cursor:pointer; font-size:18px; padding:4px 8px;
+                                           border-radius:6px; line-height:1;">
+                                🗑
+                            </button>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+
+        <div style="padding:16px 24px; border-top:1px solid #F1F5F9; background:white; flex-shrink:0;">
+            <div style="font-size:11px; color:#94A3B8; text-align:center;">
+                💡 As sugestões aparecem no PDV (WPF e Web) quando este produto é adicionado ao carrinho.
+                Apenas produtos em estoque são exibidos ao vendedor.
+            </div>
+        </div>
+    </div>
+}
+
+@if (_modalProdutoAberto)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; display:flex;
+                align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:16px; padding:32px; width:580px; max-height:90vh;
+                    overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.3);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+                <h3 style="margin:0; font-weight:800; color:#1E293B; font-size:18px;">
+                    @(_editandoProdutoId == null ? "➕ Novo Produto" : "✏️ Editar Produto")
+                </h3>
+                <button @onclick="FecharModalProduto"
+                        style="background:none; border:none; font-size:20px; cursor:pointer; color:#64748B;">✕</button>
+            </div>
+            
+            @if (!string.IsNullOrEmpty(_erroProduto))
+            {
+                <div style="background:#FEE2E2; color:#991B1B; padding:10px 14px; border-radius:8px; margin-bottom:16px; font-size:13px;">@_erroProduto</div>
+            }
+
+            <div style="margin-bottom:12px;">
+                <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Nome *</label>
+                <input type="text" value="@_fp.Name" @onchange="e => _fp = _fp with { Name = e.Value?.ToString() ?? string.Empty }"
+                       style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+                <div>
+                    <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Código de Barras</label>
+                    <input type="text" value="@_fp.Barcode" @onchange="e => _fp = _fp with { Barcode = e.Value?.ToString() ?? string.Empty }"
+                           style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
+                </div>
+                <div>
+                    <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">SKU</label>
+                    <input type="text" value="@_fp.Sku" @onchange="e => _fp = _fp with { Sku = e.Value?.ToString() ?? string.Empty }"
+                           style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
+                </div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:12px;">
+                <div>
+                    <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Preço Venda *</label>
+                    <input type="number" step="0.01" min="0" value="@_fp.SalePrice" @onchange="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _fp = _fp with { SalePrice = v }; }"
+                           style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
+                </div>
+                <div>
+                    <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Custo</label>
+                    <input type="number" step="0.01" min="0" value="@_fp.OriginalCost" @onchange="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _fp = _fp with { OriginalCost = v }; }"
+                           style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
+                </div>
+                <div>
+                    <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Estoque</label>
+                    <input type="number" step="0.01" min="0" value="@_fp.Stock" @onchange="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _fp = _fp with { Stock = v }; }"
+                           style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
+                </div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:12px;">
+                <div>
+                    <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Preço B — Revendedor</label>
+                    <input type="number" step="0.01" min="0" value="@_fp.PrecoBRevendedor" @onchange="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _fp = _fp with { PrecoBRevendedor = v }; }"
+                           style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
+                </div>
+                <div>
+                    <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Preço C — Atacadista</label>
+                    <input type="number" step="0.01" min="0" value="@_fp.PrecoCAtacadista" @onchange="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _fp = _fp with { PrecoCAtacadista = v }; }"
+                           style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
+                </div>
+                <div>
+                    <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Estoque Mínimo</label>
+                    <input type="number" step="0.01" min="0" value="@_fp.MinStock" @onchange="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _fp = _fp with { MinStock = v }; }"
+                           style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
+                </div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+                <div>
+                    <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Unidade</label>
+                    <input type="text" value="@_fp.Unit" @onchange="e => _fp = _fp with { Unit = e.Value?.ToString() ?? string.Empty }"
+                           style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
+                </div>
+                <div>
+                    <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Status</label>
+                    <select @onchange="SetIsActive"
+                            style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px;">
+                        <option value="true" selected="@_fp.IsActive">✅ Ativo</option>
+                        <option value="false" selected="@(!_fp.IsActive)">❌ Inativo</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="margin-bottom:24px; padding:16px; background:#F8FAFC; border:1px dashed #CBD5E1; border-radius:8px;">
+                <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase; display:block; margin-bottom:8px;">Imagem do Produto</label>
+                
+                <div style="display:flex; align-items:center; gap:16px;">
+                    <InputFile OnChange="UploadImagem" accept="image/jpeg,image/png,image/webp" 
+                               style="flex:1; padding:8px; border:1px solid #E2E8F0; border-radius:6px; font-size:13px; background:white;" />
+                    
+                    @if (!string.IsNullOrEmpty(_imagemUrl))
+                    {
+                        <img src="@_imagemUrl" alt="Preview" style="max-height:64px; max-width:64px; border-radius:8px; border:1px solid #E2E8F0; object-fit:cover;" />
+                    }
+                </div>
+                
+                @if (_uploadingImagem)
+                {
+                    <div style="font-size:12px; color:#1E62A6; margin-top:8px; font-weight:600;">⏳ Enviando imagem para a nuvem...</div>
+                }
+            </div>
+
+            <div style="display:flex; gap:12px;">
+                <button @onclick="SalvarProdutoAsync" disabled="@(_salvandoProduto || _uploadingImagem)"
+                        style="flex:1; background:#1E62A6; color:white; border:none; padding:12px;
+                               border-radius:8px; font-weight:700; font-size:14px; cursor:pointer;
+                               opacity:@(_salvandoProduto || _uploadingImagem ? "0.6" : "1");">
+                    @(_salvandoProduto ? "Salvando..." : (_editandoProdutoId == null ? "💾 Cadastrar" : "💾 Salvar"))
+                </button>
+                <button @onclick="FecharModalProduto"
+                        style="padding:12px 24px; background:#F1F5F9; color:#64748B; border:none; border-radius:8px; font-weight:600; cursor:pointer;">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+
+@code {
+    private ProdutoItem[]? _produtos;
+    private string  _busca       = "";
+    private int     _pagina      = 1;
+    private int     _totalPaginas = 1;
+    private int     _total       = 0;
+    private bool    _loading     = true;
+
+    // ── Produtos Agregados ────────────────────────────────────────────────────
+    private Guid?           _produtoSelecionadoId;
+    private string          _produtoSelecionadoNome = "";
+    private AgregadoItem[]  _agregados      = [];
+    private ProdutoItem[]   _produtosBusca  = [];
+    private string          _buscaAgregado  = "";
+    private bool            _loadingAgregados;
+    private bool            _painelAgregadosAberto;
+
+    private const string Th     = "padding:12px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td     = "padding:12px 16px; font-size:13px;";
+    private const string BtnPag = "padding:8px 16px; border:1px solid #E2E8F0; border-radius:8px; background:white; cursor:pointer; font-size:13px; color:#1E293B;";
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _loading = true;
+        var url  = $"api/Products?page={_pagina}&pageSize=20&search={Uri.EscapeDataString(_busca)}";
+        var result = await Api.GetAsync<PagedResult<ProdutoItem>>(url);
+        _produtos     = result?.Items ?? [];
+        _total        = result?.TotalItems ?? 0;
+        _totalPaginas = result?.TotalPages ?? 1;
+        _loading      = false;
+    }
+
+    private async Task AbrirAgregados(Guid produtoId, string nome)
+    {
+        _produtoSelecionadoId   = produtoId;
+        _produtoSelecionadoNome = nome;
+        _painelAgregadosAberto  = true;
+        _loadingAgregados       = true;
+
+        var result = await Api.GetAsync<AgregadoItem[]>($"api/products/{produtoId}/agregados");
+        _agregados        = result ?? [];
+        _loadingAgregados = false;
+    }
+
+    private async Task OnBuscaAgregadoKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await BuscarProdutosParaAdicionar();
+    }
+
+    private async Task BuscarProdutosParaAdicionar()
+    {
+        if (string.IsNullOrWhiteSpace(_buscaAgregado)) { _produtosBusca = []; return; }
+        var result = await Api.GetAsync<PagedResult<ProdutoItem>>(
+            $"api/Products?pageSize=8&search={Uri.EscapeDataString(_buscaAgregado)}");
+        _produtosBusca = result?.Items ?? [];
+    }
+
+    private async Task AdicionarAgregado(ProdutoItem produto)
+    {
+        if (_produtoSelecionadoId is null) return;
+        if (_agregados.Any(a => a.ProdutoRelacionadoId == produto.Id)) return; // já existe
+
+        var novaOrdem = _agregados.Length > 0 ? _agregados.Max(a => a.Ordem) + 1 : 0;
+        var novos = _agregados.Append(new AgregadoItem(
+            System.Guid.Empty, produto.Id, produto.Name,
+            produto.Unit, produto.SalePrice, produto.Stock, novaOrdem)).ToArray();
+
+        await SalvarAgregados(novos);
+        _buscaAgregado = "";
+        _produtosBusca = [];
+    }
+
+    private async Task RemoverAgregado(AgregadoItem item)
+    {
+        if (_produtoSelecionadoId is null) return;
+        await Api.DeleteAsync($"api/products/{_produtoSelecionadoId}/agregados/{item.ProdutoRelacionadoId}");
+        _agregados = _agregados.Where(a => a.ProdutoRelacionadoId != item.ProdutoRelacionadoId).ToArray();
+    }
+
+    private async Task SalvarAgregados(AgregadoItem[] itens)
+    {
+        if (_produtoSelecionadoId is null) return;
+        var payload = new { Itens = itens.Select((a, i) => new { a.ProdutoRelacionadoId, Ordem = i }) };
+        await Api.PutAsync($"api/products/{_produtoSelecionadoId}/agregados", payload);
+        var result = await Api.GetAsync<AgregadoItem[]>($"api/products/{_produtoSelecionadoId}/agregados");
+        _agregados = result ?? [];
+    }
+
+    private async Task BuscarAsync() { _pagina = 1; await CarregarAsync(); }
+    private async Task LimparAsync() { _busca = ""; _pagina = 1; await CarregarAsync(); }
+    private async Task PaginaAnterior() { if (_pagina > 1) { _pagina--; await CarregarAsync(); } }
+    private async Task ProximaPagina() { if (_pagina < _totalPaginas) { _pagina++; await CarregarAsync(); } }
+    private async Task OnKeyUp(KeyboardEventArgs e) { if (e.Key == "Enter") await BuscarAsync(); }
+
+    record ProdutoItem(System.Guid Id, string Name, string? Sku, string? Barcode, string Unit,
+        decimal SalePrice, decimal OriginalCost, decimal Stock, decimal MinStock, bool IsActive, string? ImageUrl = null);
+
+    record AgregadoItem(System.Guid Id, System.Guid ProdutoRelacionadoId, string Nome,
+        string Unit, decimal Preco, decimal Estoque, int Ordem);
+
+    class PagedResult<T>
+    {
+        public T[]  Items      { get; set; } = [];
+        public int  TotalItems { get; set; }
+        public int  Page       { get; set; }
+        public int  TotalPages { get; set; }
+    }
+    
+    // ── Modal de produto ──────────────────────────────────────────────────────
+    private bool        _modalProdutoAberto  = false;
+    private Guid?       _editandoProdutoId   = null;
+    private FormProduto _fp                  = new();
+    private bool        _salvandoProduto     = false;
+    private string      _erroProduto         = "";
+    
+    // ── Variáveis do Upload ──
+    private string?     _imagemUrl;
+    private bool        _uploadingImagem     = false;
+
+    private void NovoProduto()
+    {
+        _editandoProdutoId  = null;
+        _fp                 = new();
+        _erroProduto        = "";
+        _imagemUrl          = null;
+        _modalProdutoAberto = true;
+    }
+
+    private void EditarProduto(ProdutoItem p)
+    {
+        _editandoProdutoId = p.Id;
+        _fp = new FormProduto
+        {
+            Name             = p.Name,
+            Barcode          = p.Barcode ?? string.Empty,
+            Sku              = p.Sku ?? string.Empty,
+            SalePrice        = p.SalePrice,
+            OriginalCost     = p.OriginalCost,
+            Stock            = p.Stock,
+            MinStock         = p.MinStock,
+            Unit             = p.Unit ?? "UN",
+            IsActive         = p.IsActive
+        };
+        _imagemUrl          = p.ImageUrl;
+        _erroProduto        = "";
+        _modalProdutoAberto = true;
+    }
+
+    private void FecharModalProduto() => _modalProdutoAberto = false;
+
+    private void SetIsActive(ChangeEventArgs e)
+        => _fp = _fp with { IsActive = e.Value?.ToString() == "true" };
+
+    private async Task UploadImagem(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            _erroProduto = "A imagem não pode ter mais de 5MB.";
+            return;
+        }
+
+        _uploadingImagem = true;
+        _erroProduto = "";
+        StateHasChanged();
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            using var stream  = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            
+            content.Add(new StreamContent(stream), "arquivo", file.Name);
+            content.Headers.ContentType = MediaTypeHeaderValue.Parse("multipart/form-data");
+
+            // Se for um produto novo, geramos um ID temporário apenas para a pasta do Azure Blob
+            var uploadId = _editandoProdutoId ?? Guid.NewGuid();
+
+            var resp = await Api.PostAsync($"api/storage/produto/{uploadId}/imagem", content);
+            
+            if (resp.IsSuccessStatusCode)
+            {
+                var result = await resp.Content.ReadFromJsonAsync<UploadResult>();
+                _imagemUrl = result?.Url;
+            }
+            else
+            {
+                _erroProduto = "Erro ao subir a imagem para a nuvem. Tente novamente.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _erroProduto = $"Erro no upload: {ex.Message}";
+        }
+        finally
+        {
+            _uploadingImagem = false;
+            StateHasChanged();
+        }
+    }
+
+    record UploadResult(string Url);
+
+    private async Task SalvarProdutoAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_fp.Name)) { _erroProduto = "Nome é obrigatório."; return; }
+        if (_fp.SalePrice <= 0) { _erroProduto = "Preço de venda deve ser maior que zero."; return; }
+
+        _salvandoProduto = true;
+        _erroProduto     = "";
+        try
+        {
+            var body = new
+            {
+                id               = _editandoProdutoId ?? Guid.Empty,
+                name             = _fp.Name,
+                barcode          = _fp.Barcode,
+                sku              = _fp.Sku,
+                salePrice        = _fp.SalePrice,
+                costPrice        = _fp.OriginalCost,
+                originalCost     = _fp.OriginalCost,
+                stock            = _fp.Stock,
+                minStock         = _fp.MinStock,
+                unit             = _fp.Unit,
+                isActive         = _fp.IsActive,
+                allowDiscount    = true,
+                precoBRevendedor = _fp.PrecoBRevendedor,
+                precoCAtacadista = _fp.PrecoCAtacadista,
+                imageUrl         = _imagemUrl // Adicionado payload da imagem!
+            };
+
+            HttpResponseMessage resp;
+            if (_editandoProdutoId == null)
+                resp = await Api.PostAsync("api/Products", body);
+            else
+                resp = await Api.PutAsync($"api/Products/{_editandoProdutoId}", body);
+
+            if (resp.IsSuccessStatusCode)
+            {
+                _modalProdutoAberto = false;
+                await CarregarAsync();
+            }
+            else
+                _erroProduto = $"Erro {(int)resp.StatusCode}";
+        }
+        catch (Exception ex) { _erroProduto = ex.Message; }
+        finally { _salvandoProduto = false; }
+    }
+
+    record FormProduto
+    {
+        public string  Name             { get; init; } = "";
+        public string  Barcode          { get; init; } = "";
+        public string  Sku              { get; init; } = "";
+        public decimal SalePrice        { get; init; }
+        public decimal OriginalCost     { get; init; }
+        public decimal Stock            { get; init; }
+        public decimal MinStock         { get; init; }
+        public string  Unit             { get; init; } = "UN";
+        public bool    IsActive         { get; init; } = true;
+        public decimal PrecoBRevendedor { get; init; }
+        public decimal PrecoCAtacadista { get; init; }
+    }
+
+}

@@ -1,0 +1,60 @@
+@page "/login"
+@using ERP.Portal.Services
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+<div style="display:flex; align-items:center; justify-content:center; min-height:100vh; background:linear-gradient(135deg,#1E293B,#1E62A6);">
+    <div style="background:white; border-radius:16px; padding:40px; width:380px; box-shadow:0 20px 60px rgba(0,0,0,.3);">
+        <div style="text-align:center; margin-bottom:32px;">
+            <div style="font-size:32px;">🏗️</div>
+            <div style="font-size:22px; font-weight:800; color:#1E62A6; margin-top:8px;">TTSoft ERP</div>
+            <div style="font-size:13px; color:#94A3B8; margin-top:4px;">Portal Gerencial</div>
+        </div>
+
+        <div style="margin-bottom:16px;">
+            <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">CNPJ DA EMPRESA</label>
+            <input @bind="_cnpj" placeholder="00.000.000/0000-00"
+                   style="width:100%; padding:10px; border:1px solid #CBD5E1; border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+        </div>
+        <div style="margin-bottom:16px;">
+            <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">USUÁRIO</label>
+            <input @bind="_usuario" placeholder="Digite seu usuário"
+                   style="width:100%; padding:10px; border:1px solid #CBD5E1; border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+        </div>
+        <div style="margin-bottom:24px;">
+            <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">SENHA</label>
+            <input @bind="_senha" type="password" placeholder="••••••••"
+                   style="width:100%; padding:10px; border:1px solid #CBD5E1; border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_erro))
+        {
+            <div style="background:#FEE2E2; color:#EF4444; padding:10px; border-radius:8px; font-size:13px; margin-bottom:16px;">
+                @_erro
+            </div>
+        }
+
+        <button @onclick="LoginAsync" disabled="@_loading"
+                style="width:100%; background:#1E62A6; color:white; border:none; padding:12px;
+                border-radius:8px; font-size:15px; font-weight:700; cursor:pointer;">
+            @(_loading ? "Entrando..." : "ENTRAR")
+        </button>
+    </div>
+</div>
+
+@code {
+    private string _cnpj    = "";
+    private string _usuario = "";
+    private string _senha   = "";
+    private string _erro    = "";
+    private bool   _loading = false;
+
+    private async Task LoginAsync()
+    {
+        _loading = true; _erro = "";
+        var ok = await Auth.LoginAsync(_cnpj, _usuario, _senha);
+        _loading = false;
+        if (ok) Nav.NavigateTo("/dashboard");
+        else _erro = "Usuário, senha ou CNPJ incorretos.";
+    }
+}

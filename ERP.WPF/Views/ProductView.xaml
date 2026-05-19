@@ -1,0 +1,593 @@
+<UserControl x:Class="ERP.WPF.Views.ProductView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource FundoGeral}" FontFamily="Segoe UI">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <SolidColorBrush x:Key="TtBlue" Color="#1E62A6"/>
+        <SolidColorBrush x:Key="TtSilver" Color="#8A939C"/>
+
+        <Style x:Key="LabelStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,12,0,4"/>
+        </Style>
+
+        <Style x:Key="InputStyle" TargetType="TextBox">
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background" Value="#F8FAFC"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextDark}"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                CornerRadius="6">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="0"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource TtBlue}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="0.85"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.4"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DangerButton" BasedOn="{StaticResource PrimaryButton}" TargetType="Button">
+            <Setter Property="Background" Value="#E74C3C"/>
+        </Style>
+        
+        <Style x:Key="SecondaryButton" BasedOn="{StaticResource PrimaryButton}" TargetType="Button">
+            <Setter Property="Background" Value="#94A3B8"/>
+        </Style>
+
+        <Style x:Key="NavButton" TargetType="Button">
+            <Setter Property="Background" Value="#E2E8F0"/>
+            <Setter Property="Foreground" Value="#475569"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#CBD5E1"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.4"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="340"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0" Background="{DynamicResource CardBg}" Margin="24,24,12,24" 
+                CornerRadius="16" Effect="{DynamicResource CardShadow}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="Gestão de Estoque" FontSize="20" FontWeight="Bold"
+                           Margin="20,24,20,16" Foreground="{StaticResource TtBlue}"/>
+
+                <Grid Grid.Row="1" Margin="20,0,20,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0" Text="{Binding SearchTerm, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource InputStyle}" Margin="0,0,8,0">
+                        <TextBox.InputBindings>
+                            <KeyBinding Key="Return" Command="{Binding SearchCommand}"/>
+                        </TextBox.InputBindings>
+                    </TextBox>
+                    <Button Grid.Column="1" Content="Buscar" Width="70"
+                            Command="{Binding SearchCommand}" Style="{StaticResource PrimaryButton}" Padding="0,8"/>
+                </Grid>
+
+                <ListBox Grid.Row="2" ItemsSource="{Binding Products}" SelectedItem="{Binding SelectedProduct}"
+                         Margin="12,0" BorderThickness="0" Background="Transparent" 
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                         
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0,0,8,0"/> </Style>
+                    </ListBox.ItemContainerStyle>
+
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Padding="12,10" Margin="4,4,4,8" Background="{DynamicResource FundoRodape}" 
+                                    BorderBrush="{DynamicResource BordaCard}" BorderThickness="1" CornerRadius="8">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextDark}" TextWrapping="Wrap"/>
+                                    <Grid Margin="0,6,0,0">
+                                        <TextBlock Text="{Binding SKU}" FontSize="12" Foreground="{DynamicResource TextMuted}" HorizontalAlignment="Left"/>
+                                        <TextBlock Text="{Binding SalePrice, StringFormat='R$ {0:N2}'}" FontSize="13" Foreground="#27AE60" FontWeight="Bold" HorizontalAlignment="Right"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <Border Grid.Row="3" Background="{DynamicResource FundoRodape}" BorderBrush="{DynamicResource BordaCard}" BorderThickness="0,1,0,0" Padding="12,8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" Content="◀" Style="{StaticResource NavButton}"
+                                Command="{Binding AnteriorPaginaCommand}" IsEnabled="{Binding PodeAnterior}" ToolTip="Página anterior"/>
+
+                        <TextBlock Grid.Column="1" Text="{Binding PaginaInfo}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   FontSize="12" Foreground="{DynamicResource TextMuted}" FontWeight="SemiBold"/>
+
+                        <Button Grid.Column="2" Content="▶" Style="{StaticResource NavButton}"
+                                Command="{Binding ProximaPaginaCommand}" IsEnabled="{Binding PodeProxima}" ToolTip="Próxima página"/>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="4" Margin="20,12,20,24">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Row="0" Grid.Column="0" Content="+ NOVO PRODUTO" Command="{Binding NewCommand}" Style="{StaticResource PrimaryButton}" Padding="0,12" Visibility="{Binding VisEdicao}"/>
+                    <Button Grid.Row="0" Grid.Column="2" Content="EXCLUIR" Command="{Binding DeleteCommand}" Style="{StaticResource DangerButton}" Padding="0,12" Visibility="{Binding VisEdicao}"/>
+                    <Button Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Content="📥 IMPORTAR PLANILHA" Command="{Binding ImportCommand}" Background="#10B981" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand" Padding="0,12" Visibility="{Binding VisEdicao}">
+                        <Button.Resources>
+                            <Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style>
+                        </Button.Resources>
+                    </Button>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <Border Grid.Column="1" Background="{DynamicResource CardBg}" Margin="12,24,24,24" 
+                CornerRadius="16" Effect="{DynamicResource CardShadow}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="24,24,24,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Editando Produto Cadastrado" FontSize="20" FontWeight="Bold" Foreground="{StaticResource TtBlue}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Text="Cadastrando Novo Produto" FontSize="20" FontWeight="Bold" Foreground="#27AE60">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+
+                    <Button Grid.Column="2" Content="⚖️ Ajuste de Estoque" Command="{Binding AbrirAjusteEstoqueCommand}" 
+                            Padding="15,8" Background="#F39C12" Foreground="White" 
+                            FontWeight="Bold" Cursor="Hand" VerticalAlignment="Center"/>
+                </Grid>
+                
+                <Separator Grid.Row="0" VerticalAlignment="Bottom" Margin="24,0" Background="#E2E8F0"/>
+
+                <TabControl Grid.Row="1" Margin="20,12,20,0" BorderThickness="0" Background="Transparent">
+                    
+                    <TabItem Header="Dados Principais" FontWeight="SemiBold">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
+                            <StackPanel Margin="4,12,4,4">
+                                <TextBlock Text="1. Identificação do Produto" FontWeight="Bold" Foreground="{StaticResource TtBlue}" Margin="0,0,0,10"/>
+                                
+                                <WrapPanel Margin="0,0,0,5">
+                                    <StackPanel Width="320" Margin="0,0,20,10">
+                                        <TextBlock Text="Nome do Produto *" Style="{StaticResource LabelStyle}"/>
+                                        <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" PreviewKeyDown="TxtNomeProduto_PreviewKeyDown"
+                                                 Style="{StaticResource InputStyle}" IsEnabled="{Binding PodeEditar}"/>
+                                    </StackPanel>
+                                    
+                                    <StackPanel Width="150" Margin="0,0,20,10">
+                                        <TextBlock Text="Unidade de Medida" Style="{StaticResource LabelStyle}"/>
+                                        <Border Background="{DynamicResource FundoRodape}" BorderBrush="{DynamicResource BordaInput}" BorderThickness="1" CornerRadius="6" Padding="4">
+                                            <ComboBox SelectedValue="{Binding Unit, UpdateSourceTrigger=PropertyChanged}" 
+                                                      SelectedValuePath="Tag" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource TextDark}">
+                                                <ComboBoxItem Content="UN (Unidade)" Tag="UN"/>
+                                                <ComboBoxItem Content="MT (Metro Linear)" Tag="MT"/>
+                                                <ComboBoxItem Content="BR (Barra)" Tag="BR"/>
+                                                <ComboBoxItem Content="RL (Rolo)" Tag="RL"/>
+                                                <ComboBoxItem Content="M2 (Metro Quadrado)" Tag="M2"/>
+                                                <ComboBoxItem Content="M3 (Metro Cúbico)" Tag="M3"/>
+                                                <ComboBoxItem Content="KG (Quilograma)" Tag="KG"/>
+                                                <ComboBoxItem Content="L (Litro)" Tag="L"/>
+                                                <ComboBoxItem Content="SC (Saco)" Tag="SC"/>
+                                                <ComboBoxItem Content="CX (Caixa)" Tag="CX"/>
+                                                <ComboBoxItem Content="PC (Peça)" Tag="PC"/>
+                                            </ComboBox>
+                                        </Border>
+                                    </StackPanel>
+                                    
+                                    <StackPanel Width="160" Margin="0,0,20,10">
+                                        <TextBlock Text="Código de Barras (EAN)" Style="{StaticResource LabelStyle}"/>
+                                        <TextBox Text="{Binding Barcode}" Style="{StaticResource InputStyle}"/>
+                                    </StackPanel>
+                                    
+                                    <StackPanel Width="150" Margin="0,0,20,10">
+                                        <TextBlock Text="SKU Interno" Style="{StaticResource LabelStyle}"/>
+                                        <TextBox Text="{Binding SKU}" Style="{StaticResource InputStyle}"/>
+                                    </StackPanel>
+                                </WrapPanel>
+
+                                <Grid Margin="0,0,20,15">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Categoria do Produto *" Style="{StaticResource LabelStyle}" Margin="0,0,0,4"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <ComboBox Grid.Column="0" Height="38" VerticalContentAlignment="Center" Padding="10,0" ItemsSource="{Binding ListaCategorias}" SelectedItem="{Binding CategoriaSelecionada}" DisplayMemberPath="Name" BorderBrush="{DynamicResource BordaInput}" Background="{DynamicResource FundoRodape}">
+                                                <ComboBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></ComboBox.Resources>
+                                            </ComboBox>
+                                            <Button Grid.Column="1" Command="{Binding NovaCategoriaCommand}" Content="+" Width="38" Height="38" Margin="8,0,0,0" Style="{StaticResource PrimaryButton}" FontSize="18" ToolTip="Cadastrar Nova Categoria">
+                                                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                                            </Button>
+                                        </Grid>
+                                    </StackPanel>
+                                    
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="Marca / Fabricante" Style="{StaticResource LabelStyle}" Margin="0,0,0,4"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <ComboBox Grid.Column="0" Height="38" VerticalContentAlignment="Center" Padding="10,0" ItemsSource="{Binding ListaMarcas}" SelectedItem="{Binding MarcaSelecionada}" DisplayMemberPath="Name" BorderBrush="{DynamicResource BordaInput}" Background="{DynamicResource FundoRodape}">
+                                                <ComboBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></ComboBox.Resources>
+                                            </ComboBox>
+                                            <Button Grid.Column="1" Command="{Binding NovaMarcaCommand}" Content="+" Width="38" Height="38" Margin="8,0,0,0" Style="{StaticResource PrimaryButton}" FontSize="18" ToolTip="Cadastrar Nova Marca">
+                                                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                                            </Button>
+                                        </Grid>
+                                    </StackPanel>
+                                    
+                                    <StackPanel Grid.Column="4">
+                                        <TextBlock Text="Fornecedor Principal" Style="{StaticResource LabelStyle}" Margin="0,0,0,4"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <ComboBox Grid.Column="0" Height="38" VerticalContentAlignment="Center" Padding="10,0" ItemsSource="{Binding ListaFornecedores}" SelectedItem="{Binding FornecedorSelecionado}" DisplayMemberPath="Name" BorderBrush="{DynamicResource BordaInput}" Background="{DynamicResource FundoRodape}">
+                                                <ComboBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></ComboBox.Resources>
+                                            </ComboBox>
+                                            <Button Grid.Column="1" Command="{Binding NovoFornecedorCommand}" Content="+" Width="38" Height="38" Margin="8,0,0,0" Style="{StaticResource PrimaryButton}" FontSize="18" ToolTip="Cadastrar Novo Fornecedor">
+                                                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                                            </Button>
+                                        </Grid>
+                                    </StackPanel>
+                                </Grid>
+
+                                <Separator Background="#E2E8F0" Margin="0,0,0,15"/>
+                                <TextBlock Text="2. Custos e Precificação" FontWeight="Bold" Foreground="{StaticResource TtBlue}" Margin="0,0,0,10"/>
+                                
+                                <Grid Margin="0,0,0,15">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <WrapPanel Grid.Column="0">
+                                        <StackPanel Width="150" Margin="0,0,20,10" Visibility="{Binding VisCusto}">
+                                            <TextBlock Text="Custo Original" Style="{StaticResource LabelStyle}"/>
+                                            <TextBox Text="{Binding OriginalCost, UpdateSourceTrigger=LostFocus}" Style="{StaticResource InputStyle}"/>
+                                        </StackPanel>
+                                        <StackPanel Width="90" Margin="0,0,20,10" Visibility="{Binding VisCusto}">
+                                            <TextBlock Text="IPI (%)" Style="{StaticResource LabelStyle}"/>
+                                            <TextBox Text="{Binding IpiPercent, UpdateSourceTrigger=LostFocus}" Style="{StaticResource InputStyle}"/>
+                                        </StackPanel>
+                                        <StackPanel Width="90" Margin="0,0,20,10" Visibility="{Binding VisCusto}">
+                                            <TextBlock Text="ICMS (%)" Style="{StaticResource LabelStyle}"/>
+                                            <TextBox Text="{Binding IcmsPercent, UpdateSourceTrigger=LostFocus}" Style="{StaticResource InputStyle}"/>
+                                        </StackPanel>
+                                        <StackPanel Width="150" Margin="0,0,20,10" Visibility="{Binding VisCusto}">
+                                            <TextBlock Text="Custo Final Calculado" Style="{StaticResource LabelStyle}"/>
+                                            <TextBox Text="{Binding FinalCost, Mode=OneWay}" Style="{StaticResource InputStyle}" IsReadOnly="True" Background="#E2E8F0" Foreground="{DynamicResource TextMuted}"/>
+                                        </StackPanel>
+                                        <StackPanel Width="160" Margin="0,0,20,10" Visibility="{Binding VisCusto}">
+                                            <TextBlock Text="Margem Desejada (%)" Style="{StaticResource LabelStyle}"/>
+                                            <TextBox Text="{Binding DesiredMarginPercent, UpdateSourceTrigger=LostFocus}" Style="{StaticResource InputStyle}"/>
+                                        </StackPanel>
+                                        <StackPanel Width="160" Margin="0,0,20,10">
+                                            <TextBlock Text="Preço de Venda Final *" Style="{StaticResource LabelStyle}"/>
+                                            <TextBox Text="{Binding SalePrice, UpdateSourceTrigger=LostFocus}" Style="{StaticResource InputStyle}" FontWeight="Bold" Foreground="#27AE60" IsEnabled="{Binding PodeEditar}"/>
+                                        </StackPanel>
+                                        <StackPanel Width="160" Margin="0,0,20,10">
+                                            <TextBlock Text="Qtd. Atacado (Pacote)" Style="{StaticResource LabelStyle}"/>
+                                            <TextBox Text="{Binding WholesaleMinQuantity, UpdateSourceTrigger=LostFocus, ConverterCulture=pt-BR, TargetNullValue=''}" Style="{StaticResource InputStyle}" ToolTip="Ex: A partir de 6 metros"/>
+                                        </StackPanel>
+                                        <StackPanel Width="170" Margin="0,0,20,10">
+                                            <TextBlock Text="Preço Unit. Atacado" Style="{StaticResource LabelStyle}"/>
+                                            <TextBox Text="{Binding WholesalePrice, UpdateSourceTrigger=LostFocus, StringFormat=N2, ConverterCulture=pt-BR, TargetNullValue=''}" Style="{StaticResource InputStyle}" FontWeight="Bold" Foreground="#0284C7"/>
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Text="💼 Preço B — Revendedor" Style="{StaticResource LabelStyle}"/>
+                                            <TextBox Text="{Binding PrecoBRevendedor, UpdateSourceTrigger=LostFocus, StringFormat=N2, ConverterCulture=pt-BR}" Style="{StaticResource InputStyle}" FontWeight="Bold" Foreground="#7C3AED"
+                                                     ToolTip="Preço para clientes Grupo B (Revendedor/Empreiteiro). 0 = preço de varejo."/>
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Text="🏭 Preço C — Atacadista" Style="{StaticResource LabelStyle}"/>
+                                            <TextBox Text="{Binding PrecoCAtacadista, UpdateSourceTrigger=LostFocus, StringFormat=N2, ConverterCulture=pt-BR}" Style="{StaticResource InputStyle}" FontWeight="Bold" Foreground="#B45309"
+                                                     ToolTip="Preço para clientes Grupo C (Atacadista/Grande conta). 0 = preço de varejo."/>
+                                        </StackPanel>
+                                    </WrapPanel>
+
+                                    <StackPanel Grid.Column="1" Margin="10,0,0,0" Width="220" VerticalAlignment="Top" Visibility="{Binding VisCusto}">
+                                        <Border Background="#F0FDF4" BorderBrush="#BBF7D0" BorderThickness="1" Padding="16" CornerRadius="8">
+                                            <StackPanel>
+                                                <TextBlock Text="📈 Indicadores de Lucro" FontWeight="Bold" Foreground="#166534" Margin="0,0,0,12"/>
+                                                <Grid Margin="0,2"><TextBlock Text="Margem Real:" Foreground="#166534"/><TextBlock Text="{Binding RealMargin, StringFormat='{}{0:N2}%'}" FontWeight="Bold" Foreground="#166534" HorizontalAlignment="Right"/></Grid>
+                                                <Grid Margin="0,2"><TextBlock Text="Lucro Unitário:" Foreground="#166534"/><TextBlock Text="{Binding UnitProfit, StringFormat='R$ {0:N2}'}" FontWeight="Bold" Foreground="#166534" HorizontalAlignment="Right"/></Grid>
+                                                <Grid Margin="0,2"><TextBlock Text="Markup Aplicado:" Foreground="#166534"/><TextBlock Text="{Binding Markup, StringFormat='{}{0:N2}x'}" FontWeight="Bold" Foreground="#166534" HorizontalAlignment="Right"/></Grid>
+                                            </StackPanel>
+                                        </Border>
+                                        
+                                        <Border Background="#F1F5F9" BorderBrush="#E2E8F0" BorderThickness="1" Padding="12,8" CornerRadius="6" Margin="0,8,0,0"
+                                                Visibility="{Binding SalePriceChangedAt, Converter={StaticResource NullToCollapsed}}">
+                                            <StackPanel>
+                                                <TextBlock Text="Última Alteração de Preço:" FontSize="10" Foreground="#64748B" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                                <TextBlock FontSize="11" Foreground="#334155" TextWrapping="Wrap">
+                                                    <Run Text="📅 "/><Run Text="{Binding SalePriceChangedAt, StringFormat='dd/MM/yy HH:mm'}"/><LineBreak/>
+                                                    <Run Text="👤 Por: "/><Run Text="{Binding SalePriceChangedBy}" FontWeight="Bold" Foreground="#0F172A"/>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Border>
+                                        
+                                        <Border Background="#FFF7ED" BorderBrush="#FED7AA" BorderThickness="1" Padding="12,8" CornerRadius="6" Margin="0,6,0,0"
+                                                Visibility="{Binding CostPriceChangedAt, Converter={StaticResource NullToCollapsed}}">
+                                            <StackPanel>
+                                                <TextBlock Text="Última Alteração de Custo:" FontSize="10" Foreground="#92400E" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                                <TextBlock FontSize="11" Foreground="#78350F" TextWrapping="Wrap">
+                                                    <Run Text="📅 "/><Run Text="{Binding CostPriceChangedAt, StringFormat='dd/MM/yy HH:mm'}"/><LineBreak/>
+                                                    <Run Text="👤 Por: "/><Run Text="{Binding CostPriceChangedBy}" FontWeight="Bold" Foreground="#0F172A"/>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
+
+                                <Separator Background="#E2E8F0" Margin="0,0,0,15"/>
+                                <TextBlock Text="3. Estoque e Localização" FontWeight="Bold" Foreground="{StaticResource TtBlue}" Margin="0,0,0,10"/>
+                                
+                                <WrapPanel>
+                                    <StackPanel Width="120" Margin="0,0,20,10"><TextBlock Text="Estoque Atual" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding Stock}" Style="{StaticResource InputStyle}"/></StackPanel>
+                                    <StackPanel Width="120" Margin="0,0,20,10"><TextBlock Text="Estoque Mínimo" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding MinStock}" Style="{StaticResource InputStyle}"/></StackPanel>
+                                    <StackPanel Width="120" Margin="0,0,20,10"><TextBlock Text="Estoque Ideal" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding IdealStock}" Style="{StaticResource InputStyle}"/></StackPanel>
+                                    <StackPanel Width="180" Margin="0,0,20,10"><TextBlock Text="Corredor / Prateleira" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding WarehouseLocation}" Style="{StaticResource InputStyle}"/></StackPanel>
+                                </WrapPanel>
+                                
+                                <WrapPanel Margin="0,10,0,20">
+                                    <CheckBox Content="Produto Ativo no PDV" IsChecked="{Binding IsActive}" FontWeight="SemiBold" Foreground="{DynamicResource TextDark}" Margin="0,0,24,0"/>
+                                    <CheckBox Content="Permitir Desconto" IsChecked="{Binding AllowDiscount}" FontWeight="SemiBold" Foreground="{DynamicResource TextDark}" Margin="0,0,24,0"/>
+                                    <CheckBox Content="Permitir Estoque Negativo neste item" IsChecked="{Binding AllowNegativeStock}" FontWeight="SemiBold" Foreground="{DynamicResource TextDark}"/>
+                                </WrapPanel>
+
+                                <Separator Background="#E2E8F0" Margin="0,0,0,15"/>
+                                <TextBlock Text="4. Produto Composto (Atalho de Venda)" FontWeight="Bold" Foreground="{StaticResource TtBlue}" Margin="0,0,0,6"/>
+                                <TextBlock FontSize="12" Foreground="#64748B" Margin="0,0,0,10" TextWrapping="Wrap">
+                                    Use quando este produto é um atalho de venda com estoque controlado em outro produto.<LineBreak/>
+                                    Ex: "Barra PVC 6m" → Produto Estoque: "Tubo PVC MT" | Fator: 6 (consome 6 MT do pai ao vender 1 barra).
+                                </TextBlock>
+                                
+                                <WrapPanel Margin="0,0,0,10">
+                                    <StackPanel Width="300" Margin="0,0,20,10">
+                                        <TextBlock Text="Produto Estoque (Pai)" Style="{StaticResource LabelStyle}" ToolTip="Produto cujo estoque será abatido ao vender este. Deixe vazio para produto simples."/>
+                                        <ComboBox ItemsSource="{Binding ListaProdutosPai}" SelectedValue="{Binding ParentProductId, Mode=TwoWay}" SelectedValuePath="Id" DisplayMemberPath="Name" Height="38" VerticalContentAlignment="Center" Padding="10,0" BorderBrush="{DynamicResource BordaInput}" Background="{DynamicResource FundoRodape}">
+                                            <ComboBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></ComboBox.Resources>
+                                        </ComboBox>
+                                    </StackPanel>
+                                    
+                                    <StackPanel Width="160" Margin="0,0,20,10">
+                                        <TextBlock Text="Fator de Conversão" Style="{StaticResource LabelStyle}" ToolTip="Quantas unidades do produto pai são consumidas por 1 unidade deste. Ex: 1 Barra = 6 MT → Fator 6"/>
+                                        <TextBox Text="{Binding ConversionFactor, UpdateSourceTrigger=LostFocus, Converter={StaticResource DecimalConverter}}" Style="{StaticResource InputStyle}" ToolTip="Ex: 6 (vender 1 barra abate 6 MT do produto pai)"/>
+                                    </StackPanel>
+                                </WrapPanel>
+                                
+                                <Border Background="#EFF6FF" CornerRadius="6" Padding="12,8" Margin="0,0,0,10" Visibility="{Binding ProdutoPaiSelecionado, Converter={StaticResource NullToCollapsed}}">
+                                    <TextBlock FontSize="12" Foreground="#1E40AF" TextWrapping="Wrap">
+                                        <Run FontWeight="Bold" Text="Configurado: "/>
+                                        <Run Text="Ao vender 1 unidade deste produto, o sistema abaterá "/><Run Text="{Binding ConversionFactor, StringFormat='{}{0:N2}'}"/>
+                                        <Run Text=" unidade(s) de "/><Run Text="{Binding ProdutoPaiSelecionado.Name}" FontWeight="Bold"/><Run Text=" do estoque."/>
+                                    </TextBlock>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <TabItem Header="Dados Fiscais" FontWeight="SemiBold">
+                        <WrapPanel Margin="4,12,4,4">
+                            <StackPanel Width="280" Margin="0,0,24,15">
+                                <TextBlock Text="NCM (Nomenclatura Comum)" Style="{StaticResource LabelStyle}"/>
+                                <TextBox Text="{Binding NCM}" Style="{StaticResource InputStyle}" MaxLength="10"/>
+                                <TextBlock Text="CEST" Style="{StaticResource LabelStyle}"/>
+                                <TextBox Text="{Binding CEST}" Style="{StaticResource InputStyle}"/>
+                                <TextBlock Text="CFOP Padrão de Saída" Style="{StaticResource LabelStyle}"/>
+                                <TextBox Text="{Binding CFOPPadrao}" Style="{StaticResource InputStyle}" MaxLength="5"/>
+                            </StackPanel>
+                            <StackPanel Width="280" Margin="0,0,24,15">
+                                <TextBlock Text="CSOSN (Simples Nacional)" Style="{StaticResource LabelStyle}"/>
+                                <Border Background="{DynamicResource FundoRodape}" BorderBrush="{DynamicResource BordaInput}" BorderThickness="1" CornerRadius="6" Padding="4">
+                                    <ComboBox IsEditable="True" Text="{Binding CSOSN}" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource TextDark}">
+                                        <ComboBoxItem Content="102 - Tributada pelo Simples"/>
+                                        <ComboBoxItem Content="400 - Não Tributada"/>
+                                        <ComboBoxItem Content="500 - ICMS Cobrado Anter. por ST"/>
+                                        <ComboBoxItem Content="900 - Outros"/>
+                                    </ComboBox>
+                                </Border>
+                            </StackPanel>
+                        </WrapPanel>
+                    </TabItem>
+                    <TabItem Header="📷 Mídia / Detalhes" FontWeight="SemiBold">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
+                            <StackPanel>
+
+                                <!-- ImageUrl -->
+                                <TextBlock Text="🖼️ URL da Foto do Produto" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextMuted}" Margin="0,0,0,6"/>
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" Text="{Binding ImageUrl, UpdateSourceTrigger=PropertyChanged}"
+                                             Padding="8,6" Background="{DynamicResource FundoInput}"
+                                             BorderBrush="{DynamicResource BordaInput}"
+                                             ToolTip="Cole a URL da imagem (ex: https://...) ou um caminho local"
+                                             FontSize="13"/>
+                                    <Button Grid.Column="1" Content="📂 Arquivo" Margin="8,0,0,0"
+                                            Command="{Binding SelecionarImagemCommand}"
+                                            Padding="10,6" Background="#1E62A6" Foreground="White"
+                                            BorderThickness="0" Cursor="Hand">
+                                        <Button.Resources>
+                                            <Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>
+                                        </Button.Resources>
+                                    </Button>
+                                </Grid>
+                                <TextBlock Text="Sugestão: use Azure Blob Storage ou um servidor de imagens."
+                                           FontSize="10" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,16"/>
+
+                                <!-- Preview da imagem -->
+                                <Border Background="{DynamicResource FundoInput}" CornerRadius="8"
+                                        Height="220" Margin="0,0,0,16" ClipToBounds="True">
+                                    <Grid>
+                                        <TextBlock Text="📷 Sem foto cadastrada" HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" FontSize="14"
+                                                   Foreground="{DynamicResource TextMuted}"
+                                                   Visibility="{Binding SemImagem, Converter={StaticResource BoolToVis}}"/>
+                                        <Image Source="{Binding ImageUrl}" Stretch="Uniform"
+                                               Visibility="{Binding TemImagem, Converter={StaticResource BoolToVis}}"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Flag Em Campanha -->
+                                <Border Background="{DynamicResource CardBg}" CornerRadius="8"
+                                        Padding="14" Margin="0,0,0,16">
+                                    <Grid>
+                                        <TextBlock Text="🔥 Produto em Campanha (aparece no topo do PDV)"
+                                                   VerticalAlignment="Center" FontSize="13"
+                                                   Foreground="{DynamicResource TextPrimary}"/>
+                                        <CheckBox HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                  IsChecked="{Binding EmCampanha}"
+                                                  Width="22" Height="22"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Descrição Detalhada -->
+                                <TextBlock Text="📝 Descrição Técnica / Detalhada"
+                                           FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}"
+                                           Margin="0,0,0,6"/>
+                                <TextBox Text="{Binding DescricaoDetalhada, UpdateSourceTrigger=PropertyChanged}"
+                                         Padding="10,8" AcceptsReturn="True" Height="140"
+                                         Background="{DynamicResource FundoInput}"
+                                         BorderBrush="{DynamicResource BordaInput}"
+                                         TextWrapping="Wrap" FontSize="13" VerticalScrollBarVisibility="Auto"
+                                         ToolTip="Ex: Dimensões: 60x60cm | Acabamento: Polido | PEI 4 | Carga: 1.200kg/m²"/>
+                                <TextBlock Text="Dica: inclua dimensões (ex: 60x60cm) para aparecer no catálogo visual."
+                                           FontSize="10" Foreground="{DynamicResource TextMuted}" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+                </TabControl>
+
+                <Border Grid.Row="2" Background="{DynamicResource FundoRodape}" Padding="24" CornerRadius="0,0,16,16" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource BordaCard}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Foreground="{StaticResource TtBlue}" 
+                                   VerticalAlignment="Center" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap"/>
+                        
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Visibility="{Binding VisEdicao}">
+                            <Button Content="CANCELAR EDIÇÃO" Command="{Binding NewCommand}" Style="{StaticResource SecondaryButton}" Width="160" Padding="0,12" Margin="0,0,12,0" Foreground="White"/>
+                            <Button Content="💾 SALVAR PRODUTO" Command="{Binding SaveCommand}" Style="{StaticResource PrimaryButton}" Width="180" Padding="0,12"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

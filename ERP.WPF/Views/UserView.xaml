@@ -1,0 +1,72 @@
+<UserControl x:Class="ERP.WPF.Views.UserView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource CardBg}">
+
+    <Grid Margin="20">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="350"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0" Background="{DynamicResource FundoRodape}" CornerRadius="10" Padding="20" Margin="0,0,20,0" BorderBrush="{DynamicResource BordaCard}" BorderThickness="1">
+            <StackPanel>
+                <TextBlock Text="Novo Usuário" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextDark}" Margin="0,0,0,20"/>
+
+                <TextBlock Text="Nome Completo" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                <TextBox Text="{Binding Nome, UpdateSourceTrigger=PropertyChanged}" Padding="8" Margin="0,0,0,15" Background="{DynamicResource FundoInput}" Foreground="{DynamicResource TextDark}" BorderBrush="{DynamicResource BordaInput}"/>
+
+                <TextBlock Text="Nome de Usuário (Login)" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                <TextBox Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}" Padding="8" Margin="0,0,0,15" Background="{DynamicResource FundoInput}" Foreground="{DynamicResource TextDark}" BorderBrush="{DynamicResource BordaInput}"/>
+
+                <TextBlock Text="Senha" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                <PasswordBox x:Name="txtSenha" PasswordChanged="TxtSenha_PasswordChanged" Padding="8" Margin="0,0,0,15" Background="{DynamicResource FundoInput}" Foreground="{DynamicResource TextDark}" BorderBrush="{DynamicResource BordaInput}"/>
+
+                <TextBlock Text="Nível de Acesso" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                <ComboBox ItemsSource="{Binding Roles}" 
+                          SelectedValue="{Binding SelectedRoleId}" 
+                          SelectedValuePath="Id" 
+                          DisplayMemberPath="Name"
+                          Padding="8" Margin="0,0,0,25"
+                          Background="{DynamicResource FundoInput}" Foreground="{DynamicResource TextDark}" BorderBrush="{DynamicResource BordaInput}"/>
+
+                <Button Content="SALVAR USUÁRIO" Command="{Binding SaveCommand}" 
+                        Background="#27AE60" Foreground="White" FontWeight="Bold" Height="45" Cursor="Hand" BorderThickness="0">
+                    <Button.Resources>
+                        <Style TargetType="Border">
+                            <Setter Property="CornerRadius" Value="6"/>
+                        </Style>
+                    </Button.Resources>
+                </Button>
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Column="1" Background="{DynamicResource CardBg}" CornerRadius="10" BorderBrush="{DynamicResource BordaCard}" BorderThickness="1" Padding="15">
+            <DataGrid ItemsSource="{Binding Usuarios}" AutoGenerateColumns="False" IsReadOnly="True" 
+                      Background="Transparent" BorderThickness="0" RowHeight="40" HeadersVisibility="Column">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="NOME" Binding="{Binding Name}" Width="*"/>
+                    <DataGridTextColumn Header="LOGIN" Binding="{Binding Username}" Width="150"/>
+                    
+                    <DataGridTextColumn Header="PERMISSÃO" Binding="{Binding RoleName}" Width="120"/>
+                    
+                    <DataGridTemplateColumn Header="AÇÕES" Width="90">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="🗑️ Excluir" 
+                                        Command="{Binding DataContext.ExcluirUsuarioCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"
+                                        Background="#EF4444" Foreground="White" FontWeight="Bold" 
+                                        BorderThickness="0" Cursor="Hand" Padding="8,4">
+                                    <Button.Resources>
+                                        <Style TargetType="Border"> <Setter Property="CornerRadius" Value="4"/> </Style>
+                                    </Button.Resources>
+                                </Button>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+    </Grid>
+</UserControl>

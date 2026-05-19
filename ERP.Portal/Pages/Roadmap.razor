@@ -1,0 +1,310 @@
+@page "/roadmap"
+@using ERP.Portal.Services
+@inject AuthService Auth
+
+<div style="padding:0 0 32px;">
+
+    <!-- Header -->
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px; flex-wrap:wrap; gap:12px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0; font-size:28px;">🗺️ Próximas Melhorias</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:6px 0 0;">
+                Roadmap TTSoft ERP — atualizado em @DateTime.Today.ToString("dd/MM/yyyy")
+            </p>
+        </div>
+        <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:10px; padding:10px 20px; text-align:center;">
+            <div style="font-size:11px; font-weight:700; color:#1E62A6; margin-bottom:2px;">VERSÃO ATUAL</div>
+            <div style="font-size:22px; font-weight:800; color:#1E293B;">2.4.1</div>
+        </div>
+    </div>
+
+    <!-- Legenda -->
+    <div style="display:flex; gap:16px; margin-bottom:28px; flex-wrap:wrap;">
+        @foreach (var (cor, label) in new[]{
+            ("#10B981","✅ Concluído"),
+            ("#1E62A6","🔄 Em desenvolvimento"),
+            ("#F59E0B","📋 Planejado"),
+            ("#94A3B8","💡 Ideia / Futuro")})
+        {
+            <div style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; color:@cor;">
+                <span style="width:10px; height:10px; border-radius:50%; background:@cor; display:inline-block; flex-shrink:0;"></span>
+                @label
+            </div>
+        }
+    </div>
+
+    <!-- ── CONCLUÍDOS ─────────────────────────────────────────────────────── -->
+    @RenderSecao("Já entregue", "#10B981")
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:14px; margin-bottom:32px;">
+        @foreach (var item in _concluidos)
+        {
+            @RenderCard(item)
+        }
+    </div>
+
+    <!-- ── EM DESENVOLVIMENTO ─────────────────────────────────────────────── -->
+    @RenderSecao("Em desenvolvimento", "#1E62A6")
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:14px; margin-bottom:32px;">
+        @foreach (var item in _emDesenvolvimento)
+        {
+            @RenderCard(item)
+        }
+    </div>
+
+    <!-- ── PLANEJADOS ─────────────────────────────────────────────────────── -->
+    @RenderSecao("Planejado — próximos sprints", "#F59E0B")
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:14px; margin-bottom:32px;">
+        @foreach (var item in _planejados)
+        {
+            @RenderCard(item)
+        }
+    </div>
+
+    <!-- ── FUTURO ─────────────────────────────────────────────────────────── -->
+    @RenderSecao("Ideias & futuro", "#94A3B8")
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:14px; margin-bottom:32px;">
+        @foreach (var item in _futuro)
+        {
+            @RenderCard(item)
+        }
+    </div>
+
+    <!-- Rodapé / contadores -->
+    <div style="background:white; border-radius:12px; padding:20px 24px;
+         box-shadow:0 2px 8px rgba(0,0,0,.05); display:flex; justify-content:space-between;
+         align-items:center; flex-wrap:wrap; gap:12px;">
+        <div style="font-size:13px; color:#64748B;">
+            📬 Sugestões? Fale com o suporte TTSoft
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <span style="background:#D1FAE5; color:#065F46; border-radius:8px; padding:6px 14px; font-size:12px; font-weight:700;">
+                @_concluidos.Count concluídos
+            </span>
+            <span style="background:#DBEAFE; color:#1E3A8A; border-radius:8px; padding:6px 14px; font-size:12px; font-weight:700;">
+                @_emDesenvolvimento.Count em desenvolvimento
+            </span>
+            <span style="background:#FEF3C7; color:#92400E; border-radius:8px; padding:6px 14px; font-size:12px; font-weight:700;">
+                @_planejados.Count planejados
+            </span>
+            <span style="background:#F3F4F6; color:#374151; border-radius:8px; padding:6px 14px; font-size:12px; font-weight:700;">
+                @_futuro.Count ideias
+            </span>
+        </div>
+    </div>
+</div>
+
+@code {
+
+    // ── Helpers de renderização ───────────────────────────────────────────────
+
+    private RenderFragment RenderSecao(string titulo, string cor) =>
+        @<div style="margin-bottom:12px;">
+            <h3 style="font-size:12px; font-weight:700; color:#64748B; text-transform:uppercase;
+                 letter-spacing:.08em; margin:0; display:flex; align-items:center; gap:10px;">
+                <span style="flex:0 0 24px; height:2px; background:@cor; display:inline-block;"></span>
+                @titulo
+                <span style="flex:0 0 24px; height:2px; background:@cor; display:inline-block;"></span>
+            </h3>
+        </div>;
+
+    private RenderFragment RenderCard(RoadmapItem item)
+    {
+        var (borda, corBadge, bgBadge, labelStatus) = Cores(item.Status);
+        return @<div style="background:white; border-radius:12px; padding:18px 20px;
+                     box-shadow:0 2px 6px rgba(0,0,0,.05);
+                     border-left:4px solid @borda;
+                     display:flex; flex-direction:column; gap:10px;">
+
+            <!-- Cabeçalho do card -->
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+                <div style="display:flex; align-items:flex-start; gap:10px;">
+                    <span style="font-size:22px; line-height:1;">@item.Icone</span>
+                    <div style="font-weight:700; font-size:14px; color:#1E293B; line-height:1.4;">
+                        @item.Titulo
+                    </div>
+                </div>
+                <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0;">
+                    <span style="background:@bgBadge; color:@corBadge; font-size:10px; font-weight:700;
+                          padding:3px 9px; border-radius:20px; white-space:nowrap;">
+                        @labelStatus
+                    </span>
+                    <span style="background:#F1F5F9; color:#64748B; font-size:10px; font-weight:600;
+                          padding:2px 8px; border-radius:20px; white-space:nowrap;">
+                        @item.Tag
+                    </span>
+                </div>
+            </div>
+
+            <!-- Descrição -->
+            <div style="font-size:13px; color:#64748B; line-height:1.6;">
+                @item.Descricao
+            </div>
+
+            <!-- Tags de módulo -->
+            <div style="display:flex; gap:5px; flex-wrap:wrap;">
+                @foreach (var mod in item.Modulos)
+                {
+                    <span style="background:#F8FAFC; color:#94A3B8; font-size:10px; font-weight:600;
+                          padding:2px 8px; border-radius:4px; border:1px solid #E2E8F0;">
+                        @mod
+                    </span>
+                }
+            </div>
+        </div>;
+    }
+
+    private static (string borda, string corBadge, string bgBadge, string label) Cores(string status) => status switch
+    {
+        "concluido" => ("#10B981", "#065F46", "#D1FAE5", "✅ Concluído"),
+        "dev"       => ("#1E62A6", "#1E3A8A", "#DBEAFE", "🔄 Em dev"),
+        "planejado" => ("#F59E0B", "#92400E", "#FEF3C7", "📋 Planejado"),
+        _           => ("#94A3B8", "#374151", "#F3F4F6", "💡 Futuro"),
+    };
+
+    // ── Dados ─────────────────────────────────────────────────────────────────
+
+    private readonly List<RoadmapItem> _concluidos =
+    [
+        new("Bugfixes de segurança",
+            "Race condition no TenantMiddleware, spoofing de identidade no chat SignalR, lockout de usuário por tentativas de login. Application Insights integrado.",
+            "🔒", "concluido", "Segurança",
+            ["TenantMiddleware","SignalR","AppInsights"]),
+
+        new("Produtos Agregados — auto-sugestão no PDV",
+            "Vinculação many-to-many entre produtos. Popup não-modal no caixa sugere produtos complementares com timer de 12s e botão de adicionar ao carrinho.",
+            "🔗", "concluido", "Sprint 1",
+            ["PDV WPF","API","Portal"]),
+
+        new("CRM de Orçamentos + Follow-up",
+            "Agenda de follow-up por data, registro de contato, motivo de perda, taxa de conversão por vendedor e KPIs de funil de vendas.",
+            "🎯", "concluido", "Sprint 1",
+            ["Portal Blazor","API"]),
+
+        new("Sugestão de Compras inteligente",
+            "Análise automática de ruptura de estoque com nível de urgência (Crítico/Alerta/Normal). Gera pedido de compra em um clique.",
+            "🛒", "concluido", "Sprint 1",
+            ["Portal","API"]),
+
+        new("Módulo completo de Entregas",
+            "Gestão de frota e motoristas. Fluxo Pendente → Em Rota → Entregue / Reagendada. Janela de horário, KPIs diários e relatório por motorista.",
+            "🚚", "concluido", "Sprint 2",
+            ["Portal","API","Domain"]),
+
+        new("Calculadora de Materiais expandida",
+            "11 templates (piso, reboco, pintura, forro PVC, telhados, elétrica, hidráulica…). Cruzamento com estoque, geração de orçamento e envio por WhatsApp.",
+            "🏗️", "concluido", "Sprint 4",
+            ["Portal","API"]),
+
+        new("UX de Balcão — PDV aprimorado",
+            "Barra de meta do dia com indicador visual, destaque do último item bipado, botões de clientes recentes, atalhos F9 (suspender) / F10 (retomar) / F11 (tela cheia) / F12 (finalizar).",
+            "🖥️", "concluido", "Sprint 5",
+            ["WPF"]),
+
+        new("Portal Gerencial — dados corrigidos",
+            "Haver de clientes, estoque com valores reais, compras com status correto, cargos com permissões, auditoria detalhada e dashboard com hora local.",
+            "🩹", "concluido", "Hotfix",
+            ["Portal Blazor"]),
+    ];
+
+    private readonly List<RoadmapItem> _emDesenvolvimento =
+    [
+        new("App Mobile MAUI — Sprint 3",
+            "Consulta de estoque, preços e clientes offline. Leitura de código de barras pela câmera. Sincronização automática ao recuperar conexão com a API.",
+            "📱", "dev", "Sprint 3",
+            ["MAUI","Android","iOS","API"]),
+
+        new("Portal: edição inline de clientes e produtos",
+            "Formulários de criação e edição de clientes e produtos diretamente no portal web — sem precisar abrir o WPF para cadastros simples.",
+            "✏️", "dev", "Portal v2",
+            ["Portal Blazor","API"]),
+    ];
+
+    private readonly List<RoadmapItem> _planejados =
+    [
+        new("PWA para motorista de entregas",
+            "App leve (Progressive Web App) instalável no celular do motorista. Rota do dia, confirmação de entrega com foto e assinatura digital. GPS opcional.",
+            "🗺️", "planejado", "Sprint 6",
+            ["PWA","API","Entregas","GPS"]),
+
+        new("Nota Fiscal de Entrada (XML NF-e)",
+            "Importação de XML de NF-e de fornecedores. Dá entrada automática no estoque, cria conta a pagar e associa ao pedido de compra correspondente.",
+            "📄", "planejado", "Sprint 6",
+            ["Fiscal","Estoque","Financeiro"]),
+
+        new("Comissionamento automático",
+            "Cálculo de comissão por vendedor com regras configuráveis (% sobre faturamento ou sobre lucro). Relatório mensal com breakdown por produto e cliente.",
+            "💼", "planejado", "Sprint 7",
+            ["WPF","Portal","API"]),
+
+        new("Transferência de estoque entre filiais",
+            "Requisição, aprovação do gerente e expedição entre filiais com rastreio completo. Reflexo automático nos dois estoques e histórico de movimentações.",
+            "🏪", "planejado", "Sprint 7",
+            ["WPF","API","Multi-filial"]),
+
+        new("Pix automático no PDV",
+            "Geração de QR Code Pix dinâmico no caixa. Confirmação automática de pagamento via webhook do banco sem precisar checar manualmente.",
+            "⚡", "planejado", "Sprint 8",
+            ["WPF","API","Financeiro","Pix"]),
+
+        new("Orçamento em PDF com assinatura digital",
+            "Gera PDF do orçamento com layout profissional da loja. Cliente assina digitalmente pelo link enviado via WhatsApp. Registro de aceite com data/hora.",
+            "📝", "planejado", "Sprint 8",
+            ["Portal","PDF","WhatsApp","CRM"]),
+    ];
+
+    private readonly List<RoadmapItem> _futuro =
+    [
+        new("BI preditivo — previsão de ruptura",
+            "Modelo de série temporal para prever quando cada produto vai zerar com base no histórico de vendas, sazonalidade e eventos do calendário.",
+            "🤖", "futuro", "IA / BI",
+            ["IA","BI","Estoque","API"]),
+
+        new("Catálogo online / E-commerce",
+            "Catálogo público com busca e carrinho de compras. Pedidos caem diretamente no ERP para separação e entrega. Integrado ao módulo de entregas.",
+            "🌐", "futuro", "E-commerce",
+            ["Portal","API","Entregas"]),
+
+        new("Importação de NF-e via SIEG / NFe.io",
+            "Captura automática de notas emitidas contra o CNPJ da loja para conciliação fiscal sem digitação. Detecta duplicatas e divergências.",
+            "🔗", "futuro", "Fiscal",
+            ["Integração","Fiscal","API"]),
+
+        new("Programa de fidelidade",
+            "Pontuação por valor comprado, resgates em compras futuras e cashback. Ranking de clientes VIP. Integrado ao PDV, portal e app mobile.",
+            "🎁", "futuro", "CRM",
+            ["WPF","Mobile","Portal"]),
+
+        new("WhatsApp Business automatizado",
+            "Envio automático de: cobrança de vencimento, confirmação de entrega, notificação de orçamento aprovado e promoções segmentadas por perfil de compra.",
+            "💬", "futuro", "Automação",
+            ["WhatsApp","CRM","API","Portal"]),
+
+        new("Dashboard de metas em TV",
+            "Tela fullscreen para TV na loja. Ranking de vendedores em tempo real, meta do dia com barra de progresso e últimas vendas via SignalR.",
+            "📺", "futuro", "Gamificação",
+            ["Portal","SignalR","Metas"]),
+
+        new("Controle de consignação",
+            "Envio de produtos em consignação para revendedores externos. Registro de devolução parcial, acerto financeiro e atualização de estoque.",
+            "📦", "futuro", "Estoque",
+            ["WPF","API","Financeiro"]),
+
+        new("Integração com marketplace (ML / Shopee)",
+            "Sincronização de estoque e preços com Mercado Livre e Shopee. Pedidos do marketplace entram no ERP automaticamente para separação.",
+            "🛍️", "futuro", "Marketplace",
+            ["API","Estoque","Integração"]),
+    ];
+
+    // ── Modelo ─────────────────────────────────────────────────────────────────
+    record RoadmapItem(
+        string Titulo,
+        string Descricao,
+        string Icone,
+        string Status,
+        string Tag,
+        List<string> Modulos);
+}

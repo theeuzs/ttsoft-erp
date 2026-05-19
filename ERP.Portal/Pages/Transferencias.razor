@@ -1,0 +1,421 @@
+@page "/transferencias"
+@using ERP.Portal.Services
+@inject ApiClient Api
+@inject AuthService Auth
+
+<div style="padding:0 0 24px;">
+
+    <!-- Cabeçalho -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">🏪 Transferências de Estoque</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">Movimentações entre filiais</p>
+        </div>
+        <button @onclick="@(() => { _modalNova = true; _erroNova = string.Empty; })"
+                style="background:#1E62A6; color:white; border:none; padding:10px 20px;
+                       border-radius:8px; font-weight:700; cursor:pointer; font-size:14px;">
+            + Nova Transferência
+        </button>
+    </div>
+
+    <!-- Filtro por filial -->
+    <div style="background:white; border-radius:12px; padding:16px; margin-bottom:16px;
+         box-shadow:0 2px 8px rgba(0,0,0,.06); display:flex; gap:12px; align-items:center;">
+        <label style="font-size:13px; font-weight:600; color:#64748B;">Filial:</label>
+        <select @bind="_filialFiltro" @bind:after="CarregarAsync"
+                style="padding:8px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; min-width:200px;">
+            <option value="">— Todas as filiais —</option>
+            @foreach (var f in _filiais)
+            {
+                <option value="@f.Id">@f.Name</option>
+            }
+        </select>
+    </div>
+
+    <!-- Tabela -->
+    <div style="background:white; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
+        @if (_loading)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">Carregando...</div>
+        }
+        else if (_transferencias.Count == 0)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">
+                Nenhuma transferência encontrada.
+            </div>
+        }
+        else
+        {
+            <table style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                        <th style="@Th">DATA</th>
+                        <th style="@Th">ORIGEM</th>
+                        <th style="@Th">DESTINO</th>
+                        <th style="@Th">OPERADOR</th>
+                        <th style="@Th; text-align:center;">ITENS</th>
+                        <th style="@Th; text-align:center;">STATUS</th>
+                        <th style="@Th; text-align:center;">AÇÕES</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in _transferencias)
+                    {
+                        <tr style="border-bottom:1px solid #F1F5F9;">
+                            <td style="@Td; color:#64748B; font-size:12px;">@t.DataTransferencia.ToString("dd/MM/yy HH:mm")</td>
+                            <td style="@Td; font-weight:600;">@t.Origem</td>
+                            <td style="@Td; font-weight:600;">@t.Destino</td>
+                            <td style="@Td; color:#64748B;">@t.OperadorNome</td>
+                            <td style="@Td; text-align:center;">@t.Itens.Count()</td>
+                            <td style="@Td; text-align:center;">
+                                <span style="background:@StatusBg(t.StatusTexto); color:@StatusColor(t.StatusTexto);
+                                             padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700;">
+                                    @t.StatusTexto
+                                </span>
+                            </td>
+                            <td style="@Td; text-align:center;">
+                                <div style="display:flex; gap:6px; justify-content:center;">
+                                    @if (t.StatusTexto is "Rascunho" or "Enviada")
+                                    {
+                                        <button @onclick="() => ConfirmarAsync(t.Id)"
+                                                style="background:#D1FAE5; color:#065F46; border:none;
+                                                       padding:4px 10px; border-radius:6px; font-size:11px;
+                                                       font-weight:700; cursor:pointer;">
+                                            ✅ Confirmar
+                                        </button>
+                                        <button @onclick="() => AbrirCancelar(t.Id)"
+                                                style="background:#FEE2E2; color:#991B1B; border:none;
+                                                       padding:4px 10px; border-radius:6px; font-size:11px;
+                                                       font-weight:700; cursor:pointer;">
+                                            ✕ Cancelar
+                                        </button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+<!-- ── MODAL NOVA TRANSFERÊNCIA ───────────────────────────────────────────── -->
+@if (_modalNova)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; display:flex;
+                align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:16px; padding:32px; width:600px; max-height:90vh;
+                    overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.3);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+                <h3 style="margin:0; font-weight:800; color:#1E293B;">🏪 Nova Transferência</h3>
+                <button @onclick="() => _modalNova = false"
+                        style="background:none; border:none; font-size:20px; cursor:pointer; color:#64748B;">✕</button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_erroNova))
+            {
+                <div style="background:#FEE2E2; color:#991B1B; padding:10px 14px; border-radius:8px;
+                            margin-bottom:16px; font-size:13px;">@_erroNova</div>
+            }
+
+            <!-- Origem / Destino -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+                <div>
+                    <label style="@LabelStyle">Filial Origem *</label>
+                    <select @bind="_novaOrigem"
+                            style="width:100%; padding:10px 12px; border:1px solid #E2E8F0;
+                                   border-radius:8px; font-size:14px; margin-top:4px;">
+                        <option value="">Selecione...</option>
+                        @foreach (var f in _filiais)
+                        {
+                            <option value="@f.Id">@f.Name</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label style="@LabelStyle">Filial Destino *</label>
+                    <select @bind="_novaDestino"
+                            style="width:100%; padding:10px 12px; border:1px solid #E2E8F0;
+                                   border-radius:8px; font-size:14px; margin-top:4px;">
+                        <option value="">Selecione...</option>
+                        @foreach (var f in _filiais)
+                        {
+                            <option value="@f.Id">@f.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <label style="@LabelStyle">Observação</label>
+                <input @bind="_novaObs" type="text"
+                       style="width:100%; padding:10px 12px; border:1px solid #E2E8F0;
+                              border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
+            </div>
+
+            <!-- Busca de produto para adicionar -->
+            <div style="background:#F8FAFC; border-radius:10px; padding:16px; margin-bottom:16px;">
+                <label style="@LabelStyle; margin-bottom:8px; display:block;">Adicionar Produto</label>
+                <div style="display:flex; gap:8px; margin-bottom:10px;">
+                    <input @bind="_buscaProduto" @bind:event="oninput" @onkeyup="OnBuscaKeyUp"
+                           placeholder="Nome, código ou SKU..."
+                           style="flex:1; padding:8px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:13px;"/>
+                    <button @onclick="BuscarProdutosAsync"
+                            style="background:#1E62A6; color:white; border:none; padding:8px 16px;
+                                   border-radius:8px; font-weight:700; cursor:pointer; font-size:13px;">
+                        🔍 Buscar
+                    </button>
+                </div>
+
+                @if (_produtosBusca.Count > 0)
+                {
+                    <div style="background:white; border:1px solid #E2E8F0; border-radius:8px; max-height:160px; overflow-y:auto;">
+                        @foreach (var p in _produtosBusca)
+                        {
+                            <div style="padding:8px 12px; display:flex; justify-content:space-between;
+                                        border-bottom:1px solid #F1F5F9; cursor:pointer;"
+                                 onmouseover="this.style.background='#F8FAFC'"
+                                 onmouseout="this.style.background=''"
+                                 @onclick="() => AdicionarItem(p)">
+                                <span style="font-size:13px; font-weight:600;">@p.Name</span>
+                                <span style="font-size:12px; color:#64748B;">Estoque: @p.Stock</span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Itens adicionados -->
+            @if (_novosItens.Count > 0)
+            {
+                <div style="margin-bottom:16px;">
+                    <label style="@LabelStyle; margin-bottom:8px; display:block;">Itens da Transferência</label>
+                    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                        <thead>
+                            <tr style="background:#F8FAFC;">
+                                <th style="padding:8px; text-align:left; color:#64748B; font-size:11px;">PRODUTO</th>
+                                <th style="padding:8px; text-align:right; color:#64748B; font-size:11px;">QUANTIDADE</th>
+                                <th style="padding:8px; text-align:center; color:#64748B; font-size:11px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in _novosItens)
+                            {
+                                <tr style="border-bottom:1px solid #F1F5F9;">
+                                    <td style="padding:8px; font-weight:600;">@item.ProdutoNome</td>
+                                    <td style="padding:8px; text-align:right;">
+                                        <input type="number" min="0.01" step="0.01" value="@item.Quantidade"
+                                               @onchange="e => AlterarQtd(item, e)"
+                                               style="width:80px; padding:4px 8px; border:1px solid #E2E8F0;
+                                                      border-radius:6px; text-align:right;"/>
+                                    </td>
+                                    <td style="padding:8px; text-align:center;">
+                                        <button @onclick="() => RemoverItem(item)"
+                                                style="background:#FEE2E2; color:#991B1B; border:none;
+                                                       padding:4px 8px; border-radius:4px; cursor:pointer;">✕</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <div style="display:flex; gap:12px; margin-top:8px;">
+                <button @onclick="SalvarTransferenciaAsync" disabled="@_salvando"
+                        style="flex:1; background:#1E62A6; color:white; border:none; padding:12px;
+                               border-radius:8px; font-weight:700; font-size:14px; cursor:pointer;">
+                    @(_salvando ? "Salvando..." : "💾 Criar Transferência")
+                </button>
+                <button @onclick="() => _modalNova = false"
+                        style="padding:12px 24px; background:#F1F5F9; color:#64748B; border:none;
+                               border-radius:8px; font-weight:600; cursor:pointer;">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ── MODAL CANCELAR ─────────────────────────────────────────────────────── -->
+@if (_modalCancelar)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; display:flex;
+                align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:16px; padding:28px; width:400px;
+                    box-shadow:0 20px 60px rgba(0,0,0,.3);">
+            <h3 style="margin:0 0 16px; color:#1E293B;">✕ Cancelar Transferência</h3>
+            <label style="@LabelStyle">Motivo *</label>
+            <input @bind="_motivoCancelar" type="text"
+                   placeholder="Descreva o motivo do cancelamento"
+                   style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px;
+                          font-size:14px; margin:4px 0 16px; box-sizing:border-box;"/>
+            <div style="display:flex; gap:10px;">
+                <button @onclick="ConfirmarCancelamento"
+                        style="flex:1; background:#EF4444; color:white; border:none; padding:10px;
+                               border-radius:8px; font-weight:700; cursor:pointer;">
+                    Cancelar Transferência
+                </button>
+                <button @onclick="() => _modalCancelar = false"
+                        style="padding:10px 20px; background:#F1F5F9; color:#64748B;
+                               border:none; border-radius:8px; font-weight:600; cursor:pointer;">
+                    Voltar
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<TransfItem>    _transferencias = new();
+    private List<FilialItem>    _filiais        = new();
+    private bool                _loading        = true;
+    private string              _filialFiltro   = "";
+
+    // Modal nova
+    private bool   _modalNova    = false;
+    private string _novaOrigem   = "";
+    private string _novaDestino  = "";
+    private string _novaObs      = "";
+    private string _erroNova     = "";
+    private bool   _salvando     = false;
+    private string _buscaProduto = "";
+    private List<ProdutoItem> _produtosBusca = new();
+    private List<NovoItem>    _novosItens    = new();
+
+    // Modal cancelar
+    private bool   _modalCancelar   = false;
+    private Guid   _idCancelar;
+    private string _motivoCancelar  = "";
+
+    private const string Th        = "padding:12px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td        = "padding:12px 16px; font-size:13px;";
+    private const string LabelStyle = "font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var f = await Api.GetAsync<FilialItem[]>("api/Transferencias/filiais");
+        _filiais = f?.ToList() ?? new();
+        await CarregarAsync();
+    }
+
+    private async Task CarregarAsync()
+    {
+        _loading = true;
+        var url  = string.IsNullOrEmpty(_filialFiltro)
+            ? "api/Transferencias?filialId=" + (_filiais.FirstOrDefault()?.Id ?? Guid.Empty)
+            : $"api/Transferencias?filialId={_filialFiltro}";
+        var result = await Api.GetAsync<TransfItem[]>(url);
+        _transferencias = result?.ToList() ?? new();
+        _loading = false;
+    }
+
+    private async Task ConfirmarAsync(Guid id)
+    {
+        await Api.PutAsync($"api/Transferencias/{id}/confirmar", new { });
+        await CarregarAsync();
+    }
+
+    private void AbrirCancelar(Guid id) { _idCancelar = id; _motivoCancelar = ""; _modalCancelar = true; }
+
+    private async Task ConfirmarCancelamento()
+    {
+        if (string.IsNullOrWhiteSpace(_motivoCancelar)) return;
+        await Api.PostAsync($"api/Transferencias/{_idCancelar}/cancelar", new { motivo = _motivoCancelar });
+        _modalCancelar = false;
+        await CarregarAsync();
+    }
+
+    private async Task BuscarProdutosAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_buscaProduto)) return;
+        var r = await Api.GetAsync<ProdutoItem[]>(
+            $"api/Products?pageSize=8&search={Uri.EscapeDataString(_buscaProduto)}");
+        _produtosBusca = r?.ToList() ?? new();
+    }
+
+    private async Task OnBuscaKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await BuscarProdutosAsync();
+    }
+
+    private void AdicionarItem(ProdutoItem p)
+    {
+        if (_novosItens.Any(i => i.ProductId == p.Id)) return;
+        _novosItens.Add(new NovoItem(p.Id, p.Name, 1));
+        _produtosBusca.Clear();
+        _buscaProduto = "";
+    }
+
+    private void AlterarQtd(NovoItem item, ChangeEventArgs e)
+    {
+        if (decimal.TryParse(e.Value?.ToString(), out var v))
+        {
+            var idx = _novosItens.IndexOf(item);
+            _novosItens[idx] = item with { Quantidade = v };
+        }
+    }
+
+    private void RemoverItem(NovoItem item) => _novosItens.Remove(item);
+
+    private async Task SalvarTransferenciaAsync()
+    {
+        if (!Guid.TryParse(_novaOrigem, out var orig) || !Guid.TryParse(_novaDestino, out var dest))
+        {
+            _erroNova = "Selecione a filial de origem e destino.";
+            return;
+        }
+        if (orig == dest) { _erroNova = "Origem e destino não podem ser iguais."; return; }
+        if (_novosItens.Count == 0) { _erroNova = "Adicione ao menos um produto."; return; }
+
+        _salvando = true;
+        _erroNova = "";
+        try
+        {
+            var resp = await Api.PostAsync("api/Transferencias", new
+            {
+                origemId  = orig,
+                destinoId = dest,
+                observacao = _novaObs,
+                itens = _novosItens.Select(i => new { productId = i.ProductId, quantidade = i.Quantidade })
+            });
+
+            if (resp.IsSuccessStatusCode)
+            {
+                _modalNova  = false;
+                _novosItens = new();
+                await CarregarAsync();
+            }
+            else
+                _erroNova = $"Erro {(int)resp.StatusCode}";
+        }
+        catch (Exception ex) { _erroNova = ex.Message; }
+        finally { _salvando = false; }
+    }
+
+    private static string StatusBg(string s) => s switch
+    {
+        "Confirmada" => "#D1FAE5",
+        "Cancelada"  => "#FEE2E2",
+        "Enviada"    => "#DBEAFE",
+        _            => "#FEF3C7"
+    };
+    private static string StatusColor(string s) => s switch
+    {
+        "Confirmada" => "#065F46",
+        "Cancelada"  => "#991B1B",
+        "Enviada"    => "#1E3A8A",
+        _            => "#92400E"
+    };
+
+    record FilialItem(Guid Id, string Name);
+    record ProdutoItem(Guid Id, string Name, decimal Stock);
+    record TransfItem(Guid Id, string Origem, string Destino, Guid OrigemId, Guid DestinoId,
+        string StatusTexto, DateTime DataTransferencia, string OperadorNome, string? Observacao,
+        IEnumerable<object> Itens);
+    record NovoItem(Guid ProductId, string ProdutoNome, decimal Quantidade)
+    {
+        public decimal Quantidade { get; init; } = Quantidade;
+    }
+}

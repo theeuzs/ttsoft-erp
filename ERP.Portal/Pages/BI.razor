@@ -1,0 +1,249 @@
+@page "/bi"
+@using ERP.Portal.Services
+@inject ApiClient Api
+
+<div style="padding:0 0 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">📈 BI / Análises</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">Inteligência de negócios em tempo real</p>
+        </div>
+        <!-- Filtro de período -->
+        <div style="display:flex; gap:8px; align-items:center;">
+            <input type="date" @bind="_inicio"
+                   style="padding:8px; border:1px solid #E2E8F0; border-radius:8px; font-size:13px;"/>
+            <span style="color:#94A3B8;">até</span>
+            <input type="date" @bind="_fim"
+                   style="padding:8px; border:1px solid #E2E8F0; border-radius:8px; font-size:13px;"/>
+            <button @onclick="CarregarAsync"
+                    style="background:#1E62A6; color:white; border:none; padding:8px 16px;
+                    border-radius:8px; font-weight:700; cursor:pointer; font-size:13px;">
+                Atualizar
+            </button>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div style="text-align:center; padding:80px; color:#94A3B8; font-size:16px;">
+            📊 Calculando análises...
+        </div>
+    }
+    else
+    {
+        <!-- DRE Resumido -->
+        @if (_dre != null)
+        {
+            <div style="background:white; border-radius:12px; padding:24px; margin-bottom:20px;
+                 box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                <h3 style="font-size:15px; font-weight:700; color:#1E293B; margin:0 0 20px;">
+                    📋 DRE — Demonstração do Resultado
+                </h3>
+                <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:20px;">
+                    <KpiCard Titulo="Receita Bruta"    Valor="@_dre.ReceitaBruta.ToString("C")"    Icone="💵" Cor="#27AE60"/>
+                    <KpiCard Titulo="Custo Mercadoria" Valor="@_dre.CustoMercadorias.ToString("C")" Icone="📦" Cor="#F59E0B"/>
+                    <KpiCard Titulo="Lucro Bruto"      Valor="@_dre.LucroBruto.ToString("C")"      Icone="💰" Cor="#1E62A6"/>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px;">
+                    <KpiCard Titulo="Margem Bruta"     Valor="@($"{_dre.MargemBruta:F1}%")"        Icone="📈" Cor="#8B5CF6"/>
+                    <KpiCard Titulo="Despesas"         Valor="@_dre.DespesasOperacionais.ToString("C")" Icone="📉" Cor="#EF4444"/>
+                    <KpiCard Titulo="Lucro Líquido"    Valor="@_dre.LucroLiquido.ToString("C")"    Icone="🏆" Cor="@(_dre.LucroLiquido >= 0 ? "#27AE60" : "#EF4444")"/>
+                </div>
+
+                @if (_dre.LinhasDespesa?.Any() == true)
+                {
+                    <div style="margin-top:20px; border-top:1px solid #F1F5F9; padding-top:16px;">
+                        <h4 style="font-size:13px; font-weight:700; color:#64748B; margin:0 0 12px;">
+                            Detalhamento de Despesas
+                        </h4>
+                        @foreach (var linha in _dre.LinhasDespesa.Take(8))
+                        {
+                            <div style="display:flex; justify-content:space-between; padding:6px 0;
+                                 border-bottom:1px solid #F8FAFC;">
+                                <span style="font-size:13px; color:#1E293B;">@linha.Descricao</span>
+                                <span style="font-size:13px; font-weight:700; color:#EF4444;">
+                                    @linha.Valor.ToString("C")
+                                </span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+
+        <!-- ABC + Ranking lado a lado -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
+
+            <!-- Curva ABC -->
+            <div style="background:white; border-radius:12px; padding:24px;
+                 box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                <h3 style="font-size:15px; font-weight:700; color:#1E293B; margin:0 0 16px;">
+                    🔵 Curva ABC de Produtos
+                </h3>
+                @if (_abc != null)
+                {
+                    <!-- Legenda -->
+                    <div style="display:flex; gap:12px; margin-bottom:12px;">
+                        @foreach (var (cls, cor, bg) in new[]{("A","#065F46","#D1FAE5"),("B","#92400E","#FEF3C7"),("C","#64748B","#F1F5F9")})
+                        {
+                            var count = _abc.Count(x => x.Classe == cls);
+                            var total = _abc.Where(x => x.Classe == cls).Sum(x => x.TotalFinanceiro);
+                            <div style="flex:1; background:@bg; border-radius:8px; padding:10px; text-align:center;">
+                                <div style="font-weight:800; color:@cor; font-size:16px;">@cls</div>
+                                <div style="font-size:11px; color:@cor;">@count produtos</div>
+                                <div style="font-size:12px; font-weight:700; color:@cor;">@total.ToString("C0")</div>
+                            </div>
+                        }
+                    </div>
+
+                    @foreach (var item in _abc.Take(10))
+                    {
+                        var cor = item.Classe == "A" ? "#27AE60" : item.Classe == "B" ? "#F59E0B" : "#94A3B8";
+                        <div style="display:flex; align-items:center; gap:8px; padding:6px 0;
+                             border-bottom:1px solid #F8FAFC;">
+                            <span style="background:@cor; color:white; padding:2px 7px; border-radius:4px;
+                                  font-size:11px; font-weight:800; min-width:20px; text-align:center;">
+                                @item.Classe
+                            </span>
+                            <span style="flex:1; font-size:13px; color:#1E293B; font-weight:500;
+                                  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                @item.Nome
+                            </span>
+                            <span style="font-size:12px; color:#94A3B8;">@item.PercentualAcumulado.ToString("F1")%</span>
+                            <span style="font-size:13px; font-weight:700; color:#1E293B; min-width:80px; text-align:right;">
+                                @item.TotalFinanceiro.ToString("C0")
+                            </span>
+                        </div>
+                    }
+                }
+            </div>
+
+            <!-- Ranking vendedores -->
+            <div style="background:white; border-radius:12px; padding:24px;
+                 box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                <h3 style="font-size:15px; font-weight:700; color:#1E293B; margin:0 0 16px;">
+                    🏆 Ranking de Vendedores
+                </h3>
+                @if (_ranking != null)
+                {
+                    @foreach (var v in _ranking)
+                    {
+                        var pct = v.PercentualTotal;
+                        <div style="margin-bottom:16px;">
+                            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                                <div>
+                                    <span style="font-weight:700; color:#1E293B;">@v.Posicao. @v.Nome</span>
+                                    <span style="font-size:12px; color:#94A3B8; margin-left:8px;">
+                                        @v.QtdVendas vendas • TM: @v.TicketMedio.ToString("C0")
+                                    </span>
+                                </div>
+                                <span style="font-weight:800; color:#27AE60;">@v.TotalVendido.ToString("C0")</span>
+                            </div>
+                            <div style="background:#F1F5F9; border-radius:4px; height:6px; overflow:hidden;">
+                                <div style="background:#1E62A6; width:@(pct)%; height:100%; border-radius:4px;"></div>
+                            </div>
+                            <div style="font-size:11px; color:#94A3B8; text-align:right; margin-top:2px;">
+                                @pct.ToString("F1")% do total
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+
+        <!-- Previsão de Demanda -->
+        @if (_previsao != null)
+        {
+            <div style="background:white; border-radius:12px; padding:24px;
+                 box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                <h3 style="font-size:15px; font-weight:700; color:#1E293B; margin:0 0 16px;">
+                    🔮 Previsão de Demanda — Produtos Críticos
+                </h3>
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                            <th style="@Th">PRODUTO</th>
+                            <th style="@Th; text-align:right;">ESTOQUE ATUAL</th>
+                            <th style="@Th; text-align:right;">MÉDIA MENSAL</th>
+                            <th style="@Th; text-align:right;">DIAS RESTANTES</th>
+                            <th style="@Th; text-align:right;">SUGESTÃO COMPRA</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in _previsao)
+                        {
+                            var dias = p.DiasEstoque;
+                            var corDias = dias < 15 ? "#EF4444" : dias < 30 ? "#F59E0B" : "#27AE60";
+                            <tr style="border-bottom:1px solid #F1F5F9;">
+                                <td style="@Td; font-weight:600;">
+                                    @p.Nome
+                                    @if (p.AbaixoDoMinimo)
+                                    {
+                                        <span style="background:#FEE2E2; color:#EF4444; padding:2px 6px;
+                                              border-radius:4px; font-size:10px; margin-left:6px;">CRÍTICO</span>
+                                    }
+                                </td>
+                                <td style="@Td; text-align:right; color:#64748B;">@p.EstoqueAtual.ToString("F0")</td>
+                                <td style="@Td; text-align:right; color:#64748B;">@p.MediaMensal.ToString("F1")/mês</td>
+                                <td style="@Td; text-align:right;">
+                                    <span style="color:@corDias; font-weight:800;">
+                                        @(dias >= 999 ? "∞" : $"{dias} d")
+                                    </span>
+                                </td>
+                                <td style="@Td; text-align:right; font-weight:700; color:#1E62A6;">
+                                    @(p.SugestaoCompra > 0 ? p.SugestaoCompra.ToString("F0") : "OK")
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private DreDetalhado?      _dre;
+    private AbcItem[]?         _abc;
+    private RankingItem[]?     _ranking;
+    private PrevisaoItem[]?    _previsao;
+    private DateTime _inicio   = DateTime.Today.AddDays(-30);
+    private DateTime _fim      = DateTime.Today;
+    private bool _loading      = true;
+
+    private const string Th = "padding:12px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td = "padding:12px 16px; font-size:13px;";
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _loading = true;
+        var ini = _inicio.ToString("yyyy-MM-dd");
+        var fim = _fim.ToString("yyyy-MM-dd");
+
+        await Task.WhenAll(
+            Task.Run(async () => _dre     = await Api.GetAsync<DreDetalhado>($"api/Bi/dre-detalhado?inicio={ini}&fim={fim}")),
+            Task.Run(async () => _abc     = await Api.GetAsync<AbcItem[]>($"api/Bi/abc?inicio={ini}&fim={fim}")),
+            Task.Run(async () => _ranking = await Api.GetAsync<RankingItem[]>($"api/Bi/ranking-vendedores?inicio={ini}&fim={fim}")),
+            Task.Run(async () => _previsao = await Api.GetAsync<PrevisaoItem[]>("api/Bi/previsao-demanda"))
+        );
+        _loading = false;
+    }
+
+    class DreDetalhado
+    {
+        public decimal ReceitaBruta { get; set; }
+        public decimal CustoMercadorias { get; set; }
+        public decimal LucroBruto { get; set; }
+        public decimal MargemBruta { get; set; }
+        public decimal DespesasOperacionais { get; set; }
+        public decimal LucroLiquido { get; set; }
+        public decimal MargemLiquida { get; set; }
+        public DreLinhaItem[]? LinhasDespesa { get; set; }
+    }
+    record DreLinhaItem(string Descricao, decimal Valor, string Categoria);
+    record AbcItem(string Nome, string SKU, string Classe, decimal TotalFinanceiro, decimal PercentualAcumulado, decimal MargemPercent);
+    record RankingItem(int Posicao, string Nome, int QtdVendas, decimal TotalVendido, decimal TicketMedio, decimal PercentualTotal);
+    record PrevisaoItem(System.Guid ProductId, string Nome, decimal MediaMensal, decimal EstoqueAtual, int DiasEstoque, bool AbaixoDoMinimo, decimal SugestaoCompra);
+}

@@ -1,0 +1,40 @@
+<Window x:Class="ERP.WPF.Views.QuickAddView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Cadastro Rápido" Height="250" Width="450"
+        WindowStartupLocation="CenterScreen" Background="{DynamicResource FundoGeral}"
+        ResizeMode="NoResize" ShowInTaskbar="False" WindowStyle="ToolWindow">
+
+    <Border Background="{DynamicResource CardBg}" Margin="15" CornerRadius="12" Padding="20">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.1" Color="Black"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock x:Name="TxtTitle" Grid.Row="0" Text="Cadastrar Novo Item" FontSize="18" FontWeight="Bold" Foreground="#1E62A6" Margin="0,0,0,15"/>
+
+            <StackPanel Grid.Row="1" VerticalAlignment="Center">
+                <TextBlock Text="Nome *" FontSize="12" Foreground="{DynamicResource TextMuted}" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                <Border Background="{DynamicResource FundoRodape}" BorderBrush="{DynamicResource BordaInput}" BorderThickness="1" CornerRadius="6" Padding="2">
+                    <TextBox x:Name="TxtName" Padding="10,8" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource TextDark}" FontSize="14"/>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
+                <Button Content="CANCELAR" Click="BtnCancel_Click" Background="#94A3B8" Foreground="White" FontWeight="Bold" Width="100" Height="35" Margin="0,0,10,0" Cursor="Hand" BorderThickness="0">
+                    <Button.Resources> <Style TargetType="Border"> <Setter Property="CornerRadius" Value="6"/> </Style> </Button.Resources>
+                </Button>
+                
+                <Button Content="SALVAR" Click="BtnSave_Click" Background="#1E62A6" Foreground="White" FontWeight="Bold" Width="100" Height="35" Cursor="Hand" BorderThickness="0">
+                    <Button.Resources> <Style TargetType="Border"> <Setter Property="CornerRadius" Value="6"/> </Style> </Button.Resources>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

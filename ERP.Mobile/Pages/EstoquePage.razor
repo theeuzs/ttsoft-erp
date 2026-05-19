@@ -1,0 +1,79 @@
+@page "/mobile/estoque"
+@using ERP.Mobile.Services
+@inject MobileApiService Api
+
+<div style="font-family:'Segoe UI',sans-serif; padding:16px; background:#F1F5F9; min-height:100vh;">
+
+    <h2 style="color:#1E293B; font-size:20px; font-weight:800; margin-bottom:16px;">
+        📦 Consulta de Estoque
+    </h2>
+
+    <!-- Busca -->
+    <div style="display:flex; gap:8px; margin-bottom:16px;">
+        <input @bind="_busca" @oninput="BuscarAsync" placeholder="Produto ou código..."
+               style="flex:1; padding:10px 14px; border:1px solid #CBD5E1; border-radius:10px;
+               font-size:14px; background:white;"/>
+        <button @onclick="BuscarAsync"
+                style="background:#1E62A6; color:white; border:none; padding:10px 16px;
+                border-radius:10px; font-size:14px; font-weight:700; cursor:pointer;">
+            🔍
+        </button>
+    </div>
+
+    @if (_loading)
+    {
+        <div style="text-align:center; color:#94A3B8; padding:40px;">Buscando...</div>
+    }
+    else if (_produtos != null)
+    {
+        @foreach (var p in _produtos)
+        {
+            <div style="background:white; border-radius:12px; padding:16px; margin-bottom:12px;
+                 box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                <div style="font-weight:700; color:#1E293B; font-size:15px;">@p.Name</div>
+                <div style="font-size:12px; color:#94A3B8; margin:4px 0;">SKU: @p.Sku</div>
+                <div style="display:flex; justify-content:space-between; margin-top:8px;">
+                    <div>
+                        <div style="font-size:11px; color:#64748B; font-weight:600;">ESTOQUE</div>
+                        <div style="font-size:20px; font-weight:800;
+                             color:@(p.Stock <= p.MinStock ? "#EF4444" : "#27AE60");">
+                            @p.Stock @p.Unit
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:11px; color:#64748B; font-weight:600;">PREÇO VENDA</div>
+                        <div style="font-size:20px; font-weight:800; color:#1E62A6;">
+                            @p.SalePrice.ToString("C")
+                        </div>
+                    </div>
+                </div>
+                @if (p.Stock <= p.MinStock)
+                {
+                    <div style="background:#FEE2E2; color:#EF4444; padding:6px 10px; border-radius:6px;
+                         font-size:12px; font-weight:600; margin-top:8px;">
+                        ⚠️ Estoque abaixo do mínimo (@p.MinStock @p.Unit)
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private string    _busca    = "";
+    private bool      _loading  = false;
+    private ProdutoMobile[]? _produtos = null;
+
+    private async Task BuscarAsync()
+    {
+        if (_busca.Length < 2) return;
+        _loading = true;
+        _produtos = await Api.GetAsync<ProdutoMobile[]>(
+            $"api/Products?search={Uri.EscapeDataString(_busca)}&pageSize=20");
+        // Unwrap paged result
+        _loading = false;
+    }
+
+    record ProdutoMobile(System.Guid Id, string Name, string? Sku, string Unit,
+        decimal SalePrice, decimal Stock, decimal MinStock);
+}

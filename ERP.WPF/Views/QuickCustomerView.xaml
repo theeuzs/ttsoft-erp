@@ -1,0 +1,66 @@
+<Window x:Class="ERP.WPF.Views.QuickCustomerView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Cadastro Rápido" SizeToContent="Height" Width="450" 
+        WindowStartupLocation="CenterOwner" WindowStyle="ToolWindow" Background="{DynamicResource FundoRodape}">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="➕ Novo Cliente Rápido" FontSize="20" FontWeight="Black" Foreground="#1E62A6" Margin="0,0,0,20"/>
+
+        <StackPanel Grid.Row="1">
+            <TextBlock Text="Nome Completo *" FontWeight="Bold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+            <TextBox Text="{Binding Nome, UpdateSourceTrigger=PropertyChanged}" FontSize="15" Padding="10,8" Margin="0,0,0,16" BorderBrush="#CBD5E1"/>
+
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,6,0">
+                    <TextBlock Text="CPF/CNPJ" FontWeight="Bold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                    <TextBox Text="{Binding Documento}" FontSize="15" Padding="10,8" BorderBrush="#CBD5E1"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                    <TextBlock Text="WhatsApp/Celular" FontWeight="Bold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                    <TextBox Text="{Binding Telefone}" FontSize="15" Padding="10,8" BorderBrush="#CBD5E1"/>
+                </StackPanel>
+            </Grid>
+
+            <TextBlock Text="Rua" FontWeight="Bold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+            <TextBox Text="{Binding Rua}" FontSize="15" Padding="10,8" Margin="0,0,0,16" BorderBrush="#CBD5E1"/>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="80"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                    <TextBlock Text="Nº" FontWeight="Bold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                    <TextBox Text="{Binding Numero}" FontSize="15" Padding="10,8" BorderBrush="#CBD5E1"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1">
+                    <TextBlock Text="Bairro" FontWeight="Bold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                    <TextBox Text="{Binding Bairro}" FontSize="15" Padding="10,8" BorderBrush="#CBD5E1"/>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+
+        <!-- Botões com Polimento de UI -->
+        <UniformGrid Grid.Row="2" Columns="2" Margin="0,24,0,0">
+            <Button Content="Cancelar" Command="{Binding CancelarCommand}" Margin="0,0,6,0" 
+                    Height="45" Background="#F1F5F9" FontWeight="Bold" Foreground="#475569" BorderThickness="0" Cursor="Hand">
+                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+            </Button>
+            <Button Content="✓ SALVAR CLIENTE" Command="{Binding SalvarCommand}" Margin="6,0,0,0" 
+                    Height="45" Background="#10B981" FontWeight="Black" Foreground="White" BorderThickness="0" Cursor="Hand">
+                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+            </Button>
+        </UniformGrid>
+    </Grid>
+</Window>

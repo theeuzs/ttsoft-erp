@@ -1,0 +1,285 @@
+@page "/haver"
+@using ERP.Portal.Services
+@inject ApiClient Api
+
+<div style="padding:0 0 24px;">
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">💰 Haver (Crédito de Clientes)</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">
+                Consulte saldos e histórico de movimentações
+            </p>
+        </div>
+    </div>
+
+    <!-- Busca de cliente -->
+    <div style="background:white; border-radius:12px; padding:20px;
+                box-shadow:0 2px 8px rgba(0,0,0,.06); margin-bottom:20px;">
+        <div style="font-size:13px; font-weight:700; color:#1E293B; margin-bottom:12px;">
+            🔍 Buscar Cliente
+        </div>
+        <div style="display:flex; gap:10px;">
+            <input @bind="_busca" @bind:event="oninput"
+                   @onkeyup="OnBuscaKeyUp"
+                   placeholder="Nome, CPF ou telefone..."
+                   style="flex:1; padding:10px 14px; border:2px solid #E2E8F0;
+                          border-radius:8px; font-size:14px;"/>
+            <button @onclick="BuscarClienteAsync" disabled="@_buscando"
+                    style="background:#1E62A6; color:white; border:none; padding:10px 20px;
+                           border-radius:8px; font-weight:700; cursor:pointer; font-size:14px;">
+                @(_buscando ? "⏳" : "Buscar")
+            </button>
+        </div>
+
+        @if (_clientes.Count > 0)
+        {
+            <div style="margin-top:12px; border:1px solid #E2E8F0; border-radius:8px; overflow:hidden;">
+                @foreach (var c in _clientes)
+                {
+                    <button @onclick="() => SelecionarClienteAsync(c.Id)"
+                            style="width:100%; text-align:left; padding:12px 16px; border:none;
+                                   border-bottom:1px solid #F1F5F9; background:white; cursor:pointer;"
+                            onmouseover="this.style.background='#F8FAFC'"
+                            onmouseout="this.style.background='white'">
+                        <div style="font-weight:700; color:#1E293B;">@c.Name</div>
+                        <div style="font-size:12px; color:#94A3B8;">
+                            @c.Document @(string.IsNullOrEmpty(c.Phone) ? "" : $"· {c.Phone}")
+                        </div>
+                    </button>
+                }
+            </div>
+        }
+    </div>
+
+    @if (_clienteSelecionado != null)
+    {
+        <!-- KPIs -->
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:20px;">
+            <div style="background:white; border-radius:12px; padding:20px;
+                        box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:8px;">SALDO ATUAL</div>
+                <div style="font-size:28px; font-weight:900;
+                            color:@(_saldo >= 0 ? "#10B981" : "#EF4444");">
+                    @_saldo.ToString("C")
+                </div>
+                <div style="font-size:12px; color:#94A3B8; margin-top:4px;">
+                    @(_saldo >= 0 ? "Crédito disponível" : "Saldo negativo")
+                </div>
+            </div>
+            <div style="background:white; border-radius:12px; padding:20px;
+                        box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:8px;">TOTAL CREDITADO</div>
+                <div style="font-size:28px; font-weight:900; color:#1E293B;">
+                    @_historico.Where(h => h.Tipo == "Entrada").Sum(h => h.Valor).ToString("C")
+                </div>
+                <div style="font-size:12px; color:#94A3B8; margin-top:4px;">
+                    @_historico.Count(h => h.Tipo == "Entrada") lançamentos
+                </div>
+            </div>
+            <div style="background:white; border-radius:12px; padding:20px;
+                        box-shadow:0 2px 8px rgba(0,0,0,.06);">
+                <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:8px;">TOTAL UTILIZADO</div>
+                <div style="font-size:28px; font-weight:900; color:#1E293B;">
+                    @_historico.Where(h => h.Tipo == "Saida").Sum(h => h.Valor).ToString("C")
+                </div>
+                <div style="font-size:12px; color:#94A3B8; margin-top:4px;">
+                    @_historico.Count(h => h.Tipo == "Saida") usos
+                </div>
+            </div>
+        </div>
+
+        <!-- Lançamento manual -->
+        <div style="background:white; border-radius:12px; padding:20px;
+                    box-shadow:0 2px 8px rgba(0,0,0,.06); margin-bottom:20px;">
+            <div style="font-size:13px; font-weight:700; color:#1E293B; margin-bottom:14px;">
+                ➕ Lançar Crédito Manual
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <input type="number" @bind="_valorLancar" min="0.01" step="0.01"
+                       placeholder="Valor R$"
+                       style="width:140px; padding:9px 12px; border:1px solid #E2E8F0;
+                              border-radius:8px; font-size:13px;"/>
+                <input @bind="_descLancar" placeholder="Descrição..."
+                       style="flex:1; min-width:180px; padding:9px 12px; border:1px solid #E2E8F0;
+                              border-radius:8px; font-size:13px;"/>
+                <button @onclick="LancarCreditoAsync" disabled="@(_valorLancar <= 0 || _lancando)"
+                        style="background:@(_valorLancar > 0 ? "#10B981" : "#94A3B8");
+                               color:white; border:none; padding:9px 18px; border-radius:8px;
+                               font-weight:700; cursor:pointer; font-size:13px;">
+                    @(_lancando ? "⏳" : "💰 Lançar")
+                </button>
+            </div>
+            @if (_mensagemLancar != null)
+            {
+                <div style="margin-top:10px; padding:10px 14px;
+                            background:@(_lancarSucesso ? "#D1FAE5" : "#FEE2E2");
+                            border-radius:8px; font-size:13px; font-weight:600;
+                            color:@(_lancarSucesso ? "#065F46" : "#991B1B");">
+                    @_mensagemLancar
+                </div>
+            }
+        </div>
+
+        <!-- Histórico -->
+        <div style="background:white; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
+            <div style="padding:16px 20px; border-bottom:2px solid #F1F5F9; display:flex;
+                        justify-content:space-between; align-items:center;">
+                <div style="font-size:14px; font-weight:800; color:#1E293B;">
+                    📋 Histórico — @_clienteSelecionado.Name
+                </div>
+                <span style="font-size:12px; color:#94A3B8;">@_historico.Count movimentações</span>
+            </div>
+
+            @if (_loadingHistorico)
+            {
+                <div style="text-align:center; padding:40px; color:#94A3B8;">⏳ Carregando histórico...</div>
+            }
+            else if (_historico.Count == 0)
+            {
+                <div style="text-align:center; padding:40px; color:#94A3B8;">
+                    Nenhuma movimentação encontrada.
+                </div>
+            }
+            else
+            {
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                            <th style="@Th">DATA</th>
+                            <th style="@Th">TIPO</th>
+                            <th style="@Th">DESCRIÇÃO</th>
+                            <th style="@Th">OPERADOR</th>
+                            <th style="@Th; text-align:right;">VALOR</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var h in _historico.OrderByDescending(x => x.Data))
+                        {
+                            var entrada = h.Tipo == "Entrada";
+                            <tr style="border-bottom:1px solid #F1F5F9;">
+                                <td style="@Td; color:#64748B; white-space:nowrap;">
+                                    @h.Data.ToString("dd/MM/yyyy HH:mm")
+                                </td>
+                                <td style="@Td;">
+                                    <span style="background:@(entrada ? "#D1FAE5" : "#FEE2E2");
+                                          color:@(entrada ? "#065F46" : "#991B1B");
+                                          font-size:11px; font-weight:700; padding:3px 8px;
+                                          border-radius:20px;">
+                                        @(entrada ? "⬆ Entrada" : "⬇ Saída")
+                                    </span>
+                                </td>
+                                <td style="@Td; color:#1E293B;">@h.Descricao</td>
+                                <td style="@Td; color:#64748B; font-size:12px;">@h.OperadorNome</td>
+                                <td style="@Td; text-align:right; font-weight:800;
+                                     color:@(entrada ? "#10B981" : "#EF4444"); font-size:15px;">
+                                    @(entrada ? "+" : "-")@h.Valor.ToString("C")
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private string            _busca            = "";
+    private bool              _buscando         = false;
+    private List<ClienteDto>  _clientes         = [];
+    private ClienteDto?       _clienteSelecionado;
+    private decimal           _saldo            = 0;
+    private List<HistoricoDto> _historico       = [];
+    private bool              _loadingHistorico = false;
+
+    private decimal  _valorLancar   = 0;
+    private string   _descLancar    = "";
+    private bool     _lancando      = false;
+    private string?  _mensagemLancar;
+    private bool     _lancarSucesso = true;
+
+    private const string Th = "padding:10px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td = "padding:12px 16px; font-size:13px;";
+
+    private async Task OnBuscaKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await BuscarClienteAsync();
+    }
+
+    private async Task BuscarClienteAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_busca)) return;
+        _buscando = true;
+        try
+        {
+            var result = await Api.GetAsync<PagedClientes>(
+                $"api/Customers?search={Uri.EscapeDataString(_busca)}&pageSize=8");
+            _clientes = result?.Items?.ToList() ?? [];
+        }
+        finally { _buscando = false; }
+    }
+
+    private async Task SelecionarClienteAsync(Guid clienteId)
+    {
+        _clienteSelecionado = _clientes.FirstOrDefault(c => c.Id == clienteId);
+        _clientes           = [];
+        _loadingHistorico   = true;
+        _mensagemLancar     = null;
+
+        try
+        {
+            var saldoResp = await Api.GetAsync<SaldoDto>($"api/haver/saldo/{clienteId}");
+            _saldo = saldoResp?.Saldo ?? 0;
+
+            var historico = await Api.GetAsync<HistoricoDto[]>($"api/haver/historico/{clienteId}");
+            _historico = historico?.ToList() ?? [];
+        }
+        finally { _loadingHistorico = false; }
+    }
+
+    private async Task LancarCreditoAsync()
+    {
+        if (_clienteSelecionado == null || _valorLancar <= 0) return;
+        _lancando = true;
+
+        var resp = await Api.PostAsync("api/haver/credito", new
+        {
+            ClienteId = _clienteSelecionado.Id,
+            Valor     = _valorLancar,
+            Descricao = string.IsNullOrWhiteSpace(_descLancar)
+                        ? "Crédito lançado manualmente via Portal" : _descLancar
+        });
+
+        _lancando      = false;
+        _lancarSucesso = resp.IsSuccessStatusCode;
+        _mensagemLancar = resp.IsSuccessStatusCode
+            ? $"✅ Crédito de {_valorLancar:C} lançado com sucesso."
+            : "❌ Erro ao lançar crédito.";
+
+        if (resp.IsSuccessStatusCode)
+        {
+            _valorLancar = 0;
+            _descLancar  = "";
+            await SelecionarClienteAsync(_clienteSelecionado.Id);
+        }
+    }
+
+    class ClienteDto
+    {
+        public Guid    Id       { get; set; }
+        public string  Name     { get; set; } = "";
+        public string? Document { get; set; }
+        public string? Phone    { get; set; }
+    }
+    class PagedClientes { public ClienteDto[] Items { get; set; } = []; }
+    record SaldoDto(Guid ClienteId, decimal Saldo);
+    class HistoricoDto
+    {
+        public DateTime Data         { get; set; }
+        public string   Tipo         { get; set; } = "";
+        public string   Descricao    { get; set; } = "";
+        public decimal  Valor        { get; set; }
+        public string   OperadorNome { get; set; } = "";
+    }
+}

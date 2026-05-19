@@ -1,0 +1,184 @@
+<Window x:Class="ERP.WPF.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:conv="clr-namespace:ERP.WPF.Converters"
+        x:Name="TelaPrincipal"
+        PreviewKeyDown="MainWindow_PreviewKeyDown"
+        Closing="Window_Closing"
+        Title="ERP Materiais de Construção" Height="800" Width="1280"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource FundoGeral}"
+        FontFamily="Segoe UI">
+
+    <Window.Resources>
+        <Style x:Key="NavButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#B0BEC5"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="16,12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#1A2545"/>
+                    <Setter Property="Foreground" Value="White"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="LabelStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
+            <Setter Property="Margin" Value="0,8,0,3"/>
+        </Style>
+
+        <Style x:Key="InputStyle" TargetType="Control">
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BordaInput}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background" Value="{DynamicResource FundoInput}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextDark}"/>
+        </Style>
+
+        <DropShadowEffect x:Key="CardShadow" BlurRadius="8" Opacity="0.1" ShadowDepth="2"/>
+        <conv:RoleToVisibilityConverter x:Key="RoleToVisibilityConverter"/>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="200"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0" Background="{DynamicResource CorPrimaria}">
+            <Border.Resources>
+                <Style x:Key="SlimScrollBarThumb" TargetType="Thumb">
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Thumb">
+                                <Border Background="#FFFFFF33" CornerRadius="2" Margin="1"/>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+
+                <Style x:Key="SlimScrollBar" TargetType="ScrollBar">
+                    <Setter Property="Width" Value="4"/>
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ScrollBar">
+                                <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                    <Track.Thumb>
+                                        <Thumb Style="{StaticResource SlimScrollBarThumb}"/>
+                                    </Track.Thumb>
+                                </Track>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+
+                <Style x:Key="SidebarScroller" TargetType="ScrollViewer">
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ScrollViewer">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="4"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ScrollBar Grid.Column="0"
+                                               x:Name="PART_VerticalScrollBar"
+                                               Style="{StaticResource SlimScrollBar}"
+                                               Value="{TemplateBinding VerticalOffset}"
+                                               Maximum="{TemplateBinding ScrollableHeight}"
+                                               ViewportSize="{TemplateBinding ViewportHeight}"
+                                               Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
+                                    <ScrollContentPresenter Grid.Column="1"/>
+                                </Grid>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Border.Resources>
+
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top">
+                    <Border Background="{DynamicResource CorPrimaria}" Padding="16,5">
+                        <StackPanel>
+                            <Image Source="/Assets/TTSOFT.png" Height="120" HorizontalAlignment="Center" Stretch="Uniform"/>
+                        </StackPanel>
+                    </Border>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="20,10,0,10">
+                        <Ellipse Width="8" Height="8" Fill="#27AE60" Margin="0,0,8,0"/>
+                        <TextBlock Text="Usuário: " Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtNomeUsuario" Text="NOME" Foreground="White" FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <Separator Background="{DynamicResource CorPrimaria}" Margin="0"/>
+                </StackPanel>
+
+                <StackPanel DockPanel.Dock="Bottom">
+                    <Separator Background="#1A2545" Margin="0,10,0,10" Opacity="0.3"/>
+                    <Button Content="🚪 Sair do Sistema" Style="{StaticResource NavButton}" Foreground="#FF6B6B" Click="BtnLogout_Click"/>
+                </StackPanel>
+
+                <ScrollViewer Style="{StaticResource SidebarScroller}"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <Button Content="📊  Dashboard (F1)"  Style="{StaticResource NavButton}" Tag="dashboard"    Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=report.financial}"/>
+                        <Button Content="🖥️  Caixa (PDV) (F2)" Style="{StaticResource NavButton}" Tag="pdv"          Click="NavButton_Click"/>
+                        <Button Content="📦  Produtos (F3)"   Style="{StaticResource NavButton}" Tag="products"     Click="NavButton_Click"/>
+                        <Button Content="👤  Clientes (F4)"   Style="{StaticResource NavButton}" Tag="customers"    Click="NavButton_Click"/>
+                        <Button Content="🧾  Vendas (F5)"     Style="{StaticResource NavButton}" Tag="sales"        Click="NavButton_Click"/>
+                        <Button Content="📑  Orçamentos (F6)" Style="{StaticResource NavButton}" Tag="orcamentos"   Click="NavButton_Click"/>
+                        
+                        <Button Content="👤 Usuários (F7)"    Style="{StaticResource NavButton}" Tag="users"        Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=users.view}"/>
+                        
+                        <Button Content="💰 Financeiro (F8)"  Style="{StaticResource NavButton}" Tag="financeiro"   Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=financeiro.view}"/>
+                        <Button Content="💸 Despesas (F9)"    Style="{StaticResource NavButton}" Tag="contaspagar"  Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=despesas.view}"/>
+                        <Button Content="👁️ Auditoria (F10)"  Style="{StaticResource NavButton}" Tag="auditoria"    Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=audit.view}"/>
+                        <Button Content="🛒 Compras"          Style="{StaticResource NavButton}" Tag="compras"      Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=compras.view}"/>
+                        <Button Content="📊 Margem"           Style="{StaticResource NavButton}" Tag="margem"       Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=margem.view}"/>
+                        <Button Content="🗂️ Inventário"       Style="{StaticResource NavButton}" Tag="inventario"   Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=inventario.view}"/>
+                        <Button Content="📈 Fluxo de Caixa"   Style="{StaticResource NavButton}" Tag="fluxocaixa"   Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=fluxocaixa.view}"/>
+                        <Button Content="🔔 Notificações"     Style="{StaticResource NavButton}" Tag="notificacoes" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=inventario.view}"/>
+                        <Button Content="🏠 Catálogo Visual"   Style="{StaticResource NavButton}" Tag="catalogo"     Click="NavButton_Click" ToolTip="Catálogo de pisos e revestimentos com fotos"/>
+                        <Button Content="💬 Chat Interno"      Style="{StaticResource NavButton}" Tag="chat"         Click="NavButton_Click" ToolTip="Mensagens entre terminais da loja"/>
+                        <StackPanel>
+                            <ToggleButton x:Name="BtnNotasFiscais" Content="📄 Notas Fiscais"
+                                          Height="45" Background="Transparent" Foreground="#DDDDDD"
+                                          BorderThickness="0" HorizontalContentAlignment="Left"
+                                          Padding="15,0,0,0" Cursor="Hand" FontSize="14"/>
+                            <StackPanel Margin="15,0,0,0">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsChecked, ElementName=BtnNotasFiscais}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                <Button Content="NFC-e (Vendas)" Style="{StaticResource NavButton}" Tag="nfce"      Click="NavButton_Click"/>
+                                <Button Content="NF-e (Emissão)" Style="{StaticResource NavButton}" Tag="nfe"       Click="NavButton_Click"/>
+                                <Button Content="Importar XML"   Style="{StaticResource NavButton}" Tag="importXml" Click="NavButton_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <Rectangle Height="1" Fill="#1A2545" Margin="16,8"/>
+                        <Button Content="📊 BI / Análises" Style="{StaticResource NavButton}" Tag="bi" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=report.financial}"/>
+                        <Button Content="🏪 Filiais" Style="{StaticResource NavButton}" Tag="filiais" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=users.view}"/>
+                        <Button Content="⚙️ Configurações" Style="{StaticResource NavButton}" Tag="config" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=config.view}"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+
+        <Border Grid.Column="1" Background="{DynamicResource FundoGeral}">
+            <ContentControl x:Name="ContentArea" Margin="0"/>
+        </Border>
+    </Grid>
+</Window>

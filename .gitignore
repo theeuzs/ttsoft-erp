@@ -1,0 +1,12 @@
+## .NET 
+bin/ 
+obj/ 
+.vs/ 
+.vscode/ 
+Logs/ 
+publish/ 
+offline.db 
+licenca.json 
+config.enc 
+*.user 
+*.nupkg 

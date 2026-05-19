@@ -1,0 +1,632 @@
+@page "/pdv"
+@using ERP.Portal.Services
+@inject ApiClient Api
+@inject AuthService Auth
+@inject IJSRuntime JS
+
+<style>
+    .pdv-grid { display: grid; grid-template-columns: 1fr 380px; gap: 0; height: calc(100vh - 54px); }
+    .pdv-produtos { padding: 16px; overflow-y: auto; background: #F1F5F9; }
+    .pdv-carrinho { background: white; display: flex; flex-direction: column; border-left: 1px solid #E2E8F0; }
+    .produto-card { background: white; border-radius: 10px; padding: 12px; cursor: pointer;
+                    border: 2px solid transparent; transition: all .15s; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+    .produto-card:hover { border-color: #1E62A6; background: #EFF6FF; }
+    /* S3.5: highlight ao adicionar produto */
+    .produto-card.flash { border-color: #F59E0B !important; background: #FEF3C7 !important; }
+    .carrinho-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+                     border-bottom: 1px solid #F1F5F9; }
+    /* S3.5: animação do item recém-adicionado */
+    .carrinho-item.novo { animation: item-novo .5s ease; }
+    @@keyframes item-novo { 0% { background:#FEF3C7; } 100% { background:transparent; } }
+    /* S3.5: animação do total */
+    .total-animado { transition: color .3s ease; }
+    .total-animado.mudou { color: #10B981 !important; }
+    @@media (max-width: 768px) {
+        .pdv-grid { grid-template-columns: 1fr; }
+        .pdv-carrinho { position: fixed; bottom: 0; left: 0; right: 0; max-height: 50vh; z-index: 50; }
+    }
+</style>
+
+<!-- Beep invisível para erro de barcode (S3.5) -->
+<audio id="beep-erro" src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAA..." preload="auto" style="display:none"></audio>
+
+<!-- ── Modal: Produtos Agregados ───────────────────────────────────────────── -->
+@if (_agregados.Count > 0)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200;
+                display:flex; align-items:center; justify-content:center;"
+         @onclick="FecharAgregados">
+        <div style="background:white; border-radius:16px; padding:24px; max-width:480px;
+                    width:90%; box-shadow:0 20px 60px rgba(0,0,0,.3);"
+             @onclick:stopPropagation>
+            <div style="font-size:16px; font-weight:800; color:#1E293B; margin-bottom:4px;">
+                📦 Produtos frequentemente comprados juntos
+            </div>
+            <div style="font-size:12px; color:#94A3B8; margin-bottom:16px;">
+                Clientes que levaram <strong>@_agregadoPai</strong> também levaram:
+            </div>
+            @foreach (var ag in _agregados)
+            {
+                <div style="display:flex; align-items:center; gap:12px; padding:10px 0;
+                            border-bottom:1px solid #F1F5F9;">
+                    <div style="flex:1;">
+                        <div style="font-weight:700; font-size:13px; color:#1E293B;">@ag.Nome</div>
+                        <div style="font-size:12px; color:#94A3B8;">@ag.Preco.ToString("C") por @ag.Unit</div>
+                    </div>
+                    <button @onclick="() => AdicionarAgregado(ag)"
+                            style="background:#1E62A6; color:white; border:none; padding:8px 14px;
+                                   border-radius:8px; font-weight:700; font-size:12px; cursor:pointer;">
+                        + Adicionar
+                    </button>
+                </div>
+            }
+            <button @onclick="FecharAgregados"
+                    style="width:100%; margin-top:16px; background:#F1F5F9; border:none;
+                           padding:12px; border-radius:8px; font-weight:600; cursor:pointer;
+                           color:#64748B; font-size:13px;">
+                Não, obrigado
+            </button>
+        </div>
+    </div>
+}
+
+<!-- ── Modal: Opção Fiscal ao Finalizar ───────────────────────────────────── -->
+@if (_modalFiscal)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200;
+                display:flex; align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:16px; padding:28px; max-width:440px;
+                    width:90%; box-shadow:0 20px 60px rgba(0,0,0,.3);">
+            <div style="font-size:17px; font-weight:800; color:#1E293B; margin-bottom:6px;">
+                🧾 Emitir nota fiscal?
+            </div>
+            <div style="font-size:13px; color:#94A3B8; margin-bottom:20px;">
+                Venda de @Total.ToString("C"). Escolha o tipo de documento ou pule.
+            </div>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <button @onclick="ConfirmarNfce"
+                        style="padding:14px; background:#1E62A6; color:white; border:none;
+                               border-radius:10px; font-weight:700; cursor:pointer; font-size:14px;
+                               text-align:left; display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:20px;">📱</span>
+                    <div>
+                        <div>NFC-e — Nota Fiscal do Consumidor</div>
+                        <div style="font-size:11px; opacity:.8;">Para consumidor final · emissão imediata</div>
+                    </div>
+                </button>
+                <button @onclick="ConfirmarNfe"
+                        style="padding:14px; background:#7C3AED; color:white; border:none;
+                               border-radius:10px; font-weight:700; cursor:pointer; font-size:14px;
+                               text-align:left; display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:20px;">📄</span>
+                    <div>
+                        <div>NF-e — Nota Fiscal Eletrônica</div>
+                        <div style="font-size:11px; opacity:.8;">Para CNPJ ou valor alto</div>
+                    </div>
+                </button>
+                <button @onclick="ConfirmarSemNota"
+                        style="padding:14px; background:#F1F5F9; color:#64748B; border:none;
+                               border-radius:10px; font-weight:700; cursor:pointer; font-size:14px;
+                               text-align:left; display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:20px;">🧾</span>
+                    <div>
+                        <div>Sem nota / Recibo simples</div>
+                        <div style="font-size:11px; opacity:.8;">Finalizar sem emissão fiscal</div>
+                    </div>
+                </button>
+            </div>
+            <button @onclick="FecharModalFiscal"
+                    style="width:100%; margin-top:12px; background:transparent; border:none;
+                           color:#94A3B8; cursor:pointer; font-size:12px;">
+                Cancelar
+            </button>
+        </div>
+    </div>
+}
+
+<div class="pdv-grid">
+    <!-- Painel esquerdo: produtos -->
+    <div class="pdv-produtos">
+        <div style="display:flex; gap:10px; margin-bottom:16px;">
+            <input @bind="_busca" @bind:event="oninput" @onkeyup="BuscarProdutos"
+                   placeholder="🔍 Buscar produto, código de barras..."
+                   style="flex:1; padding:12px 16px; border:1px solid #E2E8F0; border-radius:10px;
+                   font-size:15px; background:white;"/>
+            <button @onclick="ToggleMostrarTodos"
+                    style="background:white; border:1px solid #E2E8F0; padding:10px 16px;
+                    border-radius:10px; cursor:pointer; font-size:13px; font-weight:600; color:#64748B;">
+                @(_mostrarTodos ? "⬆ Menos" : "📦 Todos")
+            </button>
+        </div>
+
+        @if (_loadingProdutos)
+        {
+            <div style="text-align:center; padding:40px; color:#94A3B8;">Carregando...</div>
+        }
+        else
+        {
+            <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px;">
+                @foreach (var p in _produtos ?? [])
+                {
+                    var flashClass = _flashProdutoId == p.Id ? "produto-card flash" : "produto-card";
+                    <div class="@flashClass" @onclick="() => AdicionarItemAsync(p)">
+                        <div style="font-size:11px; color:#94A3B8; margin-bottom:4px;
+                             font-family:monospace; overflow:hidden; text-overflow:ellipsis;">
+                            @(p.Barcode ?? p.Sku ?? "—")
+                        </div>
+                        <div style="font-size:13px; font-weight:700; color:#1E293B; margin-bottom:8px;
+                             line-height:1.3; min-height:36px;">
+                            @(p.Name.Length > 40 ? p.Name[..40] + "…" : p.Name)
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:16px; font-weight:800; color:#1E62A6;">
+                                @p.SalePrice.ToString("C")
+                            </span>
+                            <span style="font-size:11px; color:@(p.Stock > 0 ? "#27AE60" : "#EF4444");
+                                  font-weight:700; background:@(p.Stock > 0 ? "#D1FAE5" : "#FEE2E2");
+                                  padding:2px 6px; border-radius:4px;">
+                                @(p.Stock > 0 ? $"{p.Stock:F0} {p.Unit}" : "Sem estoque")
+                            </span>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <!-- Painel direito: carrinho -->
+    <div class="pdv-carrinho">
+        <div style="padding:16px; border-bottom:1px solid #F1F5F9;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-weight:800; font-size:16px; color:#1E293B;">🛒 Carrinho</span>
+                @if (_itens.Any())
+                {
+                    <button @onclick="LimparCarrinho"
+                            style="background:none; border:none; color:#EF4444; cursor:pointer;
+                            font-size:12px; font-weight:600;">
+                        ✕ Limpar
+                    </button>
+                }
+            </div>
+            <div style="margin-top:10px; display:flex; gap:8px;">
+                <input @bind="_nomeCliente" placeholder="Cliente (opcional)..."
+                       style="flex:1; padding:8px 10px; border:1px solid #E2E8F0; border-radius:8px;
+                       font-size:13px;"/>
+                <button @onclick="BuscarClienteAsync"
+                        style="background:#F1F5F9; border:none; padding:8px 12px; border-radius:8px;
+                        cursor:pointer; font-size:12px; font-weight:600; color:#64748B;">
+                    🔍
+                </button>
+            </div>
+        </div>
+
+        <div style="flex:1; overflow-y:auto;">
+            @if (!_itens.Any())
+            {
+                <div style="text-align:center; padding:40px; color:#94A3B8;">
+                    <div style="font-size:32px; margin-bottom:8px;">🛒</div>
+                    Toque em um produto para adicionar
+                </div>
+            }
+            else
+            {
+                @foreach (var item in _itens)
+                {
+                    var isNovo = _ultimoItemId == item.ProdutoId;
+                    <div class="carrinho-item @(isNovo ? "novo" : "")">
+                        <div style="flex:1; min-width:0;">
+                            <div style="font-size:13px; font-weight:600; color:#1E293B;
+                                 overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                @item.Nome
+                            </div>
+                            <div style="font-size:12px; color:#64748B;">
+                                @item.PrecoUnitario.ToString("C") × @item.Quantidade
+                            </div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <button @onclick="() => AlterarQtd(item, -1)"
+                                    style="width:28px; height:28px; border:1px solid #E2E8F0;
+                                    border-radius:6px; background:white; cursor:pointer; font-size:16px;">
+                                −
+                            </button>
+                            <span style="font-size:14px; font-weight:700; min-width:24px; text-align:center;">
+                                @item.Quantidade
+                            </span>
+                            <button @onclick="() => AlterarQtd(item, 1)"
+                                    style="width:28px; height:28px; border:1px solid #E2E8F0;
+                                    border-radius:6px; background:white; cursor:pointer; font-size:16px;">
+                                +
+                            </button>
+                        </div>
+                        <div style="font-weight:800; color:#1E293B; min-width:70px; text-align:right;">
+                            @item.Total.ToString("C")
+                        </div>
+                        <button @onclick="() => RemoverItem(item)"
+                                style="background:none; border:none; color:#EF4444; cursor:pointer;
+                                padding:4px; font-size:16px;">✕</button>
+                    </div>
+                }
+            }
+        </div>
+
+        @if (_itens.Any())
+        {
+            <div style="padding:12px 16px; border-top:1px solid #F1F5F9; display:flex; flex-direction:column; gap:6px;">
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <span style="font-size:12px; color:#64748B; font-weight:600; white-space:nowrap;">Desconto:</span>
+                    <input type="number"
+       value="@_desconto"
+       @oninput="ValidarDesconto"
+       min="0" step="0.50"
+                           style="flex:1; padding:6px 10px; border:1px solid @(_erroDesconto != null ? "#EF4444" : "#E2E8F0");
+                                  border-radius:6px; font-size:13px;"/>
+                    <span style="font-size:12px; color:#64748B;">R$</span>
+                </div>
+                <!-- S3.3: aviso de desconto excedido -->
+                @if (_erroDesconto != null)
+                {
+                    <div style="font-size:11px; color:#EF4444; font-weight:600; padding:4px 8px;
+                                background:#FEE2E2; border-radius:6px;">
+                        🚫 @_erroDesconto
+                    </div>
+                }
+                @if (_maxDesconto > 0)
+                {
+                    <div style="font-size:11px; color:#94A3B8;">
+                        Seu limite: @_maxDesconto.ToString("F0")% do subtotal
+                        (@(Subtotal * _maxDesconto / 100).ToString("C"))
+                    </div>
+                }
+            </div>
+        }
+
+        <div style="padding:16px; border-top:2px solid #E2E8F0; background:#FAFAFA;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:13px; color:#64748B;">
+                <span>Subtotal</span><span>@Subtotal.ToString("C")</span>
+            </div>
+            @if (_desconto > 0)
+            {
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:13px; color:#EF4444;">
+                    <span>Desconto</span><span>-@_desconto.ToString("C")</span>
+                </div>
+            }
+            <!-- S3.5: animação do total -->
+            <div style="display:flex; justify-content:space-between; margin-bottom:16px;
+                 font-size:20px; font-weight:800;">
+                <span style="color:#1E293B;">TOTAL</span>
+                <span class="total-animado @(_totalAnimando ? "mudou" : "")"
+                      style="color:@(_totalAnimando ? "#10B981" : "#1E293B");">
+                    @Total.ToString("C")
+                </span>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:12px;">
+                @foreach (var (forma, icone) in new[]{("Dinheiro","💵"),("Cartão Débito","💳"),("Cartão Crédito","💳"),("PIX","📲"),("Fiado","📋")})
+                {
+                    <button @onclick="@(() => _formaPagamento = forma)"
+                            style="padding:8px; border:2px solid @(_formaPagamento == forma ? "#1E62A6" : "#E2E8F0");
+                            border-radius:8px; background:@(_formaPagamento == forma ? "#EFF6FF" : "white");
+                            color:@(_formaPagamento == forma ? "#1E62A6" : "#64748B");
+                            font-size:12px; font-weight:700; cursor:pointer;">
+                        @icone @forma
+                    </button>
+                }
+            </div>
+
+            <button @onclick="AbrirModalFiscal"
+                    disabled="@(!_itens.Any() || _finalizando || _erroDesconto != null)"
+                    style="width:100%; padding:16px;
+                    background:@(!_itens.Any() || _erroDesconto != null ? "#94A3B8" : "#27AE60");
+                    color:white; border:none; border-radius:10px; font-size:16px; font-weight:800;
+                    cursor:@(!_itens.Any() || _erroDesconto != null ? "not-allowed" : "pointer");">
+                @(_finalizando ? "⏳ Finalizando..." : $"✅ Finalizar Venda — {Total.ToString("C")}")
+            </button>
+        </div>
+    </div>
+</div>
+
+@if (_mensagem != null)
+{
+    <div style="position:fixed; top:70px; left:50%; transform:translateX(-50%);
+         background:@(_sucesso ? "#27AE60" : "#EF4444"); color:white; padding:14px 28px;
+         border-radius:12px; font-size:15px; font-weight:700; z-index:500;
+         box-shadow:0 4px 20px rgba(0,0,0,.2);">
+        @_mensagem
+    </div>
+}
+
+@code {
+    private ProdutoItem[]?     _produtos;
+    private string             _busca           = "";
+    private bool               _mostrarTodos    = false;
+    private bool               _loadingProdutos = true;
+    private List<ItemCarrinho> _itens           = new();
+    private string             _nomeCliente     = "";
+    private Guid?              _clienteId;
+    private decimal            _desconto        = 0;
+    private string             _formaPagamento  = "Dinheiro";
+    private bool               _finalizando     = false;
+    private string?            _mensagem;
+    private bool               _sucesso         = true;
+    private bool               _modalFiscal     = false;
+
+    // S3.3: limite de desconto por cargo
+    private decimal _maxDesconto  = 100; // % — padrão antes de carregar o cargo
+    private string? _erroDesconto;
+
+    // S3.5: feedback visual
+    private Guid?  _flashProdutoId;
+    private Guid?  _ultimoItemId;
+    private bool   _totalAnimando = false;
+    private decimal _totalAnterior = 0;
+
+    // Produtos Agregados
+    private List<AgregadoItem> _agregados   = [];
+    private string             _agregadoPai = "";
+
+    private decimal Subtotal => _itens.Sum(i => i.Total);
+    private decimal Total    => Math.Max(0, Subtotal - _desconto);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CarregarProdutosAsync();
+        await CarregarLimiteDescontoAsync();
+    }
+
+    // S3.3: carrega o MaxDiscountPercentage do cargo do usuário logado
+    private async Task CarregarLimiteDescontoAsync()
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(Auth.Cargo)) return;
+            var cargos = await Api.GetAsync<RoleItem[]>("api/Cargos");
+            var cargo  = cargos?.FirstOrDefault(c =>
+                string.Equals(c.Name, Auth.Cargo, StringComparison.OrdinalIgnoreCase));
+            if (cargo != null)
+                _maxDesconto = cargo.MaxDiscountPercentage;
+        }
+        catch { /* mantém _maxDesconto = 100 como fallback seguro */ }
+    }
+
+    // S3.3: valida desconto ao digitar — bloqueia antes de finalizar
+    private void ValidarDesconto(ChangeEventArgs e)
+    {
+        if (decimal.TryParse(e.Value?.ToString()?.Replace(",", "."),
+            System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out var v))
+            _desconto = Math.Max(0, v);
+
+        var limiteValor = Subtotal * _maxDesconto / 100;
+        _erroDesconto = _desconto > limiteValor && limiteValor > 0
+            ? $"Desconto máximo para seu cargo: {_maxDesconto:F0}% ({limiteValor:C})"
+            : null;
+    }
+
+    private async Task CarregarProdutosAsync(string? search = null)
+    {
+        _loadingProdutos = true;
+        var url = string.IsNullOrEmpty(search)
+            ? "api/Products?pageSize=48"
+            : $"api/Products?search={Uri.EscapeDataString(search)}&pageSize=48";
+        var result       = await Api.GetAsync<PagedResult<ProdutoItem>>(url);
+        _produtos        = result?.Items ?? [];
+        _loadingProdutos = false;
+    }
+
+    private async Task BuscarProdutos(KeyboardEventArgs e)
+    {
+        if (_busca.Length >= 2 || _busca.Length == 0)
+            await CarregarProdutosAsync(_busca);
+    }
+
+    private async Task ToggleMostrarTodos()
+    {
+        _mostrarTodos = !_mostrarTodos;
+        await CarregarProdutosAsync();
+    }
+
+    private async Task AdicionarItemAsync(ProdutoItem p)
+    {
+        var existente = _itens.FirstOrDefault(i => i.ProdutoId == p.Id);
+        if (existente != null)
+            existente.Quantidade++;
+        else
+            _itens.Add(new ItemCarrinho
+            {
+                ProdutoId     = p.Id,
+                Nome          = p.Name,
+                PrecoUnitario = p.SalePrice,
+                Quantidade    = 1
+            });
+
+        // S3.5: highlight do card + animação do item + animação do total
+        _flashProdutoId = p.Id;
+        _ultimoItemId   = p.Id;
+        await AnimarTotal();
+        StateHasChanged();
+
+        // Remove highlight após 400ms
+        await Task.Delay(400);
+        _flashProdutoId = null;
+        _ultimoItemId   = null;
+        StateHasChanged();
+
+        // Revalida desconto
+        ValidarDesconto(new ChangeEventArgs { Value = _desconto.ToString() });
+
+        // Busca produtos agregados
+        try
+        {
+            var ags = await Api.GetAsync<AgregadoItem[]>($"api/Products/{p.Id}/sugestoes");
+            if (ags?.Length > 0) { _agregados = ags.ToList(); _agregadoPai = p.Name; }
+        }
+        catch { }
+    }
+
+    // S3.5: animação verde no total por 600ms
+    private async Task AnimarTotal()
+    {
+        _totalAnimando = true;
+        StateHasChanged();
+        await Task.Delay(600);
+        _totalAnimando = false;
+        StateHasChanged();
+    }
+
+    private void AdicionarAgregado(AgregadoItem ag)
+    {
+        var existente = _itens.FirstOrDefault(i => i.ProdutoId == ag.ProdutoRelacionadoId);
+        if (existente != null) existente.Quantidade++;
+        else _itens.Add(new ItemCarrinho
+        {
+            ProdutoId     = ag.ProdutoRelacionadoId,
+            Nome          = ag.Nome,
+            PrecoUnitario = ag.Preco,
+            Quantidade    = 1
+        });
+        FecharAgregados();
+        _ = AnimarTotal();
+    }
+
+    private void FecharAgregados()  { _agregados = []; _agregadoPai = ""; }
+    private void FecharModalFiscal() => _modalFiscal = false;
+    private void AbrirModalFiscal()
+    {
+        // S3.3: bloqueia finalização se desconto inválido
+        if (!_itens.Any() || _finalizando || _erroDesconto != null) return;
+        _modalFiscal = true;
+    }
+
+    private Task ConfirmarNfce()    => ConfirmarVendaAsync("nfce");
+    private Task ConfirmarNfe()     => ConfirmarVendaAsync("nfe");
+    private Task ConfirmarSemNota() => ConfirmarVendaAsync("sem_nota");
+
+    private void AlterarQtd(ItemCarrinho item, int delta)
+    {
+        item.Quantidade += delta;
+        if (item.Quantidade <= 0) _itens.Remove(item);
+        ValidarDesconto(new ChangeEventArgs { Value = _desconto.ToString() });
+        _ = AnimarTotal();
+    }
+
+    private void RemoverItem(ItemCarrinho item)
+    {
+        _itens.Remove(item);
+        ValidarDesconto(new ChangeEventArgs { Value = _desconto.ToString() });
+        _ = AnimarTotal();
+    }
+
+    private void LimparCarrinho()
+    {
+        _itens.Clear();
+        _desconto     = 0;
+        _clienteId    = null;
+        _erroDesconto = null;
+    }
+
+    private async Task BuscarClienteAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_nomeCliente)) return;
+        var clientes = await Api.GetAsync<ClienteItem[]>(
+            $"api/Customers?search={Uri.EscapeDataString(_nomeCliente)}&pageSize=1");
+        if (clientes?.Length > 0)
+        {
+            _nomeCliente = clientes[0].Name;
+            _clienteId   = clientes[0].Id;
+        }
+    }
+
+    private async Task ConfirmarVendaAsync(string tipoNota)
+    {
+        // S3.3: dupla verificação no submit (defesa em profundidade)
+        if (_erroDesconto != null)
+        {
+            _sucesso  = false;
+            _mensagem = $"❌ {_erroDesconto}";
+            await Task.Delay(3000);
+            _mensagem = null;
+            return;
+        }
+
+        _modalFiscal = false;
+        _finalizando = true;
+
+        var metodoPagamento = _formaPagamento switch
+        {
+            "Cartão Débito"  => "CartaoDebito",
+            "Cartão Crédito" => "CartaoCredito",
+            "PIX"            => "Pix",
+            "Fiado"          => "APrazo",
+            _                => "Dinheiro"
+        };
+
+        var payload = new
+        {
+            CustomerName   = string.IsNullOrWhiteSpace(_nomeCliente) ? (string?)null : _nomeCliente,
+            CustomerId     = _clienteId,
+            DiscountAmount = _desconto,
+            Notes          = tipoNota != "sem_nota" ? $"Nota: {tipoNota.ToUpper()}" : null,
+            Payments       = new[] { new { PaymentMethod = metodoPagamento, Amount = Total } },
+            Items = _itens.Select(i => new
+            {
+                ProductId       = i.ProdutoId,
+                Quantity        = i.Quantidade,
+                UnitPrice       = i.PrecoUnitario,
+                TotalItem       = i.Total,
+                DiscountPercent = 0m,
+                FatorConversao  = 1m
+            }).ToList()
+        };
+
+        var resp = await Api.PostAsync("api/Sales", payload);
+        _finalizando = false;
+
+        if (resp.IsSuccessStatusCode)
+        {
+            var venda = await resp.Content.ReadFromJsonAsync<VendaCriadaDto>();
+            _sucesso  = true;
+            _mensagem = $"✅ Venda #{venda?.SaleNumber} registrada! {Total.ToString("C")}";
+
+            if (tipoNota != "sem_nota" && venda?.Id != null)
+            {
+                var nfResp = await Api.PostAsync(
+                    $"api/notas-fiscais/{tipoNota}/emitir-da-venda/{venda.Id}", new { });
+                if (!nfResp.IsSuccessStatusCode)
+                    _mensagem += " (⚠ Nota não emitida — verifique o módulo Fiscal)";
+            }
+
+            LimparCarrinho();
+            _nomeCliente = "";
+            await Task.Delay(4000);
+            _mensagem = null;
+        }
+        else
+        {
+            _sucesso  = false;
+            var err   = await resp.Content.ReadAsStringAsync();
+            var trunc = err.Length > 80 ? err[..80] : err;
+            _mensagem = $"❌ Erro: {trunc}";
+            await Task.Delay(4000);
+            _mensagem = null;
+        }
+    }
+
+    // ── DTOs locais ───────────────────────────────────────────────────────────
+    record ProdutoItem(Guid Id, string Name, string? Sku, string? Barcode,
+        string Unit, decimal SalePrice, decimal Stock);
+    record ClienteItem(Guid Id, string Name);
+    record AgregadoItem(Guid Id, Guid ProdutoRelacionadoId, string Nome,
+        string? Barcode, string Unit, decimal Preco, decimal Stock, int Ordem);
+    record VendaCriadaDto(Guid Id, string SaleNumber);
+    record RoleItem(Guid Id, string Name, decimal MaxDiscountPercentage);
+
+    class ItemCarrinho
+    {
+        public Guid    ProdutoId     { get; set; }
+        public string  Nome          { get; set; } = "";
+        public decimal PrecoUnitario { get; set; }
+        public decimal Quantidade    { get; set; }
+        public decimal Total         => PrecoUnitario * Quantidade;
+    }
+    class PagedResult<T> { public T[] Items { get; set; } = []; }
+}

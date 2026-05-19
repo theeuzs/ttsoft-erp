@@ -1,0 +1,158 @@
+@page "/estoque"
+@using ERP.Portal.Services
+@inject ApiClient Api
+
+<div style="padding:0 0 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">🏪 Estoque</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">Posição atual do estoque</p>
+        </div>
+    </div>
+
+    <div style="display:flex; gap:4px; margin-bottom:16px;">
+        @foreach (var (tab, label) in new[]{("todos","📦 Todos"),("criticos","⚠️ Críticos / Zerados")})
+        {
+            <button @onclick="@(() => MudarTab(tab))"
+                    style="padding:10px 20px; border:none; border-radius:8px; font-weight:700;
+                    font-size:14px; cursor:pointer;
+                    background:@(_tab == tab ? "#1E62A6" : "#F1F5F9");
+                    color:@(_tab == tab ? "white" : "#64748B");">
+                @label
+            </button>
+        }
+    </div>
+
+    <div style="background:white; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
+        @if (_loading)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">Carregando estoque...</div>
+        }
+        else if (_produtos?.Length == 0)
+        {
+            <div style="text-align:center; padding:60px; color:#94A3B8;">Nenhum produto encontrado.</div>
+        }
+        else
+        {
+            <table style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="background:#F8FAFC; border-bottom:2px solid #E2E8F0;">
+                        <th style="@Th">PRODUTO</th>
+                        <th style="@Th">SKU / BARCODE</th>
+                        <th style="@Th">CATEGORIA</th>
+                        <th style="@Th; text-align:right;">ESTOQUE</th>
+                        <th style="@Th; text-align:right;">MÍNIMO</th>
+                        <th style="@Th; text-align:center;">SITUAÇÃO</th>
+                        <th style="@Th; text-align:right;">VALOR EM ESTOQUE</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in _produtos!)
+                    {
+                        var situacao = p.Stock <= 0 ? ("Zerado","#EF4444","#FEE2E2")
+                            : p.Stock <= p.MinStock ? ("Crítico","#D97706","#FEF3C7")
+                            : ("OK","#065F46","#D1FAE5");
+                        <tr style="border-bottom:1px solid #F1F5F9;
+                             background:@(p.Stock <= 0 ? "#FFF5F5" : "transparent")">
+                            <td style="@Td; font-weight:600; color:#1E293B;">@p.Name</td>
+                            
+                            <td style="@Td; font-family:monospace; font-size:12px; color:#64748B;">@(p.Barcode ?? p.Sku ?? "—")</td>
+                            
+                            <td style="@Td; color:#64748B; font-size:12px;">@(p.CategoryName ?? "—")</td>
+                            <td style="@Td; text-align:right; font-weight:800;
+                                color:@(p.Stock <= p.MinStock ? "#EF4444" : "#27AE60"); font-size:16px;">
+                                @p.Stock.ToString("F0") <span style="font-size:11px; font-weight:400;">@p.Unit</span>
+                            </td>
+                            <td style="@Td; text-align:right; color:#94A3B8;">@p.MinStock.ToString("F0")</td>
+                            <td style="@Td; text-align:center;">
+                                <span style="background:@situacao.Item3; color:@situacao.Item2;
+                                      padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700;">
+                                    @situacao.Item1
+                                </span>
+                            </td>
+                            <td style="@Td; text-align:right; font-weight:600; color:#1E293B;">
+                                @((p.Stock * p.CostPrice).ToString("C"))
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr style="background:#F8FAFC; border-top:2px solid #E2E8F0;">
+                        <td colspan="6" style="@Td; font-weight:700; color:#1E293B;">
+                            VALOR TOTAL EM ESTOQUE
+                        </td>
+                        <td style="@Td; text-align:right; font-weight:800; font-size:16px; color:#1E62A6;">
+                            @(_produtos.Sum(p => p.Stock * p.CostPrice).ToString("C"))
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        }
+    </div>
+</div>
+
+@code {
+    private EstoqueItem[]? _produtos;
+    private string _tab    = "todos";
+    private bool   _loading = true;
+
+    private const string Th = "padding:12px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td = "padding:12px 16px; font-size:13px;";
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task MudarTab(string tab) { _tab = tab; await CarregarAsync(); }
+
+    private async Task CarregarAsync()
+    {
+        _loading = true;
+        if (_tab == "criticos")
+        {
+            // api/Stock/low retorna ProductDto diretamente
+            _produtos = await Api.GetAsync<EstoqueItem[]>("api/Stock/low") ?? [];
+        }
+        else
+        {
+            // api/Products retorna PagedResult<ProductDto> com todos os campos
+            var result = await Api.GetAsync<PagedResult<EstoqueItem>>("api/Products?pageSize=9999") ?? new();
+            _produtos = result.Items ?? [];
+        }
+        _loading = false;
+    }
+
+    class PagedResult<T>
+    {
+        public T[]  Items      { get; set; } = [];
+        public int  TotalItems { get; set; }
+        public int  TotalPages { get; set; }
+    }
+
+    // 👇 CORREÇÃO MÁXIMA: Transformamos em classe com os nomes exatos do ProductDto! 👇
+    public class EstoqueItem
+    {
+        public Guid Id { get; set; }
+        
+        public string Name { get; set; } = "—";
+        public string Nome { set { Name = value; } } 
+
+        public string? Barcode { get; set; }
+        public string? CodigoBarras { set { Barcode = value; } }
+        public string? Sku { get { return Barcode; } set { Barcode = value; } }
+
+        public string? CategoryName { get; set; }
+        public string? Categoria { set { CategoryName = value; } }
+
+        public decimal Stock { get; set; }
+        public decimal EstoqueAtual    { set { Stock = value; } }
+        public decimal EstoqueSistema  { set { Stock = value; } }  // InventarioProdutoDto
+
+        public decimal MinStock { get; set; }
+        public decimal EstoqueMinimo { set { MinStock = value; } }
+
+        public decimal CostPrice { get; set; }
+        public decimal PrecoCusto { set { CostPrice = value; } }
+        public decimal OriginalCost { set { CostPrice = value; } }
+
+        public string Unit { get; set; } = "UN";
+    }
+}
