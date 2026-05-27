@@ -1,0 +1,565 @@
+@page "/tintometrico"
+@using ERP.Portal.Services
+@using System.Text.Json
+@inject ApiClient Api
+@inject IJSRuntime JS
+
+<div style="padding:0 0 32px;">
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <div style="font-size:32px;">🎨</div>
+            <div>
+                <h2 style="color:#1E293B; font-weight:800; margin:0;">Tintométrico</h2>
+                <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">
+                    Fórmulas de cores Suvinil, Coral, Renner e outras marcas
+                </p>
+            </div>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <input @bind="_busca" @bind:event="oninput" @onkeyup="BuscarAsync"
+                   placeholder="Buscar por cor, código ou produto..."
+                   style="padding:9px 14px; border:1px solid #E2E8F0; border-radius:8px;
+                          font-size:13px; width:280px; outline:none;" />
+            <button @onclick="() => AbrirModal(null)"
+                    style="background:#1E62A6; color:white; border:none; padding:9px 18px;
+                           border-radius:8px; font-size:13px; font-weight:700; cursor:pointer;">
+                ➕ Nova Fórmula
+            </button>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div style="text-align:center; padding:60px; color:#94A3B8;">Carregando fórmulas...</div>
+    }
+    else if (!_formulas.Any())
+    {
+        <div style="text-align:center; padding:60px; background:white; border-radius:12px;
+                    box-shadow:0 2px 8px rgba(0,0,0,.06);">
+            <div style="font-size:48px; margin-bottom:12px;">🎨</div>
+            <h3 style="color:#1E293B; font-weight:700; margin:0 0 8px;">Nenhuma fórmula cadastrada</h3>
+            <p style="color:#94A3B8; font-size:14px; margin:0 0 20px;">
+                Cadastre fórmulas para as tintas do seu estoque.<br/>
+                Tintas representam 20–30% do faturamento de uma matcon.
+            </p>
+            <button @onclick="() => AbrirModal(null)"
+                    style="background:#1E62A6; color:white; border:none; padding:12px 24px;
+                           border-radius:8px; font-size:14px; font-weight:700; cursor:pointer;">
+                ➕ Cadastrar Primeira Fórmula
+            </button>
+        </div>
+    }
+    else
+    {
+        <!-- Cards por fabricante -->
+        @foreach (var grupo in _formulas.GroupBy(f => f.Fabricante))
+        {
+            <div style="margin-bottom:24px;">
+                <h3 style="font-size:14px; font-weight:700; color:#64748B; text-transform:uppercase;
+                            letter-spacing:.5px; margin:0 0 12px;">
+                    🏭 @grupo.Key — @grupo.Count() cor(es)
+                </h3>
+                <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:12px;">
+                    @foreach (var f in grupo)
+                    {
+                        <div style="background:white; border-radius:12px; padding:16px;
+                                    box-shadow:0 2px 8px rgba(0,0,0,.06);
+                                    border-left:4px solid @CorBase(f.Base);">
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                                <div>
+                                    <div style="font-size:15px; font-weight:700; color:#1E293B;">@f.NomeCor</div>
+                                    <div style="font-size:12px; color:#64748B; margin-top:2px;">@f.CodigoFabricante</div>
+                                </div>
+                                <span style="background:@CorBase(f.Base)20; color:@CorBase(f.Base); padding:3px 10px;
+                                             border-radius:12px; font-size:11px; font-weight:700; white-space:nowrap;">
+                                    @f.Base
+                                </span>
+                            </div>
+                            <div style="font-size:12px; color:#64748B; margin-bottom:10px;">
+                                🎁 Produto: <strong>@f.ProductName</strong><br/>
+                                📐 Rendimento: <strong>@f.RendimentoM2PorLitro m²/L</strong>
+                                — @f.DemaosRecomendadas demão(s)
+                            </div>
+                            @if (!string.IsNullOrEmpty(f.CorantesJson))
+                            {
+                                var corantes = ParseCorantes(f.CorantesJson);
+                                @if (corantes.Any())
+                                {
+                                    <div style="background:#F8FAFC; border-radius:6px; padding:8px 10px; margin-bottom:10px;">
+                                        <div style="font-size:10px; font-weight:700; color:#64748B; margin-bottom:4px;">CORANTES</div>
+                                        @foreach (var c in corantes)
+                                        {
+                                            <div style="font-size:12px; color:#1E293B; display:flex; justify-content:space-between;">
+                                                <span>@c.Nome</span>
+                                                <strong>@c.Ml ml/L</strong>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            }
+                            <div style="display:flex; gap:8px;">
+                                <button @onclick="() => AbrirCalcular(f)"
+                                        style="flex:1; background:#F0FDF4; color:#16A34A; border:1px solid #BBF7D0;
+                                               padding:7px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer;">
+                                    📐 Calcular
+                                </button>
+                                <button @onclick="() => AbrirModal(f)"
+                                        style="flex:1; background:#EFF6FF; color:#1E62A6; border:1px solid #BFDBFE;
+                                               padding:7px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer;">
+                                    ✏️ Editar
+                                </button>
+                                <button @onclick="() => ExcluirAsync(f)"
+                                        style="background:#FEF2F2; color:#DC2626; border:1px solid #FECACA;
+                                               padding:7px 10px; border-radius:6px; font-size:12px; cursor:pointer;">
+                                    🗑️
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+<!-- Modal: Salvar Fórmula -->
+@if (_modalAberto)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000;
+                display:flex; align-items:center; justify-content:center; padding:16px;">
+        <div style="background:white; border-radius:16px; padding:28px; width:560px; max-height:90vh;
+                    overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.3);">
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="font-size:17px; font-weight:800; color:#1E293B; margin:0;">
+                    🎨 @(_editandoId == null ? "Nova Fórmula" : "Editar Fórmula")
+                </h3>
+                <button @onclick="FecharModal" style="background:none; border:none; font-size:20px; cursor:pointer; color:#64748B;">✕</button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_erroModal))
+            {
+                <div style="background:#FEF2F2; color:#DC2626; padding:10px 14px; border-radius:8px; margin-bottom:16px; font-size:13px;">
+                    ❌ @_erroModal
+                </div>
+            }
+
+            <!-- Produto -->
+            <div style="margin-bottom:14px;">
+                <label style="@Label">Produto (tinta) *</label>
+                <input value="@_dto.ProductSearch"
+                       @oninput="async e => { _dto.ProductSearch = e.Value?.ToString() ?? string.Empty; await BuscarProdutosAsync(); }"
+                       placeholder="Digite o nome da tinta..."
+                       style="@Input" />
+                @if (_produtosBusca.Any())
+                {
+                    <div style="border:1px solid #E2E8F0; border-radius:8px; margin-top:4px; max-height:150px; overflow-y:auto; background:white; box-shadow:0 4px 12px rgba(0,0,0,.1);">
+                        @foreach (var p in _produtosBusca)
+                        {
+                            <div @onclick="() => SelecionarProduto(p)"
+                                 style="padding:10px 14px; cursor:pointer; font-size:13px; border-bottom:1px solid #F1F5F9;">
+                                <strong>@p.Name</strong>
+                                <span style="color:#94A3B8; font-size:11px; margin-left:8px;">@p.SalePrice.ToString("C2")</span>
+                            </div>
+                        }
+                    </div>
+                }
+                @if (_dto.ProductId != Guid.Empty)
+                {
+                    <div style="font-size:12px; color:#16A34A; margin-top:4px;">
+                        ✅ Produto selecionado: <strong>@_dto.ProductName</strong>
+                    </div>
+                }
+            </div>
+
+            <!-- Fabricante + Código -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
+                <div>
+                    <label style="@Label">Fabricante *</label>
+                    <select @bind="_dto.Fabricante" style="@Input">
+                        <option value="">Selecione...</option>
+                        @foreach (var fab in Fabricantes)
+                        { <option value="@fab">@fab</option> }
+                    </select>
+                </div>
+                <div>
+                    <label style="@Label">Código do Fabricante</label>
+                    <input @bind="_dto.CodigoFabricante" placeholder="Ex: SV-0987" style="@Input" />
+                </div>
+            </div>
+
+            <!-- Nome da Cor + Base -->
+            <div style="display:grid; grid-template-columns:2fr 1fr; gap:12px; margin-bottom:14px;">
+                <div>
+                    <label style="@Label">Nome da Cor *</label>
+                    <input @bind="_dto.NomeCor" placeholder="Ex: Branco Neve" style="@Input" />
+                </div>
+                <div>
+                    <label style="@Label">Base</label>
+                    <select @bind="_dto.Base" style="@Input">
+                        @foreach (var b in Bases)
+                        { <option value="@b">@b</option> }
+                    </select>
+                </div>
+            </div>
+
+            <!-- Rendimento + Demãos -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
+                <div>
+                    <label style="@Label">Rendimento (m²/L/demão)</label>
+                    <input type="number" step="0.1" min="1" @bind="_dto.RendimentoM2PorLitro" style="@Input" />
+                </div>
+                <div>
+                    <label style="@Label">Demãos Recomendadas</label>
+                    <input type="number" min="1" max="4" @bind="_dto.DemaosRecomendadas" style="@Input" />
+                </div>
+            </div>
+
+            <!-- Corantes -->
+            <div style="margin-bottom:14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <label style="@Label; margin:0;">Corantes (ml por litro de base)</label>
+                    <button @onclick="AdicionarCorante"
+                            style="background:#EFF6FF; color:#1E62A6; border:none; padding:4px 10px;
+                                   border-radius:6px; font-size:12px; cursor:pointer; font-weight:600;">
+                        + Adicionar
+                    </button>
+                </div>
+                @for (var i = 0; i < _corantes.Count; i++)
+                {
+                    var idx = i;
+                    <div style="display:grid; grid-template-columns:1fr auto auto; gap:8px; margin-bottom:6px; align-items:center;">
+                        <input @bind="_corantes[idx].Nome" placeholder="Nome do corante (ex: Ocre, Amarelo)"
+                               style="padding:8px 10px; border:1px solid #E2E8F0; border-radius:6px; font-size:13px;" />
+                        <input type="number" step="0.1" min="0" @bind="_corantes[idx].Ml"
+                               placeholder="ml/L"
+                               style="width:80px; padding:8px 10px; border:1px solid #E2E8F0; border-radius:6px; font-size:13px;" />
+                        <button @onclick="() => RemoverCorante(idx)"
+                                style="background:#FEF2F2; color:#DC2626; border:none; padding:8px 10px;
+                                       border-radius:6px; cursor:pointer;">🗑️</button>
+                    </div>
+                }
+            </div>
+
+            <!-- Observações -->
+            <div style="margin-bottom:20px;">
+                <label style="@Label">Observações</label>
+                <textarea @bind="_dto.Observacoes" rows="2" placeholder="Instruções de mistura, temperatura de aplicação, etc."
+                          style="@Input resize:vertical;"></textarea>
+            </div>
+
+            <div style="display:flex; gap:12px;">
+                <button @onclick="SalvarAsync" disabled="@_salvando"
+                        style="flex:1; background:#1E62A6; color:white; border:none; padding:12px;
+                               border-radius:8px; font-size:14px; font-weight:700; cursor:pointer;
+                               opacity:@(_salvando ? "0.6" : "1");">
+                    @(_salvando ? "Salvando..." : "💾 Salvar Fórmula")
+                </button>
+                <button @onclick="FecharModal"
+                        style="padding:12px 20px; background:#F1F5F9; color:#64748B; border:none;
+                               border-radius:8px; font-weight:600; cursor:pointer;">Cancelar</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal: Calcular área -->
+@if (_calcAberto && _calcFormula is not null)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000;
+                display:flex; align-items:center; justify-content:center; padding:16px;">
+        <div style="background:white; border-radius:16px; padding:28px; width:440px;
+                    box-shadow:0 20px 60px rgba(0,0,0,.3);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="font-size:17px; font-weight:800; color:#1E293B; margin:0;">
+                    📐 Calcular — @_calcFormula.NomeCor
+                </h3>
+                <button @onclick="() => _calcAberto = false"
+                        style="background:none; border:none; font-size:20px; cursor:pointer; color:#64748B;">✕</button>
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <label style="@Label">Área a pintar (m²) *</label>
+                <input type="number" step="0.5" min="1" @bind="_calcArea"
+                       style="@Input font-size:18px; text-align:center;" />
+            </div>
+            <div style="margin-bottom:20px;">
+                <label style="@Label">Demãos (padrão: @_calcFormula.DemaosRecomendadas)</label>
+                <input type="number" min="1" max="4" @bind="_calcDemaos"
+                       style="@Input text-align:center;" />
+            </div>
+
+            <button @onclick="CalcularAsync"
+                    style="width:100%; background:#16A34A; color:white; border:none; padding:12px;
+                           border-radius:8px; font-size:14px; font-weight:700; cursor:pointer; margin-bottom:16px;">
+                🧮 Calcular
+            </button>
+
+            @if (_calcResultado is not null)
+            {
+                <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:10px; padding:16px;">
+                    <div style="font-size:13px; font-weight:700; color:#16A34A; margin-bottom:10px;">
+                        Resultado para @_calcResultado.AreaM2 m² — @_calcResultado.Demaos demão(s)
+                    </div>
+                    <div style="font-size:22px; font-weight:800; color:#1E293B; margin-bottom:4px;">
+                        @_calcResultado.LitrosNecessarios L de tinta
+                    </div>
+                    <div style="font-size:13px; color:#64748B; margin-bottom:12px;">
+                        Custo estimado: <strong>@_calcResultado.CustoEstimado.ToString("C2")</strong>
+                    </div>
+                    <div style="font-size:12px; color:#475569; border-top:1px solid #D1FAE5; padding-top:10px;">
+                        <strong>Latas sugeridas:</strong><br/>
+                        @if (_calcResultado.Latas.Galoes18L > 0)
+                        { <span>@_calcResultado.Latas.Galoes18L × Galão 18L &nbsp;</span> }
+                        @if (_calcResultado.Latas.Galoes3_6L > 0)
+                        { <span>@_calcResultado.Latas.Galoes3_6L × 3,6L &nbsp;</span> }
+                        @if (_calcResultado.Latas.Latas900ml > 0)
+                        { <span>@_calcResultado.Latas.Latas900ml × 900ml</span> }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    // ── Estado ────────────────────────────────────────────────────────────────
+    private List<FormulaDto>  _formulas    = [];
+    private bool              _loading     = true;
+    private string            _busca       = "";
+
+    // Modal salvar
+    private bool          _modalAberto  = false;
+    private Guid?         _editandoId;
+    private FormulaDtoEdit _dto         = new();
+    private List<Corante> _corantes     = [];
+    private List<ProdutoItem> _produtosBusca = [];
+    private bool          _salvando     = false;
+    private string?       _erroModal;
+
+    // Modal calcular
+    private bool           _calcAberto    = false;
+    private FormulaDto?    _calcFormula;
+    private decimal        _calcArea      = 20m;
+    private int            _calcDemaos    = 2;
+    private CalcResultado? _calcResultado;
+
+    private const string Label = "font-size:11px; font-weight:700; color:#64748B; display:block; margin-bottom:5px; text-transform:uppercase; letter-spacing:.4px;";
+    private const string Input = "width:100%; padding:9px 12px; border:1px solid #E2E8F0; border-radius:7px; font-size:13px; outline:none; box-sizing:border-box;";
+
+    private static readonly string[] Fabricantes = ["Suvinil", "Coral", "Renner", "Iquine", "Sherwin-Williams", "Decker", "Hydronorth", "Outra"];
+    private static readonly string[] Bases = ["Branca", "Pastel", "Média", "Profunda", "Transparente", "Outra"];
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _loading = true;
+        try { _formulas = await Api.GetAsync<List<FormulaDto>>($"api/Tintometrico?busca={_busca}") ?? []; }
+        catch { _formulas = []; }
+        finally { _loading = false; }
+    }
+
+    private async Task BuscarAsync() => await CarregarAsync();
+
+    // ── Modal Salvar ──────────────────────────────────────────────────────────
+    private void AbrirModal(FormulaDto? formula)
+    {
+        _erroModal    = null;
+        _produtosBusca = [];
+        if (formula is null)
+        {
+            _editandoId = null;
+            _dto        = new();
+            _corantes   = [];
+        }
+        else
+        {
+            _editandoId = formula.Id;
+            _dto = new FormulaDtoEdit
+            {
+                ProductId           = formula.ProductId,
+                ProductName         = formula.ProductName,
+                ProductSearch       = formula.ProductName,
+                Fabricante          = formula.Fabricante,
+                CodigoFabricante    = formula.CodigoFabricante,
+                NomeCor             = formula.NomeCor,
+                Base                = formula.Base,
+                RendimentoM2PorLitro = formula.RendimentoM2PorLitro,
+                DemaosRecomendadas  = formula.DemaosRecomendadas,
+                Observacoes         = formula.Observacoes
+            };
+            _corantes = ParseCorantes(formula.CorantesJson ?? "").ToList();
+        }
+        _modalAberto = true;
+    }
+
+    private void FecharModal()
+    {
+        _modalAberto   = false;
+        _produtosBusca = [];
+    }
+
+    private async Task BuscarProdutosAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_dto.ProductSearch) || _dto.ProductSearch.Length < 2)
+        {
+            _produtosBusca = [];
+            return;
+        }
+        try
+        {
+            _produtosBusca = await Api.GetAsync<List<ProdutoItem>>(
+                $"api/Products?search={Uri.EscapeDataString(_dto.ProductSearch)}&pageSize=8") ?? [];
+        }
+        catch { _produtosBusca = []; }
+    }
+
+    private void SelecionarProduto(ProdutoItem p)
+    {
+        _dto.ProductId    = p.Id;
+        _dto.ProductName  = p.Name;
+        _dto.ProductSearch = p.Name;
+        _produtosBusca    = [];
+    }
+
+    private void AdicionarCorante() => _corantes.Add(new Corante());
+    private void RemoverCorante(int idx) => _corantes.RemoveAt(idx);
+
+    private async Task SalvarAsync()
+    {
+        if (_dto.ProductId == Guid.Empty) { _erroModal = "Selecione um produto."; return; }
+        if (string.IsNullOrWhiteSpace(_dto.Fabricante)) { _erroModal = "Informe o fabricante."; return; }
+        if (string.IsNullOrWhiteSpace(_dto.NomeCor)) { _erroModal = "Informe o nome da cor."; return; }
+
+        _salvando = true;
+        _erroModal = null;
+        try
+        {
+            var corantesValidos = _corantes.Where(c => !string.IsNullOrWhiteSpace(c.Nome)).ToList();
+            var payload = new
+            {
+                _dto.ProductId, _dto.Fabricante, _dto.CodigoFabricante, _dto.NomeCor,
+                _dto.Base, _dto.RendimentoM2PorLitro, _dto.DemaosRecomendadas,
+                CorantesJson = corantesValidos.Any()
+                    ? System.Text.Json.JsonSerializer.Serialize(corantesValidos)
+                    : (string?)null,
+                _dto.Observacoes
+            };
+            await Api.PostAsync("api/Tintometrico", payload);
+            FecharModal();
+            await CarregarAsync();
+        }
+        catch (Exception ex) { _erroModal = ex.Message; }
+        finally { _salvando = false; }
+    }
+
+    private async Task ExcluirAsync(FormulaDto f)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"Excluir fórmula '{f.NomeCor}'?")) return;
+        try
+        {
+            await Api.DeleteAsync($"api/Tintometrico/produto/{f.ProductId}");
+            await CarregarAsync();
+        }
+        catch { }
+    }
+
+    // ── Modal Calcular ────────────────────────────────────────────────────────
+    private void AbrirCalcular(FormulaDto f)
+    {
+        _calcFormula   = f;
+        _calcDemaos    = f.DemaosRecomendadas;
+        _calcResultado = null;
+        _calcAberto    = true;
+    }
+
+    private async Task CalcularAsync()
+    {
+        try
+        {
+            _calcResultado = await Api.GetAsync<CalcResultado>(
+                $"api/Tintometrico/calcular/{_calcFormula!.ProductId}?areaM2={_calcArea}&demaos={_calcDemaos}");
+        }
+        catch { }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    private static string CorBase(string base_) => base_ switch
+    {
+        "Branca"     => "#6B7280",
+        "Pastel"     => "#8B5CF6",
+        "Média"      => "#F59E0B",
+        "Profunda"   => "#DC2626",
+        "Transparente" => "#0EA5E9",
+        _            => "#64748B"
+    };
+
+    private static List<Corante> ParseCorantes(string? json)
+    {
+        if (string.IsNullOrEmpty(json)) return [];
+        try { return JsonSerializer.Deserialize<List<Corante>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? []; }
+        catch { return []; }
+    }
+
+    // ── DTOs locais ───────────────────────────────────────────────────────────
+    private class FormulaDtoEdit
+    {
+        public Guid    ProductId           { get; set; }
+        public string  ProductName         { get; set; } = "";
+        public string  ProductSearch       { get; set; } = "";
+        public string  Fabricante          { get; set; } = "";
+        public string  CodigoFabricante    { get; set; } = "";
+        public string  NomeCor             { get; set; } = "";
+        public string  Base                { get; set; } = "Branca";
+        public decimal RendimentoM2PorLitro { get; set; } = 10m;
+        public int     DemaosRecomendadas  { get; set; } = 2;
+        public string? Observacoes         { get; set; }
+    }
+
+    private class Corante
+    {
+        public string  Nome { get; set; } = "";
+        public decimal Ml   { get; set; }
+    }
+
+    private class FormulaDto
+    {
+        public Guid    Id                  { get; set; }
+        public Guid    ProductId           { get; set; }
+        public string  ProductName         { get; set; } = "";
+        public decimal SalePrice           { get; set; }
+        public string  Fabricante          { get; set; } = "";
+        public string  CodigoFabricante    { get; set; } = "";
+        public string  NomeCor             { get; set; } = "";
+        public string  Base                { get; set; } = "";
+        public decimal RendimentoM2PorLitro { get; set; }
+        public int     DemaosRecomendadas  { get; set; }
+        public string? CorantesJson        { get; set; }
+        public string? Observacoes         { get; set; }
+    }
+
+    private class ProdutoItem
+    {
+        public Guid    Id        { get; set; }
+        public string  Name      { get; set; } = "";
+        public decimal SalePrice { get; set; }
+    }
+
+    private class CalcResultado
+    {
+        public decimal AreaM2            { get; set; }
+        public int     Demaos            { get; set; }
+        public decimal LitrosNecessarios { get; set; }
+        public decimal CustoEstimado     { get; set; }
+        public LatasResult Latas         { get; set; } = new();
+    }
+
+    private class LatasResult
+    {
+        public decimal Galoes18L  { get; set; }
+        public decimal Galoes3_6L { get; set; }
+        public decimal Latas900ml { get; set; }
+    }
+}

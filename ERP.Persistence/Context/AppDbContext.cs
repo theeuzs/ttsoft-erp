@@ -110,6 +110,7 @@ public class AppDbContext : DbContext
     public DbSet<ProdutoAgregado>      ProdutosAgregados   { get; set; }
     public DbSet<Entrega>              Entregas            { get; set; }
     public DbSet<Veiculo>              Veiculos            { get; set; }
+    public DbSet<FormulaTintometrica>  FormulasTintometricas { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -157,6 +158,17 @@ public class AppDbContext : DbContext
             e => !e.IsDeleted && e.TenantId == GetTenantId());
         modelBuilder.Entity<Veiculo>().HasQueryFilter(
             v => !v.IsDeleted && v.TenantId == GetTenantId());
+
+        // ── Tintométrico ──────────────────────────────────────────────────────
+        modelBuilder.Entity<FormulaTintometrica>().HasQueryFilter(
+            f => !f.IsDeleted && f.TenantId == GetTenantId());
+        modelBuilder.Entity<FormulaTintometrica>(e =>
+        {
+            e.HasOne(f => f.Product)
+                .WithMany()
+                .HasForeignKey(f => f.ProductId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
 
         // ── Entidades sem IsDeleted — só TenantId ─────────────────────
         modelBuilder.Entity<User>().HasQueryFilter(
