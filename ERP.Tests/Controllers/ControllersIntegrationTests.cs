@@ -17,6 +17,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using ERP.Application.DTOs;
+using ERP.Application.Interfaces;
 using ERP.Persistence.Context;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
@@ -48,13 +49,25 @@ public class ErpApiFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
-            // Remove o DbContext real (SQL Server)
+            // ── FASE 0: Remove o DbContext real e substitui por InMemory ────────────
+            // Precisa remover AMBOS porque agora usamos AddSingleton(Options) +
+            // AddScoped<AppDbContext>(factory) em vez de AddDbContext<>.
             services.RemoveAll<DbContextOptions<AppDbContext>>();
             services.RemoveAll<AppDbContext>();
 
-            // Substitui por InMemory com nome único por factory
-            services.AddDbContext<AppDbContext>(options =>
-                options.UseInMemoryDatabase($"IntegrationTests_{Guid.NewGuid()}"));
+            // Registra as options InMemory com nome único por factory
+            var dbName = $"IntegrationTests_{Guid.NewGuid()}";
+            services.AddSingleton(
+                new DbContextOptionsBuilder<AppDbContext>()
+                    .UseInMemoryDatabase(dbName)
+                    .Options);
+
+            // Factory que injeta IRequestTenant — mesma estrutura do Program.cs.
+            // TenantMiddleware seta IRequestTenant por requisição via JWT claim.
+            services.AddScoped<AppDbContext>(sp => new AppDbContext(
+                sp.GetRequiredService<DbContextOptions<AppDbContext>>(),
+                sp.GetRequiredService<IRequestTenant>()
+            ));
 
             // Substitui configurações JWT para usar a chave de teste
             services.Configure<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>(
@@ -855,4 +868,161 @@ public class MetricsControllerTests : IntegrationTestBase
         public int    Requests        { get; set; }
         public double LatenciaMediaMs { get; set; }
     }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  FASE 0 — TESTES OBRIGATÓRIOS DE ISOLAMENTO
+//
+//  Estes são os critérios de pronto da Fase 0. Os três testes DEVEM estar
+//  vermelhos antes das correções e VERDES depois. O CI bloqueia merge
+//  se qualquer um falhar.
+//
+//  NOTA: InMemory EF Core não executa HasQueryFilter em todas as situações,
+//  mas com a correção do construtor (IRequestTenant por instância), o filtro
+//  é avaliado corretamente porque cada contexto usa seu próprio TenantId.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// <summary>
+/// FASE 0 — Teste #1: Isolamento Cross-Tenant em Produtos
+///
+/// Cria um produto com JWT do Tenant A e verifica que o Tenant B
+/// não o vê ao chamar GET /api/products. Prova que o HasQueryFilter
+/// com GetTenantId() por instância está funcionando na API.
+/// </summary>
+public class Fase0TenantIsolationTests : IClassFixture<ErpApiFactory>
+{
+    private readonly ErpApiFactory _factory;
+
+    public Fase0TenantIsolationTests(ErpApiFactory factory)
+    {
+        _factory = factory;
+    }
+
+    [Fact(DisplayName = "FASE0 #1 — Produto do Tenant A NÃO aparece para Tenant B")]
+    public async Task Produto_TenantA_NaoAparece_Para_TenantB()
+    {
+        // ── Arrange ──────────────────────────────────────────────────────────
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+
+        // Cria produto diretamente no banco com o TenantId do Tenant A
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        // IgnoreQueryFilters para conseguir inserir sem filtro
+        var produto = new ERP.Domain.Entities.Product
+        {
+            Id       = Guid.NewGuid(),
+            TenantId = tenantA,
+            Name     = "Cimento CP-II 50kg — TenantA",
+            SalePrice = 35.90m,
+            Stock    = 100,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        db.Products.Add(produto);
+        await db.SaveChangesAsync();
+
+        // ── Act — Tenant B consulta produtos ─────────────────────────────────
+        var clientB = _factory.CreateClient();
+        clientB.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer", _factory.GerarToken(tenantId: tenantB));
+
+        var resp = await clientB.GetAsync("/api/products");
+
+        // ── Assert ───────────────────────────────────────────────────────────
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await resp.Content.ReadAsStringAsync();
+
+        // Tenant B NÃO deve ver o produto do Tenant A
+        body.Should().NotContain("Cimento CP-II 50kg — TenantA", "produto do Tenant A nao deve vazar para Tenant B (LGPD)");
+    }
+
+    [Fact(DisplayName = "FASE0 #2 — Produto do Tenant A aparece corretamente para Tenant A")]
+    public async Task Produto_TenantA_Aparece_Para_TenantA()
+    {
+        // ── Arrange ──────────────────────────────────────────────────────────
+        var tenantA = Guid.NewGuid();
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var produtoId = Guid.NewGuid();
+        var produto = new ERP.Domain.Entities.Product
+        {
+            Id        = produtoId,
+            TenantId  = tenantA,
+            Name      = $"Argamassa AC-II — TenantA-{produtoId:N}",
+            SalePrice = 22.50m,
+            Stock     = 50,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        db.Products.Add(produto);
+        await db.SaveChangesAsync();
+
+        // ── Act — Tenant A consulta seus próprios produtos ────────────────────
+        var clientA = _factory.CreateClient();
+        clientA.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer", _factory.GerarToken(tenantId: tenantA));
+
+        var resp = await clientA.GetAsync("/api/products");
+
+        // ── Assert ───────────────────────────────────────────────────────────
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await resp.Content.ReadAsStringAsync();
+
+        body.Should().Contain($"TenantA-{produtoId:N}", "Tenant A deve ver seus proprios produtos");
+    }
+
+    [Fact(DisplayName = "FASE0 #3 — GET /api/haver/saldo com cliente de outro tenant retorna 0 (não vaza)")]
+    public async Task Haver_ClienteOutroTenant_NaoVazaDado()
+    {
+        // ── Arrange ──────────────────────────────────────────────────────────
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        // Cria cliente do Tenant A com saldo Haver
+        var clienteId = Guid.NewGuid();
+        var cliente = new ERP.Domain.Entities.Customer
+        {
+            Id           = clienteId,
+            TenantId     = tenantA,
+            Name         = "Cliente do Tenant A",
+            HaverBalance = 500m,
+            CreatedAt    = DateTime.UtcNow,
+            UpdatedAt    = DateTime.UtcNow,
+        };
+        db.Customers.Add(cliente);
+        await db.SaveChangesAsync();
+
+        // ── Act — Tenant B tenta ver saldo do cliente do Tenant A ────────────
+        var clientB = _factory.CreateClient();
+        clientB.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer", _factory.GerarToken(tenantId: tenantB));
+
+        var resp = await clientB.GetAsync($"/api/haver/saldo/{clienteId}");
+
+        // ── Assert ───────────────────────────────────────────────────────────
+        // Deve retornar 200 com saldo 0 (cliente não encontrado neste tenant)
+        // OU 404/403. De qualquer forma, NÃO deve retornar saldo de R$ 500.
+        if (resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            body.Should().NotContain("500", "saldo do Tenant A nao deve vazar para Tenant B");
+        }
+        else
+        {
+            resp.StatusCode.Should().BeOneOf(
+                HttpStatusCode.NotFound,
+                HttpStatusCode.Forbidden,
+                HttpStatusCode.Unauthorized);
+        }
+    }
+}
 }

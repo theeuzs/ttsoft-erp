@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
+using ERP.Application.Interfaces;
 using ERP.Domain.Common;
 using ERP.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -10,15 +10,15 @@ namespace ERP.Persistence.Context;
 public class AppDbContext : DbContext
 {
     // ══════════════════════════════════════════════════════════════════
-    //  TenantId ESTÁTICO GLOBAL
-    //  Setado UMA VEZ no App.xaml.cs antes de abrir o Login.
-    //  Funciona perfeitamente em WPF onde não existe escopo HTTP.
+    //  TenantId ESTÁTICO — mantido SOMENTE para o WPF Desktop e para
+    //  PreencherTenantIdEUpdatedAt em cenários sem IRequestTenant.
+    //  Na API esses campos NÃO são usados para filtragem.
     // ══════════════════════════════════════════════════════════════════
     private static Guid   _globalTenantId  = Guid.Empty;
     private static Guid   _currentUserId   = Guid.Empty;
     private static string _currentUserName = string.Empty;
 
-    /// <summary>Chamado no login para identificar o usuário nos logs de auditoria.</summary>
+    /// <summary>Chamado no WPF/login para identificar o usuário nos logs de auditoria.</summary>
     public static void SetCurrentUser(Guid userId, string userName)
     {
         _currentUserId   = userId;
@@ -26,76 +26,77 @@ public class AppDbContext : DbContext
     }
 
     /// <summary>
-    /// Chamado no App.xaml.cs durante o startup, antes de qualquer query.
+    /// Chamado no App.xaml.cs do WPF durante o startup.
+    /// Na API este método NÃO é chamado — o tenant vem do IRequestTenant (Scoped).
     /// </summary>
     public static void SetGlobalTenantId(Guid id) => _globalTenantId = id;
-    public static Guid GetGlobalTenantId() => _globalTenantId;
+    public static Guid   GetGlobalTenantId()   => _globalTenantId;
+    public static Guid   GetCurrentUserId()    => _currentUserId;
+    public static string GetCurrentUserName()  => _currentUserName;
+
+    // ── IRequestTenant — isolado por requisição HTTP (API) ou por processo (WPF) ───
+    private readonly IRequestTenant? _requestTenant;
 
     /// <summary>
-    /// Método de instância — EF Core avalia por query (não cacheia o valor no modelo).
-    /// Use sempre GetTenantId() nos HasQueryFilter, nunca var tid = _globalTenantId.
+    /// Retorna o TenantId correto para a instância atual:
+    ///   • API:        _requestTenant.TenantId  — scoped por requisição HTTP
+    ///   • WPF:        _globalTenantId          — setado uma vez no startup
+    ///   • Design-time: Guid.Empty              — migrations sem filtro de tenant
     /// </summary>
-    public Guid GetTenantId() => _globalTenantId;
-
-    // ── IRequestTenant (API) — isolado por requisição HTTP ───────────────
-    private readonly Func<Guid>?   _tenantResolver;
-    private readonly Func<string>? _userNameResolver;
+    public Guid GetTenantId() => _requestTenant?.TenantId ?? _globalTenantId;
 
     /// <summary>
-    /// Construtor padrão para WPF — usa static global (1 tenant por processo).
+    /// Construtor para o WPF Desktop — não injeta IRequestTenant.
+    /// O tenant vem de _globalTenantId (setado via SetGlobalTenantId).
     /// </summary>
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options) { }
 
     /// <summary>
-    /// Construtor para API — recebe IServiceProvider para resolver IRequestTenant
-    /// Scoped por requisição, eliminando race condition entre tenants simultâneos.
+    /// Construtor para a API — recebe IRequestTenant Scoped.
+    /// Cada requisição HTTP tem seu próprio scope, logo seu próprio TenantId.
+    /// Elimina completamente a race condition entre tenants simultâneos.
     /// </summary>
-    public AppDbContext(DbContextOptions<AppDbContext> options, IServiceProvider sp)
+    public AppDbContext(DbContextOptions<AppDbContext> options, IRequestTenant requestTenant)
         : base(options)
     {
-        _tenantResolver    = null;
-        _userNameResolver  = null;
+        _requestTenant = requestTenant;
     }
 
-
-
     // ── DbSets ────────────────────────────────────────────────────────────
-    public DbSet<NfePendente>      NfePendentes       { get; set; }
-    public DbSet<AuditLog>         AuditLogs          { get; set; }
-    public DbSet<ChatMessage>      ChatMessages       => Set<ChatMessage>();
-    public DbSet<Product>          Products           => Set<Product>();
-    public DbSet<Brand>            Brands             { get; set; }
-    public DbSet<Supplier>         Suppliers          { get; set; }
-    public DbSet<Category>         Categories         => Set<Category>();
-    public DbSet<Customer>         Customers          => Set<Customer>();
-    public DbSet<Role>             Roles              { get; set; }
-    public DbSet<Permission>       Permissions        { get; set; }
-    public DbSet<Sale>             Sales              => Set<Sale>();
-    public DbSet<SaleItem>         SaleItems          => Set<SaleItem>();
-    public DbSet<User>             Users              { get; set; }
-    public DbSet<Caixa>            Caixas             { get; set; }
-    public DbSet<PedidoCompra>     PedidosCompra      { get; set; }
-    public DbSet<PedidoCompraItem> PedidosCompraItens { get; set; }
-    public DbSet<CaixaMovimento>   CaixaMovimentos    { get; set; }
-    public DbSet<ContaReceber>     ContasReceber      { get; set; }
-    public DbSet<ContaPagar>       ContasPagar        { get; set; }
-    public DbSet<MovimentoHaver>   MovimentosHaver    { get; set; }
-    public DbSet<Orcamento>        Orcamentos         { get; set; }
-    public DbSet<OrcamentoItem>    OrcamentoItens     { get; set; }
-    public DbSet<SaleItemDevolucao>   SaleItemDevolucoes   { get; set; }
-    public DbSet<Branch>              Branches             { get; set; }
-    public DbSet<ProductBranchStock>  ProductBranchStocks  { get; set; }
-    public DbSet<PontosFidelidade>    PontosFidelidade     { get; set; }
-    public DbSet<TransferenciaEstoque> Transferencias       { get; set; }
-    public DbSet<TransferenciaItem>   TransferenciaItens   { get; set; }
-    public DbSet<NfseEmitida>         NfseEmitidas         { get; set; }
-    public DbSet<MetaVendas>          MetasVendas          { get; set; }
-    // Sprint 1 — Produtos Agregados
-    public DbSet<ProdutoAgregado>     ProdutosAgregados    { get; set; }
-    // Sprint 2 — Logística
-    public DbSet<Entrega>             Entregas             { get; set; }
-    public DbSet<Veiculo>             Veiculos             { get; set; }
+    public DbSet<NfePendente>          NfePendentes        { get; set; }
+    public DbSet<AuditLog>             AuditLogs           { get; set; }
+    public DbSet<ChatMessage>          ChatMessages        => Set<ChatMessage>();
+    public DbSet<Product>              Products            => Set<Product>();
+    public DbSet<Brand>                Brands              { get; set; }
+    public DbSet<Supplier>             Suppliers           { get; set; }
+    public DbSet<Category>             Categories          => Set<Category>();
+    public DbSet<Customer>             Customers           => Set<Customer>();
+    public DbSet<Role>                 Roles               { get; set; }
+    public DbSet<Permission>           Permissions         { get; set; }
+    public DbSet<Sale>                 Sales               => Set<Sale>();
+    public DbSet<SaleItem>             SaleItems           => Set<SaleItem>();
+    public DbSet<User>                 Users               { get; set; }
+    public DbSet<Caixa>                Caixas              { get; set; }
+    public DbSet<PedidoCompra>         PedidosCompra       { get; set; }
+    public DbSet<PedidoCompraItem>     PedidosCompraItens  { get; set; }
+    public DbSet<CaixaMovimento>       CaixaMovimentos     { get; set; }
+    public DbSet<ContaReceber>         ContasReceber       { get; set; }
+    public DbSet<ContaPagar>           ContasPagar         { get; set; }
+    public DbSet<MovimentoHaver>       MovimentosHaver     { get; set; }
+    public DbSet<Orcamento>            Orcamentos          { get; set; }
+    public DbSet<OrcamentoItem>        OrcamentoItens      { get; set; }
+    public DbSet<SaleItemDevolucao>    SaleItemDevolucoes  { get; set; }
+    public DbSet<Branch>               Branches            { get; set; }
+    public DbSet<ProductBranchStock>   ProductBranchStocks { get; set; }
+    public DbSet<PontosFidelidade>     PontosFidelidade    { get; set; }
+    public DbSet<TransferenciaEstoque> Transferencias      { get; set; }
+    public DbSet<TransferenciaItem>    TransferenciaItens  { get; set; }
+    public DbSet<NfseEmitida>          NfseEmitidas        { get; set; }
+    public DbSet<MetaVendas>           MetasVendas         { get; set; }
+    public DbSet<ProdutoAgregado>      ProdutosAgregados   { get; set; }
+    public DbSet<Entrega>              Entregas            { get; set; }
+    public DbSet<Veiculo>              Veiculos            { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -104,80 +105,71 @@ public class AppDbContext : DbContext
 
         // ══════════════════════════════════════════════════════════════
         //  FILTROS GLOBAIS
-        //  GetTenantId() é método de instância — EF Core avalia o valor
-        //  a cada query, não cacheia no modelo. Isso garante isolamento
-        //  correto entre tenants mesmo quando dois ERPs compartilham a
-        //  mesma DLL e o mesmo banco de dados.
+        //
+        //  IMPORTANTE: os filtros são SEMPRE registrados, independente
+        //  de qual construtor foi usado. GetTenantId() é avaliado
+        //  POR QUERY no contexto correto:
+        //    • API:  retorna o TenantId do JWT da requisição atual
+        //    • WPF:  retorna o TenantId lido do licenca.json
+        //    • Migrations: retorna Guid.Empty (não afeta o schema)
+        //
+        //  Remover o antigo `if (_globalTenantId != Guid.Empty)` era
+        //  o bug principal: na API _globalTenantId é sempre Guid.Empty,
+        //  então o bloco inteiro era ignorado e NENHUM filtro de tenant
+        //  era aplicado, expondo dados de todos os tenants.
         // ══════════════════════════════════════════════════════════════
 
-        if (_globalTenantId != Guid.Empty)
-        {
-            // ── Entidades com IsDeleted + TenantId ────────────────────
-            modelBuilder.Entity<Product>().HasQueryFilter(
-                p => !p.IsDeleted && p.TenantId == GetTenantId());
-            modelBuilder.Entity<Customer>().HasQueryFilter(
-                c => !c.IsDeleted && c.TenantId == GetTenantId());
-            modelBuilder.Entity<Sale>().HasQueryFilter(
-                s => !s.IsDeleted && s.TenantId == GetTenantId());
-            modelBuilder.Entity<Caixa>().HasQueryFilter(
-                c => !c.IsDeleted && c.TenantId == GetTenantId());
-            modelBuilder.Entity<PedidoCompra>().HasQueryFilter(
-                p => !p.IsDeleted && p.TenantId == GetTenantId());
-            modelBuilder.Entity<Orcamento>().HasQueryFilter(
-                o => !o.IsDeleted && o.TenantId == GetTenantId());
-            modelBuilder.Entity<Category>().HasQueryFilter(
-                c => !c.IsDeleted && c.TenantId == GetTenantId());
-            modelBuilder.Entity<Brand>().HasQueryFilter(
-                b => !b.IsDeleted && b.TenantId == GetTenantId());
-            modelBuilder.Entity<Supplier>().HasQueryFilter(
-                s => !s.IsDeleted && s.TenantId == GetTenantId());
+        // ── Entidades com IsDeleted + TenantId ────────────────────────
+        modelBuilder.Entity<Product>().HasQueryFilter(
+            p => !p.IsDeleted && p.TenantId == GetTenantId());
+        modelBuilder.Entity<Customer>().HasQueryFilter(
+            c => !c.IsDeleted && c.TenantId == GetTenantId());
+        modelBuilder.Entity<Sale>().HasQueryFilter(
+            s => !s.IsDeleted && s.TenantId == GetTenantId());
+        modelBuilder.Entity<Caixa>().HasQueryFilter(
+            c => !c.IsDeleted && c.TenantId == GetTenantId());
+        modelBuilder.Entity<PedidoCompra>().HasQueryFilter(
+            p => !p.IsDeleted && p.TenantId == GetTenantId());
+        modelBuilder.Entity<Orcamento>().HasQueryFilter(
+            o => !o.IsDeleted && o.TenantId == GetTenantId());
+        modelBuilder.Entity<Category>().HasQueryFilter(
+            c => !c.IsDeleted && c.TenantId == GetTenantId());
+        modelBuilder.Entity<Brand>().HasQueryFilter(
+            b => !b.IsDeleted && b.TenantId == GetTenantId());
+        modelBuilder.Entity<Supplier>().HasQueryFilter(
+            s => !s.IsDeleted && s.TenantId == GetTenantId());
+        modelBuilder.Entity<ProdutoAgregado>().HasQueryFilter(
+            pa => !pa.IsDeleted && pa.TenantId == GetTenantId());
+        modelBuilder.Entity<Entrega>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == GetTenantId());
+        modelBuilder.Entity<Veiculo>().HasQueryFilter(
+            v => !v.IsDeleted && v.TenantId == GetTenantId());
 
-            // ── Entidades sem IsDeleted, só TenantId ──────────────────
-            modelBuilder.Entity<User>().HasQueryFilter(
-                u => u.TenantId == GetTenantId());
-            modelBuilder.Entity<Role>().HasQueryFilter(
-                r => r.TenantId == GetTenantId());
-            modelBuilder.Entity<Branch>().HasQueryFilter(
-                b => b.TenantId == GetTenantId());
-            modelBuilder.Entity<ProductBranchStock>().HasQueryFilter(
-                s => s.TenantId == GetTenantId());
-            modelBuilder.Entity<TransferenciaEstoque>().HasQueryFilter(
-                t => t.TenantId == GetTenantId());
-            modelBuilder.Entity<ContaReceber>().HasQueryFilter(
-                c => c.TenantId == GetTenantId());
-            modelBuilder.Entity<ContaPagar>().HasQueryFilter(
-                c => c.TenantId == GetTenantId());
+        // ── Entidades sem IsDeleted — só TenantId ─────────────────────
+        modelBuilder.Entity<User>().HasQueryFilter(
+            u => u.TenantId == GetTenantId());
+        modelBuilder.Entity<Role>().HasQueryFilter(
+            r => r.TenantId == GetTenantId());
+        modelBuilder.Entity<Branch>().HasQueryFilter(
+            b => b.TenantId == GetTenantId());
+        modelBuilder.Entity<ProductBranchStock>().HasQueryFilter(
+            s => s.TenantId == GetTenantId());
+        modelBuilder.Entity<TransferenciaEstoque>().HasQueryFilter(
+            t => t.TenantId == GetTenantId());
+        modelBuilder.Entity<ContaReceber>().HasQueryFilter(
+            c => c.TenantId == GetTenantId());
+        modelBuilder.Entity<ContaPagar>().HasQueryFilter(
+            c => c.TenantId == GetTenantId());
 
-            // ── Sprint 1 — ProdutoAgregado ────────────────────────────
-            modelBuilder.Entity<ProdutoAgregado>().HasQueryFilter(
-                pa => !pa.IsDeleted && pa.TenantId == GetTenantId());
+        // ── Fidelidade e Haver — agora com isolamento de tenant ───────
+        // PontosFidelidade herda BaseEntity (tem TenantId).
+        // MovimentoHaver deve ter TenantId para filtrar corretamente.
+        modelBuilder.Entity<PontosFidelidade>().HasQueryFilter(
+            p => p.TenantId == GetTenantId());
+        modelBuilder.Entity<MovimentoHaver>().HasQueryFilter(
+            m => m.TenantId == GetTenantId());
 
-            // ── Sprint 2 — Logística ──────────────────────────────────
-            modelBuilder.Entity<Entrega>().HasQueryFilter(
-                e => !e.IsDeleted && e.TenantId == GetTenantId());
-            modelBuilder.Entity<Veiculo>().HasQueryFilter(
-                v => !v.IsDeleted && v.TenantId == GetTenantId());
-        }
-        else
-        {
-            // Design-time (migrations): só soft-delete, sem filtro de tenant
-            modelBuilder.Entity<Product>().HasQueryFilter(p => !p.IsDeleted);
-            modelBuilder.Entity<Customer>().HasQueryFilter(c => !c.IsDeleted);
-            modelBuilder.Entity<Sale>().HasQueryFilter(s => !s.IsDeleted);
-            modelBuilder.Entity<Caixa>().HasQueryFilter(c => !c.IsDeleted);
-            modelBuilder.Entity<PedidoCompra>().HasQueryFilter(p => !p.IsDeleted);
-            modelBuilder.Entity<Orcamento>().HasQueryFilter(o => !o.IsDeleted);
-            modelBuilder.Entity<Category>().HasQueryFilter(c => !c.IsDeleted);
-            modelBuilder.Entity<Brand>().HasQueryFilter(b => !b.IsDeleted);
-            modelBuilder.Entity<Supplier>().HasQueryFilter(s => !s.IsDeleted);
-            // Sprint 1
-            modelBuilder.Entity<ProdutoAgregado>().HasQueryFilter(pa => !pa.IsDeleted);
-            // Sprint 2
-            modelBuilder.Entity<Entrega>().HasQueryFilter(e => !e.IsDeleted);
-            modelBuilder.Entity<Veiculo>().HasQueryFilter(v => !v.IsDeleted);
-        }
-
-        // ── ProdutoAgregado: many-to-many auto-referenciante (Sprint 1) ───────
+        // ── ProdutoAgregado: many-to-many auto-referenciante ──────────
         modelBuilder.Entity<ProdutoAgregado>(e =>
         {
             e.ToTable("ProdutosAgregados");
@@ -198,7 +190,7 @@ public class AppDbContext : DbContext
         });
     }
 
-    // ── Auditoria automática ─────────────────────────────────────────────
+    // ── Auditoria automática ──────────────────────────────────────────
     private List<AuditLog> GerarLogsAuditoria()
     {
         var logs = new List<AuditLog>();
@@ -262,12 +254,17 @@ public class AppDbContext : DbContext
             var entityId = entry.Properties
                 .FirstOrDefault(p => p.Metadata.IsPrimaryKey())?.CurrentValue?.ToString();
 
+            // Usa GetTenantId() — funciona tanto no WPF quanto na API
+            var tenantId  = GetTenantId();
+            var userId    = _requestTenant?.UserId    ?? _currentUserId;
+            var userName  = _requestTenant?.UserName  ?? _currentUserName;
+
             logs.Add(new AuditLog
             {
                 Id          = Guid.NewGuid(),
-                TenantId    = _globalTenantId,
-                UserId      = _currentUserId == Guid.Empty ? null : _currentUserId,
-                UserName    = _currentUserName,
+                TenantId    = tenantId,
+                UserId      = userId   == Guid.Empty ? null : userId,
+                UserName    = userName,
                 Action      = acao,
                 EntityType  = entry.Entity.GetType().Name,
                 EntityId    = entityId,
@@ -297,21 +294,22 @@ public class AppDbContext : DbContext
         };
     }
 
-    // ── Auto-fill TenantId e UpdatedAt em todo SaveChanges ───────────────
+    // ── Auto-fill TenantId e UpdatedAt em todo SaveChanges ────────────
     private void PreencherTenantIdEUpdatedAt()
     {
+        var tenantId = GetTenantId(); // Correto para API e WPF
         foreach (var entry in ChangeTracker.Entries())
         {
-            if (entry.State == EntityState.Added && _globalTenantId != Guid.Empty)
+            if (entry.State == EntityState.Added && tenantId != Guid.Empty)
             {
                 if (entry.Entity is BaseEntity baseEntity && baseEntity.TenantId == Guid.Empty)
-                    baseEntity.TenantId = _globalTenantId;
+                    baseEntity.TenantId = tenantId;
 
                 if (entry.Entity is ContaReceber cr && cr.TenantId == Guid.Empty)
-                    cr.TenantId = _globalTenantId;
+                    cr.TenantId = tenantId;
 
                 if (entry.Entity is ContaPagar cp && cp.TenantId == Guid.Empty)
-                    cp.TenantId = _globalTenantId;
+                    cp.TenantId = tenantId;
             }
 
             if (entry.State == EntityState.Modified && entry.Entity is BaseEntity be)

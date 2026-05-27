@@ -246,7 +246,11 @@ public class HaverServiceTests
             ctx.Customers.Add(new Customer { Id = customerId, Name = "Cliente X", HaverBalance = 250m, TenantId = tid });
         });
 
-        var saldo = await new HaverService(sp).ObterSaldoAsync(customerId);
+        using var scope1 = sp.CreateScope();
+        var mockTenant1 = new Mock<IRequestTenant>();
+        mockTenant1.Setup(t => t.TenantId).Returns(tid);
+        var db1 = scope1.ServiceProvider.GetRequiredService<ERP.Persistence.Context.AppDbContext>();
+        var saldo = await new HaverService(db1, mockTenant1.Object).ObterSaldoAsync(customerId);
 
         Assert.Equal(250m, saldo);
     }
@@ -263,7 +267,11 @@ public class HaverServiceTests
             ctx.Customers.Add(new Customer { Id = customerId, Name = "Cliente Y", HaverBalance = 10m, TenantId = tid });
         });
 
-        var service = new HaverService(sp);
+        using var scope2 = sp.CreateScope();
+        var mockTenant2 = new Mock<IRequestTenant>();
+        mockTenant2.Setup(t => t.TenantId).Returns(tid);
+        var db2 = scope2.ServiceProvider.GetRequiredService<ERP.Persistence.Context.AppDbContext>();
+        var service = new HaverService(db2, mockTenant2.Object);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => service.LancarAsync(customerId, 50m, "Saida", "Retirada", "Teste"));
@@ -273,7 +281,11 @@ public class HaverServiceTests
     public async Task LancarAsync_ClienteInexistente_LancaKeyNotFoundException()
     {
         var sp      = TestDb.Create("haver_naoexiste");
-        var service = new HaverService(sp);
+        using var scope3 = sp.CreateScope();
+        var emptyTenant = new Mock<IRequestTenant>();
+        emptyTenant.Setup(t => t.TenantId).Returns(Guid.NewGuid());
+        var db3 = scope3.ServiceProvider.GetRequiredService<ERP.Persistence.Context.AppDbContext>();
+        var service = new HaverService(db3, emptyTenant.Object);
 
         await Assert.ThrowsAsync<KeyNotFoundException>(
             () => service.LancarAsync(Guid.NewGuid(), 10m, "Entrada", "Dep.", "Teste"));

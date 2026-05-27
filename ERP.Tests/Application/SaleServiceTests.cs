@@ -184,5 +184,61 @@ namespace ERP.Tests.Application.Services
             clienteFake.HaverBalance.Should().Be(60.00m); // Gastou 40, sobrou 60
             _uowMock.Verify(u => u.CommitAsync(), Times.Once);
         }
+        /// <summary>
+        /// FASE 0 — Teste #4 (Rollback de Venda)
+        ///
+        /// Verifica que quando CommitAsync lança exceção, o RollbackAsync é chamado
+        /// na transação, garantindo que o estoque não fica fantasma.
+        ///
+        /// Com Mock o rollback não desfaz o banco de verdade — isso é verificado
+        /// nos testes de integração. Aqui provamos que o PLUMBING está correto:
+        /// qualquer exception no commit aciona o rollback.
+        /// </summary>
+        [Fact(DisplayName = "FASE0 #4 — Rollback: CommitAsync falha → RollbackAsync chamado")]
+        [Trait("Fase0", "Transacao")]
+        public async Task CriarVenda_QuandoCommitFalha_DeveAcionarRollback()
+        {
+            // Arrange
+            var usuarioId = Guid.NewGuid();
+            var produtoId = Guid.NewGuid();
+            var produtoFake = new Product { Id = produtoId, Name = "Cimento CP-II", Stock = 100, AllowNegativeStock = false };
+
+            var dto = new CreateSaleDto
+            {
+                UsuarioId = usuarioId,
+                Items     = new List<CreateSaleItemDto> { new CreateSaleItemDto { ProductId = produtoId, Quantity = 1, UnitPrice = 35m } },
+                Payments  = new List<CreateSalePaymentDto>()
+            };
+
+            _uowMock.Setup(u => u.Caixas.GetCaixaAbertoByUsuarioAsync(usuarioId))
+                    .ReturnsAsync(new Caixa { Id = Guid.NewGuid() });
+            _uowMock.Setup(u => u.Products.GetByIdAsync(produtoId))
+                    .ReturnsAsync(produtoFake);
+
+            // CommitAsync lança exception (simula falha de rede / constraint)
+            _uowMock.Setup(u => u.CommitAsync())
+                    .ThrowsAsync(new Exception("Simulated DB failure"));
+
+            // Recria o mock de transação para este teste específico
+            var txMock = new Mock<ITransaction>();
+            txMock.Setup(t => t.CommitAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+            txMock.Setup(t => t.RollbackAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+            txMock.Setup(t => t.DisposeAsync()).Returns(ValueTask.CompletedTask);
+            _uowMock.Setup(u => u.BeginTransactionAsync()).ReturnsAsync(txMock.Object);
+
+            // Act
+            var act = async () => await _saleService.CreateAsync(dto);
+
+            // Assert: a exception deve ser relançada (não engolida)
+            await act.Should().ThrowAsync<Exception>();
+
+            // O Rollback DEVE ter sido chamado exatamente uma vez
+            txMock.Verify(t => t.RollbackAsync(It.IsAny<CancellationToken>()), Times.Once,
+                "rollback deve ser acionado quando o commit falha");
+
+            // O CommitAsync da transação NÃO deve ter sido chamado (falhou antes)
+            txMock.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Never,
+                "tx.CommitAsync nao deve ser chamado se _uow.CommitAsync falhou");
+        }
     }
 }
