@@ -1,0 +1,179 @@
+@page "/comissoes"
+@using ERP.Portal.Services
+@inject ApiClient Api
+
+<div style="padding:0 0 32px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <div style="font-size:32px;">💵</div>
+            <div>
+                <h2 style="color:#1E293B; font-weight:800; margin:0;">Comissões de Vendedores</h2>
+                <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">
+                    Calculadas com base no PercentualComissão do cargo de cada vendedor
+                </p>
+            </div>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <input type="date" @bind="_inicio"
+                   style="padding:8px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:13px;" />
+            <span style="color:#94A3B8; font-size:13px;">até</span>
+            <input type="date" @bind="_fim"
+                   style="padding:8px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:13px;" />
+            <button @onclick="CarregarAsync"
+                    style="background:#1E62A6; color:white; border:none; padding:9px 18px;
+                           border-radius:8px; font-size:13px; font-weight:700; cursor:pointer;">
+                🔍 Calcular
+            </button>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div style="text-align:center; padding:60px; color:#94A3B8;">Calculando comissões...</div>
+    }
+    else if (_resultado is not null)
+    {
+        <!-- KPIs -->
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:24px;">
+            <div style="background:white; border-radius:12px; padding:20px;
+                        box-shadow:0 2px 8px rgba(0,0,0,.06); border-top:4px solid #27AE60;">
+                <div style="font-size:22px; font-weight:800; color:#1E293B;">
+                    @_resultado.TotalVendido.ToString("C0")
+                </div>
+                <div style="font-size:12px; color:#94A3B8; font-weight:600; margin-top:4px;">
+                    TOTAL VENDIDO NO PERÍODO
+                </div>
+            </div>
+            <div style="background:white; border-radius:12px; padding:20px;
+                        box-shadow:0 2px 8px rgba(0,0,0,.06); border-top:4px solid #F59E0B;">
+                <div style="font-size:22px; font-weight:800; color:#1E293B;">
+                    @_resultado.TotalComissoes.ToString("C0")
+                </div>
+                <div style="font-size:12px; color:#94A3B8; font-weight:600; margin-top:4px;">
+                    TOTAL DE COMISSÕES A PAGAR
+                </div>
+            </div>
+            <div style="background:white; border-radius:12px; padding:20px;
+                        box-shadow:0 2px 8px rgba(0,0,0,.06); border-top:4px solid #8B5CF6;">
+                <div style="font-size:22px; font-weight:800; color:#1E293B;">
+                    @(_resultado.Vendedores?.Count ?? 0)
+                </div>
+                <div style="font-size:12px; color:#94A3B8; font-weight:600; margin-top:4px;">
+                    VENDEDORES ATIVOS NO PERÍODO
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabela -->
+        <div style="background:white; border-radius:12px; padding:0;
+                    box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
+            <div style="padding:20px 24px; border-bottom:1px solid #F1F5F9;">
+                <h3 style="font-size:15px; font-weight:700; color:#1E293B; margin:0;">
+                    Detalhamento por Vendedor
+                </h3>
+            </div>
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#F8FAFC;">
+                            <th style="@Th">Vendedor</th>
+                            <th style="@Th; text-align:right;">Qtd Vendas</th>
+                            <th style="@Th; text-align:right;">Total Vendido</th>
+                            <th style="@Th; text-align:center;">% Comissão</th>
+                            <th style="@Th; text-align:right;">Valor Comissão</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var v in _resultado.Vendedores ?? [])
+                        {
+                            <tr style="border-top:1px solid #F1F5F9;">
+                                <td style="@Td; font-weight:600;">@v.Vendedor</td>
+                                <td style="@Td; text-align:right; color:#64748B;">@v.QtdVendas</td>
+                                <td style="@Td; text-align:right; font-weight:600;">
+                                    @v.TotalVendido.ToString("C0")
+                                </td>
+                                <td style="@Td; text-align:center;">
+                                    @if (v.PercentualComissao > 0)
+                                    {
+                                        <span style="background:#FEF3C7; color:#D97706; padding:3px 10px;
+                                                     border-radius:12px; font-size:12px; font-weight:700;">
+                                            @v.PercentualComissao.ToString("0.##")%
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span style="color:#94A3B8; font-size:12px;">Não configurado</span>
+                                    }
+                                </td>
+                                <td style="@Td; text-align:right; font-weight:700;
+                                           color:@(v.ValorComissao > 0 ? "#16A34A" : "#94A3B8");">
+                                    @v.ValorComissao.ToString("C0")
+                                </td>
+                            </tr>
+                        }
+                        <tr style="border-top:2px solid #E2E8F0; background:#F8FAFC;">
+                            <td style="@Td; font-weight:700;">TOTAL</td>
+                            <td style="@Td; text-align:right; font-weight:700;">
+                                @(_resultado.Vendedores?.Sum(v => v.QtdVendas) ?? 0)
+                            </td>
+                            <td style="@Td; text-align:right; font-weight:700;">
+                                @_resultado.TotalVendido.ToString("C0")
+                            </td>
+                            <td></td>
+                            <td style="@Td; text-align:right; font-weight:800; color:#16A34A;">
+                                @_resultado.TotalComissoes.ToString("C0")
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <p style="color:#94A3B8; font-size:12px; margin-top:12px;">
+            ℹ️ Para ajustar o percentual de comissão de cada cargo, vá em
+            <a href="/cargos" style="color:#1E62A6;">Cargos</a>.
+        </p>
+    }
+</div>
+
+@code {
+    private DateTime      _inicio    = DateTime.Today.AddMonths(-1);
+    private DateTime      _fim       = DateTime.Today;
+    private bool          _loading   = false;
+    private ComissaoResultado? _resultado;
+
+    private const string Th = "padding:10px 20px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td = "padding:14px 20px; font-size:13px;";
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _loading = true;
+        try
+        {
+            var ini = _inicio.ToString("yyyy-MM-dd");
+            var fim = _fim.AddDays(1).ToString("yyyy-MM-dd");
+            _resultado = await Api.GetAsync<ComissaoResultado>(
+                $"api/Comissao?inicio={ini}&fim={fim}");
+        }
+        catch { }
+        finally { _loading = false; }
+    }
+
+    private class ComissaoResultado
+    {
+        public decimal               TotalVendido   { get; set; }
+        public decimal               TotalComissoes { get; set; }
+        public List<ComissaoVendedor>? Vendedores   { get; set; }
+    }
+
+    private class ComissaoVendedor
+    {
+        public string  Vendedor           { get; set; } = "";
+        public int     QtdVendas          { get; set; }
+        public decimal TotalVendido       { get; set; }
+        public decimal PercentualComissao { get; set; }
+        public decimal ValorComissao      { get; set; }
+    }
+}

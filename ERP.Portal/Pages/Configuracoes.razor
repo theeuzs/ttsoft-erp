@@ -1,0 +1,195 @@
+@page "/configuracoes"
+@using ERP.Portal.Services
+@inject ApiClient Api
+@inject IJSRuntime JS
+
+<div style="padding:0 0 32px; max-width:640px;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px;">
+        <div style="font-size:32px;">⚙️</div>
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">Configurações da Loja</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">
+                Dados exibidos no Portal do Cliente e na Calculadora Pública
+            </p>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div style="text-align:center; padding:60px; color:#94A3B8;">Carregando...</div>
+    }
+    else
+    {
+        <div style="background:white; border-radius:12px; padding:28px;
+                    box-shadow:0 2px 8px rgba(0,0,0,.06);">
+
+            @if (!string.IsNullOrEmpty(_erro))
+            {
+                <div style="background:#FEF2F2; border:1px solid #FECACA; border-radius:8px;
+                            padding:12px 16px; color:#DC2626; margin-bottom:16px; font-size:13px;">
+                    ❌ @_erro
+                </div>
+            }
+            @if (_salvo)
+            {
+                <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px;
+                            padding:12px 16px; color:#16A34A; margin-bottom:16px; font-size:13px;">
+                    ✅ Configurações salvas com sucesso!
+                </div>
+            }
+
+            <div style="display:flex; flex-direction:column; gap:20px;">
+
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#475569;
+                                  display:block; margin-bottom:6px; text-transform:uppercase; letter-spacing:.5px;">
+                        Nome Fantasia *
+                    </label>
+                    <input @bind="_dto.Nome" placeholder="Ex: Casa do Construtor"
+                           style="width:100%; padding:10px 14px; border:1px solid #E2E8F0;
+                                  border-radius:8px; font-size:14px; outline:none;" />
+                    <p style="font-size:11px; color:#94A3B8; margin:4px 0 0;">
+                        Exibido no Portal do Cliente e na Calculadora Pública
+                    </p>
+                </div>
+
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#475569;
+                                  display:block; margin-bottom:6px; text-transform:uppercase; letter-spacing:.5px;">
+                        CNPJ
+                    </label>
+                    <input @bind="_dto.CNPJ" placeholder="00.000.000/0001-00"
+                           style="width:100%; padding:10px 14px; border:1px solid #E2E8F0;
+                                  border-radius:8px; font-size:14px; outline:none;" />
+                </div>
+
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#475569;
+                                  display:block; margin-bottom:6px; text-transform:uppercase; letter-spacing:.5px;">
+                        Endereço
+                    </label>
+                    <input @bind="_dto.Endereco" placeholder="Rua, número, bairro, cidade/UF"
+                           style="width:100%; padding:10px 14px; border:1px solid #E2E8F0;
+                                  border-radius:8px; font-size:14px; outline:none;" />
+                </div>
+
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#475569;
+                                  display:block; margin-bottom:6px; text-transform:uppercase; letter-spacing:.5px;">
+                        Telefone / WhatsApp *
+                    </label>
+                    <input @bind="_dto.Telefone" placeholder="(00) 90000-0000"
+                           style="width:100%; padding:10px 14px; border:1px solid #E2E8F0;
+                                  border-radius:8px; font-size:14px; outline:none;" />
+                    <p style="font-size:11px; color:#94A3B8; margin:4px 0 0;">
+                        Usado no botão "Solicitar Orçamento no WhatsApp" da Calculadora Pública
+                    </p>
+                </div>
+
+            </div>
+
+            <div style="margin-top:28px; display:flex; gap:12px;">
+                <button @onclick="SalvarAsync" disabled="@_salvando"
+                        style="background:#1E62A6; color:white; border:none; padding:12px 24px;
+                               border-radius:8px; font-size:14px; font-weight:700; cursor:pointer;
+                               opacity:@(_salvando ? "0.6" : "1");">
+                    @(_salvando ? "Salvando..." : "💾 Salvar Configurações")
+                </button>
+                <button @onclick="CarregarAsync"
+                        style="background:#F1F5F9; color:#64748B; border:none; padding:12px 24px;
+                               border-radius:8px; font-size:14px; font-weight:600; cursor:pointer;">
+                    🔄 Cancelar
+                </button>
+            </div>
+        </div>
+
+        <div style="background:white; border-radius:12px; padding:20px; margin-top:16px;
+                    box-shadow:0 2px 8px rgba(0,0,0,.06);">
+            <h3 style="font-size:13px; font-weight:700; color:#1E293B; margin:0 0 12px;">
+                🔗 Links da sua loja
+            </h3>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+                @{ var baseUrl = Nav.BaseUri.TrimEnd('/'); }
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:12px; color:#64748B; min-width:140px;">Calculadora Pública:</span>
+                    <a href="@(baseUrl)/calculadora-publica" target="_blank"
+                       style="font-size:12px; color:#1E62A6; word-break:break-all;">
+                        @(baseUrl)/calculadora-publica
+                    </a>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:12px; color:#64748B; min-width:140px;">Portal do Cliente:</span>
+                    <a href="@(baseUrl)/cliente" target="_blank"
+                       style="font-size:12px; color:#1E62A6; word-break:break-all;">
+                        @(baseUrl)/cliente
+                    </a>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:12px; color:#64748B; min-width:140px;">Catálogo Público:</span>
+                    <a href="@(baseUrl)/catalogo" target="_blank"
+                       style="font-size:12px; color:#1E62A6; word-break:break-all;">
+                        @(baseUrl)/catalogo
+                    </a>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    @inject NavigationManager Nav
+
+    private ConfigLojaDto _dto      = new();
+    private bool          _loading  = true;
+    private bool          _salvando = false;
+    private bool          _salvo    = false;
+    private string?       _erro;
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _loading = true;
+        _salvo   = false;
+        _erro    = null;
+        try
+        {
+            _dto = await Api.GetAsync<ConfigLojaDto>("api/Config") ?? new();
+        }
+        catch { _dto = new(); }
+        finally { _loading = false; }
+    }
+
+    private async Task SalvarAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_dto.Nome))
+        {
+            _erro = "Nome Fantasia é obrigatório.";
+            return;
+        }
+        _salvando = true;
+        _erro     = null;
+        _salvo    = false;
+        try
+        {
+            await Api.PutAsync("api/Config", _dto);
+            _salvo = true;
+            await Task.Delay(3000);
+            _salvo = false;
+        }
+        catch (Exception ex)
+        {
+            _erro = ex.Message;
+        }
+        finally { _salvando = false; }
+    }
+
+    private class ConfigLojaDto
+    {
+        public Guid   Id       { get; set; }
+        public string Nome     { get; set; } = "";
+        public string CNPJ     { get; set; } = "";
+        public string Endereco { get; set; } = "";
+        public string Telefone { get; set; } = "";
+    }
+}
