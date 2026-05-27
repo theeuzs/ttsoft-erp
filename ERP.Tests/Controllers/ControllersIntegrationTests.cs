@@ -1267,4 +1267,24 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         (await resp.Content.ReadAsStringAsync()).Should().NotContain(marker);
     }
+    // ── 9. Devolucao via API (1.5.2 fix — órfão de tenant) ─────────────────
+    [Fact(DisplayName = "F1.1 — Devolucao: POST autenticado nao retorna 500")]
+    [Trait("F11", "DualTenant")]
+    public async Task Devolucao_ComAuth_NaoRetorna500()
+    {
+        // Verifica que o endpoint exige auth e retorna erro de negócio (não 500).
+        // O fix real (TenantId no INSERT) requer teste com SQL Server real;
+        // este garante que o caminho não explode com NullReference após a refatoração.
+        var resp = await ClientFor(Guid.NewGuid()).PostAsJsonAsync("/api/devolucao",
+            new
+            {
+                SaleId = Guid.NewGuid(),
+                Items  = new[] { new { ProductId = Guid.NewGuid(), Quantidade = 1m, Motivo = "Teste" } }
+            });
+
+        resp.StatusCode.Should().NotBe(HttpStatusCode.InternalServerError,
+            "após injetar IRequestTenant o construtor nao deve explodir");
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized,
+            "JWT foi enviado — nao deve ser 401");
+    }
 }

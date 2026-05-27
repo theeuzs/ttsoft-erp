@@ -23,7 +23,7 @@ public class MarketplaceService
 
     // ── Mercado Livre ─────────────────────────────────────────────────────────
 
-    public async Task<bool> ProcessarWebhookMLAsync(string topico, string recurso, string accessToken)
+    public async Task<bool> ProcessarWebhookMLAsync(string topico, string recurso, string accessToken, Guid tenantId)
     {
         try
         {
@@ -36,7 +36,7 @@ public class MarketplaceService
 
             if (topico == "orders")
             {
-                await ProcessarPedidoMLAsync(root);
+                await ProcessarPedidoMLAsync(root, tenantId);
                 return true;
             }
 
@@ -61,13 +61,18 @@ public class MarketplaceService
         }
     }
 
-    private async Task ProcessarPedidoMLAsync(JsonElement pedido)
+    // Fase 1.5 Fix: tenantId vem da URL do webhook (configurada por loja no ML).
+    // O scope é necessário porque webhooks são [AllowAnonymous] — não há JWT.
+    // Injetamos o tenant no IRequestTenant do scope para que HasQueryFilter funcione.
+    private async Task ProcessarPedidoMLAsync(JsonElement pedido, Guid tenantId)
     {
         var status = pedido.TryGetProperty("status", out var s) ? s.GetString() : "";
         if (status != "paid") return;
 
         using var scope = _sp.CreateScope();
-        var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var ctx    = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var tenant = scope.ServiceProvider.GetRequiredService<ERP.Application.Interfaces.IRequestTenant>();
+        tenant.TenantId = tenantId; // Seta o tenant no scope para HasQueryFilter funcionar
 
         if (!pedido.TryGetProperty("order_items", out var itens)) return;
 
@@ -81,11 +86,11 @@ public class MarketplaceService
 
             var qtd = item.TryGetProperty("quantity", out var q) ? q.GetDecimal() : 0;
 
-            // S3.7: ExecuteSqlInterpolatedAsync
+            // AND TenantId= impede baixa de estoque de outro tenant com mesmo SKU (EAN colidente).
             await ctx.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE Products SET Stock = Stock - {qtd} WHERE SKU = {sku} AND Stock > 0");
+                $"UPDATE Products SET Stock = Stock - {qtd} WHERE SKU = {sku} AND TenantId = {tenantId} AND Stock > 0");
 
-            Log.Information("ML Pedido: baixou {Qtd} do SKU {SKU}", qtd, sku);
+            Log.Information("ML Pedido [{TenantId}]: baixou {Qtd} do SKU {SKU}", tenantId, qtd, sku);
         }
     }
 
@@ -100,12 +105,14 @@ public class MarketplaceService
 
     // ── Shopee ────────────────────────────────────────────────────────────────
 
-    public async Task ProcessarWebhookShopeeAsync(ShopeeWebhookDto dto)
+    public async Task ProcessarWebhookShopeeAsync(ShopeeWebhookDto dto, Guid tenantId)
     {
         if (dto.Code != 3) return;
 
         using var scope = _sp.CreateScope();
-        var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var ctx    = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var tenant = scope.ServiceProvider.GetRequiredService<ERP.Application.Interfaces.IRequestTenant>();
+        tenant.TenantId = tenantId; // Fase 1.5: injeta tenant no scope do webhook
 
         foreach (var item in dto.Data?.OrderList ?? [])
         {
@@ -114,11 +121,11 @@ public class MarketplaceService
                 var qtd = produto.ModelQuantityPurchased;
                 var sku = produto.ModelSku;
 
-                // S3.7: ExecuteSqlInterpolatedAsync
+                // AND TenantId= impede baixa de estoque de outro tenant com mesmo SKU.
                 await ctx.Database.ExecuteSqlInterpolatedAsync(
-                    $"UPDATE Products SET Stock = Stock - {qtd} WHERE SKU = {sku} AND Stock > 0");
+                    $"UPDATE Products SET Stock = Stock - {qtd} WHERE SKU = {sku} AND TenantId = {tenantId} AND Stock > 0");
 
-                Log.Information("Shopee: baixou {Qtd} do SKU {SKU}", qtd, sku);
+                Log.Information("Shopee [{TenantId}]: baixou {Qtd} do SKU {SKU}", tenantId, qtd, sku);
             }
         }
     }

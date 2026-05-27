@@ -21,16 +21,19 @@ public class MarketplaceController : ControllerBase
 
     /// <summary>
     /// Webhook do Mercado Livre — recebe notificações de pedidos e itens.
-    /// URL para configurar no ML: https://seudominio.com/api/marketplace/ml/webhook
+    /// Fase 1.5: tenantId na URL identifica a loja. Cada loja configura sua própria URL:
+    ///   https://api.ttsoft.com.br/api/marketplace/ml/webhook/{tenantId}
+    /// Isso permite multi-tenant sem JWT (ML não envia token do ERP).
     /// </summary>
-    [HttpPost("ml/webhook")]
-    [AllowAnonymous] // ML não envia JWT — autenticado pelo token interno
+    [HttpPost("ml/webhook/{tenantId:guid}")]
+    [AllowAnonymous] // ML não envia JWT — tenant identificado pela URL
     public async Task<IActionResult> WebhookML(
-        [FromBody] MLWebhookDto dto,
-        [FromQuery] string? userId)
+        [FromRoute] Guid tenantId,
+        [FromBody]  MLWebhookDto dto)
     {
+        if (tenantId == Guid.Empty) return BadRequest("tenantId inválido na URL do webhook.");
         var token = _config["Marketplace:ML:AccessToken"] ?? "";
-        var ok = await _service.ProcessarWebhookMLAsync(dto.Topic, dto.Resource, token);
+        var ok = await _service.ProcessarWebhookMLAsync(dto.Topic, dto.Resource, token, tenantId);
         return ok ? Ok() : BadRequest();
     }
 
@@ -48,13 +51,17 @@ public class MarketplaceController : ControllerBase
 
     /// <summary>
     /// Webhook da Shopee — recebe notificações de pedidos.
-    /// URL para configurar na Shopee: https://seudominio.com/api/marketplace/shopee/webhook
+    /// Fase 1.5: tenantId na URL identifica a loja. Configurar na Shopee:
+    ///   https://api.ttsoft.com.br/api/marketplace/shopee/webhook/{tenantId}
     /// </summary>
-    [HttpPost("shopee/webhook")]
+    [HttpPost("shopee/webhook/{tenantId:guid}")]
     [AllowAnonymous]
-    public async Task<IActionResult> WebhookShopee([FromBody] ShopeeWebhookDto dto)
+    public async Task<IActionResult> WebhookShopee(
+        [FromRoute] Guid tenantId,
+        [FromBody]  ShopeeWebhookDto dto)
     {
-        await _service.ProcessarWebhookShopeeAsync(dto);
+        if (tenantId == Guid.Empty) return BadRequest("tenantId inválido na URL do webhook.");
+        await _service.ProcessarWebhookShopeeAsync(dto, tenantId);
         return Ok();
     }
 
