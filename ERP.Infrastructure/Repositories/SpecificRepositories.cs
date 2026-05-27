@@ -207,17 +207,25 @@ public class AuditLogRepository : Repository<AuditLog>, IAuditLogRepository { pu
 public class DevolucaoRepository : IDevolucaoRepository
 {
     private readonly AppDbContext _ctx;
-    public DevolucaoRepository(AppDbContext ctx) => _ctx = ctx;
+    private readonly ERP.Application.Interfaces.IRequestTenant _tenant;
+
+    // Fase 1.5 Fix: injetar IRequestTenant para usar o tenant da requisição HTTP.
+    // Antes: AppDbContext.GetGlobalTenantId() retorna Guid.Empty na API,
+    // fazendo devoluções via Portal/API ficarem com TenantId = Guid.Empty (órfãs).
+    public DevolucaoRepository(AppDbContext ctx, ERP.Application.Interfaces.IRequestTenant tenant)
+    {
+        _ctx    = ctx;
+        _tenant = tenant;
+    }
 
     /// <summary>
     /// EXCEÇÃO S3.7: mantém ExecuteSqlRawAsync por ter 11 parâmetros posicionais.
-    /// Migrar para ExecuteSqlInterpolatedAsync com 11 interpolações aumentaria o risco
-    /// de erro de ordem. Todos os valores são Guid/decimal/string de domínio interno —
-    /// nunca input direto do usuário. Risco de injection: zero.
+    /// Todos os valores são Guid/decimal/string de domínio — nunca input direto do usuário.
     /// </summary>
     public async Task AddAsync(ERP.Domain.Entities.SaleItemDevolucao d)
     {
-        var tenantId = AppDbContext.GetGlobalTenantId();
+        // IRequestTenant.TenantId é correto em API (JWT) e WPF (estático via WpfRequestTenant).
+        var tenantId = _tenant.TenantId;
         await _ctx.Database.ExecuteSqlRawAsync(@"
             INSERT INTO SaleItemDevolucoes
                 (Id, TenantId, SaleId, ProductId, ProductName,

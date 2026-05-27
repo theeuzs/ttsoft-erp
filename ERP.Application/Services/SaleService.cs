@@ -196,7 +196,7 @@ public class SaleService : ISaleService
         venda.NfceReferencia = referencia;
         
         _uow.Sales.Update(venda);
-        await _uow.CommitAsync(); // Se der erro de nome aqui, troque para _uow.SaveChangesAsync()
+        await _uow.CommitAsync();
     }
 }
 

@@ -43,6 +43,19 @@ public class AppDbContext : DbContext
     ///   • WPF:        _globalTenantId          — setado uma vez no startup
     ///   • Design-time: Guid.Empty              — migrations sem filtro de tenant
     /// </summary>
+    /// <summary>
+    /// Retorna o TenantId correto para a instância atual:
+    ///   • API:        _requestTenant.TenantId  — scoped por requisição HTTP
+    ///   • WPF:        _globalTenantId          — setado uma vez no startup
+    ///   • Design-time: Guid.Empty              — migrations sem filtro de tenant
+    /// </summary>
+    /// <remarks>
+    /// ATENÇÃO — não otimize este método para retornar um campo diretamente:
+    ///   ERRADO: p => p.TenantId == _requestTenant.TenantId  (captura o valor no build do modelo — congela o primeiro tenant)
+    ///   CERTO:  p => p.TenantId == GetTenantId()             (EF Core avalia a chamada por query, no contexto correto)
+    /// O EF Core 8 reconhece GetTenantId() como referência captiva avaliada por query.
+    /// Trocar para acesso direto ao campo faz o modelo cachear o primeiro tenant e vazar dados.
+    /// </remarks>
     public Guid GetTenantId() => _requestTenant?.TenantId ?? _globalTenantId;
 
     /// <summary>

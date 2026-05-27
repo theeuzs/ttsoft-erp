@@ -32,7 +32,8 @@ public class UnitOfWork : IUnitOfWork
         ICustomerRepository customers,
         ISaleRepository     sales,
         ICategoryRepository categories,
-        IUserRepository     users)
+        IUserRepository     users,
+        ERP.Application.Interfaces.IRequestTenant requestTenant)
     {
         _ctx       = ctx;
         Products   = products;
@@ -50,7 +51,7 @@ public class UnitOfWork : IUnitOfWork
         PedidosCompra = new PedidoCompraRepository(_ctx);
         Brands        = new BrandRepository(_ctx);
         AuditLogs     = new AuditLogRepository(_ctx);
-        Devolucoes    = new DevolucaoRepository(_ctx);
+        Devolucoes    = new DevolucaoRepository(_ctx, requestTenant);
         Roles         = new RoleRepository(_ctx);
     }
 

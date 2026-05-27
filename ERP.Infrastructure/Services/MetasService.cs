@@ -86,9 +86,11 @@ public class MetasService : IMetasService
             var updatedAt  = DateTime.UtcNow;
             var valorMeta  = dto.ValorMeta;
             var existenteId = existente.Id;
-            // S3.7: ExecuteSqlInterpolatedAsync — impossível de fazer injection acidentalmente
+            // Fase 1.5: AND TenantId= adicionado por defesa em profundidade.
+            // O existenteId já foi carregado via LINQ com HasQueryFilter (tenant filtrado),
+            // mas adicionar TenantId no SQL explícito é mais seguro que confiar só no EF.
             await _ctx.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE MetasVendas SET ValorMeta={valorMeta}, Descricao={descricao}, UpdatedAt={updatedAt} WHERE Id={existenteId}");
+                $"UPDATE MetasVendas SET ValorMeta={valorMeta}, Descricao={descricao}, UpdatedAt={updatedAt} WHERE Id={existenteId} AND TenantId={tenantId}");
 
             return (existente.Id, Atualizado: true);
         }
@@ -110,8 +112,11 @@ public class MetasService : IMetasService
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        // S3.7: ExecuteSqlInterpolatedAsync
+        // Fase 1.5 Fix: AND TenantId= impede IDOR de DELETE.
+        // Sem isso qualquer usuário autenticado de qualquer tenant que adivinhe
+        // o GUID de uma meta consegue deletá-la (mesmo de outra loja).
+        var tenantId = _tenant.TenantId;
         await _ctx.Database.ExecuteSqlInterpolatedAsync(
-            $"DELETE FROM MetasVendas WHERE Id={id}");
+            $"DELETE FROM MetasVendas WHERE Id={id} AND TenantId={tenantId}");
     }
 }
