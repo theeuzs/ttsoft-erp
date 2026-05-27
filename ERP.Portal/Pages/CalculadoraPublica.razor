@@ -276,6 +276,16 @@
     private const string Th = "padding:10px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
     private const string Td = "padding:12px 16px; font-size:13px;";
 
+    // UTM tracking — rastreia origem do visitante para medir conversão calculadora→cliente
+    [Parameter][SupplyParameterFromQuery(Name = "utm_source")]   public string? UtmSource   { get; set; }
+    [Parameter][SupplyParameterFromQuery(Name = "utm_medium")]   public string? UtmMedium   { get; set; }
+    [Parameter][SupplyParameterFromQuery(Name = "utm_campaign")] public string? UtmCampaign { get; set; }
+
+    private string _utmTag => string.IsNullOrEmpty(UtmSource) ? "" :
+        $"&utm_source={Uri.EscapeDataString(UtmSource ?? "")}" +
+        $"&utm_medium={Uri.EscapeDataString(UtmMedium ?? "calculadora")}" +
+        $"&utm_campaign={Uri.EscapeDataString(UtmCampaign ?? "calculadora_publica")}";
+
     protected override async Task OnInitializedAsync()
     {
         // Templates: endpoint público (AllowAnonymous)
@@ -358,9 +368,11 @@
         sb.AppendLine("Gostaria de um orçamento com preços para esses materiais?");
 
         var enc = Uri.EscapeDataString(sb.ToString());
-        var url = _whatsappLoja.Contains("?")
+        // UTM no link do WhatsApp — permite rastrear quantos leads vieram da calculadora pública
+        var urlBase = _whatsappLoja.Contains("?")
             ? _whatsappLoja + "&text=" + enc
             : _whatsappLoja + "?text=" + enc;
+        var url = urlBase + _utmTag;
 
         await JS.InvokeVoidAsync("open", url, "_blank");
     }

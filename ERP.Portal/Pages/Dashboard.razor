@@ -26,7 +26,7 @@
     else
     {
         <!-- KPIs -->
-        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px;">
+        <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:16px; margin-bottom:24px;">
             <div style="@KpiCard("#27AE60")">
                 <div style="font-size:28px; margin-bottom:4px;">💰</div>
                 <div style="font-size:24px; font-weight:800; color:#1E293B;">
@@ -63,6 +63,16 @@
                 <div style="font-size:12px; color:#94A3B8; font-weight:600;">INADIMPLÊNCIA</div>
                 <div style="font-size:11px; color:#EF4444; margin-top:4px;">contas vencidas</div>
             </div>
+            <a href="/crm" style="@KpiCard("#F59E0B") text-decoration:none; cursor:pointer;">
+                <div style="font-size:28px; margin-bottom:4px;">📞</div>
+                <div style="font-size:24px; font-weight:800; color:#1E293B;">
+                    @_followupHoje
+                </div>
+                <div style="font-size:12px; color:#94A3B8; font-weight:600;">LIGAR HOJE</div>
+                <div style="font-size:11px; color:#F59E0B; margin-top:4px;">
+                    @(_followupHoje == 1 ? "orçamento pendente" : "orçamentos pendentes")
+                </div>
+            </a>
         </div>
 
         <!-- Gráficos -->
@@ -163,6 +173,7 @@
     private int     _qtdVendasMes      = 0;
     private int     _produtosCriticos  = 0;
     private decimal _totalInadimplente = 0;
+    private int     _followupHoje      = 0;
     private RankingItem[]?   _ranking  = null;
     private PrevisaoItem[]?  _previsao = null;
     private SazonalidadeItem[]? _sazon = null;
@@ -215,6 +226,9 @@
             }),
             Task.Run(async () => {
                 _previsao = await Api.GetAsync<PrevisaoItem[]>("api/Bi/previsao-demanda");
+                // Conta orçamentos com follow-up para hoje — tipo local desnecessário, só o count importa
+                var ag = await Api.GetAsync<System.Text.Json.JsonElement[]>("api/Orcamentos/agenda-hoje");
+                _followupHoje = ag?.Length ?? 0;
             }),
             Task.Run(async () => {
                 _sazon = await Api.GetAsync<SazonalidadeItem[]>("api/Bi/sazonalidade?meses=6");
