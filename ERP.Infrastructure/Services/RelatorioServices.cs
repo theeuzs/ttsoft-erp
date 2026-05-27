@@ -215,40 +215,47 @@ public class FluxoCaixaService : IFluxoCaixaService
 // ═══════════════════════════════════════════════════════════════════════════════
 public class HaverService : IHaverService
 {
-    private readonly IServiceProvider _sp;
-    public HaverService(IServiceProvider sp) => _sp = sp;
+    private readonly AppDbContext   _db;
+    private readonly IRequestTenant _tenant;
+
+    // ── FASE 0 FIX ───────────────────────────────────────────────────────────
+    // Antes: HaverService usava IServiceProvider + CreateScope() para criar
+    // seu próprio DbContext. O novo scope criava um RequestTenant zerado
+    // (TenantId = Guid.Empty), o que destruía o isolamento de tenant.
+    // Agora: injeta AppDbContext e IRequestTenant do mesmo scope da requisição.
+    // Os HasQueryFilter do DbContext filtram por TenantId automaticamente.
+    public HaverService(AppDbContext db, IRequestTenant tenant)
+    {
+        _db     = db;
+        _tenant = tenant;
+    }
 
     public async Task<decimal> ObterSaldoAsync(Guid customerId, CancellationToken ct = default)
     {
-        using var scope = _sp.CreateScope();
-        var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        return await ctx.Customers.AsNoTracking()
+        // HasQueryFilter em Customer já filtra por TenantId.
+        // Se o cliente não pertence a este tenant, retorna 0 (não expõe dado).
+        return await _db.Customers.AsNoTracking()
             .Where(c => c.Id == customerId)
             .Select(c => c.HaverBalance)
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(ct);
     }
 
     public async Task<IReadOnlyList<HaverHistoricoDto>> ObterHistoricoAsync(Guid customerId, CancellationToken ct = default)
     {
-        using var scope = _sp.CreateScope();
-        var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        return await ctx.MovimentosHaver.AsNoTracking()
+        // HasQueryFilter em MovimentoHaver já filtra por TenantId após correção.
+        return await _db.MovimentosHaver.AsNoTracking()
             .Where(m => m.CustomerId == customerId)
             .OrderBy(m => m.DataMovimento)
             .Select(m => new HaverHistoricoDto(m.DataMovimento, m.Tipo, m.Descricao, m.Valor, m.OperadorNome))
-            .ToListAsync();
+            .ToListAsync(ct);
     }
 
     public async Task LancarAsync(Guid customerId, decimal valor, string tipo, string descricao, string operadorNome)
     {
-        using var scope = _sp.CreateScope();
-        var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
         if (tipo == "Saida")
         {
-            var saldoAtual = await ctx.Customers.AsNoTracking()
+            // HasQueryFilter garante que só clientes deste tenant são consultados
+            var saldoAtual = await _db.Customers.AsNoTracking()
                 .Where(c => c.Id == customerId)
                 .Select(c => c.HaverBalance)
                 .FirstOrDefaultAsync();
@@ -257,16 +264,20 @@ public class HaverService : IHaverService
                 throw new InvalidOperationException("Saldo Haver insuficiente.");
         }
 
-        decimal delta = tipo == "Entrada" ? valor : -valor;
+        decimal delta    = tipo == "Entrada" ? valor : -valor;
+        var     tenantId = _tenant.TenantId;
 
-        // S3.7: ExecuteSqlInterpolatedAsync — safe by design
-        int rows = await ctx.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE Customers SET HaverBalance = HaverBalance + {delta} WHERE Id = {customerId}");
+        // ── FASE 0 FIX: AND TenantId = {tenantId} no WHERE ────────────────────
+        // HasQueryFilter não se aplica a ExecuteSqlInterpolatedAsync.
+        // Sem o filtro de TenantId no SQL, um usuário de outro tenant poderia
+        // alterar o saldo de um cliente que não é seu.
+        int rows = await _db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE Customers SET HaverBalance = HaverBalance + {delta} WHERE Id = {customerId} AND TenantId = {tenantId}");
 
         if (rows == 0)
-            throw new KeyNotFoundException($"Cliente {customerId} não encontrado.");
+            throw new KeyNotFoundException($"Cliente {customerId} não encontrado neste tenant.");
 
-        ctx.MovimentosHaver.Add(new MovimentoHaver
+        _db.MovimentosHaver.Add(new MovimentoHaver
         {
             CustomerId    = customerId,
             Valor         = valor,
@@ -276,15 +287,12 @@ public class HaverService : IHaverService
             OperadorNome  = operadorNome,
         });
 
-        await ctx.SaveChangesAsync();
+        await _db.SaveChangesAsync();
     }
 
     public async Task RegistrarMovimentoVendaAsync(Guid customerId, decimal valor, string tipo, string descricao, string operadorNome)
     {
-        using var scope = _sp.CreateScope();
-        var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        ctx.MovimentosHaver.Add(new MovimentoHaver
+        _db.MovimentosHaver.Add(new MovimentoHaver
         {
             CustomerId    = customerId,
             Valor         = valor,
@@ -294,7 +302,7 @@ public class HaverService : IHaverService
             OperadorNome  = operadorNome,
         });
 
-        await ctx.SaveChangesAsync();
+        await _db.SaveChangesAsync();
     }
 }
 

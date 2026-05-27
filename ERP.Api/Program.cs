@@ -37,9 +37,21 @@ builder.Host.UseSerilog((ctx, cfg) =>
 // ── Banco de dados ────────────────────────────────────────────────────────────
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
 
-builder.Services.AddDbContext<AppDbContext>(opt =>
-    opt.UseSqlServer(connectionString)
-       .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking));
+// ── Fase 0 Fix: DbContext com IRequestTenant Scoped por requisição ────────────
+// NÃO usar AddDbContext puro aqui — ele criaria AppDbContext com o construtor
+// de 1-argumento (WPF), sem IRequestTenant. Usamos uma factory explícita que
+// injeta IRequestTenant (já registrado como Scoped abaixo) no construtor da API.
+// Resultado: cada requisição HTTP tem seu próprio AppDbContext isolado por tenant.
+builder.Services.AddSingleton(
+    new DbContextOptionsBuilder<AppDbContext>()
+        .UseSqlServer(connectionString)
+        .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
+        .Options);
+
+builder.Services.AddScoped<AppDbContext>(sp => new AppDbContext(
+    sp.GetRequiredService<DbContextOptions<AppDbContext>>(),
+    sp.GetRequiredService<IRequestTenant>()
+));
 
 // ── AutoMapper ────────────────────────────────────────────────────────────────
 builder.Services.AddAutoMapper(typeof(MappingProfile));
@@ -73,7 +85,9 @@ builder.Services.AddScoped<IDevolucaoService,      ERP.Application.Services.Devo
 builder.Services.AddScoped<IRoleService,           ERP.Application.Services.RoleService>();
 builder.Services.AddScoped<ICalculadoraService, CalculadoraService>();
 
-builder.Services.AddScoped<IHaverService>(sp => new ERP.Infrastructure.Services.HaverService(sp));
+// Fase 0 Fix: HaverService agora injeta AppDbContext e IRequestTenant diretamente
+// (sem IServiceProvider e sem CreateScope — que criava scope novo com tenant vazio).
+builder.Services.AddScoped<IHaverService, ERP.Infrastructure.Services.HaverService>();
 
 builder.Services.AddScoped<IProdutoAgregadoService, ERP.Infrastructure.Services.ProdutoAgregadoService>();
 builder.Services.AddScoped<ISugestaoComprasService, ERP.Infrastructure.Services.SugestaoComprasService>();
@@ -154,6 +168,11 @@ builder.Services.AddApplicationInsightsTelemetry(opts =>
     opts.EnableAdaptiveSampling  = false; // desativa amostragem — queremos 100% dos dados
     opts.EnableRequestTrackingTelemetryModule = true;
 });
+
+// F1.3 — Enriquece CADA evento do App Insights com TenantId, UserId e CorrelationId.
+// Sem isso é impossível filtrar erros/latência por loja no portal Azure.
+builder.Services.AddSingleton<Microsoft.ApplicationInsights.Extensibility.ITelemetryInitializer,
+    ERP.Api.Services.TenantTelemetryInitializer>();
 
 // ── JWT ───────────────────────────────────────────────────────────────────────
 var jwtKey      = builder.Configuration["Jwt:Key"]!;
@@ -341,6 +360,11 @@ app.UseAuthorization();
 // TenantMiddleware APÓS autenticação — para ter claims disponíveis
 // S2.1: já enriquece o LogContext com TenantId e UserId
 app.UseMiddleware<TenantMiddleware>();
+
+// F1.2 — Rate limiting por tenant_id (complementa o UseIpRateLimiting por IP acima).
+// Posição: APÓS TenantMiddleware (que popula IRequestTenant com o tenant do JWT).
+// Limites: 5 req/min/tenant no login, 200 req/min/tenant nas demais rotas.
+app.UseMiddleware<TenantRateLimitMiddleware>();
 
 // S2.5: Brute force APÓS rate limiting (que já bloqueia) — só para alertar
 app.UseMiddleware<BruteForceAlertMiddleware>();

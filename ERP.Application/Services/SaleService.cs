@@ -77,85 +77,97 @@ public class SaleService : ISaleService
             }).ToList()
         };
 
-        // 2. Baixa de Estoque (atômica — segura em multi-terminal)
-        foreach (var itemDto in dto.Items)
+        // ── FASE 0 FIX: Transação única para baixa de estoque + criação da venda ──
+        // Antes: BaixarEstoqueAtomico tinha commit próprio e _uow.CommitAsync()
+        // vinha depois sem transação envolvendo os dois. Se o segundo commit falhasse
+        // (queda de rede, constraint violation, etc.), o estoque já havia sido baixado
+        // sem a venda correspondente → estoque fantasma garantido.
+        //
+        // Agora: ambas as operações estão dentro de uma única ITransaction.
+        // Se qualquer parte falhar, o RollbackAsync desfaz tudo — incluindo o UPDATE
+        // SQL do BaixarEstoqueAtomico, que usa a mesma conexão/transação do DbContext.
+        //
+        // NOTA para testes com InMemory: ITransaction/EfTransaction em InMemory é um no-op
+        // (não há rollback real), mas o comportamento de negócio permanece correto.
+        // Para testes de rollback real, use SQLite in-process (ver SaleServiceTests).
+
+        await using var tx = await _uow.BeginTransactionAsync();
+        try
         {
-            var product = await _uow.Products.GetByIdAsync(itemDto.ProductId)
-                ?? throw new KeyNotFoundException($"Produto {itemDto.ProductId} não encontrado.");
-
-            // ── PRODUTO COMPOSTO: baixa no Pai, não no Filho ─────────────────
-            // Se o produto vendido é um "atalho de venda" (ex: Barra 6m),
-            // o estoque real está no Produto Pai (ex: Tubo PVC MT).
-            // Quantidade a baixar = quantidade vendida × ConversionFactor do Filho
-            Product produtoEstoque;
-            decimal qtdEstoque;
-
-            if (product.ParentProductId.HasValue && product.ConversionFactor > 0)
+            // 2. Baixa de Estoque (atômica — segura em multi-terminal)
+            foreach (var itemDto in dto.Items)
             {
-                // É produto filho — busca o pai e abate o estoque dele
-                produtoEstoque = await _uow.Products.GetByIdAsync(product.ParentProductId.Value)
-                    ?? throw new KeyNotFoundException(
-                        $"Produto pai de '{product.Name}' não encontrado. " +
-                        $"Verifique o cadastro de produto composto.");
+                var product = await _uow.Products.GetByIdAsync(itemDto.ProductId)
+                    ?? throw new KeyNotFoundException($"Produto {itemDto.ProductId} não encontrado.");
 
-                qtdEstoque = itemDto.Quantity * product.ConversionFactor;
+                Product produtoEstoque;
+                decimal qtdEstoque;
+
+                if (product.ParentProductId.HasValue && product.ConversionFactor > 0)
+                {
+                    produtoEstoque = await _uow.Products.GetByIdAsync(product.ParentProductId.Value)
+                        ?? throw new KeyNotFoundException(
+                            $"Produto pai de '{product.Name}' não encontrado. " +
+                            $"Verifique o cadastro de produto composto.");
+
+                    qtdEstoque = itemDto.Quantity * product.ConversionFactor;
+                }
+                else
+                {
+                    produtoEstoque = product;
+                    qtdEstoque = itemDto.Quantity;
+                }
+
+                bool baixouOk = await _uow.Products.BaixarEstoqueAtomicoAsync(
+                    produtoEstoque.Id, qtdEstoque, produtoEstoque.AllowNegativeStock);
+
+                if (!baixouOk)
+                    throw new InvalidOperationException(
+                        $"Estoque insuficiente para '{produtoEstoque.Name}' " +
+                        $"(necessário: {qtdEstoque:N2}, disponível no estoque). " +
+                        $"Outro terminal pode ter vendido o último item agora mesmo.");
+
+                sale.Items.Add(new SaleItem
+                {
+                    Id              = Guid.NewGuid(),
+                    SaleId          = novaVendaId,
+                    ProductId       = product.Id,
+                    ProductName     = product.Name,
+                    Quantity        = qtdEstoque,
+                    UnitPrice       = itemDto.UnitPrice,
+                    DiscountPercent = itemDto.DiscountPercent,
+                    TotalItem       = itemDto.TotalItem
+                });
             }
-            else
+
+            sale.RecalculateTotals();
+
+            // 3. Saldo em Haver
+            var pagamentoHaver = dto.Payments.FirstOrDefault(p => p.PaymentMethod == Domain.Enums.PaymentMethod.Haver);
+            if (pagamentoHaver != null && dto.CustomerId.HasValue)
             {
-                // Produto simples ou produto pai — abate o próprio estoque
-                produtoEstoque = product;
-                qtdEstoque = itemDto.Quantity;
+                var customer = await _uow.Customers.GetByIdAsync(dto.CustomerId.Value);
+                if (customer != null)
+                {
+                    if (customer.HaverBalance < pagamentoHaver.Amount)
+                        throw new InvalidOperationException("Saldo haver insuficiente.");
+
+                    customer.HaverBalance -= pagamentoHaver.Amount;
+                    _uow.Customers.Update(customer);
+                }
             }
 
-            bool baixouOk = await _uow.Products.BaixarEstoqueAtomicoAsync(
-                produtoEstoque.Id, qtdEstoque, produtoEstoque.AllowNegativeStock);
-
-            if (!baixouOk)
-                throw new InvalidOperationException(
-                    $"Estoque insuficiente para '{produtoEstoque.Name}' " +
-                    $"(necessário: {qtdEstoque:N2}, disponível no estoque). " +
-                    $"Outro terminal pode ter vendido o último item agora mesmo.");
-
-            sale.Items.Add(new SaleItem
-            {
-                Id              = Guid.NewGuid(),
-                SaleId          = novaVendaId,
-                ProductId       = product.Id,        // Guarda o produto vendido (filho ou simples)
-                ProductName     = product.Name,
-                Quantity        = qtdEstoque,         // Quantidade baixada no estoque do pai
-                UnitPrice       = itemDto.UnitPrice,
-                DiscountPercent = itemDto.DiscountPercent,
-                TotalItem       = itemDto.TotalItem
-            });
-        }
-
-        sale.RecalculateTotals();
-
-        // 3. Saldo em Haver
-        var pagamentoHaver = dto.Payments.FirstOrDefault(p => p.PaymentMethod == Domain.Enums.PaymentMethod.Haver);
-        if (pagamentoHaver != null && dto.CustomerId.HasValue)
-        {
-            var customer = await _uow.Customers.GetByIdAsync(dto.CustomerId.Value);
-            if (customer != null)
-            {
-                if (customer.HaverBalance < pagamentoHaver.Amount)
-                    throw new InvalidOperationException("Saldo haver insuficiente.");
-                    
-                customer.HaverBalance -= pagamentoHaver.Amount;
-                _uow.Customers.Update(customer); // ← NoTracking: precisa marcar como modificado
-            }
-        }
-        
-        // 4. Salva apenas Venda e Estoque (O Caixa salva isolado lá na ViewModel)
-        await _uow.Sales.AddAsync(sale);
-        
-        try 
-        {
-            await _uow.CommitAsync(); 
+            // 4. Persiste venda — dentro da mesma transação da baixa de estoque
+            await _uow.Sales.AddAsync(sale);
+            await _uow.CommitAsync();
+            await tx.CommitAsync();
         }
         catch (Exception ex)
         {
-            throw new Exception($"🚨 ERRO NA VENDA: {ex.InnerException?.Message ?? ex.Message}");
+            // RollbackAsync desfaz tanto o CommitAsync do EF quanto o UPDATE SQL
+            // do BaixarEstoqueAtomico — os dois estão na mesma transação.
+            await tx.RollbackAsync();
+            throw new Exception($"ERRO NA VENDA (revertido): {ex.InnerException?.Message ?? ex.Message}", ex);
         }
         
         // Sprint Q: acumular pontos de fidelidade se tiver cliente

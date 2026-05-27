@@ -56,8 +56,37 @@ public class UnitOfWork : IUnitOfWork
 
     public async Task<int> CommitAsync() => await _ctx.SaveChangesAsync();
 
+    /// <summary>
+    /// Abre uma transação no banco. A baixa de estoque (ExecuteSqlInterpolated)
+    /// e o SaveChanges da Sale são executados na mesma transação — garante
+    /// que se qualquer parte falhar, nada é persistido.
+    /// Retorna ITransaction (abstração do Domain) para manter o Application
+    /// desacoplado de EF Core.
+    /// </summary>
+    public async Task<ITransaction> BeginTransactionAsync()
+    {
+        var efTx = await _ctx.Database.BeginTransactionAsync();
+        return new EfTransaction(efTx);
+    }
+
     public void Dispose()
     {
         if (!_disposed) { _ctx.Dispose(); _disposed = true; }
     }
+}
+
+/// <summary>
+/// Wrapper que adapta IDbContextTransaction (EF Core) para ITransaction (Domain).
+/// Fica na camada Infrastructure — é a única que conhece EF Core.
+/// </summary>
+internal sealed class EfTransaction : ITransaction
+{
+    private readonly Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction _tx;
+
+    public EfTransaction(Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction tx)
+        => _tx = tx;
+
+    public Task CommitAsync(CancellationToken ct = default)  => _tx.CommitAsync(ct);
+    public Task RollbackAsync(CancellationToken ct = default) => _tx.RollbackAsync(ct);
+    public ValueTask DisposeAsync() => _tx.DisposeAsync();
 }

@@ -389,7 +389,12 @@ public partial class App : System.Windows.Application
                 sp.GetRequiredService<FluxoCaixaService>(),
                 sp.GetRequiredService<IMemoryCache>()));
 
-        services.AddScoped<IHaverService>(sp => new HaverService(sp));
+        // Fase 0 Fix: WpfRequestTenant lê TenantId/UserId dos estáticos do AppDbContext
+        // (preenchidos no login via SetGlobalTenantId + SetCurrentUser).
+        // HaverService e FidelidadeService agora injetam IRequestTenant diretamente
+        // em vez de usar IServiceProvider/CreateScope (que criava scope sem tenant).
+        services.AddScoped<IRequestTenant, ERP.WPF.Services.WpfRequestTenant>();
+        services.AddScoped<IHaverService, HaverService>();
         services.AddScoped<ERP.Application.Interfaces.IFidelidadeService,
                    ERP.Infrastructure.Services.FidelidadeService>();
 

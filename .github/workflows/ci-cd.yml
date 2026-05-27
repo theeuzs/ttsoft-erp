@@ -25,10 +25,7 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      #- name: 📱 Instalar Workloads do Mobile (Android)
-      #  run: dotnet workload restore ERP.sln
-
-      - name: Remover Mobile do Build (Para economizar tempo)
+      - name: Remover Mobile do Build (economiza tempo de CI)
         run: dotnet sln ERP.sln remove ERP.Mobile/ERP.Mobile.csproj
 
       - name: 📦 Restore dependências
@@ -36,9 +33,10 @@ jobs:
 
       - name: 🔨 Build — Domain, Application, Infrastructure, Persistence
         run: |
-          dotnet build ERP.Domain\ERP.Domain.csproj           -c ${{ env.BUILD_CONFIG }} --no-restore
-          dotnet build ERP.Application\ERP.Application.csproj -c ${{ env.BUILD_CONFIG }} --no-restore
-          dotnet build ERP.Infrastructure\ERP.Infrastructure.csproj -c ${{ env.BUILD_CONFIG }} --no-restore
+          dotnet build ERP.Domain\ERP.Domain.csproj                 -c ${{ env.BUILD_CONFIG }} --no-restore
+          dotnet build ERP.Application\ERP.Application.csproj       -c ${{ env.BUILD_CONFIG }} --no-restore
+          dotnet build ERP.Infrastructure\ERP.Infrastructure.csproj  -c ${{ env.BUILD_CONFIG }} --no-restore
+          dotnet build ERP.Persistence\ERP.Persistence.csproj        -c ${{ env.BUILD_CONFIG }} --no-restore
 
       - name: 🔨 Build — API
         run: dotnet build ERP.Api\ERP.Api.csproj -c ${{ env.BUILD_CONFIG }} --no-restore
@@ -49,17 +47,30 @@ jobs:
       - name: 🔨 Build — WPF
         run: dotnet build ERP.WPF\ERP.WPF.csproj -c ${{ env.BUILD_CONFIG }} --no-restore
 
-      #- name: 🧪 Executar testes
-      #  run: dotnet test ERP.Tests\ERP.Tests.csproj --no-restore --verbosity normal
-      #  env:
-      #    DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      # ── FASE 0 — Gate obrigatório de isolamento multi-tenant ─────────────────
+      # Estes 3 testes provam que:
+      #   #1 Produto do Tenant A não vaza para Tenant B
+      #   #2 Produto do Tenant A aparece corretamente para Tenant A
+      #   #3 Saldo Haver do Tenant A não vaza para Tenant B
+      # Qualquer PR que quebre o isolamento falha aqui e não avança para deploy.
+      - name: 🔒 Fase 0 — Testes de isolamento multi-tenant (gate obrigatório)
+        run: dotnet test ERP.Tests\ERP.Tests.csproj --filter "FASE0" --no-restore --verbosity normal
+        env:
+          DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
-      #- name: 📊 Publicar resultados dos testes
-      #  if: always()
-      #  uses: actions/upload-artifact@v4
-      #  with:
-      #    name: test-results
-      #    path: '**/TestResults/*.xml'
+      # ── Suíte completa de testes ──────────────────────────────────────────────
+      - name: 🧪 Todos os testes
+        run: dotnet test ERP.Tests\ERP.Tests.csproj --no-restore --verbosity normal --logger "trx;LogFileName=results.trx"
+        env:
+          DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+      - name: 📊 Publicar resultados dos testes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ github.sha }}
+          path: '**/TestResults/*.trx'
+          retention-days: 14
 
   # ── Job 2: Publish WPF (apenas na main) ──────────────────────────────────────
   publish-wpf:
@@ -103,18 +114,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Note que removemos o setup do .NET, restore e publish daqui.
-      # A action do Azure abaixo cuidará de baixar o código e compilar o Blazor sozinha.
-
       - name: 🚀 Deploy → Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: upload
-          app_location: "ERP.Portal" # Onde o motor do Azure vai procurar o .csproj do Blazor
-          output_location: "wwwroot" # Onde o motor do Azure vai jogar os arquivos estáticos após buildar
-          # skip_app_build foi removido!
+          app_location: "ERP.Portal"
+          output_location: "wwwroot"
 
   # ── Job 4: Deploy API → Azure App Service (apenas na main) ───────────────────
   deploy-api:

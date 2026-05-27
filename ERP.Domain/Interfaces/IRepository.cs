@@ -53,4 +53,10 @@ public interface IUnitOfWork : IDisposable
     IDevolucaoRepository    Devolucoes    { get; }
     IRoleRepository         Roles         { get; }
     Task<int> CommitAsync();
+    /// <summary>
+    /// Inicia uma transação explícita no banco de dados.
+    /// Use para operações que precisam ser atômicas (ex: baixa de estoque + criação de venda).
+    /// O caller é responsável por chamar CommitAsync e DisposeAsync na transação retornada.
+    /// </summary>
+    Task<ITransaction> BeginTransactionAsync();
 }

@@ -17,5 +17,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ERP.Domain\ERP.Domain.csproj" />
+    <!-- Necessário para IRequestTenant injetado no AppDbContext (Fase 0 fix) -->
+    <ProjectReference Include="..\ERP.Application\ERP.Application.csproj" />
   </ItemGroup>
 </Project>

@@ -7,16 +7,28 @@ namespace ERP.Infrastructure.Services;
 
 public class FidelidadeService : IFidelidadeService
 {
-    private readonly AppDbContext _db;
+    private readonly AppDbContext   _db;
+    private readonly IRequestTenant _tenant;
+
+    // ── FASE 0 FIX: injetar IRequestTenant do mesmo scope da requisição ──────
+    // Antes: FidelidadeService não filtrava por TenantId, qualquer usuário
+    // autenticado conseguia ver/alterar pontos de clientes de outros tenants.
+    // Agora: HasQueryFilter em PontosFidelidade filtra por TenantId automaticamente
+    // (configurado em AppDbContext.OnModelCreating após a correção).
+    public FidelidadeService(AppDbContext db, IRequestTenant tenant)
+    {
+        _db     = db;
+        _tenant = tenant;
+    }
 
     // Regras de negócio (podem virar configuração futura)
     private const decimal RealPorPonto  = 1m;     // R$ 1,00 = 1 ponto
     private const decimal ValorPorPonto = 0.01m;  // 1 ponto = R$ 0,01 de desconto
 
-    public FidelidadeService(AppDbContext db) => _db = db;
-
     public async Task<int> GetSaldoAsync(Guid customerId)
     {
+        // HasQueryFilter em PontosFidelidade já filtra por TenantId.
+        // Se o cliente não é deste tenant, retorna 0 (sem vazar dado).
         var creditos = await _db.Set<PontosFidelidade>()
             .Where(p => p.CustomerId == customerId && p.Tipo == "Credito")
             .SumAsync(p => (int?)p.Pontos) ?? 0;
@@ -41,6 +53,7 @@ public class FidelidadeService : IFidelidadeService
             Pontos     = pontos,
             Descricao  = $"Compra — venda #{saleId.ToString()[..8].ToUpper()}",
             Data       = DateTime.UtcNow
+            // TenantId é preenchido por PreencherTenantIdEUpdatedAt via GetTenantId()
         });
 
         await _db.SaveChangesAsync();
@@ -67,6 +80,7 @@ public class FidelidadeService : IFidelidadeService
 
     public async Task<List<MovimentoPontosDto>> GetHistoricoAsync(Guid customerId, int pagina = 1, int pageSize = 20)
     {
+        // HasQueryFilter já garante que só pontos deste tenant são retornados
         return await _db.Set<PontosFidelidade>()
             .Where(p => p.CustomerId == customerId)
             .OrderByDescending(p => p.Data)
