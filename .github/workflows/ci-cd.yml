@@ -55,6 +55,12 @@ jobs:
       # Qualquer PR que quebre o isolamento falha aqui e não avança para deploy.
       - name: 🔒 Fase 0 — Testes de isolamento multi-tenant (gate obrigatório)
         run: dotnet test ERP.Tests\ERP.Tests.csproj --filter "FASE0" --no-restore --verbosity normal
+
+      # ── F1.1 — Isolamento dual-tenant para 8 controllers sensíveis ─────────
+      - name: 🔒 F1.1 — Dual-tenant isolation (gate obrigatório)
+        run: dotnet test ERP.Tests\ERP.Tests.csproj --filter "F11" --no-restore --verbosity normal
+        env:
+          DOTNET_CLI_TELEMETRY_OPTOUT: 1
         env:
           DOTNET_CLI_TELEMETRY_OPTOUT: 1
 

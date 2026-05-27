@@ -1026,3 +1026,245 @@ public class Fase0TenantIsolationTests : IClassFixture<ErpApiFactory>
     }
 }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  F1.1 — DUAL-TENANT ISOLATION TESTS
+//
+//  Objetivo: provar que nenhum dos controllers sensíveis vaza dados entre
+//  tenants. Um por controller, cobrindo os 8 mais críticos além dos 3 do FASE0.
+//
+//  Padrão: seed com TenantId=A, requisição com JWT de TenantId=B,
+//          verifica que o identificador único do dado de A não aparece.
+//
+//  Junto com Fase0TenantIsolationTests → 11 testes de isolamento no total.
+// ═══════════════════════════════════════════════════════════════════════════════
+public class F11DualTenantTests : IClassFixture<ErpApiFactory>
+{
+    private readonly ErpApiFactory _factory;
+    public F11DualTenantTests(ErpApiFactory factory) => _factory = factory;
+
+    // ── helper: seed direct (bypasses HTTP stack) ──────────────────────────
+    private async Task<AppDbContext> SeedAsync(Action<AppDbContext> seed)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        seed(db);
+        await db.SaveChangesAsync();
+        return db;
+    }
+
+    private HttpClient ClientFor(Guid tenantId)
+    {
+        var c = _factory.CreateClient();
+        c.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer", _factory.GerarToken(tenantId: tenantId));
+        return c;
+    }
+
+    // ── 1. Customers ────────────────────────────────────────────────────────
+    [Fact(DisplayName = "F1.1 — Customers: Tenant B nao ve clientes do Tenant A")]
+    [Trait("F11", "DualTenant")]
+    public async Task Customers_TenantB_NaoVeClientesDeTenantA()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var marker  = $"Cliente-A-{tenantA:N}";
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Customers.Add(new ERP.Domain.Entities.Customer
+        {
+            Id = Guid.NewGuid(), TenantId = tenantA, Name = marker,
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var resp = await ClientFor(tenantB).GetAsync("/api/customers");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await resp.Content.ReadAsStringAsync()).Should().NotContain(marker);
+    }
+
+    // ── 2. Sales ────────────────────────────────────────────────────────────
+    [Fact(DisplayName = "F1.1 — Sales: Tenant B nao ve vendas do Tenant A")]
+    [Trait("F11", "DualTenant")]
+    public async Task Sales_TenantB_NaoVeVendasDeTenantA()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var saleNum = $"SALE-A-{tenantA:N}";
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Sales.Add(new ERP.Domain.Entities.Sale
+        {
+            Id = Guid.NewGuid(), TenantId = tenantA, SaleNumber = saleNum,
+            Total = 100m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            SaleDate = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var resp = await ClientFor(tenantB).GetAsync("/api/sales");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await resp.Content.ReadAsStringAsync()).Should().NotContain(saleNum);
+    }
+
+    // ── 3. Orcamentos ───────────────────────────────────────────────────────
+    [Fact(DisplayName = "F1.1 — Orcamentos: Tenant B nao ve orcamentos do Tenant A")]
+    [Trait("F11", "DualTenant")]
+    public async Task Orcamentos_TenantB_NaoVeOrcamentosDeTenantA()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var marker  = $"ORC-A-{tenantA:N}";
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Orcamentos.Add(new ERP.Domain.Entities.Orcamento
+        {
+            Id = Guid.NewGuid(), TenantId = tenantA, Numero = marker,
+            ValorTotal = 500m, DataEmissao = DateTime.UtcNow,
+            DataValidade = DateTime.UtcNow.AddDays(30),
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var resp = await ClientFor(tenantB).GetAsync("/api/orcamentos");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await resp.Content.ReadAsStringAsync()).Should().NotContain(marker);
+    }
+
+    // ── 4. Contas a Receber ─────────────────────────────────────────────────
+    [Fact(DisplayName = "F1.1 — ContasReceber: Tenant B nao ve contas do Tenant A")]
+    [Trait("F11", "DualTenant")]
+    public async Task ContasReceber_TenantB_NaoVeContasDeTenantA()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var marker  = $"CR-A-{tenantA:N}";
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.ContasReceber.Add(new ERP.Domain.Entities.ContaReceber
+        {
+            Id = Guid.NewGuid(), TenantId = tenantA, Descricao = marker,
+            ValorTotal = 1000m, DataVencimento = DateTime.UtcNow.AddDays(30),
+            CustomerId = Guid.NewGuid(), CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var resp = await ClientFor(tenantB).GetAsync("/api/contas-receber/pendentes");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await resp.Content.ReadAsStringAsync()).Should().NotContain(marker);
+    }
+
+    // ── 5. Contas a Pagar ───────────────────────────────────────────────────
+    [Fact(DisplayName = "F1.1 — ContasPagar: Tenant B nao ve contas do Tenant A")]
+    [Trait("F11", "DualTenant")]
+    public async Task ContasPagar_TenantB_NaoVeContasDeTenantA()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var marker  = $"CP-A-{tenantA:N}";
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.ContasPagar.Add(new ERP.Domain.Entities.ContaPagar
+        {
+            Id = Guid.NewGuid(), TenantId = tenantA, Descricao = marker,
+            Valor = 500m, DataVencimento = DateTime.UtcNow.AddDays(15),
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var resp = await ClientFor(tenantB).GetAsync("/api/contas-pagar/pendentes");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await resp.Content.ReadAsStringAsync()).Should().NotContain(marker);
+    }
+
+    // ── 6. Fidelidade ───────────────────────────────────────────────────────
+    [Fact(DisplayName = "F1.1 — Fidelidade: saldo de cliente do Tenant A e 0 para Tenant B")]
+    [Trait("F11", "DualTenant")]
+    public async Task Fidelidade_ClienteTenantA_SaldoZeroParaTenantB()
+    {
+        var tenantA   = Guid.NewGuid();
+        var tenantB   = Guid.NewGuid();
+        var clienteId = Guid.NewGuid();
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.PontosFidelidade.Add(new ERP.Domain.Entities.PontosFidelidade
+        {
+            Id = Guid.NewGuid(), TenantId = tenantA,
+            CustomerId = clienteId, Tipo = "Credito",
+            Pontos = 500, Data = DateTime.UtcNow,
+            Descricao = "Compra teste"
+        });
+        await db.SaveChangesAsync();
+
+        var resp = await ClientFor(tenantB)
+            .GetAsync($"/api/fidelidade/{clienteId}/saldo");
+
+        if (resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            body.Should().NotContain("500",
+                "pontos do Tenant A nao devem aparecer para Tenant B");
+        }
+        else
+        {
+            resp.StatusCode.Should().BeOneOf(
+                HttpStatusCode.NotFound, HttpStatusCode.Forbidden);
+        }
+    }
+
+    // ── 7. Pedidos de Compra ────────────────────────────────────────────────
+    [Fact(DisplayName = "F1.1 — PedidosCompra: Tenant B nao ve pedidos do Tenant A")]
+    [Trait("F11", "DualTenant")]
+    public async Task PedidosCompra_TenantB_NaoVePedidosDeTenantA()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var marker  = $"PC-A-{tenantA:N}";
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.PedidosCompra.Add(new ERP.Domain.Entities.PedidoCompra
+        {
+            Id = Guid.NewGuid(), TenantId = tenantA, Numero = marker,
+            Status = ERP.Domain.Enums.StatusPedidoCompra.Rascunho,
+            DataPedido = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var resp = await ClientFor(tenantB).GetAsync("/api/pedidos-compra");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await resp.Content.ReadAsStringAsync()).Should().NotContain(marker);
+    }
+
+    // ── 8. Entregas ─────────────────────────────────────────────────────────
+    [Fact(DisplayName = "F1.1 — Entregas: Tenant B nao ve entregas do Tenant A")]
+    [Trait("F11", "DualTenant")]
+    public async Task Entregas_TenantB_NaoVeEntregasDeTenantA()
+    {
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var marker  = $"END-A-{tenantA:N}";
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Entregas.Add(new ERP.Domain.Entities.Entrega
+        {
+            Id = Guid.NewGuid(), TenantId = tenantA,
+            ClienteNome = marker, SaleId = Guid.NewGuid(),
+            Status = ERP.Domain.Enums.StatusEntrega.Pendente,
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var resp = await ClientFor(tenantB).GetAsync("/api/entregas");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await resp.Content.ReadAsStringAsync()).Should().NotContain(marker);
+    }
+}
