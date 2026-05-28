@@ -20,6 +20,21 @@ public class MarketplaceController : ControllerBase
     // ── Mercado Livre ─────────────────────────────────────────────────────────
 
     /// <summary>
+    /// Retorna a configuração atual dos marketplaces habilitados para a loja.
+    /// </summary>
+    [HttpGet("config")]
+    [Authorize]
+    public IActionResult GetConfig()
+    {
+        return Ok(new
+        {
+            Plataformas = new[] { "MercadoLivre", "Shopee" },
+            WebhookUrlML     = $"{Request.Scheme}://{Request.Host}/api/marketplace/ml/webhook/{{tenantId}}",
+            WebhookUrlShopee = $"{Request.Scheme}://{Request.Host}/api/marketplace/shopee/webhook/{{tenantId}}"
+        });
+    }
+
+    /// <summary>
     /// Webhook do Mercado Livre — recebe notificações de pedidos e itens.
     /// Fase 1.5: tenantId na URL identifica a loja. Cada loja configura sua própria URL:
     ///   https://api.ttsoft.com.br/api/marketplace/ml/webhook/{tenantId}

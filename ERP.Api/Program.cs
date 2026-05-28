@@ -85,6 +85,9 @@ builder.Services.AddScoped<IDevolucaoService,      ERP.Application.Services.Devo
 builder.Services.AddScoped<IRoleService,           ERP.Application.Services.RoleService>();
 builder.Services.AddScoped<ICalculadoraService, CalculadoraService>();
 
+// ── Asaas (boleto bancário) ───────────────────────────────────────────────────
+builder.Services.AddHttpClient<ERP.Infrastructure.Services.AsaasService>();
+
 // Fase 0 Fix: HaverService agora injeta AppDbContext e IRequestTenant diretamente
 // (sem IServiceProvider e sem CreateScope — que criava scope novo com tenant vazio).
 builder.Services.AddScoped<IHaverService, ERP.Infrastructure.Services.HaverService>();

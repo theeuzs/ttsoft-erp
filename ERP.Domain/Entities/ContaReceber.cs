@@ -35,4 +35,16 @@ public class ContaReceber : BaseEntity
     public Guid? ParcelamentoId { get; set; }
     /// <summary>Forma de recebimento. Ex: "Dinheiro", "Cheque", "Cartão Crédito".</summary>
     public string FormaPagamento { get; set; } = string.Empty;
+
+    // ── Integração Asaas (boleto/PIX digital) ─────────────────────────────────
+    /// <summary>ID do pagamento no Asaas. Null = boleto não gerado.</summary>
+    public string? AsaasPaymentId { get; set; }
+    /// <summary>URL do boleto bancário para download/impressão.</summary>
+    public string? BoletoUrl     { get; set; }
+    /// <summary>Linha digitável do boleto (código de barras).</summary>
+    public string? BoletoBarCode  { get; set; }
+    /// <summary>URL da fatura digital (página de pagamento unificada).</summary>
+    public string? InvoiceUrl    { get; set; }
+    /// <summary>Status no Asaas: PENDING, RECEIVED, OVERDUE, REFUNDED.</summary>
+    public string? AsaasStatus   { get; set; }
 }

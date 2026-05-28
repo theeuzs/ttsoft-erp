@@ -1,7 +1,10 @@
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Infrastructure.Services;
+using ERP.Persistence.Context;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -11,8 +14,18 @@ namespace ERP.Api.Controllers;
 public class ContasReceberController : ControllerBase
 {
     private readonly IContaReceberService _service;
+    private readonly AsaasService         _asaas;
+    private readonly AppDbContext         _db;
 
-    public ContasReceberController(IContaReceberService service) => _service = service;
+    public ContasReceberController(
+        IContaReceberService service,
+        AsaasService asaas,
+        AppDbContext db)
+    {
+        _service = service;
+        _asaas   = asaas;
+        _db      = db;
+    }
 
     /// <summary>Lista contas a receber pendentes.</summary>
     [HttpGet("pendentes")]
@@ -83,6 +96,62 @@ public class ContasReceberController : ControllerBase
         await _service.DarBaixaParcialAsync(id, dto.Valor);
         return NoContent();
     }
+    /// <summary>
+    /// Gera boleto bancário via Asaas para uma conta a receber.
+    /// Requer Asaas:ApiKey configurado nas variáveis de ambiente.
+    /// </summary>
+    [HttpPost("{id:guid}/gerar-boleto")]
+    public async Task<IActionResult> GerarBoleto(Guid id)
+    {
+        var conta = await _db.ContasReceber
+            .Include(c => c.Customer)
+            .Where(c => c.Id == id)
+            .FirstOrDefaultAsync();
+
+        if (conta is null) return NotFound();
+        if (!string.IsNullOrEmpty(conta.AsaasPaymentId))
+            return Ok(new { conta.BoletoUrl, conta.InvoiceUrl, conta.BoletoBarCode, conta.AsaasStatus });
+
+        if (conta.Customer is null)
+            return BadRequest(new { erro = "Conta sem cliente vinculado." });
+
+        // 1. Obter/criar cliente no Asaas
+        var cpfCnpj = conta.Customer.Document ?? "";
+        if (string.IsNullOrEmpty(cpfCnpj))
+            return BadRequest(new { erro = "Cliente sem CPF/CNPJ cadastrado. Preencha antes de gerar boleto." });
+
+        var asaasClientId = await _asaas.ObterOuCriarClienteAsync(
+            conta.Customer.Name, cpfCnpj, conta.Customer.Email, conta.Customer.Phone);
+
+        if (asaasClientId is null)
+            return StatusCode(502, new { erro = "Não foi possível registrar o cliente no Asaas. Verifique a API Key." });
+
+        // 2. Gerar boleto
+        var resultado = await _asaas.GerarBoletoAsync(
+            asaasClientId,
+            conta.ValorTotal - conta.ValorRecebido,
+            conta.DataVencimento,
+            $"{conta.Descricao} — Parcela {conta.NumeroParcela}/{conta.TotalParcelas}");
+
+        if (resultado is null)
+            return StatusCode(502, new { erro = "Erro ao gerar boleto no Asaas." });
+
+        // 3. Salvar IDs na conta
+        conta.AsaasPaymentId = resultado.AsaasPaymentId;
+        conta.BoletoUrl      = resultado.BoletoUrl;
+        conta.InvoiceUrl     = resultado.InvoiceUrl;
+        conta.BoletoBarCode  = resultado.BoletoBarCode;
+        conta.AsaasStatus    = resultado.Status;
+        await _db.SaveChangesAsync();
+
+        return Ok(new {
+            resultado.BoletoUrl,
+            resultado.InvoiceUrl,
+            resultado.BoletoBarCode,
+            resultado.Status
+        });
+    }
+
 }
 
 public record BaixaParcialDto(decimal Valor);
