@@ -1,0 +1,224 @@
+@page "/conciliacao"
+@using ERP.Portal.Services
+@using Microsoft.AspNetCore.Components.Forms
+@inject ApiClient Api
+@inject IJSRuntime JS
+
+<div style="padding:0 0 32px;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px;">
+        <div style="font-size:32px;">🔄</div>
+        <div>
+            <h2 style="color:#1E293B; font-weight:800; margin:0;">Conciliação de Cartões</h2>
+            <p style="color:#94A3B8; font-size:13px; margin:4px 0 0;">
+                Importe o extrato da operadora (Cielo, Rede, Stone, GetNet) e cruze com suas vendas
+            </p>
+        </div>
+    </div>
+
+    <!-- Upload -->
+    <div style="background:white; border-radius:12px; padding:24px;
+                box-shadow:0 2px 8px rgba(0,0,0,.06); margin-bottom:20px;">
+        <h3 style="font-size:14px; font-weight:700; color:#1E293B; margin:0 0 16px;">
+            📁 Importar Extrato CSV
+        </h3>
+
+        <div style="display:grid; grid-template-columns:1fr auto auto; gap:12px; align-items:end;">
+            <div>
+                <label style="font-size:11px; font-weight:700; color:#64748B; display:block; margin-bottom:6px; text-transform:uppercase;">
+                    Arquivo CSV da operadora
+                </label>
+                <InputFile OnChange="SelecionarArquivo" accept=".csv"
+                           style="width:100%; padding:9px 12px; border:1px solid #E2E8F0;
+                                  border-radius:8px; font-size:13px; background:white;" />
+            </div>
+            <div>
+                <label style="font-size:11px; font-weight:700; color:#64748B; display:block; margin-bottom:6px; text-transform:uppercase;">
+                    Separador
+                </label>
+                <select @bind="_separador"
+                        style="padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:13px;">
+                    <option value=";">; (ponto-vírgula)</option>
+                    <option value=",">, (vírgula)</option>
+                    <option value="&#9;">TAB</option>
+                </select>
+            </div>
+            <button @onclick="ImportarAsync" disabled="@(_arquivo == null || _importando)"
+                    style="background:#1E62A6; color:white; border:none; padding:10px 20px;
+                           border-radius:8px; font-size:13px; font-weight:700; cursor:pointer;
+                           opacity:@(_arquivo == null || _importando ? "0.5" : "1");">
+                @(_importando ? "Processando..." : "🔍 Conciliar")
+            </button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_erro))
+        {
+            <div style="background:#FEF2F2; color:#DC2626; padding:10px 14px; border-radius:8px; margin-top:12px; font-size:13px;">
+                ❌ @_erro
+            </div>
+        }
+
+        <p style="font-size:12px; color:#94A3B8; margin:12px 0 0;">
+            O CSV deve ter colunas <strong>Data</strong> e <strong>Valor</strong>.
+            Coluna de descrição é opcional. O sistema cruza por data + valor (tolerância R$0,01).
+        </p>
+    </div>
+
+    <!-- Resultado -->
+    @if (_resultado is not null)
+    {
+        <!-- KPIs -->
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px;">
+            <div style="background:white; border-radius:10px; padding:16px; box-shadow:0 2px 8px rgba(0,0,0,.06); border-top:4px solid #1E62A6;">
+                <div style="font-size:20px; font-weight:800; color:#1E293B;">@_resultado.TotalLinhas</div>
+                <div style="font-size:11px; color:#94A3B8; font-weight:600; margin-top:2px;">TRANSAÇÕES NO EXTRATO</div>
+            </div>
+            <div style="background:white; border-radius:10px; padding:16px; box-shadow:0 2px 8px rgba(0,0,0,.06); border-top:4px solid #27AE60;">
+                <div style="font-size:20px; font-weight:800; color:#1E293B;">@_resultado.Conciliados</div>
+                <div style="font-size:11px; color:#94A3B8; font-weight:600; margin-top:2px;">CONCILIADOS ✅</div>
+            </div>
+            <div style="background:white; border-radius:10px; padding:16px; box-shadow:0 2px 8px rgba(0,0,0,.06); border-top:4px solid #EF4444;">
+                <div style="font-size:20px; font-weight:800; color:#1E293B;">@_resultado.NaoConciliados</div>
+                <div style="font-size:11px; color:#94A3B8; font-weight:600; margin-top:2px;">NÃO CONCILIADOS ❌</div>
+            </div>
+            <div style="background:white; border-radius:10px; padding:16px; box-shadow:0 2px 8px rgba(0,0,0,.06); border-top:4px solid #F59E0B;">
+                <div style="font-size:20px; font-weight:800; color:#1E293B;">@_resultado.TotalExtrato.ToString("C0")</div>
+                <div style="font-size:11px; color:#94A3B8; font-weight:600; margin-top:2px;">TOTAL DO EXTRATO</div>
+            </div>
+        </div>
+
+        <!-- Filtros -->
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+            @foreach (var (f, label) in new[]{("todos","Todos"),("conciliado","✅ Conciliados"),("nao","❌ Não conciliados")})
+            {
+                <button @onclick="() => _filtro = f"
+                        style="padding:8px 16px; border:none; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer;
+                               background:@(_filtro == f ? "#1E62A6" : "#F1F5F9"); color:@(_filtro == f ? "white" : "#64748B");">
+                    @label
+                </button>
+            }
+        </div>
+
+        <!-- Tabela -->
+        <div style="background:white; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#F8FAFC;">
+                            <th style="@Th">Status</th>
+                            <th style="@Th">Data</th>
+                            <th style="@Th; text-align:right;">Valor Extrato</th>
+                            <th style="@Th">Descrição Extrato</th>
+                            <th style="@Th">Venda</th>
+                            <th style="@Th; text-align:right;">Valor Venda</th>
+                            <th style="@Th; text-align:right;">Diferença</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in FiltrarItens())
+                        {
+                            <tr style="border-top:1px solid #F1F5F9; background:@(item.Conciliado ? "white" : "#FFF8F8");">
+                                <td style="@Td; text-align:center;">
+                                    @(item.Conciliado ? "✅" : "❌")
+                                </td>
+                                <td style="@Td;">@item.DataExtrato.ToString("dd/MM/yyyy")</td>
+                                <td style="@Td; text-align:right; font-weight:600;">@item.ValorExtrato.ToString("C2")</td>
+                                <td style="@Td; color:#64748B; font-size:12px; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                    @item.DescExtrato
+                                </td>
+                                <td style="@Td; font-size:12px; color:@(item.Conciliado ? "#1E293B" : "#94A3B8");">
+                                    @(item.NumeroVenda ?? "— não encontrada")
+                                </td>
+                                <td style="@Td; text-align:right;">
+                                    @(item.ValorVenda.HasValue ? item.ValorVenda.Value.ToString("C2") : "—")
+                                </td>
+                                <td style="@Td; text-align:right; font-weight:600; color:@(item.Diferenca == 0 ? "#16A34A" : "#DC2626");">
+                                    @(item.Diferenca.HasValue ? item.Diferenca.Value.ToString("C2") : "—")
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private IBrowserFile?      _arquivo;
+    private string             _separador = ";";
+    private bool               _importando = false;
+    private string?            _erro;
+    private ConciliacaoResult? _resultado;
+    private string             _filtro = "todos";
+
+    private const string Th = "padding:10px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
+    private const string Td = "padding:12px 16px; font-size:13px;";
+
+    private void SelecionarArquivo(InputFileChangeEventArgs e)
+    {
+        _arquivo = e.File;
+        _erro    = null;
+        _resultado = null;
+    }
+
+    private async Task ImportarAsync()
+    {
+        if (_arquivo is null) return;
+        _importando = true;
+        _erro       = null;
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            using var stream  = _arquivo.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            using var sc      = new System.Net.Http.StreamContent(stream);
+            sc.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/csv");
+            content.Add(sc, "arquivo", _arquivo.Name);
+
+            var resp = await Api.HttpClient.PostAsync(
+                $"api/Conciliacao/importar-extrato?separador={Uri.EscapeDataString(_separador)}", content);
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                _erro = await resp.Content.ReadAsStringAsync();
+                return;
+            }
+            _resultado = await resp.Content.ReadFromJsonAsync<ConciliacaoResult>();
+        }
+        catch (Exception ex) { _erro = ex.Message; }
+        finally { _importando = false; }
+    }
+
+    private List<ItemConciliacao> FiltrarItens()
+    {
+        if (_resultado?.Itens is null) return [];
+        return _filtro switch
+        {
+            "conciliado" => _resultado.Itens.Where(i => i.Conciliado).ToList(),
+            "nao"        => _resultado.Itens.Where(i => !i.Conciliado).ToList(),
+            _            => _resultado.Itens
+        };
+    }
+
+    private class ConciliacaoResult
+    {
+        public int    TotalLinhas     { get; set; }
+        public int    Conciliados     { get; set; }
+        public int    NaoConciliados  { get; set; }
+        public decimal TotalExtrato   { get; set; }
+        public decimal TotalConciliado { get; set; }
+        public List<ItemConciliacao> Itens { get; set; } = [];
+    }
+
+    private class ItemConciliacao
+    {
+        public DateTime DataExtrato   { get; set; }
+        public decimal  ValorExtrato  { get; set; }
+        public string   DescExtrato   { get; set; } = "";
+        public bool     Conciliado    { get; set; }
+        public string?  NumeroVenda   { get; set; }
+        public Guid?    VendaId       { get; set; }
+        public decimal? ValorVenda    { get; set; }
+        public string?  VendedorVenda { get; set; }
+        public decimal? Diferenca     { get; set; }
+    }
+}

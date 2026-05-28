@@ -29,14 +29,36 @@ namespace ERP.Tests;
 // ═══════════════════════════════════════════════════════════════════════════════
 //  HELPER — cria um IServiceProvider com InMemory DB + TenantId configurado
 // ═══════════════════════════════════════════════════════════════════════════════
+// FakeRequestTenant: substitui o static _globalTenantId para evitar race condition em testes paralelos
+internal class FakeRequestTenant : ERP.Application.Interfaces.IRequestTenant
+{
+    public Guid   TenantId { get; set; }
+    public Guid   UserId   { get; set; }
+    public string UserName { get; set; } = "test";
+}
+
 internal static class TestDb
 {
-    public static IServiceProvider Create(string dbName, Action<AppDbContext>? seed = null)
+    /// <param name="tenantId">
+    /// Quando fornecido, usa ESTE tenantId (para testes que semeiam com TenantId explícito).
+    /// Quando nulo, gera um novo GUID. O IRequestTenant registrado usa o mesmo valor,
+    /// garantindo que HasQueryFilter e dados semeados estejam no mesmo tenant.
+    /// </param>
+    public static IServiceProvider Create(
+        string dbName,
+        Action<AppDbContext>? seed = null,
+        Guid? tenantId = null)
     {
-        var tenantId = Guid.NewGuid();
-        AppDbContext.SetGlobalTenantId(tenantId);
+        var tid    = tenantId ?? Guid.NewGuid();
+        var tenant = new FakeRequestTenant { TenantId = tid };
+
+        // Mantém SetGlobalTenantId para compatibilidade com construtor de 1 argumento (WPF)
+        AppDbContext.SetGlobalTenantId(tid);
 
         var services = new ServiceCollection();
+        // Registra IRequestTenant ANTES de AddDbContext — EF Core escolhe o construtor de 2 args
+        // e usa este tenant no HasQueryFilter (sem depender do estático, thread-safe)
+        services.AddSingleton<ERP.Application.Interfaces.IRequestTenant>(tenant);
         services.AddDbContext<AppDbContext>(o =>
             o.UseInMemoryDatabase(dbName));
 

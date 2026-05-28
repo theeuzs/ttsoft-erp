@@ -52,6 +52,13 @@ namespace ERP.Tests.Application.Services
             // Simula o commit no banco de dados
             _uowMock.Setup(u => u.CommitAsync()).ReturnsAsync(0);
 
+            // Fase 0: BeginTransactionAsync deve estar no construtor para todos os testes
+            var txMock = new Mock<ITransaction>();
+            txMock.Setup(t => t.CommitAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+            txMock.Setup(t => t.RollbackAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+            txMock.Setup(t => t.DisposeAsync()).Returns(ValueTask.CompletedTask);
+            _uowMock.Setup(u => u.BeginTransactionAsync()).ReturnsAsync(txMock.Object);
+
             _saleService = new SaleService(_uowMock.Object, _mapperMock.Object, _validatorMock.Object, _haverServiceMock.Object);
         }
 

@@ -86,11 +86,16 @@ public class MetasService : IMetasService
             var updatedAt  = DateTime.UtcNow;
             var valorMeta  = dto.ValorMeta;
             var existenteId = existente.Id;
-            // Fase 1.5: AND TenantId= adicionado por defesa em profundidade.
-            // O existenteId já foi carregado via LINQ com HasQueryFilter (tenant filtrado),
-            // mas adicionar TenantId no SQL explícito é mais seguro que confiar só no EF.
-            await _ctx.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE MetasVendas SET ValorMeta={valorMeta}, Descricao={descricao}, UpdatedAt={updatedAt} WHERE Id={existenteId} AND TenantId={tenantId}");
+            // HasQueryFilter já garantiu que existenteId pertence ao tenant atual.
+            // Usa EF Core diretamente — compatível com InMemory e SQL Server.
+            var metaExistente = await _ctx.MetasVendas.FindAsync(existenteId);
+            if (metaExistente is not null)
+            {
+                metaExistente.ValorMeta = valorMeta;
+                metaExistente.Descricao = descricao;
+                metaExistente.UpdatedAt = updatedAt;
+                await _ctx.SaveChangesAsync(ct);
+            }
 
             return (existente.Id, Atualizado: true);
         }
@@ -112,11 +117,16 @@ public class MetasService : IMetasService
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        // Fase 1.5 Fix: AND TenantId= impede IDOR de DELETE.
-        // Sem isso qualquer usuário autenticado de qualquer tenant que adivinhe
-        // o GUID de uma meta consegue deletá-la (mesmo de outra loja).
-        var tenantId = _tenant.TenantId;
-        await _ctx.Database.ExecuteSqlInterpolatedAsync(
-            $"DELETE FROM MetasVendas WHERE Id={id} AND TenantId={tenantId}");
+        // HasQueryFilter garante isolamento de tenant — só encontra metas do tenant atual.
+        // Soft delete via EF Core (compatível com InMemory e SQL Server).
+        var meta = await _ctx.MetasVendas
+            .Where(m => m.Id == id)
+            .FirstOrDefaultAsync(ct);
+
+        if (meta is null) return; // Não encontrada ou de outro tenant — não faz nada
+
+        meta.IsDeleted = true;
+        meta.UpdatedAt = DateTime.UtcNow;
+        await _ctx.SaveChangesAsync(ct);
     }
 }

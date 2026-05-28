@@ -387,12 +387,12 @@ public class CaixaControllerTests : IntegrationTestBase
 
     [Fact(DisplayName = "GET /api/caixa/status sem token → 401")]
     public async Task Status_SemToken_Retorna401()
-        => (await AnonClient.GetAsync("/api/caixa/status"))
+        => (await AnonClient.GetAsync("/api/caixa/aberto"))
             .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
     [Fact(DisplayName = "GET /api/caixa/status com token → 200")]
     public async Task Status_ComToken_Retorna200()
-        => (await AuthClient.GetAsync("/api/caixa/status"))
+        => (await AuthClient.GetAsync("/api/caixa/aberto"))
             .StatusCode.Should().Be(HttpStatusCode.OK);
 }
 
@@ -432,12 +432,12 @@ public class FidelidadeControllerTests : IntegrationTestBase
 
     [Fact(DisplayName = "GET /api/fidelidade/saldo/{guid} sem token → 401")]
     public async Task Saldo_SemToken_Retorna401()
-        => (await AnonClient.GetAsync($"/api/fidelidade/saldo/{Guid.NewGuid()}"))
+        => (await AnonClient.GetAsync($"/api/fidelidade/{Guid.NewGuid()}/saldo"))
             .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
     [Fact(DisplayName = "GET /api/fidelidade/saldo/{guid} com token → 200")]
     public async Task Saldo_ComToken_Retorna200()
-        => (await AuthClient.GetAsync($"/api/fidelidade/saldo/{Guid.NewGuid()}"))
+        => (await AuthClient.GetAsync($"/api/fidelidade/{Guid.NewGuid()}/saldo"))
             .StatusCode.Should().Be(HttpStatusCode.OK);
 }
 
@@ -470,12 +470,12 @@ public class ContasReceberControllerTests : IntegrationTestBase
 
     [Fact(DisplayName = "GET /api/contasreceber sem token → 401")]
     public async Task GetAll_SemToken_Retorna401()
-        => (await AnonClient.GetAsync("/api/contasreceber"))
+        => (await AnonClient.GetAsync("/api/contas-receber/pendentes"))
             .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
     [Fact(DisplayName = "GET /api/contasreceber com token → 200")]
     public async Task GetAll_ComToken_Retorna200()
-        => (await AuthClient.GetAsync("/api/contasreceber"))
+        => (await AuthClient.GetAsync("/api/contas-receber/pendentes"))
             .StatusCode.Should().Be(HttpStatusCode.OK);
 }
 

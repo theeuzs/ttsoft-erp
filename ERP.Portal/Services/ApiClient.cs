@@ -50,6 +50,9 @@ public class ApiClient
 
     /// <summary>BaseAddress do HttpClient — usada para construir URLs absolutas (ex: romaneio HTML).</summary>
     public string GetBaseUrl() => _http.BaseAddress?.ToString() ?? "/";
+
+    /// <summary>HttpClient exposto para operações multipart (upload de arquivo CSV).</summary>
+    public HttpClient HttpClient => _http;
 }
 
 public class AuthService
