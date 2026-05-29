@@ -70,6 +70,10 @@ namespace ERP.Tests.Application.Services
             var usuarioId = Guid.NewGuid();
             var produtoId = Guid.NewGuid();
             var produtoFake = new Product { Id = produtoId, Name = "Veda Rosca", Stock = 10, AllowNegativeStock = false };
+            // Callback simula o UPDATE atômico de estoque que acontece no banco
+            _uowMock.Setup(u => u.Products.BaixarEstoqueAtomicoAsync(produtoId, It.IsAny<decimal>(), It.IsAny<bool>()))
+                    .ReturnsAsync(true)
+                    .Callback<Guid, decimal, bool>((_, qty, _) => produtoFake.Stock -= qty);
             
             var dto = new CreateSaleDto
             {
@@ -105,7 +109,10 @@ namespace ERP.Tests.Application.Services
             var produtoId = Guid.NewGuid();
             
             // Estoque atual é ZERO
-            var produtoFake = new Product { Id = produtoId, Name = "Cimento Votorantim", Stock = 0 }; 
+            var produtoFake = new Product { Id = produtoId, Name = "Cimento Votorantim", Stock = 0 };
+            _uowMock.Setup(u => u.Products.BaixarEstoqueAtomicoAsync(produtoId, It.IsAny<decimal>(), It.IsAny<bool>()))
+                    .ReturnsAsync(true)
+                    .Callback<Guid, decimal, bool>((_, qty, _) => produtoFake.Stock -= qty);
             
             var dto = new CreateSaleDto
             {

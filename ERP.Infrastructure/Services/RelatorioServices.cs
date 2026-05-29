@@ -267,15 +267,20 @@ public class HaverService : IHaverService
         decimal delta    = tipo == "Entrada" ? valor : -valor;
         var     tenantId = _tenant.TenantId;
 
-        // ── FASE 0 FIX: AND TenantId = {tenantId} no WHERE ────────────────────
-        // HasQueryFilter não se aplica a ExecuteSqlInterpolatedAsync.
-        // Sem o filtro de TenantId no SQL, um usuário de outro tenant poderia
-        // alterar o saldo de um cliente que não é seu.
-        int rows = await _db.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE Customers SET HaverBalance = HaverBalance + {delta} WHERE Id = {customerId} AND TenantId = {tenantId}");
+        // Busca o cliente (HasQueryFilter já garante isolamento de tenant)
+        var customer = await _db.Customers
+            .Where(c => c.Id == customerId)
+            .FirstOrDefaultAsync();
 
-        if (rows == 0)
-            throw new KeyNotFoundException($"Cliente {customerId} não encontrado neste tenant.");
+        if (customer is null)
+            throw new KeyNotFoundException($"Cliente {customerId} não encontrado.");
+
+        // Valida saldo se for saída
+        if (tipo == "Saida" && customer.HaverBalance < valor)
+            throw new InvalidOperationException($"Saldo insuficiente: R${customer.HaverBalance:F2}");
+
+        // Atualiza saldo via EF Core (funciona com InMemory e SQL Server)
+        customer.HaverBalance += delta;
 
         _db.MovimentosHaver.Add(new MovimentoHaver
         {
