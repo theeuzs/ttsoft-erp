@@ -4,6 +4,7 @@
 // como propriedades estruturadas — filtrável em Seq/Grafana/App Insights em 1 clique.
 // ─────────────────────────────────────────────────────────────────────────────
 using ERP.Application.Interfaces;
+using ERP.Persistence.Context;
 using Serilog.Context;
 using System.Security.Claims;
 
@@ -27,6 +28,8 @@ public class TenantMiddleware
             var tenantClaim = context.User.FindFirst("tenant_id")?.Value;
             if (Guid.TryParse(tenantClaim, out var tenantId))
                 requestTenant.TenantId = tenantId;
+                // Propaga para o AsyncLocal — necessário para HasQueryFilter com InMemory e SQL Server.
+                AppDbContext.SetQueryTenantId(tenantId);
 
             var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                            ?? context.User.FindFirst("sub")?.Value;

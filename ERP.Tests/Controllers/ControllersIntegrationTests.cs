@@ -680,10 +680,11 @@ public class CalculadoraControllerTests : IntegrationTestBase
 {
     public CalculadoraControllerTests(ErpApiFactory f) : base(f) { }
 
-    [Fact(DisplayName = "GET /api/calculadora sem token → 401")]
+    [Fact(DisplayName = "GET /api/calculadora/templates sem token → 200 (endpoint público)")]
     public async Task GetAll_SemToken_Retorna401()
+        // /api/calculadora/templates é AllowAnonymous (usado pela calculadora pública)
         => (await AnonClient.GetAsync("/api/calculadora/templates"))
-            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            .StatusCode.Should().Be(HttpStatusCode.OK);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

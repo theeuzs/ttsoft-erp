@@ -252,7 +252,7 @@ public class PedidoCompraServiceTests
         var pedido = new PedidoCompra { Status = StatusPedidoCompra.Rascunho };
         pedido.Itens.Add(new PedidoCompraItem { ProductId = Guid.NewGuid(), Quantidade = 1 });
 
-        repo.Setup(r => r.GetByIdAsync(pedido.Id)).ReturnsAsync(pedido);
+        repo.Setup(r => r.GetWithItensAsync(pedido.Id)).ReturnsAsync(pedido);
 
         await svc.EnviarAsync(pedido.Id);
 
@@ -266,7 +266,7 @@ public class PedidoCompraServiceTests
         var (svc, _, repo, _) = Build();
         var pedido = new PedidoCompra { Status = StatusPedidoCompra.Rascunho };
         // sem itens
-        repo.Setup(r => r.GetByIdAsync(pedido.Id)).ReturnsAsync(pedido);
+        repo.Setup(r => r.GetWithItensAsync(pedido.Id)).ReturnsAsync(pedido);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => svc.EnviarAsync(pedido.Id));
     }
@@ -297,7 +297,7 @@ public class PedidoCompraServiceTests
     {
         var (svc, _, repo, _) = Build();
         var pedido = new PedidoCompra { Status = StatusPedidoCompra.Recebido };
-        repo.Setup(r => r.GetByIdAsync(pedido.Id)).ReturnsAsync(pedido);
+        repo.Setup(r => r.GetWithItensAsync(pedido.Id)).ReturnsAsync(pedido);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => svc.CancelarAsync(pedido.Id));
     }
@@ -322,7 +322,7 @@ public class PedidoCompraServiceTests
         var pedido = new PedidoCompra { Status = StatusPedidoCompra.Rascunho };
         pedido.Itens.Add(new PedidoCompraItem { ProductId = prodId, Quantidade = 50, PrecoUnitario = 0.80m });
 
-        repo.Setup(r => r.GetByIdAsync(pedido.Id)).ReturnsAsync(pedido);
+        repo.Setup(r => r.GetWithItensAsync(pedido.Id)).ReturnsAsync(pedido);
         repo.Setup(r => r.GetWithItensAsync(pedido.Id)).ReturnsAsync(pedido);
         prodRepo.Setup(r => r.GetByIdAsync(prodId)).ReturnsAsync(produto);
 

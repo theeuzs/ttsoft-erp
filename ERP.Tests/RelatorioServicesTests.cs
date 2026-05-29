@@ -54,7 +54,7 @@ internal static class TestDb
 
         // Mantém SetGlobalTenantId para compatibilidade com construtor de 1 argumento (WPF)
         AppDbContext.SetGlobalTenantId(tid);
-
+        AppDbContext.SetQueryTenantId(tid);
         // Constrói as opções do banco InMemory
         var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(dbName)
@@ -94,6 +94,7 @@ public class DreServiceTests
         // Arrange
         var tid = Guid.NewGuid();
         AppDbContext.SetGlobalTenantId(tid);
+        AppDbContext.SetQueryTenantId(tid); // AsyncLocal — garante filtro correto para InMemory
 
         var sp = TestDb.Create("dre_receita", ctx =>
         {
@@ -151,7 +152,7 @@ public class DreServiceTests
     {
         var tid = Guid.NewGuid();
         AppDbContext.SetGlobalTenantId(tid);
-
+        AppDbContext.SetQueryTenantId(tid);
         var sp = TestDb.Create("dre_canceladas", ctx =>
         {
             ctx.Sales.Add(new Sale
@@ -182,7 +183,7 @@ public class AbcServiceTests
     {
         var tid = Guid.NewGuid();
         AppDbContext.SetGlobalTenantId(tid);
-
+        AppDbContext.SetQueryTenantId(tid);
         var sp = TestDb.Create("abc_ordem", ctx =>
         {
             var venda = new Sale
@@ -220,6 +221,7 @@ public class ComissaoServiceTests
     {
         var tid = Guid.NewGuid();
         AppDbContext.SetGlobalTenantId(tid);
+        AppDbContext.SetQueryTenantId(tid);
 
         var sp = TestDb.Create("comissao_calc", ctx =>
         {
@@ -242,7 +244,7 @@ public class ComissaoServiceTests
     {
         var tid = Guid.NewGuid();
         AppDbContext.SetGlobalTenantId(tid);
-
+        AppDbContext.SetQueryTenantId(tid);
         var sp = TestDb.Create("comissao_null_vendor", ctx =>
         {
             ctx.Sales.Add(new Sale
@@ -268,7 +270,7 @@ public class HaverServiceTests
     {
         var tid = Guid.NewGuid();
         AppDbContext.SetGlobalTenantId(tid);
-        var customerId = Guid.NewGuid();
+        AppDbContext.SetQueryTenantId(tid);        var customerId = Guid.NewGuid();
 
         var sp = TestDb.Create("haver_saldo", ctx =>
         {
@@ -289,7 +291,7 @@ public class HaverServiceTests
     {
         var tid = Guid.NewGuid();
         AppDbContext.SetGlobalTenantId(tid);
-        var customerId = Guid.NewGuid();
+        AppDbContext.SetQueryTenantId(tid);        var customerId = Guid.NewGuid();
 
         var sp = TestDb.Create("haver_insuficiente", ctx =>
         {
@@ -331,7 +333,7 @@ public class InventarioServiceTests
     {
         var tid = Guid.NewGuid();
         AppDbContext.SetGlobalTenantId(tid);
-
+        AppDbContext.SetQueryTenantId(tid);
         var sp = TestDb.Create("inv_lista", ctx =>
         {
             ctx.Products.AddRange(
@@ -349,7 +351,7 @@ public class InventarioServiceTests
     {
         var tid       = Guid.NewGuid();
         AppDbContext.SetGlobalTenantId(tid);
-        var produtoId = Guid.NewGuid();
+        AppDbContext.SetQueryTenantId(tid);        var produtoId = Guid.NewGuid();
 
         var sp = TestDb.Create("inv_ajuste", ctx =>
         {

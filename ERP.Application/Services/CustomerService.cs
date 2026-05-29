@@ -66,6 +66,7 @@ public class CustomerService : ICustomerService
             // Mapper injeta novos valores na entidade rastreada sem chamar Update()
             _mapper.Map(dto, rastreado);
             rastreado.IsDeleted = false;
+            rastreado.Name      = dto.Name;
             rastreado.UpdatedAt = DateTime.UtcNow;
 
             await _uow.CommitAsync();

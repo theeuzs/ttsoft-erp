@@ -58,8 +58,17 @@ namespace ERP.Tests.Application
         }
 
         [Fact(DisplayName = "Criar produto com validação inválida deve lançar exceção")]
+        // Nota: o construtor configura o validador para retornar sucesso.
+        // Este teste sobrescreve para forçar falha.
         public async Task CriarProduto_ValidacaoInvalida_DeveLancarExcecao()
         {
+            // Sobrescreve o mock para retornar erros de validação
+            _validatorMock
+                .Setup(v => v.ValidateAsync(
+                    It.IsAny<ValidationContext<CreateProductDto>>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ValidationResult(
+                    new[] { new FluentValidation.Results.ValidationFailure("Name", "Nome é obrigatório") }));
             var dto = new CreateProductDto { Name = "" }; // Nome vazio
             var failures = new[] { new ValidationFailure("Name", "Nome é obrigatório") };
 
