@@ -390,10 +390,14 @@ public class CaixaControllerTests : IntegrationTestBase
         => (await AnonClient.GetAsync("/api/caixa/aberto"))
             .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
-    [Fact(DisplayName = "GET /api/caixa/status com token → 200")]
+    [Fact(DisplayName = "GET /api/caixa/status com token → 200 ou 404")]
     public async Task Status_ComToken_Retorna200()
-        => (await AuthClient.GetAsync("/api/caixa/aberto"))
-            .StatusCode.Should().Be(HttpStatusCode.OK);
+    {
+        // GET /api/caixa/aberto retorna 200 se houver caixa aberto, 404 se não houver.
+        // Ambos são válidos — o endpoint está protegido e acessível.
+        var status = (await AuthClient.GetAsync("/api/caixa/aberto")).StatusCode;
+        status.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.NotFound);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -627,7 +631,7 @@ public class FiscalControllerTests : IntegrationTestBase
 
     [Fact(DisplayName = "GET /api/fiscal sem token → 401")]
     public async Task GetAll_SemToken_Retorna401()
-        => (await AnonClient.GetAsync("/api/fiscal"))
+        => (await AnonClient.GetAsync("/api/fiscal/aliquota-icms/SP"))
             .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 }
 
@@ -678,7 +682,7 @@ public class CalculadoraControllerTests : IntegrationTestBase
 
     [Fact(DisplayName = "GET /api/calculadora sem token → 401")]
     public async Task GetAll_SemToken_Retorna401()
-        => (await AnonClient.GetAsync("/api/calculadora"))
+        => (await AnonClient.GetAsync("/api/calculadora/templates"))
             .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 }
 
@@ -692,7 +696,7 @@ public class BiControllerTests : IntegrationTestBase
 
     [Fact(DisplayName = "GET /api/bi sem token → 401")]
     public async Task GetAll_SemToken_Retorna401()
-        => (await AnonClient.GetAsync("/api/bi"))
+        => (await AnonClient.GetAsync("/api/bi/abc"))
             .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 }
 
@@ -706,7 +710,7 @@ public class MarketplaceControllerTests : IntegrationTestBase
 
     [Fact(DisplayName = "GET /api/marketplace sem token → 401")]
     public async Task GetAll_SemToken_Retorna401()
-        => (await AnonClient.GetAsync("/api/marketplace"))
+        => (await AnonClient.GetAsync("/api/marketplace/config"))
             .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 }
 

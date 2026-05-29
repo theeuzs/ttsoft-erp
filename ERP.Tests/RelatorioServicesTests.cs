@@ -55,12 +55,19 @@ internal static class TestDb
         // Mantém SetGlobalTenantId para compatibilidade com construtor de 1 argumento (WPF)
         AppDbContext.SetGlobalTenantId(tid);
 
+        // Constrói as opções do banco InMemory
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(dbName)
+            .Options;
+
         var services = new ServiceCollection();
-        // Registra IRequestTenant ANTES de AddDbContext — EF Core escolhe o construtor de 2 args
-        // e usa este tenant no HasQueryFilter (sem depender do estático, thread-safe)
         services.AddSingleton<ERP.Application.Interfaces.IRequestTenant>(tenant);
-        services.AddDbContext<AppDbContext>(o =>
-            o.UseInMemoryDatabase(dbName));
+        // Factory explícita: garante que o construtor de 2 args é sempre usado,
+        // independente de como o EF Core resolve AddDbContext.
+        // Isso elimina a race condition do _globalTenantId estático.
+        services.AddSingleton<Microsoft.EntityFrameworkCore.DbContextOptions<AppDbContext>>(options);
+        services.AddScoped<AppDbContext>(sp =>
+            new AppDbContext(options, sp.GetRequiredService<ERP.Application.Interfaces.IRequestTenant>()));
 
         var provider = services.BuildServiceProvider();
 
