@@ -152,6 +152,31 @@ public abstract class IntegrationTestBase : IClassFixture<ErpApiFactory>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+//  TENANT SCOPE — helper para testes de isolamento
+//
+//  Problema: o construtor de AppDbContext(options, IRequestTenant) seta
+//  _asyncTenantId.Value = requestTenant.TenantId no contexto async atual.
+//  Quando o seed cria um scope sem request HTTP, IRequestTenant.TenantId = Guid.Empty,
+//  e o construtor sobrescreve o AsyncLocal para Guid.Empty.
+//  O request HTTP filho herda Guid.Empty do pai e — mesmo com o middleware
+//  setando corretamente depois — pode haver race entre o construtor do DbContext
+//  e o filtro de query.
+//
+//  TenantScope garante que o AsyncLocal correto está setado ANTES do seed e é
+//  resetado com using ao fim, evitando vazamento entre testes.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// <summary>
+/// Seta AppDbContext.SetQueryTenantId(tenantId) ao entrar no using e reseta
+/// para Guid.Empty ao sair. Usar sempre que semear dados em testes de isolamento.
+/// </summary>
+internal sealed class TenantScope : IDisposable
+{
+    public TenantScope(Guid tenantId) => AppDbContext.SetQueryTenantId(tenantId);
+    public void Dispose()             => AppDbContext.SetQueryTenantId(Guid.Empty);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 //  AUTH
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -909,23 +934,25 @@ public class Fase0TenantIsolationTests : IClassFixture<ErpApiFactory>
         var tenantA = Guid.NewGuid();
         var tenantB = Guid.NewGuid();
 
-        // Cria produto diretamente no banco com o TenantId do Tenant A
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        // IgnoreQueryFilters para conseguir inserir sem filtro
-        var produto = new ERP.Domain.Entities.Product
+        // TenantScope: garante AsyncLocal correto durante o SaveChanges do seed.
+        // Sem isso, o construtor AppDbContext(options, IRequestTenant) seta o
+        // AsyncLocal para Guid.Empty (sem request HTTP), e o request filho herda Guid.Empty.
+        using (new TenantScope(tenantA))
         {
-            Id       = Guid.NewGuid(),
-            TenantId = tenantA,
-            Name     = "Cimento CP-II 50kg — TenantA",
-            SalePrice = 35.90m,
-            Stock    = 100,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-        };
-        db.Products.Add(produto);
-        await db.SaveChangesAsync();
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id        = Guid.NewGuid(),
+                TenantId  = tenantA,
+                Name      = "Cimento CP-II 50kg — TenantA",
+                SalePrice = 35.90m,
+                Stock     = 100,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        } // Dispose() reseta AsyncLocal para Guid.Empty — sem vazamento entre testes
 
         // ── Act — Tenant B consulta produtos ─────────────────────────────────
         var clientB = _factory.CreateClient();
@@ -947,24 +974,25 @@ public class Fase0TenantIsolationTests : IClassFixture<ErpApiFactory>
     public async Task Produto_TenantA_Aparece_Para_TenantA()
     {
         // ── Arrange ──────────────────────────────────────────────────────────
-        var tenantA = Guid.NewGuid();
-
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
+        var tenantA   = Guid.NewGuid();
         var produtoId = Guid.NewGuid();
-        var produto = new ERP.Domain.Entities.Product
+
+        using (new TenantScope(tenantA))
         {
-            Id        = produtoId,
-            TenantId  = tenantA,
-            Name      = $"Argamassa AC-II — TenantA-{produtoId:N}",
-            SalePrice = 22.50m,
-            Stock     = 50,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-        };
-        db.Products.Add(produto);
-        await db.SaveChangesAsync();
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id        = produtoId,
+                TenantId  = tenantA,
+                Name      = $"Argamassa AC-II — TenantA-{produtoId:N}",
+                SalePrice = 22.50m,
+                Stock     = 50,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
 
         // ── Act — Tenant A consulta seus próprios produtos ────────────────────
         var clientA = _factory.CreateClient();
@@ -988,22 +1016,23 @@ public class Fase0TenantIsolationTests : IClassFixture<ErpApiFactory>
         var tenantA = Guid.NewGuid();
         var tenantB = Guid.NewGuid();
 
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
         // Cria cliente do Tenant A com saldo Haver
         var clienteId = Guid.NewGuid();
-        var cliente = new ERP.Domain.Entities.Customer
+        using (new TenantScope(tenantA))
         {
-            Id           = clienteId,
-            TenantId     = tenantA,
-            Name         = "Cliente do Tenant A",
-            HaverBalance = 500m,
-            CreatedAt    = DateTime.UtcNow,
-            UpdatedAt    = DateTime.UtcNow,
-        };
-        db.Customers.Add(cliente);
-        await db.SaveChangesAsync();
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Customers.Add(new ERP.Domain.Entities.Customer
+            {
+                Id           = clienteId,
+                TenantId     = tenantA,
+                Name         = "Cliente do Tenant A",
+                HaverBalance = 500m,
+                CreatedAt    = DateTime.UtcNow,
+                UpdatedAt    = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
 
         // ── Act — Tenant B tenta ver saldo do cliente do Tenant A ────────────
         var clientB = _factory.CreateClient();
@@ -1048,14 +1077,14 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
     private readonly ErpApiFactory _factory;
     public F11DualTenantTests(ErpApiFactory factory) => _factory = factory;
 
-    // ── helper: seed direct (bypasses HTTP stack) ──────────────────────────
-    private async Task<AppDbContext> SeedAsync(Action<AppDbContext> seed)
+    // ── helper: seed com TenantScope (garante AsyncLocal correto) ─────────────
+    private async Task SeedAsync(Guid tenantId, Action<AppDbContext> seed)
     {
+        using var ts = new TenantScope(tenantId);
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         seed(db);
         await db.SaveChangesAsync();
-        return db;
     }
 
     private HttpClient ClientFor(Guid tenantId)
@@ -1076,14 +1105,11 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         var tenantB = Guid.NewGuid();
         var marker  = $"Cliente-A-{tenantA:N}";
 
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        db.Customers.Add(new ERP.Domain.Entities.Customer
+        await SeedAsync(tenantA, db => db.Customers.Add(new ERP.Domain.Entities.Customer
         {
             Id = Guid.NewGuid(), TenantId = tenantA, Name = marker,
             CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync();
+        }));
 
         var resp = await ClientFor(tenantB).GetAsync("/api/customers");
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -1099,15 +1125,12 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         var tenantB = Guid.NewGuid();
         var saleNum = $"SALE-A-{tenantA:N}";
 
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        db.Sales.Add(new ERP.Domain.Entities.Sale
+        await SeedAsync(tenantA, db => db.Sales.Add(new ERP.Domain.Entities.Sale
         {
             Id = Guid.NewGuid(), TenantId = tenantA, SaleNumber = saleNum,
             Total = 100m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
             SaleDate = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync();
+        }));
 
         var resp = await ClientFor(tenantB).GetAsync("/api/sales");
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -1123,16 +1146,13 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         var tenantB = Guid.NewGuid();
         var marker  = $"ORC-A-{tenantA:N}";
 
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        db.Orcamentos.Add(new ERP.Domain.Entities.Orcamento
+        await SeedAsync(tenantA, db => db.Orcamentos.Add(new ERP.Domain.Entities.Orcamento
         {
             Id = Guid.NewGuid(), TenantId = tenantA, Numero = marker,
             ValorTotal = 500m, DataEmissao = DateTime.UtcNow,
             DataValidade = DateTime.UtcNow.AddDays(30),
             CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync();
+        }));
 
         var resp = await ClientFor(tenantB).GetAsync("/api/orcamentos");
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -1148,15 +1168,12 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         var tenantB = Guid.NewGuid();
         var marker  = $"CR-A-{tenantA:N}";
 
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        db.ContasReceber.Add(new ERP.Domain.Entities.ContaReceber
+        await SeedAsync(tenantA, db => db.ContasReceber.Add(new ERP.Domain.Entities.ContaReceber
         {
             Id = Guid.NewGuid(), TenantId = tenantA, Descricao = marker,
             ValorTotal = 1000m, DataVencimento = DateTime.UtcNow.AddDays(30),
             CustomerId = Guid.NewGuid(), CreatedAt = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync();
+        }));
 
         var resp = await ClientFor(tenantB).GetAsync("/api/contas-receber/pendentes");
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -1172,15 +1189,12 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         var tenantB = Guid.NewGuid();
         var marker  = $"CP-A-{tenantA:N}";
 
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        db.ContasPagar.Add(new ERP.Domain.Entities.ContaPagar
+        await SeedAsync(tenantA, db => db.ContasPagar.Add(new ERP.Domain.Entities.ContaPagar
         {
             Id = Guid.NewGuid(), TenantId = tenantA, Descricao = marker,
             Valor = 500m, DataVencimento = DateTime.UtcNow.AddDays(15),
             CreatedAt = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync();
+        }));
 
         var resp = await ClientFor(tenantB).GetAsync("/api/contas-pagar/pendentes");
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -1196,16 +1210,13 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         var tenantB   = Guid.NewGuid();
         var clienteId = Guid.NewGuid();
 
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        db.PontosFidelidade.Add(new ERP.Domain.Entities.PontosFidelidade
+        await SeedAsync(tenantA, db => db.PontosFidelidade.Add(new ERP.Domain.Entities.PontosFidelidade
         {
             Id = Guid.NewGuid(), TenantId = tenantA,
             CustomerId = clienteId, Tipo = "Credito",
             Pontos = 500, Data = DateTime.UtcNow,
             Descricao = "Compra teste"
-        });
-        await db.SaveChangesAsync();
+        }));
 
         var resp = await ClientFor(tenantB)
             .GetAsync($"/api/fidelidade/{clienteId}/saldo");
@@ -1232,16 +1243,13 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         var tenantB = Guid.NewGuid();
         var marker  = $"PC-A-{tenantA:N}";
 
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        db.PedidosCompra.Add(new ERP.Domain.Entities.PedidoCompra
+        await SeedAsync(tenantA, db => db.PedidosCompra.Add(new ERP.Domain.Entities.PedidoCompra
         {
             Id = Guid.NewGuid(), TenantId = tenantA, Numero = marker,
             Status = ERP.Domain.Enums.StatusPedidoCompra.Rascunho,
             DataPedido = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync();
+        }));
 
         var resp = await ClientFor(tenantB).GetAsync("/api/pedidos-compra");
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -1257,16 +1265,13 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         var tenantB = Guid.NewGuid();
         var marker  = $"END-A-{tenantA:N}";
 
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        db.Entregas.Add(new ERP.Domain.Entities.Entrega
+        await SeedAsync(tenantA, db => db.Entregas.Add(new ERP.Domain.Entities.Entrega
         {
             Id = Guid.NewGuid(), TenantId = tenantA,
             ClienteNome = marker, SaleId = Guid.NewGuid(),
             Status = ERP.Domain.Enums.StatusEntrega.Pendente,
             CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync();
+        }));
 
         var resp = await ClientFor(tenantB).GetAsync("/api/entregas");
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
