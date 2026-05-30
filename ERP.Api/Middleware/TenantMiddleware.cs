@@ -27,9 +27,11 @@ public class TenantMiddleware
         {
             var tenantClaim = context.User.FindFirst("tenant_id")?.Value;
             if (Guid.TryParse(tenantClaim, out var tenantId))
+            {
                 requestTenant.TenantId = tenantId;
                 // Propaga para o AsyncLocal — necessário para HasQueryFilter com InMemory e SQL Server.
                 AppDbContext.SetQueryTenantId(tenantId);
+            }
 
             var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                            ?? context.User.FindFirst("sub")?.Value;
