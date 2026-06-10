@@ -55,16 +55,10 @@ public class AppDbContext : DbContext
     ///   • WPF:        _globalTenantId          — setado uma vez no startup
     ///   • Design-time: Guid.Empty              — migrations sem filtro de tenant
     /// </summary>
-    /// <summary>
-    /// Retorna o TenantId correto para a instância atual:
-    ///   • API:        _requestTenant.TenantId  — scoped por requisição HTTP
-    ///   • WPF:        _globalTenantId          — setado uma vez no startup
-    ///   • Design-time: Guid.Empty              — migrations sem filtro de tenant
-    /// </summary>
     /// <remarks>
     /// ATENÇÃO — não otimize este método para retornar um campo diretamente:
     ///   ERRADO: p => p.TenantId == _requestTenant.TenantId  (captura o valor no build do modelo — congela o primeiro tenant)
-    ///   CERTO:  p => p.TenantId == AppDbContext.GetQueryTenantId()             (EF Core avalia a chamada por query, no contexto correto)
+    ///   CERTO:  p => p.TenantId == tenantFilter.Value             (EF Core avalia a chamada por query, no contexto correto)
     /// O EF Core 8 reconhece GetTenantId() como referência captiva avaliada por query.
     /// Trocar para acesso direto ao campo faz o modelo cachear o primeiro tenant e vazar dados.
     /// </remarks>
@@ -75,7 +69,12 @@ public class AppDbContext : DbContext
     /// O tenant vem de _globalTenantId (setado via SetGlobalTenantId).
     /// </summary>
     public AppDbContext(DbContextOptions<AppDbContext> options)
-        : base(options) { }
+        : base(options) 
+    {
+        // CORREÇÃO: Garante que o AsyncLocal seja preenchido no WPF para que o HasQueryFilter funcione
+        if (_globalTenantId != Guid.Empty)
+            _asyncTenantId.Value = _globalTenantId;
+    }
 
     /// <summary>
     /// Construtor para a API — recebe IRequestTenant Scoped.
@@ -86,9 +85,12 @@ public class AppDbContext : DbContext
         : base(options)
     {
         _requestTenant = requestTenant;
-        // Propaga o TenantId para o AsyncLocal — garante que HasQueryFilter (estático)
-        // usa o TenantId correto para este request/test, sem depender de "this" capturado.
-        _asyncTenantId.Value = requestTenant.TenantId;
+        // Propaga o TenantId para o AsyncLocal APENAS quando temos um tenant real.
+        // Quando requestTenant.TenantId == Guid.Empty (ex: seed em teste sem request HTTP),
+        // NÃO sobrescreve — evita que o construtor apague um valor válido setado pelo
+        // TenantMiddleware ou pelo TenantScope antes da criação do contexto.
+        if (requestTenant.TenantId != Guid.Empty)
+            _asyncTenantId.Value = requestTenant.TenantId;
     }
 
     // ── DbSets ────────────────────────────────────────────────────────────
@@ -132,6 +134,13 @@ public class AppDbContext : DbContext
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
         base.OnModelCreating(modelBuilder);
 
+        // CRITICAL: captura _asyncTenantId como variável de closure LOCAL.
+        // EF Core trata closures como PARÂMETROS (reavaliados a cada execução de query).
+        // Chamadas de método estático sem argumentos (GetQueryTenantId()) são tratadas
+        // como CONSTANTES (avaliadas uma vez e cacheadas para sempre no InMemory).
+        // Com tenantFilter.Value, cada query lê o AsyncLocal atual — correto por request.
+        var tenantFilter = _asyncTenantId;
+
         // ══════════════════════════════════════════════════════════════
         //  FILTROS GLOBAIS
         //
@@ -150,33 +159,33 @@ public class AppDbContext : DbContext
 
         // ── Entidades com IsDeleted + TenantId ────────────────────────
         modelBuilder.Entity<Product>().HasQueryFilter(
-            p => !p.IsDeleted && p.TenantId == AppDbContext.GetQueryTenantId());
+            p => !p.IsDeleted && p.TenantId == tenantFilter.Value);
         modelBuilder.Entity<Customer>().HasQueryFilter(
-            c => !c.IsDeleted && c.TenantId == AppDbContext.GetQueryTenantId());
+            c => !c.IsDeleted && c.TenantId == tenantFilter.Value);
         modelBuilder.Entity<Sale>().HasQueryFilter(
-            s => !s.IsDeleted && s.TenantId == AppDbContext.GetQueryTenantId());
+            s => !s.IsDeleted && s.TenantId == tenantFilter.Value);
         modelBuilder.Entity<Caixa>().HasQueryFilter(
-            c => !c.IsDeleted && c.TenantId == AppDbContext.GetQueryTenantId());
+            c => !c.IsDeleted && c.TenantId == tenantFilter.Value);
         modelBuilder.Entity<PedidoCompra>().HasQueryFilter(
-            p => !p.IsDeleted && p.TenantId == AppDbContext.GetQueryTenantId());
+            p => !p.IsDeleted && p.TenantId == tenantFilter.Value);
         modelBuilder.Entity<Orcamento>().HasQueryFilter(
-            o => !o.IsDeleted && o.TenantId == AppDbContext.GetQueryTenantId());
+            o => !o.IsDeleted && o.TenantId == tenantFilter.Value);
         modelBuilder.Entity<Category>().HasQueryFilter(
-            c => !c.IsDeleted && c.TenantId == AppDbContext.GetQueryTenantId());
+            c => !c.IsDeleted && c.TenantId == tenantFilter.Value);
         modelBuilder.Entity<Brand>().HasQueryFilter(
-            b => !b.IsDeleted && b.TenantId == AppDbContext.GetQueryTenantId());
+            b => !b.IsDeleted && b.TenantId == tenantFilter.Value);
         modelBuilder.Entity<Supplier>().HasQueryFilter(
-            s => !s.IsDeleted && s.TenantId == AppDbContext.GetQueryTenantId());
+            s => !s.IsDeleted && s.TenantId == tenantFilter.Value);
         modelBuilder.Entity<ProdutoAgregado>().HasQueryFilter(
-            pa => !pa.IsDeleted && pa.TenantId == AppDbContext.GetQueryTenantId());
+            pa => !pa.IsDeleted && pa.TenantId == tenantFilter.Value);
         modelBuilder.Entity<Entrega>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == AppDbContext.GetQueryTenantId());
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
         modelBuilder.Entity<Veiculo>().HasQueryFilter(
-            v => !v.IsDeleted && v.TenantId == AppDbContext.GetQueryTenantId());
+            v => !v.IsDeleted && v.TenantId == tenantFilter.Value);
 
         // ── Tintométrico ──────────────────────────────────────────────────────
         modelBuilder.Entity<FormulaTintometrica>().HasQueryFilter(
-            f => !f.IsDeleted && f.TenantId == AppDbContext.GetQueryTenantId());
+            f => !f.IsDeleted && f.TenantId == tenantFilter.Value);
         modelBuilder.Entity<FormulaTintometrica>(e =>
         {
             e.HasOne(f => f.Product)
@@ -187,27 +196,27 @@ public class AppDbContext : DbContext
 
         // ── Entidades sem IsDeleted — só TenantId ─────────────────────
         modelBuilder.Entity<User>().HasQueryFilter(
-            u => u.TenantId == AppDbContext.GetQueryTenantId());
+            u => u.TenantId == tenantFilter.Value);
         modelBuilder.Entity<Role>().HasQueryFilter(
-            r => r.TenantId == AppDbContext.GetQueryTenantId());
+            r => r.TenantId == tenantFilter.Value);
         modelBuilder.Entity<Branch>().HasQueryFilter(
-            b => b.TenantId == AppDbContext.GetQueryTenantId());
+            b => b.TenantId == tenantFilter.Value);
         modelBuilder.Entity<ProductBranchStock>().HasQueryFilter(
-            s => s.TenantId == AppDbContext.GetQueryTenantId());
+            s => s.TenantId == tenantFilter.Value);
         modelBuilder.Entity<TransferenciaEstoque>().HasQueryFilter(
-            t => t.TenantId == AppDbContext.GetQueryTenantId());
+            t => t.TenantId == tenantFilter.Value);
         modelBuilder.Entity<ContaReceber>().HasQueryFilter(
-            c => c.TenantId == AppDbContext.GetQueryTenantId());
+            c => c.TenantId == tenantFilter.Value);
         modelBuilder.Entity<ContaPagar>().HasQueryFilter(
-            c => c.TenantId == AppDbContext.GetQueryTenantId());
+            c => c.TenantId == tenantFilter.Value);
 
         // ── Fidelidade e Haver — agora com isolamento de tenant ───────
         // PontosFidelidade herda BaseEntity (tem TenantId).
         // MovimentoHaver deve ter TenantId para filtrar corretamente.
         modelBuilder.Entity<PontosFidelidade>().HasQueryFilter(
-            p => p.TenantId == AppDbContext.GetQueryTenantId());
+            p => p.TenantId == tenantFilter.Value);
         modelBuilder.Entity<MovimentoHaver>().HasQueryFilter(
-            m => m.TenantId == AppDbContext.GetQueryTenantId());
+            m => m.TenantId == tenantFilter.Value);
 
         // ── ProdutoAgregado: many-to-many auto-referenciante ──────────
         modelBuilder.Entity<ProdutoAgregado>(e =>
@@ -296,8 +305,8 @@ public class AppDbContext : DbContext
 
             // Usa GetTenantId() — funciona tanto no WPF quanto na API
             var tenantId  = GetTenantId();
-            var userId    = _requestTenant?.UserId    ?? _currentUserId;
-            var userName  = _requestTenant?.UserName  ?? _currentUserName;
+            var userId    = _requestTenant?.UserId   ?? _currentUserId;
+            var userName  = _requestTenant?.UserName ?? _currentUserName;
 
             logs.Add(new AuditLog
             {

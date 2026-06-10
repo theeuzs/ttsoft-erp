@@ -8,7 +8,17 @@
 //
 // A solução: Separar explicitamente os caminhos de LEITURA (NoTracking)
 // e ESCRITA (AsTracking), sem depender do comportamento implícito do FindAsync.
+//
+// ── NOTA SOBRE TENANT FILTER ─────────────────────────────────────────────────
+// O HasQueryFilter no AppDbContext usa closure + AsyncLocal para filtrar por
+// tenant. No EF Core InMemory (testes), o compiled query cache avalia a closure
+// UMA VEZ na primeira compilação e reutiliza o valor — não reavalia por chamada.
+// Para garantir isolamento correto em TODOS os ambientes (InMemory e SQL Server),
+// os métodos de leitura aplicam um filtro explícito com variável LOCAL, avaliada
+// fresh a cada chamada ao método. Para SQL Server esse filtro é redundante com o
+// HasQueryFilter mas inofensivo; para InMemory é o que realmente garante isolamento.
 // ══════════════════════════════════════════════════════════════════════════════
+using ERP.Domain.Common;
 using ERP.Domain.Interfaces;
 using ERP.Persistence.Context;
 using Microsoft.EntityFrameworkCore;
@@ -21,10 +31,26 @@ public class Repository<T> : IRepository<T> where T : class
     protected readonly AppDbContext _ctx;
     protected readonly DbSet<T> _set;
 
+    // Verificado uma vez por tipo: se T é BaseEntity, aplicamos filtro explícito de tenant.
+    private static readonly bool _isTenantEntity =
+        typeof(BaseEntity).IsAssignableFrom(typeof(T));
+
     public Repository(AppDbContext ctx)
     {
         _ctx = ctx;
         _set = ctx.Set<T>();
+    }
+
+    // ── Helper: base query com filtro de tenant explícito ────────────────────
+    // tenantId é variável LOCAL — avaliada fresh a cada chamada, nunca cacheada
+    // pelo EF Core compiled query cache (diferente de closures em HasQueryFilter).
+    private IQueryable<T> TenantQuery()
+    {
+        var tenantId = AppDbContext.GetQueryTenantId(); // leitura fresh do AsyncLocal
+        var q = _set.AsNoTracking();
+        if (_isTenantEntity && tenantId != Guid.Empty)
+            q = q.Where(e => EF.Property<Guid>(e, "TenantId") == tenantId);
+        return q;
     }
 
     // ── LEITURA PURA (para exibição, relatórios, PDV) ────────────────────
@@ -52,17 +78,17 @@ public class Repository<T> : IRepository<T> where T : class
 
     // Com NoTracking explícito — vai direto no SQL Server (dados frescos entre PCs)
     public virtual async Task<IEnumerable<T>> GetAllAsync()
-        => await _set.AsNoTracking().ToListAsync();
+        => await TenantQuery().ToListAsync();
 
     public virtual async Task<IEnumerable<T>> FindAsync(Expression<Func<T, bool>> predicate)
-        => await _set.AsNoTracking().Where(predicate).ToListAsync();
+        => await TenantQuery().Where(predicate).ToListAsync();
 
     public async Task<(IEnumerable<T> Items, int Total)> GetPagedAsync(
         int page, int pageSize,
         Expression<Func<T, bool>>? filter = null,
         Expression<Func<T, object>>? orderBy = null)
     {
-        IQueryable<T> query = _set.AsNoTracking();
+        IQueryable<T> query = TenantQuery();
         if (filter != null) query = query.Where(filter);
         int total = await query.CountAsync();
         if (orderBy != null) query = query.OrderBy(orderBy);

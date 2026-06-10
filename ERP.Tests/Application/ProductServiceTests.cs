@@ -28,9 +28,10 @@ namespace ERP.Tests.Application
             _mapperMock    = new Mock<IMapper>();
             _validatorMock = new Mock<IValidator<CreateProductDto>>();
 
+            // CORREÇÃO: Mock assinado com o ValidationContext correto
             _validatorMock
                 .Setup(v => v.ValidateAsync(
-                    It.IsAny<ValidationContext<CreateProductDto>>(),
+                    It.IsAny<ValidationContext<CreateProductDto>>(), 
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new ValidationResult());
 
@@ -58,25 +59,17 @@ namespace ERP.Tests.Application
         }
 
         [Fact(DisplayName = "Criar produto com validação inválida deve lançar exceção")]
-        // Nota: o construtor configura o validador para retornar sucesso.
-        // Este teste sobrescreve para forçar falha.
         public async Task CriarProduto_ValidacaoInvalida_DeveLancarExcecao()
         {
-            // Sobrescreve o mock para retornar erros de validação
-            _validatorMock
-                .Setup(v => v.ValidateAsync(
-                    It.IsAny<ValidationContext<CreateProductDto>>(),
-                    It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new ValidationResult(
-                    new[] { new FluentValidation.Results.ValidationFailure("Name", "Nome é obrigatório") }));
-            var dto = new CreateProductDto { Name = "" }; // Nome vazio
             var failures = new[] { new ValidationFailure("Name", "Nome é obrigatório") };
 
             _validatorMock
                 .Setup(v => v.ValidateAsync(
-                    It.IsAny<ValidationContext<CreateProductDto>>(),
+                    It.IsAny<ValidationContext<CreateProductDto>>(), 
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new ValidationResult(failures));
+
+            var dto = new CreateProductDto { Name = "" }; 
 
             await _service.Invoking(s => s.CreateAsync(dto))
                 .Should().ThrowAsync<ValidationException>();
@@ -110,7 +103,6 @@ namespace ERP.Tests.Application
                 .ReturnsAsync(produtoExistente);
 
             // Act
-            // Simula usuário logado (ProductService usa ERP.Domain.CurrentUser.Name internamente)
             ERP.Domain.CurrentUser.Id   = usuarioId;
             ERP.Domain.CurrentUser.Name = usuarioNome;
             await _service.UpdateAsync(dto);

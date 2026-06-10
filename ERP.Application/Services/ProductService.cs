@@ -25,7 +25,6 @@ public class ProductService : IProductService
 
     public async Task<PagedResult<ProductDto>> GetPagedAsync(int page = 1, int pageSize = 50, string? search = null)
     {
-        // Filtro opcional por nome, código de barras ou SKU
         var (items, total) = await _uow.Products.GetPagedAsync(
             page:     page,
             pageSize: pageSize,
@@ -68,7 +67,17 @@ public class ProductService : IProductService
 
     public async Task<ProductDto> CreateAsync(CreateProductDto dto)
     {
-        await _validator.ValidateAndThrowAsync(dto);
+        if (dto == null) throw new ArgumentNullException(nameof(dto));
+        
+        // CORREÇÃO: Criação explícita do contexto evita NRE no Mock
+        var context = new ValidationContext<CreateProductDto>(dto);
+        var validationResult = await _validator.ValidateAsync(context);
+        
+        if (!validationResult.IsValid)
+        {
+            throw new ValidationException(validationResult.Errors);
+        }
+
         var product = _mapper.Map<Product>(dto);
         await _uow.Products.AddAsync(product);
         await _uow.CommitAsync();
@@ -77,34 +86,28 @@ public class ProductService : IProductService
 
     public async Task<ProductDto> UpdateAsync(UpdateProductDto dto)
     {
-        // 1. GetByIdTrackedAsync — força rastreamento independente do NoTracking global
         var product = await _uow.Products.GetByIdTrackedAsync(dto.Id)
             ?? throw new KeyNotFoundException($"Produto {dto.Id} não encontrado.");
 
-        // Captura flags ANTES do mapper sobrescrever os valores
         bool salePriceChanged = product.SalePrice    != dto.SalePrice;
         bool costPriceChanged = product.OriginalCost != dto.OriginalCost;
 
-        // 2. Mapper injeta os novos valores na entidade já rastreada
-        //    O ChangeTracker detecta a mutação e marca como Modified automaticamente
         _mapper.Map(dto, product);
 
-        // 3. NÃO chamar Update() — forçar o Update sobrescreve OriginalValues e quebra auditoria
         product.UpdatedAt = DateTime.UtcNow;
 
         string? operador = ERP.Domain.CurrentUser.Name;
         if (salePriceChanged)
         {
-            product.SalePriceChangedAt = DateTime.Now;
+            product.SalePriceChangedAt = DateTime.UtcNow; 
             product.SalePriceChangedBy = operador;
         }
         if (costPriceChanged)
         {
-            product.CostPriceChangedAt = DateTime.Now;
+            product.CostPriceChangedAt = DateTime.UtcNow; 
             product.CostPriceChangedBy = operador;
         }
 
-        // 4. Commit — EF detecta o que mudou via ChangeTracker e salva apenas os campos alterados
         await _uow.CommitAsync();
         return _mapper.Map<ProductDto>(product);
     }
