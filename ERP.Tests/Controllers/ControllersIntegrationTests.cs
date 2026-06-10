@@ -55,11 +55,17 @@ public class ErpApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<DbContextOptions<AppDbContext>>();
             services.RemoveAll<AppDbContext>();
 
-            // Registra as options InMemory com nome único por factory
+            // ── CORREÇÃO: Cria um provedor interno isolado para evitar vazamento de cache do EF InMemory ──
+            var internalServiceProvider = new ServiceCollection()
+                .AddEntityFrameworkInMemoryDatabase()
+                .BuildServiceProvider();
+
+            // Registra as options InMemory com nome único por factory E provedor isolado
             var dbName = $"IntegrationTests_{Guid.NewGuid()}";
             services.AddSingleton(
                 new DbContextOptionsBuilder<AppDbContext>()
                     .UseInMemoryDatabase(dbName)
+                    .UseInternalServiceProvider(internalServiceProvider) // Garante cache limpo por Factory
                     .Options);
 
             // Factory que injeta IRequestTenant — mesma estrutura do Program.cs.
@@ -79,7 +85,7 @@ public class ErpApiFactory : WebApplicationFactory<Program>
                         ValidateIssuer           = true,
                         ValidateAudience         = true,
                         ValidateLifetime         = true,
-                        ValidateIssuerSigningKey  = true,
+                        ValidateIssuerSigningKey = true,
                         ValidIssuer              = JwtIssuer,
                         ValidAudience            = JwtAudience,
                         IssuerSigningKey         = new SymmetricSecurityKey(
@@ -918,14 +924,20 @@ public class MetricsControllerTests : IntegrationTestBase
 /// não o vê ao chamar GET /api/products. Prova que o HasQueryFilter
 /// com GetTenantId() por instância está funcionando na API.
 /// </summary>
-public class Fase0TenantIsolationTests : IClassFixture<ErpApiFactory>
+// IClassFixture removido intencionalmente.
+// Motivo: o EF Core InMemory compila o HasQueryFilter com o valor do AsyncLocal
+// na PRIMEIRA compilação da query e usa esse valor para todo o cache. Quando o
+// FASE0 #1 roda antes do #2, a query fica compilada com tenantB e o FASE0 #2
+// nunca consegue ver o produto de tenantA.
+//
+// Cada instância da classe recebe sua própria ErpApiFactory → InMemory DB novo
+// + compiled query cache limpo → sem contaminação cruzada entre testes.
+public class Fase0TenantIsolationTests : IDisposable
 {
-    private readonly ErpApiFactory _factory;
+    private readonly ErpApiFactory _factory = new();
 
-    public Fase0TenantIsolationTests(ErpApiFactory factory)
-    {
-        _factory = factory;
-    }
+    public void Dispose() => _factory.Dispose();
+
 
     [Fact(DisplayName = "FASE0 #1 — Produto do Tenant A NÃO aparece para Tenant B")]
     public async Task Produto_TenantA_NaoAparece_Para_TenantB()
