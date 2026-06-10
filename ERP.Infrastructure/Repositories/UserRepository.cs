@@ -18,12 +18,13 @@ public class UserRepository : IUserRepository
     }
 
     public async Task<User?> GetByUsernameAsync(string username)
-    {
-        return await _context.Users
-            .Include(u => u.Role)
-            .ThenInclude(r => r.Permissions)
-            .FirstOrDefaultAsync(u => u.Username == username);
-    }
+{
+    return await _context.Users
+        .IgnoreQueryFilters()          // ← login é pré-autenticação: sem JWT, sem tenant
+        .Include(u => u.Role)
+        .ThenInclude(r => r.Permissions)
+        .FirstOrDefaultAsync(u => u.Username == username && !u.IsDeleted);
+}
 
     public async Task<bool> HasAnyAsync()
     {
