@@ -46,21 +46,35 @@ public class TenantRateLimitMiddleware
 
     public async Task InvokeAsync(HttpContext context, IRequestTenant tenant)
     {
-        // Só aplica para requisições autenticadas com tenant conhecido
-        if (tenant.TenantId == Guid.Empty)
+        var isLogin = context.Request.Method == HttpMethods.Post
+                   && context.Request.Path.StartsWithSegments(
+                          "/api/Auth/login", StringComparison.OrdinalIgnoreCase);
+
+        // ── Resolve o TenantId para uso no rate limit ─────────────────────────
+        // Para requests autenticados: vem do JWT via IRequestTenant.
+        // Para login (pré-JWT): lê X-Tenant-CNPJ e deriva o TenantId via SHA-256
+        // — mesma lógica do TenantHelper.FromCnpj. Sem isso, o rate limit era
+        // contornado simplesmente não enviando JWT (bypass trivial via brute force).
+        var rateLimitId = tenant.TenantId;
+
+        if (rateLimitId == Guid.Empty && isLogin)
+        {
+            var cnpj = context.Request.Headers["X-Tenant-CNPJ"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(cnpj))
+                rateLimitId = ERP.Api.Models.TenantHelper.FromCnpj(cnpj);
+        }
+
+        // Sem tenant identificável — deixa passar (será rejeitado mais adiante)
+        if (rateLimitId == Guid.Empty)
         {
             await _next(context);
             return;
         }
 
-        var isLogin = context.Request.Method == HttpMethods.Post
-                   && context.Request.Path.StartsWithSegments(
-                          "/api/Auth/login", StringComparison.OrdinalIgnoreCase);
-
         var limit  = isLogin ? LoginLimitPerMinute : GeneralLimitPerMinute;
         var tipo   = isLogin ? "login" : "gen";
         var janela = DateTime.UtcNow.ToString("yyyyMMddHHmm");
-        var key    = $"rl:{tipo}:{tenant.TenantId}:{janela}";
+        var key    = $"rl:{tipo}:{rateLimitId}:{janela}";
 
         // Incremento atômico — AddOrUpdate garante que não há lost update
         var count = _counters.AddOrUpdate(key, 1, (_, c) => c + 1);
@@ -75,7 +89,7 @@ public class TenantRateLimitMiddleware
             _logger.LogWarning(
                 "Tenant {TenantId} bloqueado por rate limit — {Path} " +
                 "({Count}/{Limit} req/min). Usuário: {UserName}",
-                tenant.TenantId, context.Request.Path, count, limit, tenant.UserName);
+                rateLimitId, context.Request.Path, count, limit, tenant.UserName);
 
             context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
             context.Response.Headers["Retry-After"] = "60";
