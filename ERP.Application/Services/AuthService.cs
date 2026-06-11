@@ -23,9 +23,12 @@ public class AuthService : IAuthService
         _userRepository = userRepository;
     }
 
-    public async Task<LoginResultDto> LoginAsync(LoginDto dto)
+    public async Task<LoginResultDto> LoginAsync(LoginDto dto, Guid tenantId)
     {
-        var user = await _userRepository.GetByUsernameAsync(dto.Username);
+        // Valida credencial DENTRO do tenant reivindicado no header X-Tenant-CNPJ.
+        // GetByUsernameAndTenantAsync filtra por username + tenantId explicitamente,
+        // impedindo que credencial de outro tenant seja aceita aqui (cross-tenant auth).
+        var user = await _userRepository.GetByUsernameAndTenantAsync(dto.Username, tenantId);
 
         // Resposta genérica para não revelar se usuário existe
         if (user == null)

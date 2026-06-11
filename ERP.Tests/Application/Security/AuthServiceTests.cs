@@ -21,9 +21,12 @@ namespace ERP.Tests.Application.Security
         private const string HashSenhaCorreta =
             "$2b$12$0WWQu20zk3bJEWfKDFgRR.zcc6pRbfkj4MLuSW7J2avFyxiVf.g/u";
 
+        // TenantId fixo para todos os testes — simula o tenant resolvido do CNPJ
+        private static readonly Guid TenantTeste = Guid.Parse("8fb9fc74-bbf7-8418-c6d6-48b7f1eb5466");
+
         public AuthServiceTests()
         {
-            _repoMock   = new Mock<IUserRepository>();
+            _repoMock    = new Mock<IUserRepository>();
             _authService = new AuthService(_repoMock.Object);
         }
 
@@ -36,14 +39,15 @@ namespace ERP.Tests.Application.Security
             Username             = "joao",
             PasswordHash         = HashSenhaCorreta,
             IsActive             = true,
+            TenantId             = TenantTeste,
             FailedLoginAttempts  = tentativas,
             LockoutEndUtc        = bloqueioAte,
             Role = new Role
             {
-                Name                 = "Gerente",
+                Name                  = "Gerente",
                 MaxDiscountPercentage = 30m,
-                MaxSangriaValue      = 5000m,
-                Permissions          = new List<Permission>
+                MaxSangriaValue       = 5000m,
+                Permissions           = new List<Permission>
                 {
                     new() { Code = "financeiro.view" },
                     new() { Code = "sale.cancel" }
@@ -51,16 +55,22 @@ namespace ERP.Tests.Application.Security
             }
         };
 
+        // Configura o mock para o novo método que valida tenant
+        private void SetupUsuario(User? user, string username = "joao")
+            => _repoMock
+                .Setup(r => r.GetByUsernameAndTenantAsync(username, TenantTeste))
+                .ReturnsAsync(user);
+
         // ── Cenários de sucesso ────────────────────────────────────────────────
 
         [Fact(DisplayName = "Login com credenciais corretas deve retornar sucesso com dados do usuário")]
         public async Task Login_CredenciaisCorretas_DeveRetornarSucesso()
         {
             var user = CriarUsuarioAtivo();
-            _repoMock.Setup(r => r.GetByUsernameAsync("joao")).ReturnsAsync(user);
+            SetupUsuario(user);
 
-            var result = await _authService.LoginAsync(new LoginDto
-                { Username = "joao", Password = "Senha@123" });
+            var result = await _authService.LoginAsync(
+                new LoginDto { Username = "joao", Password = "Senha@123" }, TenantTeste);
 
             result.Sucedeu.Should().BeTrue();
             result.Usuario.Should().NotBeNull();
@@ -72,14 +82,12 @@ namespace ERP.Tests.Application.Security
         [Fact(DisplayName = "Login bem-sucedido deve resetar contador de tentativas")]
         public async Task Login_BemSucedido_DeveResetarContadorDeTentativas()
         {
-            // Usuário já tinha 3 tentativas falhas
             var user = CriarUsuarioAtivo(tentativas: 3);
-            _repoMock.Setup(r => r.GetByUsernameAsync("joao")).ReturnsAsync(user);
+            SetupUsuario(user);
 
-            await _authService.LoginAsync(new LoginDto
-                { Username = "joao", Password = "Senha@123" });
+            await _authService.LoginAsync(
+                new LoginDto { Username = "joao", Password = "Senha@123" }, TenantTeste);
 
-            // Deve ter chamado reset (tentativas=0, bloqueio=null)
             _repoMock.Verify(r =>
                 r.UpdateLoginAttemptAsync(user.Id, 0, null),
                 Times.Once);
@@ -90,14 +98,12 @@ namespace ERP.Tests.Application.Security
         [Fact(DisplayName = "Login com usuário inexistente deve retornar mensagem genérica")]
         public async Task Login_UsuarioInexistente_DeveRetornarMensagemGenerica()
         {
-            _repoMock.Setup(r => r.GetByUsernameAsync(It.IsAny<string>()))
-                     .ReturnsAsync((User?)null);
+            SetupUsuario(null, "naoexiste");
 
             var result = await _authService.LoginAsync(
-                new LoginDto { Username = "naoexiste", Password = "qualquer" });
+                new LoginDto { Username = "naoexiste", Password = "qualquer" }, TenantTeste);
 
             result.Sucedeu.Should().BeFalse();
-            // Mensagem genérica — não revela se o usuário existe
             result.Mensagem.Should().Contain("incorretos");
         }
 
@@ -105,10 +111,10 @@ namespace ERP.Tests.Application.Security
         public async Task Login_SenhaErrada_DeveIncrementarContador()
         {
             var user = CriarUsuarioAtivo(tentativas: 1);
-            _repoMock.Setup(r => r.GetByUsernameAsync("joao")).ReturnsAsync(user);
+            SetupUsuario(user);
 
             var result = await _authService.LoginAsync(
-                new LoginDto { Username = "joao", Password = "senhaErrada" });
+                new LoginDto { Username = "joao", Password = "senhaErrada" }, TenantTeste);
 
             result.Sucedeu.Should().BeFalse();
             _repoMock.Verify(r =>
@@ -119,16 +125,15 @@ namespace ERP.Tests.Application.Security
         [Fact(DisplayName = "Login com 5ª senha errada deve bloquear a conta")]
         public async Task Login_QuintaSenhaErrada_DeveBloquearConta()
         {
-            var user = CriarUsuarioAtivo(tentativas: 4); // 4 falhas anteriores
-            _repoMock.Setup(r => r.GetByUsernameAsync("joao")).ReturnsAsync(user);
+            var user = CriarUsuarioAtivo(tentativas: 4);
+            SetupUsuario(user);
 
             var result = await _authService.LoginAsync(
-                new LoginDto { Username = "joao", Password = "senhaErrada" });
+                new LoginDto { Username = "joao", Password = "senhaErrada" }, TenantTeste);
 
             result.Sucedeu.Should().BeFalse();
             result.Mensagem.Should().Contain("bloqueada");
 
-            // Deve ter registrado bloqueio com data futura
             _repoMock.Verify(r =>
                 r.UpdateLoginAttemptAsync(
                     user.Id,
@@ -142,14 +147,13 @@ namespace ERP.Tests.Application.Security
         {
             var bloqueioAte = DateTime.UtcNow.AddMinutes(10);
             var user = CriarUsuarioAtivo(tentativas: 5, bloqueioAte: bloqueioAte);
-            _repoMock.Setup(r => r.GetByUsernameAsync("joao")).ReturnsAsync(user);
+            SetupUsuario(user);
 
             var result = await _authService.LoginAsync(
-                new LoginDto { Username = "joao", Password = "Senha@123" });
+                new LoginDto { Username = "joao", Password = "Senha@123" }, TenantTeste);
 
             result.Sucedeu.Should().BeFalse();
             result.Mensagem.Should().Contain("bloqueada");
-            // Não deve ter tentado atualizar o contador (conta ainda bloqueada)
             _repoMock.Verify(r =>
                 r.UpdateLoginAttemptAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<DateTime?>()),
                 Times.Never);
@@ -160,10 +164,10 @@ namespace ERP.Tests.Application.Security
         {
             var user = CriarUsuarioAtivo();
             user.IsActive = false;
-            _repoMock.Setup(r => r.GetByUsernameAsync("joao")).ReturnsAsync(user);
+            SetupUsuario(user);
 
             var result = await _authService.LoginAsync(
-                new LoginDto { Username = "joao", Password = "Senha@123" });
+                new LoginDto { Username = "joao", Password = "Senha@123" }, TenantTeste);
 
             result.Sucedeu.Should().BeFalse();
             result.Mensagem.Should().Contain("inativa");
@@ -172,13 +176,12 @@ namespace ERP.Tests.Application.Security
         [Fact(DisplayName = "Login com bloqueio expirado deve permitir acesso com senha correta")]
         public async Task Login_BloqueioExpirado_DevePermitirAcesso()
         {
-            // Bloqueio que JÁ expirou (no passado)
             var bloqueioExpirado = DateTime.UtcNow.AddMinutes(-1);
             var user = CriarUsuarioAtivo(tentativas: 5, bloqueioAte: bloqueioExpirado);
-            _repoMock.Setup(r => r.GetByUsernameAsync("joao")).ReturnsAsync(user);
+            SetupUsuario(user);
 
             var result = await _authService.LoginAsync(
-                new LoginDto { Username = "joao", Password = "Senha@123" });
+                new LoginDto { Username = "joao", Password = "Senha@123" }, TenantTeste);
 
             result.Sucedeu.Should().BeTrue();
         }
@@ -186,14 +189,34 @@ namespace ERP.Tests.Application.Security
         [Fact(DisplayName = "Login deve informar quantas tentativas restam antes do bloqueio")]
         public async Task Login_SenhaErrada_DeveInformarTentativasRestantes()
         {
-            var user = CriarUsuarioAtivo(tentativas: 2); // 2 falhas, faltam 3
-            _repoMock.Setup(r => r.GetByUsernameAsync("joao")).ReturnsAsync(user);
+            var user = CriarUsuarioAtivo(tentativas: 2);
+            SetupUsuario(user);
 
             var result = await _authService.LoginAsync(
-                new LoginDto { Username = "joao", Password = "senhaErrada" });
+                new LoginDto { Username = "joao", Password = "senhaErrada" }, TenantTeste);
 
             result.Sucedeu.Should().BeFalse();
-            result.Mensagem.Should().Contain("2"); // 5 - 3 = 2 restantes
+            result.Mensagem.Should().Contain("2");
+        }
+
+        // ── Teste de isolamento cross-tenant (auditoria A.1) ──────────────────
+
+        [Fact(DisplayName = "Login com CNPJ de outro tenant deve retornar falha mesmo com credencial válida")]
+        public async Task Login_TenantErrado_DeveRetornarFalha()
+        {
+            var tenantErrado = Guid.NewGuid(); // tenant diferente do usuário
+            var user = CriarUsuarioAtivo();    // usuário existe no TenantTeste
+
+            // Para o tenant errado, repositório retorna null
+            _repoMock
+                .Setup(r => r.GetByUsernameAndTenantAsync("joao", tenantErrado))
+                .ReturnsAsync((User?)null);
+
+            var result = await _authService.LoginAsync(
+                new LoginDto { Username = "joao", Password = "Senha@123" }, tenantErrado);
+
+            result.Sucedeu.Should().BeFalse("credencial de outro tenant não deve funcionar aqui");
+            result.Mensagem.Should().Contain("incorretos");
         }
     }
 }

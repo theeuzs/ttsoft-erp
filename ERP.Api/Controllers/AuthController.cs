@@ -42,7 +42,7 @@ public class AuthController : ControllerBase
         // Para requisições autenticadas, o TenantMiddleware resolve IRequestTenant via claim JWT.
         var tenantId = TenantHelper.FromCnpj(cnpj);
 
-        var result = await _authService.LoginAsync(dto);
+        var result = await _authService.LoginAsync(dto, tenantId);
 
         if (!result.Sucedeu || result.Usuario is null)
             return Unauthorized(new { erro = result.Mensagem });

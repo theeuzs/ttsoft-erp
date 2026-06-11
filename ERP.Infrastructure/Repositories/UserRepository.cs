@@ -17,14 +17,30 @@ public class UserRepository : IUserRepository
         _context = context;
     }
 
+    public async Task<User?> GetByUsernameAndTenantAsync(string username, Guid tenantId)
+    {
+        // IgnoreQueryFilters: login é pré-autenticação — AsyncLocal ainda é Guid.Empty.
+        // O TenantId é validado EXPLICITAMENTE aqui — sem tenant correto, sem login.
+        // Fecha o vetor de cross-tenant login (auditoria A.1).
+        return await _context.Users
+            .IgnoreQueryFilters()
+            .Include(u => u.Role)
+            .ThenInclude(r => r.Permissions)
+            .FirstOrDefaultAsync(u =>
+                u.Username  == username
+                && u.TenantId == tenantId
+                && !u.IsDeleted);
+    }
+
     public async Task<User?> GetByUsernameAsync(string username)
-{
-    return await _context.Users
-        .IgnoreQueryFilters()          // ← login é pré-autenticação: sem JWT, sem tenant
-        .Include(u => u.Role)
-        .ThenInclude(r => r.Permissions)
-        .FirstOrDefaultAsync(u => u.Username == username && !u.IsDeleted);
-}
+    {
+        // Usado apenas por EnsureDefaultAdminCreatedAsync (bootstrap sem tenant).
+        return await _context.Users
+            .IgnoreQueryFilters()
+            .Include(u => u.Role)
+            .ThenInclude(r => r.Permissions)
+            .FirstOrDefaultAsync(u => u.Username == username && !u.IsDeleted);
+    }
 
     public async Task<bool> HasAnyAsync()
     {
