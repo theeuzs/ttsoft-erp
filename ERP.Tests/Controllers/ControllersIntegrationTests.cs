@@ -16,6 +16,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using ERP.Api.Security;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using ERP.Persistence.Context;
@@ -116,7 +117,7 @@ public class ErpApiFactory : WebApplicationFactory<Program>
             new("role_name",                  cargo),
         };
 
-        foreach (var p in permissoes ?? ["admin"])
+        foreach (var p in permissoes ?? Permissions.All)
             claims.Add(new Claim("permission", p));
 
         var token = new JwtSecurityToken(

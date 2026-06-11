@@ -1,3 +1,4 @@
+using ERP.Api.Security;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -71,6 +72,7 @@ public class ProductsController : ControllerBase
     }
 
     /// <summary>Cria novo produto.</summary>
+    [HasPermission(Permissions.ProductEdit)]
     [HttpPost]
     [ProducesResponseType(typeof(ProductDto), 201)]
     [ProducesResponseType(400)]
@@ -88,6 +90,7 @@ public class ProductsController : ControllerBase
     }
 
     /// <summary>Atualiza produto existente.</summary>
+    [HasPermission(Permissions.ProductEdit)]
     [HttpPut("{id:guid}")]
     [ProducesResponseType(typeof(ProductDto), 200)]
     [ProducesResponseType(400)]
@@ -109,6 +112,7 @@ public class ProductsController : ControllerBase
     }
 
     /// <summary>Remove produto (soft delete).</summary>
+    [HasPermission(Permissions.ProductEdit)]
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(404)]
@@ -123,6 +127,7 @@ public class ProductsController : ControllerBase
     }
 
     /// <summary>Ajusta estoque de um produto.</summary>
+    [HasPermission(Permissions.StockAdjust)]
     [HttpPatch("{id:guid}/stock")]
     [ProducesResponseType(204)]
     [ProducesResponseType(404)]
@@ -198,6 +203,7 @@ public class ProdutosAgregadosController : ControllerBase
     /// Salva a lista completa de produtos relacionados (replace).
     /// Envia a lista completa — os que foram removidos da lista serão excluídos.
     /// </summary>
+    [HasPermission(Permissions.ProductEdit)]
     [HttpPut("{id:guid}/agregados")]
     [ProducesResponseType(204)]
     [ProducesResponseType(400)]
@@ -215,6 +221,7 @@ public class ProdutosAgregadosController : ControllerBase
     }
 
     /// <summary>Remove um produto específico da lista de relacionados.</summary>
+    [HasPermission(Permissions.ProductEdit)]
     [HttpDelete("{id:guid}/agregados/{relacionadoId:guid}")]
     [ProducesResponseType(204)]
     public async Task<IActionResult> RemoverAgregado(Guid id, Guid relacionadoId)

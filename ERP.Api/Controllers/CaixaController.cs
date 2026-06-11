@@ -1,3 +1,4 @@
+using ERP.Api.Security;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using ERP.Domain.Enums;
@@ -22,6 +23,7 @@ public class CaixaController : ControllerBase
         ?? Guid.Empty.ToString());
 
     /// <summary>Retorna o caixa aberto do usuário autenticado.</summary>
+    [HasPermission(Permissions.CashViewSummary)]
     [HttpGet("aberto")]
     public async Task<IActionResult> GetAberto()
     {
@@ -60,6 +62,7 @@ public class CaixaController : ControllerBase
     }
 
     /// <summary>Registra sangria no caixa.</summary>
+    [HasPermission(Permissions.CashSangria)]
     [HttpPost("sangria")]
     public async Task<IActionResult> Sangria([FromBody] MovimentoCaixaRequest dto)
     {
@@ -70,6 +73,7 @@ public class CaixaController : ControllerBase
     }
 
     /// <summary>Registra suprimento no caixa.</summary>
+    [HasPermission(Permissions.CashSangria)]
     [HttpPost("suprimento")]
     public async Task<IActionResult> Suprimento([FromBody] MovimentoCaixaRequest dto)
     {
