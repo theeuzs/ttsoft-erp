@@ -103,9 +103,18 @@ public class LoginViewModel : BaseViewModel
             }
             // ========================================================
 
+            // Deriva o TenantId do CNPJ — mesma lógica do TenantHelper.FromCnpj da API.
+            // Inline aqui para não criar dependência de ERP.Api no WPF.
+            var cnpjDigits = new string(cnpjCliente.Where(char.IsDigit).ToArray());
+            using var sha      = System.Security.Cryptography.SHA256.Create();
+            var hashBytes      = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(cnpjDigits));
+            var guidBytes      = new byte[16];
+            System.Array.Copy(hashBytes, guidBytes, 16);
+            var tenantId = new Guid(guidBytes);
+
             // Se passou da trava, faz o login normal no banco de dados local...
             var dto      = new LoginDto { Username = this.Usuario, Password = this.Senha };
-            var resultado = await _authService.LoginAsync(dto);
+            var resultado = await _authService.LoginAsync(dto, tenantId);
 
             if (resultado.Sucedeu && resultado.Usuario is { } user)
             {
