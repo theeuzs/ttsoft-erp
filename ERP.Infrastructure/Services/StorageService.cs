@@ -1,19 +1,3 @@
-// ── ERP.Infrastructure/Services/StorageService.cs ────────────────────────────
-// 2.2 — Azure Blob Storage para imagens de produtos e fotos de entrega.
-//
-// Pacote necessário (já está no Azure SDK):
-//   dotnet add ERP.Infrastructure package Azure.Storage.Blobs
-//
-// Configuração no appsettings.json:
-//   "AzureStorage": {
-//     "ConnectionString": "DefaultEndpointsProtocol=https;AccountName=...",
-//     "ContainerProdutos": "produto-imagens",
-//     "ContainerEntregas": "entrega-fotos"
-//   }
-//
-// Configuração no Azure App Service → Configuration:
-//   AzureStorage__ConnectionString = DefaultEndpointsProtocol=https;...
-// ─────────────────────────────────────────────────────────────────────────────
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Microsoft.Extensions.Configuration;
@@ -25,16 +9,16 @@ namespace ERP.Infrastructure.Services;
 public interface IStorageService
 {
     /// <summary>Faz upload de imagem de produto. Retorna a URL pública.</summary>
-    Task<string> UploadImagemProdutoAsync(Guid produtoId, Stream stream, string contentType, CancellationToken ct = default);
+    Task<string> UploadImagemProdutoAsync(Guid tenantId, Guid produtoId, Stream stream, string contentType, CancellationToken ct = default);
 
     /// <summary>Faz upload de foto de comprovante de entrega. Retorna a URL pública.</summary>
-    Task<string> UploadFotoEntregaAsync(Guid entregaId, Stream stream, string contentType, CancellationToken ct = default);
+    Task<string> UploadFotoEntregaAsync(Guid tenantId, Guid entregaId, Stream stream, string contentType, CancellationToken ct = default);
 
     /// <summary>Remove a imagem de um produto.</summary>
-    Task DeletarImagemProdutoAsync(Guid produtoId, CancellationToken ct = default);
+    Task DeletarImagemProdutoAsync(Guid tenantId, Guid produtoId, CancellationToken ct = default);
 
     /// <summary>Lista todas as fotos de uma entrega.</summary>
-    Task<IReadOnlyList<string>> ListarFotosEntregaAsync(Guid entregaId, CancellationToken ct = default);
+    Task<IReadOnlyList<string>> ListarFotosEntregaAsync(Guid tenantId, Guid entregaId, CancellationToken ct = default);
 }
 
 public class StorageService : IStorageService
@@ -58,19 +42,14 @@ public class StorageService : IStorageService
     }
 
     public async Task<string> UploadImagemProdutoAsync(
-        Guid produtoId, Stream stream, string contentType, CancellationToken ct = default)
+        Guid tenantId, Guid produtoId, Stream stream, string contentType, CancellationToken ct = default)
     {
         var container = await GetOrCreateContainerAsync(_containerProdutos, PublicAccessType.Blob, ct);
 
-        // Normaliza extensão pelo content-type
-        var ext      = contentType switch
-        {
-            "image/jpeg" => ".jpg",
-            "image/png"  => ".png",
-            "image/webp" => ".webp",
-            _            => ".jpg"
-        };
-        var blobName = $"{produtoId}{ext}";
+        var ext      = ContentTypeToExt(contentType);
+        // Prefixo {tenantId}/ garante que blobs de tenants diferentes nunca colidam
+        // e que a listagem por prefixo fica naturalmente isolada por tenant.
+        var blobName = $"{tenantId}/{produtoId}{ext}";
         var blob     = container.GetBlobClient(blobName);
 
         await blob.UploadAsync(stream, new BlobUploadOptions
@@ -78,22 +57,22 @@ public class StorageService : IStorageService
             HttpHeaders = new BlobHttpHeaders
             {
                 ContentType  = contentType,
-                CacheControl = "public, max-age=31536000" // 1 ano — imagens são imutáveis por ID
+                CacheControl = "public, max-age=31536000"
             }
         }, ct);
 
-        _logger.LogInformation("Imagem do produto {ProdutoId} enviada: {Url}", produtoId, blob.Uri);
+        _logger.LogInformation("Imagem do produto {ProdutoId} (tenant {TenantId}) enviada: {Url}",
+            produtoId, tenantId, blob.Uri);
         return blob.Uri.ToString();
     }
 
     public async Task<string> UploadFotoEntregaAsync(
-        Guid entregaId, Stream stream, string contentType, CancellationToken ct = default)
+        Guid tenantId, Guid entregaId, Stream stream, string contentType, CancellationToken ct = default)
     {
         var container = await GetOrCreateContainerAsync(_containerEntregas, PublicAccessType.Blob, ct);
 
-        // Múltiplas fotos por entrega — timestamp garante nome único
         var ext      = contentType == "image/png" ? ".png" : ".jpg";
-        var blobName = $"{entregaId}/{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}{ext}";
+        var blobName = $"{tenantId}/{entregaId}/{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}{ext}";
         var blob     = container.GetBlobClient(blobName);
 
         await blob.UploadAsync(stream, new BlobUploadOptions
@@ -101,34 +80,34 @@ public class StorageService : IStorageService
             HttpHeaders = new BlobHttpHeaders { ContentType = contentType }
         }, ct);
 
-        _logger.LogInformation("Foto de entrega {EntregaId} enviada: {Url}", entregaId, blob.Uri);
+        _logger.LogInformation("Foto de entrega {EntregaId} (tenant {TenantId}) enviada: {Url}",
+            entregaId, tenantId, blob.Uri);
         return blob.Uri.ToString();
     }
 
-    public async Task DeletarImagemProdutoAsync(Guid produtoId, CancellationToken ct = default)
+    public async Task DeletarImagemProdutoAsync(Guid tenantId, Guid produtoId, CancellationToken ct = default)
     {
         var container = _client.GetBlobContainerClient(_containerProdutos);
 
-        // Tenta deletar .jpg e .png (não sabe qual foi enviado)
         foreach (var ext in new[] { ".jpg", ".png", ".webp" })
         {
-            var blob = container.GetBlobClient($"{produtoId}{ext}");
+            var blob = container.GetBlobClient($"{tenantId}/{produtoId}{ext}");
             await blob.DeleteIfExistsAsync(cancellationToken: ct);
         }
     }
 
     public async Task<IReadOnlyList<string>> ListarFotosEntregaAsync(
-        Guid entregaId, CancellationToken ct = default)
+        Guid tenantId, Guid entregaId, CancellationToken ct = default)
     {
         var container = _client.GetBlobContainerClient(_containerEntregas);
         var urls      = new List<string>();
 
+        // Prefixo duplo {tenantId}/{entregaId}/ — listagem naturalmente isolada
         await foreach (var blob in container.GetBlobsAsync(
-    BlobTraits.None, BlobStates.All,
-    prefix: $"{entregaId}/", cancellationToken: ct))
+            BlobTraits.None, BlobStates.All,
+            prefix: $"{tenantId}/{entregaId}/", cancellationToken: ct))
         {
-            var blobClient = container.GetBlobClient(blob.Name);
-            urls.Add(blobClient.Uri.ToString());
+            urls.Add(container.GetBlobClient(blob.Name).Uri.ToString());
         }
 
         return urls;
@@ -141,4 +120,12 @@ public class StorageService : IStorageService
         await container.CreateIfNotExistsAsync(access, cancellationToken: ct);
         return container;
     }
+
+    private static string ContentTypeToExt(string contentType) => contentType switch
+    {
+        "image/jpeg" => ".jpg",
+        "image/png"  => ".png",
+        "image/webp" => ".webp",
+        _            => ".jpg"
+    };
 }
