@@ -206,6 +206,34 @@ public class AuthControllerTests : IntegrationTestBase
             new { Username = "naoexiste", Password = "errado" });
         resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
+
+    [Fact(DisplayName = "POST /api/auth/login — 6 tentativas no mesmo CNPJ → 429 na 6ª (1.6.5)")]
+    public async Task Login_RateLimitPorCnpj_Retorna429NaSextaTentativa()
+    {
+        // CNPJ único por execução — garante janela de contagem limpa
+        // (14 dígitos numéricos — válido para X-Tenant-CNPJ)
+        var cnpjUnico = "99" + Guid.NewGuid().ToString("N")[..12];
+
+        var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Tenant-CNPJ", cnpjUnico);
+
+        // 5 primeiras não devem ser bloqueadas (limite = 5/min)
+        for (var i = 1; i <= 5; i++)
+        {
+            var r = await client.PostAsJsonAsync("/api/auth/login",
+                new { Username = "brute", Password = "force" });
+
+            r.StatusCode.Should().NotBe(HttpStatusCode.TooManyRequests,
+                $"tentativa {i}/5 não deve ser bloqueada pelo rate limit");
+        }
+
+        // 6ª deve retornar 429
+        var ultima = await client.PostAsJsonAsync("/api/auth/login",
+            new { Username = "brute", Password = "force" });
+
+        ultima.StatusCode.Should().Be(HttpStatusCode.TooManyRequests,
+            "6ª tentativa no mesmo CNPJ/minuto deve retornar 429 (rate limit 1.6.5)");
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
