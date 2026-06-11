@@ -112,21 +112,61 @@ public class MarketplaceService
         using var scope = _sp.CreateScope();
         var ctx    = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var tenant = scope.ServiceProvider.GetRequiredService<ERP.Application.Interfaces.IRequestTenant>();
-        tenant.TenantId = tenantId; // Fase 1.5: injeta tenant no scope do webhook
+        tenant.TenantId = tenantId;
 
         foreach (var item in dto.Data?.OrderList ?? [])
         {
+            // ── Round-trip: confirmar pedido na Shopee antes de baixar estoque ──
+            // Impede que webhook falso corrompa estoque sem que o pedido exista de fato.
+            var orderConfirmado = await ConfirmarPedidoShopeeAsync(item.OrderSn);
+            if (!orderConfirmado)
+            {
+                Log.Warning("Shopee: pedido {OrderSn} não confirmado via API — ignorando.", item.OrderSn);
+                continue;
+            }
+
             foreach (var produto in item.ItemList ?? [])
             {
                 var qtd = produto.ModelQuantityPurchased;
                 var sku = produto.ModelSku;
 
-                // AND TenantId= impede baixa de estoque de outro tenant com mesmo SKU.
                 await ctx.Database.ExecuteSqlInterpolatedAsync(
                     $"UPDATE Products SET Stock = Stock - {qtd} WHERE SKU = {sku} AND TenantId = {tenantId} AND Stock > 0");
 
                 Log.Information("Shopee [{TenantId}]: baixou {Qtd} do SKU {SKU}", tenantId, qtd, sku);
             }
+        }
+    }
+
+    /// <summary>
+    /// Confirma que o pedido existe e está pago via API da Shopee.
+    /// Retorna false se o pedido não existir ou não estiver com status pago/pronto.
+    /// </summary>
+    private async Task<bool> ConfirmarPedidoShopeeAsync(string? orderSn)
+    {
+        if (string.IsNullOrEmpty(orderSn)) return false;
+        try
+        {
+            // Shopee Get Order Detail: verifica status real do pedido
+            var url      = $"https://partner.shopeemobile.com/api/v2/order/get_order_detail?order_sn_list={orderSn}";
+            var response = await _http.GetStringAsync(url);
+            using var doc = System.Text.Json.JsonDocument.Parse(response);
+
+            // Aceita apenas pedidos com status READY_TO_SHIP ou SHIPPED
+            var statusesValidos = new[] { "READY_TO_SHIP", "SHIPPED", "COMPLETED" };
+            if (doc.RootElement.TryGetProperty("response", out var resp) &&
+                resp.TryGetProperty("order_list", out var orders) &&
+                orders.GetArrayLength() > 0)
+            {
+                var status = orders[0].TryGetProperty("order_status", out var s) ? s.GetString() : null;
+                return statusesValidos.Contains(status, StringComparer.OrdinalIgnoreCase);
+            }
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Shopee: erro ao confirmar pedido {OrderSn}.", orderSn);
+            return false; // fail-safe: em caso de erro, não baixa estoque
         }
     }
 
