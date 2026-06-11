@@ -338,10 +338,7 @@ public partial class App : System.Windows.Application
         services.AddScoped<ICaixaService, CaixaService>();
         services.AddScoped<IOrcamentoService, OrcamentoService>();
         services.AddScoped<IContaPagarService, ContaPagarService>();
-        services.AddTransient<IContaReceberService, ContaReceberService>(sp =>
-            new ContaReceberService(
-                sp.GetRequiredService<IUnitOfWork>(),
-                sp));
+        services.AddScoped<IContaReceberService, ContaReceberService>();
         services.AddScoped<INfeImportService, NfeImportService>();
         services.AddScoped<ISpedService, SpedService>();
         services.AddScoped<INfceEmissionService, NfceEmissionService>();

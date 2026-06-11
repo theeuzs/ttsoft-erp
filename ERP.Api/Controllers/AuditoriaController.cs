@@ -6,7 +6,7 @@ namespace ERP.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Roles = "Administrador")] // Logs de auditoria são restritos a administradores (1.6.6)
 public class AuditoriaController : ControllerBase
 {
     private readonly IAuditLogService _service;
