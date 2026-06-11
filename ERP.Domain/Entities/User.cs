@@ -8,6 +8,8 @@ public class User : BaseEntity
     public string Username { get; set; } = string.Empty; 
     public string PasswordHash { get; set; } = string.Empty; 
     public bool IsActive { get; set; } = true;
+    /// <summary>1.6.8: Se true, o usuário deve trocar a senha no próximo login.</summary>
+    public bool MustChangePassword { get; set; } = false;
 
     // ── Proteção contra força bruta ──────────────────────────────────────
     /// <summary>Contador de tentativas de login com falha consecutivas.</summary>

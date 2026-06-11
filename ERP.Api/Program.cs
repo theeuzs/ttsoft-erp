@@ -194,7 +194,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer              = jwtIssuer,
             ValidAudience            = jwtAudience,
             IssuerSigningKey         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-            ClockSkew                = TimeSpan.Zero
+            ClockSkew                = TimeSpan.Zero,
+            // Mapeia o claim "role_name" do JWT para o sistema de roles do ASP.NET Core.
+            // Sem isso [Authorize(Roles = "Administrador")] sempre retorna 403.
+            RoleClaimType            = "role_name"
         };
 
         opt.Events = new JwtBearerEvents

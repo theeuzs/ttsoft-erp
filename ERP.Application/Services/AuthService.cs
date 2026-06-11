@@ -76,7 +76,9 @@ public class AuthService : IAuthService
         if (user.FailedLoginAttempts > 0 || user.LockoutEndUtc.HasValue)
             await _userRepository.UpdateLoginAttemptAsync(user.Id, 0, null);
 
-        Log.Information("Login OK: '{Username}' ({Nome})", user.Username, user.Name);
+        Log.Information("Login OK: '{Username}' ({Nome}){Flag}",
+            user.Username, user.Name,
+            user.MustChangePassword ? " [MustChangePassword]" : "");
 
         return LoginResultDto.Sucesso(new UserDto
         {
@@ -87,7 +89,7 @@ public class AuthService : IAuthService
             Permissions           = user.Role?.Permissions.Select(p => p.Code).ToList() ?? new List<string>(),
             MaxDiscountPercentage = user.Role?.MaxDiscountPercentage ?? 0m,
             MaxSangriaValue       = user.Role?.MaxSangriaValue ?? 0m
-        });
+        }, mustChangePassword: user.MustChangePassword);
     }
 
     public async Task EnsureDefaultAdminCreatedAsync()
@@ -96,10 +98,11 @@ public class AuthService : IAuthService
         {
             await _userRepository.AddAsync(new User
             {
-                Name         = "Administrador",
-                Username     = "admin",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123", 12),
-                IsActive     = true
+                Name               = "Administrador",
+                Username           = "admin",
+                PasswordHash       = BCrypt.Net.BCrypt.HashPassword("admin123", 12),
+                IsActive           = true,
+                MustChangePassword = true  // 1.6.8: força troca de senha no primeiro login
             });
         }
     }

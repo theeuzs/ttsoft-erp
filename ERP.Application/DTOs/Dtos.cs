@@ -534,12 +534,14 @@ public class CreateRoleDto
 // ── DTO de resultado de login (com suporte a mensagens de bloqueio) ─────────
 public class LoginResultDto
 {
-    public bool    Sucedeu  { get; private set; }
-    public string? Mensagem { get; private set; }
-    public UserDto? Usuario  { get; private set; }
+    public bool     Sucedeu            { get; private set; }
+    public string?  Mensagem           { get; private set; }
+    public UserDto? Usuario            { get; private set; }
+    /// <summary>Se true, o portal/WPF deve redirecionar para tela de troca de senha (1.6.8).</summary>
+    public bool     MustChangePassword { get; private set; }
 
-    public static LoginResultDto Sucesso(UserDto usuario) =>
-        new() { Sucedeu = true, Usuario = usuario };
+    public static LoginResultDto Sucesso(UserDto usuario, bool mustChangePassword = false) =>
+        new() { Sucedeu = true, Usuario = usuario, MustChangePassword = mustChangePassword };
 
     public static LoginResultDto Falhou(string mensagem) =>
         new() { Sucedeu = false, Mensagem = mensagem };
