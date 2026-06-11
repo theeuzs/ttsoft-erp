@@ -215,7 +215,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    // Registra uma policy ASP.NET Core por código de permissão.
+    // Cada policy exige que o JWT contenha um claim "permission" com o valor correspondente.
+    // [HasPermission(Permissions.XYZ)] resolve para [Authorize(Policy = "xyz")] via HasPermissionAttribute.
+    foreach (var perm in ERP.Api.Security.Permissions.All)
+        options.AddPolicy(perm, policy => policy.RequireClaim("permission", perm));
+});
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 var corsOrigins = builder.Configuration

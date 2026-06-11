@@ -22,7 +22,7 @@ public class MarketplaceController : ControllerBase
     // ── Mercado Livre ─────────────────────────────────────────────────────────
 
     [HttpGet("config")]
-    [Authorize]
+    [HasPermission(Permissions.ConfigView)]
     public IActionResult GetConfig() => Ok(new
     {
         Plataformas      = new[] { "MercadoLivre", "Shopee" },
@@ -79,7 +79,7 @@ public class MarketplaceController : ControllerBase
     }
 
     [HttpPost("ml/sync-estoque")]
-    [Authorize]
+    [HasPermission(Permissions.ConfigView)]
     public async Task<IActionResult> SyncEstoqueML()
     {
         var token  = _config["Marketplace:ML:AccessToken"] ?? "";
@@ -119,7 +119,7 @@ public class MarketplaceController : ControllerBase
     }
 
     [HttpGet("status")]
-    [Authorize]
+    [HasPermission(Permissions.ConfigView)]
     public IActionResult Status() => Ok(new
     {
         MercadoLivre = new

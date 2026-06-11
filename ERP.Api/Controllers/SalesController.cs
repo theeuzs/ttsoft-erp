@@ -1,3 +1,4 @@
+using ERP.Api.Security;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using ERP.Api.Services;
@@ -101,6 +102,7 @@ public class SalesController : ControllerBase
     }
 
     /// <summary>Cancela uma venda. Estorna estoque automaticamente.</summary>
+    [HasPermission(Permissions.SaleCancel)]
     [HttpPost("{id:guid}/cancel")]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelSaleRequestDto dto)
     {
