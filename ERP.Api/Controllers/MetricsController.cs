@@ -15,7 +15,7 @@ namespace ERP.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Roles = "Administrador")]
 public class MetricsController : ControllerBase
 {
     private readonly MetricsCollector _collector;

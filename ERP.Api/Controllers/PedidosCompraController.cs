@@ -2,6 +2,7 @@ using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -26,6 +27,7 @@ public class PedidosCompraController : ControllerBase
     }
 
     /// <summary>Confirma o recebimento de um pedido de compra.</summary>
+    [HasPermission(Permissions.ComprasView)]
     [HttpPost("{id:guid}/receber")]
     public async Task<IActionResult> Receber(Guid id)
     {
@@ -35,6 +37,7 @@ public class PedidosCompraController : ControllerBase
     }
 
     /// <summary>Cancela um pedido de compra.</summary>
+    [HasPermission(Permissions.ComprasView)]
     [HttpPost("{id:guid}/cancelar")]
     public async Task<IActionResult> Cancelar(Guid id)
     {

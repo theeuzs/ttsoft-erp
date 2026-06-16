@@ -21,8 +21,25 @@ public static class Permissions
     public const string ProductEditPrice = "product.edit.price";
     public const string StockAdjust      = "stock.adjust";
 
-    // ── Clientes / Haver ──────────────────────────────────────────────────────
-    public const string HaverEdit       = "haver.edit";
+    // ── Clientes ─────────────────────────────────────────────────────────────
+    /// <summary>Permite criar e editar clientes (PII). POST e PUT em /api/customers.</summary>
+    public const string CustomerEdit   = "customers.edit";
+    /// <summary>
+    /// Permite excluir clientes permanentemente.
+    /// Separado de CustomerEdit: editar PII != apagar registro inteiro.
+    /// </summary>
+    public const string CustomerDelete = "customers.delete";
+
+    // ── Fidelidade ────────────────────────────────────────────────────────────
+    /// <summary>Permite resgatar pontos de fidelidade do cliente (operação financeira).</summary>
+    public const string FidelidadeUse  = "fidelidade.use";
+
+    // ── Haver ─────────────────────────────────────────────────────────────────
+    public const string HaverEdit      = "haver.edit";
+
+    // ── Entregas ─────────────────────────────────────────────────────────────
+    /// <summary>Permite excluir entrega e alterar status/motorista (operacional sensível).</summary>
+    public const string EntregasManage = "entregas.manage";
 
     // ── Financeiro ────────────────────────────────────────────────────────────
     public const string ReportFinancial = "report.financial";
@@ -32,28 +49,36 @@ public static class Permissions
     public const string MargemView      = "margem.view";
 
     // ── Relatórios / Operacionais ─────────────────────────────────────────────
-    public const string AuditView       = "audit.view";
-    public const string ComprasView     = "compras.view";
-    public const string InventarioView  = "inventario.view";
+    public const string AuditView        = "audit.view";
+    public const string ComprasView      = "compras.view";
+    public const string InventarioView   = "inventario.view";
     public const string NotasFiscaisView = "notasfiscais.view";
 
     // ── Administração ─────────────────────────────────────────────────────────
-    public const string UsersView   = "users.view";
-    public const string ConfigView  = "config.view";
+    public const string UsersView  = "users.view";
+    public const string ConfigView = "config.view";
+
     /// <summary>
     /// Permite criar, editar e excluir cargos e suas permissões.
     /// Separado de users.view para evitar escalada de privilégio:
-    /// visualizar ≠ editar o que cada perfil pode fazer.
+    /// visualizar != editar o que cada perfil pode fazer.
     /// </summary>
-    public const string RoleManage  = "role.manage";
+    public const string RoleManage = "role.manage";
 
-    /// <summary>Todas as permissões do sistema — usado para seed de Administrador e testes.</summary>
+    /// <summary>
+    /// Todas as permissões do sistema — usado para seed de Administrador e testes.
+    /// Qualquer nova permissão DEVE ser adicionada aqui para ser registrada
+    /// como policy ASP.NET Core em Program.cs e incluída no seed de Administrador.
+    /// </summary>
     public static readonly string[] All =
     [
         SaleDiscount, SaleCancel, SaleReturn,
         CashSangria, CashViewSummary,
         ProductEdit, ProductEditPrice, StockAdjust,
+        CustomerEdit, CustomerDelete,
+        FidelidadeUse,
         HaverEdit,
+        EntregasManage,
         ReportFinancial, FinanceiroView, DespesasView, FluxoCaixaView, MargemView,
         AuditView, ComprasView, InventarioView, NotasFiscaisView,
         UsersView, ConfigView, RoleManage

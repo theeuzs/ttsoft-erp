@@ -9,6 +9,7 @@ using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -69,6 +70,7 @@ public class CustomersController : ControllerBase
     }
 
     /// <summary>Cria novo cliente.</summary>
+    [HasPermission(Permissions.CustomerEdit)]
     [HttpPost]
     [ProducesResponseType(typeof(CustomerDto), 201)]
     [ProducesResponseType(400)]
@@ -86,6 +88,7 @@ public class CustomersController : ControllerBase
     }
 
     /// <summary>Atualiza dados do cliente.</summary>
+    [HasPermission(Permissions.CustomerEdit)]
     [HttpPut("{id:guid}")]
     [ProducesResponseType(typeof(CustomerDto), 200)]
     [ProducesResponseType(404)]
@@ -100,6 +103,7 @@ public class CustomersController : ControllerBase
     }
 
     /// <summary>Remove cliente.</summary>
+    [HasPermission(Permissions.CustomerDelete)]
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(404)]

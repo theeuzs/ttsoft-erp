@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -37,6 +38,8 @@ public class StorageController : ControllerBase
     /// Faz upload da imagem de um produto do tenant autenticado.
     /// Valida ownership: retorna 404 se o produto não pertencer ao tenant.
     /// </summary>
+    [HasPermission(Permissions.ProductEdit)]
+    [RequestSizeLimit(5_242_880)]
     [HttpPost("produto/{produtoId:guid}/imagem")]
     public async Task<IActionResult> UploadImagemProduto(
         Guid produtoId, IFormFile arquivo, CancellationToken ct)
@@ -55,6 +58,7 @@ public class StorageController : ControllerBase
     }
 
     /// <summary>Remove a imagem de um produto do tenant autenticado.</summary>
+    [HasPermission(Permissions.ProductEdit)]
     [HttpDelete("produto/{produtoId:guid}/imagem")]
     public async Task<IActionResult> DeletarImagemProduto(Guid produtoId, CancellationToken ct)
     {
@@ -71,6 +75,7 @@ public class StorageController : ControllerBase
     /// Faz upload de foto de comprovante de entrega do tenant autenticado.
     /// Retorna SAS URL de 5 minutos (container privado por requisito LGPD).
     /// </summary>
+    [RequestSizeLimit(5_242_880)]
     [HttpPost("entrega/{entregaId:guid}/foto")]
     public async Task<IActionResult> UploadFotoEntrega(
         Guid entregaId, IFormFile arquivo, CancellationToken ct)

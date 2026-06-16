@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -54,6 +55,7 @@ public class ContasReceberController : ControllerBase
     /// Gera parcelas para uma venda a prazo.
     /// Cada parcela vira uma ContaReceber independente com vencimento escalonado.
     /// </summary>
+    [HasPermission(Permissions.FinanceiroView)]
     [HttpPost("parcelar")]
     [ProducesResponseType(typeof(IEnumerable<ParcelaDto>), 201)]
     [ProducesResponseType(400)]
@@ -75,6 +77,7 @@ public class ContasReceberController : ControllerBase
         => Ok(await _service.GetParcelasByParcelamentoAsync(parcelamentoId));
 
     /// <summary>Dá baixa total em uma conta (paga por completo).</summary>
+    [HasPermission(Permissions.FinanceiroView)]
     [HttpPost("{id:guid}/baixa-total")]
     [ProducesResponseType(204)]
     public async Task<IActionResult> DarBaixaTotal(Guid id)
@@ -84,6 +87,7 @@ public class ContasReceberController : ControllerBase
     }
 
     /// <summary>Dá baixa parcial em uma conta.</summary>
+    [HasPermission(Permissions.FinanceiroView)]
     [HttpPost("{id:guid}/baixa-parcial")]
     [ProducesResponseType(204)]
     [ProducesResponseType(400)]
@@ -100,6 +104,7 @@ public class ContasReceberController : ControllerBase
     /// Gera boleto bancário via Asaas para uma conta a receber.
     /// Requer Asaas:ApiKey configurado nas variáveis de ambiente.
     /// </summary>
+    [HasPermission(Permissions.FinanceiroView)]
     [HttpPost("{id:guid}/gerar-boleto")]
     public async Task<IActionResult> GerarBoleto(Guid id)
     {

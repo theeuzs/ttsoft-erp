@@ -2,6 +2,7 @@ using ERP.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -37,6 +38,7 @@ public class TransferenciasController : ControllerBase
     }
 
     /// <summary>Cria uma nova transferência (status Rascunho).</summary>
+    [HasPermission(Permissions.FinanceiroView)]
     [HttpPost]
     public async Task<IActionResult> Criar([FromBody] CriarTransferenciaRequest req)
     {
@@ -61,6 +63,7 @@ public class TransferenciasController : ControllerBase
     }
 
     /// <summary>Confirma a transferência — debita origem e credita destino.</summary>
+    [HasPermission(Permissions.FinanceiroView)]
     [HttpPut("{id:guid}/confirmar")]
     public async Task<IActionResult> Confirmar(Guid id)
     {
@@ -75,6 +78,7 @@ public class TransferenciasController : ControllerBase
     }
 
     /// <summary>Cancela a transferência.</summary>
+    [HasPermission(Permissions.FinanceiroView)]
     [HttpPut("{id:guid}/cancelar")]
     public async Task<IActionResult> Cancelar(Guid id, [FromBody] CancelarRequest req)
     {

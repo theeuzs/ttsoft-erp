@@ -3,6 +3,7 @@ using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -44,6 +45,7 @@ public class StockController : ControllerBase
     /// Aplica ajustes de estoque em lote.
     /// Útil para importação de inventário físico.
     /// </summary>
+    [HasPermission(Permissions.StockAdjust)]
     [HttpPost("adjust")]
     [ProducesResponseType(204)]
     [ProducesResponseType(400)]

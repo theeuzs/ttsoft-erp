@@ -2,11 +2,12 @@ using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Administrador")] // Logs de auditoria são restritos a administradores (1.6.6)
+[HasPermission(Permissions.AuditView)]
 public class AuditoriaController : ControllerBase
 {
     private readonly IAuditLogService _service;

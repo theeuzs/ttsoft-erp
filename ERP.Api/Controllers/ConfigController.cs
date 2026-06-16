@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -69,6 +70,7 @@ public class ConfigController : ControllerBase
     }
 
     /// <summary>Atualiza as configurações da loja.</summary>
+    [HasPermission(Permissions.ConfigView)]
     [HttpPut]
     [Authorize]
     public async Task<IActionResult> Put([FromBody] ConfigLojaDto dto)

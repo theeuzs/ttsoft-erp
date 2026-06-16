@@ -4,6 +4,7 @@ using ERP.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -63,6 +64,7 @@ public class EntregasController : ControllerBase
     }
 
     /// <summary>Remove uma entrega (soft-delete).</summary>
+    [HasPermission(Permissions.EntregasManage)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {
@@ -76,6 +78,7 @@ public class EntregasController : ControllerBase
     /// Reagendada → nova DataPrevista volta status para Pendente.
     /// Cancelada/Reagendada → MotivoProblema.
     /// </summary>
+    [HasPermission(Permissions.EntregasManage)]
     [HttpPut("{id:guid}/status")]
     public async Task<IActionResult> AtualizarStatus(Guid id, [FromBody] AtualizarStatusEntregaDto dto)
     {
@@ -88,6 +91,7 @@ public class EntregasController : ControllerBase
     }
 
     /// <summary>Atribui motorista e veículo a uma entrega. Muda status para EmRota automaticamente.</summary>
+    [HasPermission(Permissions.EntregasManage)]
     [HttpPut("{id:guid}/motorista")]
     public async Task<IActionResult> AtribuirMotorista(Guid id, [FromBody] AtribuirMotoristaDto dto)
     {

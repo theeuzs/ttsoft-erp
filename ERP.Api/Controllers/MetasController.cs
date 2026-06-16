@@ -8,6 +8,7 @@ using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -33,6 +34,7 @@ public class MetasController : ControllerBase
     }
 
     /// <summary>Cria ou atualiza uma meta (upsert por vendedor/mês/ano).</summary>
+    [HasPermission(Permissions.ReportFinancial)]
     [HttpPost]
     public async Task<IActionResult> Upsert(
         [FromBody] MetaVendasDto dto, CancellationToken ct = default)
@@ -42,6 +44,7 @@ public class MetasController : ControllerBase
     }
 
     /// <summary>Remove uma meta.</summary>
+    [HasPermission(Permissions.ReportFinancial)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct = default)
     {

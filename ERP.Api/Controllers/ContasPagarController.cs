@@ -3,6 +3,7 @@ using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -30,12 +31,14 @@ public class ContasPagarController : ControllerBase
         => Ok(await _service.GetResumoAsync(ct));
 
     /// <summary>Cria nova conta a pagar.</summary>
+    [HasPermission(Permissions.DespesasView)]
     [HttpPost]
     public async Task<IActionResult> Create(
         [FromBody] CreateContaPagarDto dto, CancellationToken ct = default)
         => Ok(await _service.CreateAsync(dto, ct));
 
     /// <summary>Registra pagamento de uma conta.</summary>
+    [HasPermission(Permissions.DespesasView)]
     [HttpPost("{id:guid}/pagar")]
     public async Task<IActionResult> Pagar(Guid id, CancellationToken ct = default)
     {
@@ -44,6 +47,7 @@ public class ContasPagarController : ControllerBase
     }
 
     /// <summary>Cancela uma conta a pagar.</summary>
+    [HasPermission(Permissions.DespesasView)]
     [HttpPost("{id:guid}/cancelar")]
     public async Task<IActionResult> Cancelar(Guid id, CancellationToken ct = default)
     {

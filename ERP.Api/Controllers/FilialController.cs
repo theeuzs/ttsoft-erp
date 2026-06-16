@@ -2,6 +2,7 @@ using ERP.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -23,6 +24,7 @@ public class FilialController : ControllerBase
         => Ok(await _service.GetByFilialAsync(id));
 
     /// <summary>Cria uma transferência de estoque entre filiais.</summary>
+    [HasPermission(Permissions.ConfigView)]
     [HttpPost("transferencias")]
     public async Task<IActionResult> CriarTransferencia([FromBody] CriarTransferenciaDto dto)
     {
@@ -35,6 +37,7 @@ public class FilialController : ControllerBase
     }
 
     /// <summary>Confirma transferência — debita origem e credita destino.</summary>
+    [HasPermission(Permissions.ConfigView)]
     [HttpPost("transferencias/{id:guid}/confirmar")]
     public async Task<IActionResult> Confirmar(Guid id, [FromBody] string operador)
     {
@@ -48,6 +51,7 @@ public class FilialController : ControllerBase
     }
 
     /// <summary>Cancela uma transferência.</summary>
+    [HasPermission(Permissions.ConfigView)]
     [HttpPost("transferencias/{id:guid}/cancelar")]
     public async Task<IActionResult> Cancelar(Guid id, [FromBody] string motivo)
     {

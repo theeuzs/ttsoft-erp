@@ -3,6 +3,7 @@ using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -17,6 +18,7 @@ public class DevolucaoController : ControllerBase
     /// Processa devolução parcial ou total de itens de uma venda.
     /// Estorna estoque e gera crédito no Haver do cliente.
     /// </summary>
+    [HasPermission(Permissions.SaleReturn)]
     [HttpPost]
     [ProducesResponseType(typeof(DevolucaoResultDto), 200)]
     [ProducesResponseType(400)]

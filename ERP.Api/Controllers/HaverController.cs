@@ -4,6 +4,7 @@ using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -36,6 +37,7 @@ public class HaverController : ControllerBase
         return Ok(historico);
     }
 
+    [HasPermission(Permissions.HaverEdit)]
     [HttpPost("credito")]
     public async Task<IActionResult> LancarCredito([FromBody] LancarHaverDto dto)
     {
@@ -46,6 +48,7 @@ public class HaverController : ControllerBase
         return Ok(new { mensagem = "Crédito lançado com sucesso." });
     }
 
+    [HasPermission(Permissions.HaverEdit)]
     [HttpPost("debito")]
     public async Task<IActionResult> LancarDebito([FromBody] LancarHaverDto dto)
     {

@@ -1,19 +1,17 @@
 // ── ERP.Tests/Controllers/ControllersIntegrationTests.cs ─────────────────────
-// Testes de integração para os 26 controllers da API.
+// Testes de integração para os controllers da API.
 //
 // Estratégia:
 //   • WebApplicationFactory<Program> com InMemory DB substitui SQL Server Azure
 //   • JWT real gerado com a chave de teste para endpoints autenticados
 //   • Cada controller tem ao menos 2 testes: (1) guard de autenticação e (2) happy path
-//   • Controllers com lógica crítica (Auth, Sales, PDV) têm cobertura extra
-//
-// Pré-requisitos no Program.cs (Sprint 2A):
-//   • public partial class Program { }   ← adicionar ao final do arquivo
+//   • Controllers com lógica crítica têm cobertura extra
 // ─────────────────────────────────────────────────────────────────────────────
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using ERP.Api.Security;
@@ -50,33 +48,25 @@ public class ErpApiFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
-            // ── FASE 0: Remove o DbContext real e substitui por InMemory ────────────
-            // Precisa remover AMBOS porque agora usamos AddSingleton(Options) +
-            // AddScoped<AppDbContext>(factory) em vez de AddDbContext<>.
             services.RemoveAll<DbContextOptions<AppDbContext>>();
             services.RemoveAll<AppDbContext>();
 
-            // ── CORREÇÃO: Cria um provedor interno isolado para evitar vazamento de cache do EF InMemory ──
             var internalServiceProvider = new ServiceCollection()
                 .AddEntityFrameworkInMemoryDatabase()
                 .BuildServiceProvider();
 
-            // Registra as options InMemory com nome único por factory E provedor isolado
             var dbName = $"IntegrationTests_{Guid.NewGuid()}";
             services.AddSingleton(
                 new DbContextOptionsBuilder<AppDbContext>()
                     .UseInMemoryDatabase(dbName)
-                    .UseInternalServiceProvider(internalServiceProvider) // Garante cache limpo por Factory
+                    .UseInternalServiceProvider(internalServiceProvider)
                     .Options);
 
-            // Factory que injeta IRequestTenant — mesma estrutura do Program.cs.
-            // TenantMiddleware seta IRequestTenant por requisição via JWT claim.
             services.AddScoped<AppDbContext>(sp => new AppDbContext(
                 sp.GetRequiredService<DbContextOptions<AppDbContext>>(),
                 sp.GetRequiredService<IRequestTenant>()
             ));
 
-            // Substitui configurações JWT para usar a chave de teste
             services.Configure<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>(
                 Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme,
                 options =>
@@ -91,19 +81,21 @@ public class ErpApiFactory : WebApplicationFactory<Program>
                         ValidAudience            = JwtAudience,
                         IssuerSigningKey         = new SymmetricSecurityKey(
                                                        Encoding.UTF8.GetBytes(JwtKey)),
-                        // Necessário para [Authorize(Roles="Administrador")] funcionar —
-                        // o JWT usa "role_name" em vez de ClaimTypes.Role padrão.
                         RoleClaimType            = "role_name"
                     };
                 });
         });
     }
 
-    /// <summary>Gera um JWT de teste com TenantId e permissões informadas.</summary>
+    /// <summary>
+    /// Gera um JWT de teste com TenantId, permissões e flags informadas.
+    /// mustChangePassword=true adiciona o claim "must_change_password: true" (1.7.4).
+    /// </summary>
     public string GerarToken(
-        string cargo        = "Administrador",
-        string[]? permissoes = null,
-        Guid?  tenantId     = null)
+        string    cargo               = "Administrador",
+        string[]? permissoes          = null,
+        Guid?     tenantId            = null,
+        bool      mustChangePassword  = false)
     {
         var tid    = tenantId ?? TestTenantId;
         var key    = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(JwtKey));
@@ -120,6 +112,11 @@ public class ErpApiFactory : WebApplicationFactory<Program>
         foreach (var p in permissoes ?? Permissions.All)
             claims.Add(new Claim("permission", p));
 
+        // 1.7.4: flag de troca obrigatória — MustChangePasswordMiddleware bloqueia
+        // qualquer endpoint exceto /api/auth/change-password quando este claim existe.
+        if (mustChangePassword)
+            claims.Add(new Claim("must_change_password", "true"));
+
         var token = new JwtSecurityToken(
             issuer:             JwtIssuer,
             audience:           JwtAudience,
@@ -130,7 +127,6 @@ public class ErpApiFactory : WebApplicationFactory<Program>
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    /// <summary>HttpClient já autenticado com JWT de teste.</summary>
     public HttpClient CreateAuthenticatedClient(string cargo = "Administrador")
     {
         var client = CreateClient();
@@ -141,7 +137,7 @@ public class ErpApiFactory : WebApplicationFactory<Program>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  BASE — helpers compartilhados entre as classes de teste
+//  BASE
 // ═══════════════════════════════════════════════════════════════════════════════
 
 public abstract class IntegrationTestBase : IClassFixture<ErpApiFactory>
@@ -162,24 +158,9 @@ public abstract class IntegrationTestBase : IClassFixture<ErpApiFactory>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  TENANT SCOPE — helper para testes de isolamento
-//
-//  Problema: o construtor de AppDbContext(options, IRequestTenant) seta
-//  _asyncTenantId.Value = requestTenant.TenantId no contexto async atual.
-//  Quando o seed cria um scope sem request HTTP, IRequestTenant.TenantId = Guid.Empty,
-//  e o construtor sobrescreve o AsyncLocal para Guid.Empty.
-//  O request HTTP filho herda Guid.Empty do pai e — mesmo com o middleware
-//  setando corretamente depois — pode haver race entre o construtor do DbContext
-//  e o filtro de query.
-//
-//  TenantScope garante que o AsyncLocal correto está setado ANTES do seed e é
-//  resetado com using ao fim, evitando vazamento entre testes.
+//  TENANT SCOPE
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// <summary>
-/// Seta AppDbContext.SetQueryTenantId(tenantId) ao entrar no using e reseta
-/// para Guid.Empty ao sair. Usar sempre que semear dados em testes de isolamento.
-/// </summary>
 internal sealed class TenantScope : IDisposable
 {
     public TenantScope(Guid tenantId) => AppDbContext.SetQueryTenantId(tenantId);
@@ -218,8 +199,6 @@ public class AuthControllerTests : IntegrationTestBase
         var client = Factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Tenant-CNPJ", cnpjUnico);
 
-        // Até 12 tentativas: mesmo no pior caso (janela de 1 min vira depois de 5 reqs),
-        // 5 + 6 = 11 requests garantem que ao menos 6 caem na mesma janela → 429.
         var statusCodes = new List<HttpStatusCode>();
         for (var i = 0; i < 12; i++)
         {
@@ -266,8 +245,7 @@ public class ProductsControllerTests : IntegrationTestBase
     [Fact(DisplayName = "POST /api/products com payload inválido → 400")]
     public async Task Create_PayloadInvalido_Retorna400()
     {
-        var resp = await AuthClient.PostAsync("/api/products",
-            Json(new { })); // campos obrigatórios ausentes
+        var resp = await AuthClient.PostAsync("/api/products", Json(new { }));
         resp.StatusCode.Should().BeOneOf(HttpStatusCode.BadRequest, HttpStatusCode.UnprocessableEntity);
     }
 }
@@ -325,7 +303,7 @@ public class SalesControllerTests : IntegrationTestBase
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  METAS (Sprint 2A)
+//  METAS
 // ═══════════════════════════════════════════════════════════════════════════════
 
 public class MetasControllerTests : IntegrationTestBase
@@ -364,7 +342,7 @@ public class MetasControllerTests : IntegrationTestBase
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  CONTAS A PAGAR (Sprint 2A)
+//  CONTAS A PAGAR
 // ═══════════════════════════════════════════════════════════════════════════════
 
 public class ContasPagarControllerTests : IntegrationTestBase
@@ -407,7 +385,7 @@ public class ContasPagarControllerTests : IntegrationTestBase
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  AUDITORIA (Sprint 2A)
+//  AUDITORIA
 // ═══════════════════════════════════════════════════════════════════════════════
 
 public class AuditoriaControllerTests : IntegrationTestBase
@@ -433,14 +411,19 @@ public class AuditoriaControllerTests : IntegrationTestBase
         => (await AuthClient.GetAsync("/api/auditoria?usuario=admin&acao=UPDATE&pagina=1&tam=5"))
             .StatusCode.Should().Be(HttpStatusCode.OK);
 
-    [Fact(DisplayName = "GET /api/auditoria com role Gerente → 403 (1.6.6)")]
-    public async Task GetAll_RoleGerente_Retorna403()
-    {
-        var client = Factory.CreateAuthenticatedClient("Gerente");
-        (await client.GetAsync("/api/auditoria"))
-            .StatusCode.Should().Be(HttpStatusCode.Forbidden,
-                "logs de auditoria são restritos a Administrador");
-    }
+    [Fact(DisplayName = "GET /api/auditoria sem AuditView → 403 (1.6.6)")]
+public async Task GetAll_RoleGerente_Retorna403()
+{
+    // Sistema agora usa [HasPermission(AuditView)] — testa a permissão, não o cargo
+    var perms  = Permissions.All.Where(p => p != Permissions.AuditView).ToArray();
+    var client = Factory.CreateClient();
+    client.DefaultRequestHeaders.Authorization =
+        new AuthenticationHeaderValue("Bearer", Factory.GerarToken("Gerente", perms));
+
+    (await client.GetAsync("/api/auditoria"))
+        .StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "usuario sem audit.view nao deve ver logs de auditoria");
+}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -459,8 +442,6 @@ public class CaixaControllerTests : IntegrationTestBase
     [Fact(DisplayName = "GET /api/caixa/status com token → 200 ou 404")]
     public async Task Status_ComToken_Retorna200()
     {
-        // GET /api/caixa/aberto retorna 200 se houver caixa aberto, 404 se não houver.
-        // Ambos são válidos — o endpoint está protegido e acessível.
         var status = (await AuthClient.GetAsync("/api/caixa/aberto")).StatusCode;
         status.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.NotFound);
     }
@@ -481,10 +462,8 @@ public class InventarioControllerTests : IntegrationTestBase
 
     [Fact(DisplayName = "GET /api/inventario/produtos com token → 200 paginado")]
     public async Task Produtos_ComToken_Retorna200Paginado()
-    {
-        var resp = await AuthClient.GetAsync("/api/inventario/produtos?pagina=1&tam=10");
-        resp.StatusCode.Should().Be(HttpStatusCode.OK);
-    }
+        => (await AuthClient.GetAsync("/api/inventario/produtos?pagina=1&tam=10"))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
 
     [Fact(DisplayName = "GET /api/inventario/barcode/{codigo} inexistente → 404")]
     public async Task Barcode_NaoExistente_Retorna404()
@@ -574,7 +553,7 @@ public class EntregasControllerTests : IntegrationTestBase
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  STOCK / ESTOQUE
+//  STOCK
 // ═══════════════════════════════════════════════════════════════════════════════
 
 public class StockControllerTests : IntegrationTestBase
@@ -631,7 +610,7 @@ public class PedidosCompraControllerTests : IntegrationTestBase
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  CARGOS (ROLES)
+//  CARGOS
 // ═══════════════════════════════════════════════════════════════════════════════
 
 public class CargosControllerTests : IntegrationTestBase
@@ -702,7 +681,7 @@ public class FiscalControllerTests : IntegrationTestBase
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  NOTAS FISCAIS (Sprint 2A)
+//  NOTAS FISCAIS
 // ═══════════════════════════════════════════════════════════════════════════════
 
 public class NotasFiscaisControllerTests : IntegrationTestBase
@@ -748,7 +727,6 @@ public class CalculadoraControllerTests : IntegrationTestBase
 
     [Fact(DisplayName = "GET /api/calculadora/templates sem token → 200 (endpoint público)")]
     public async Task GetAll_SemToken_Retorna401()
-        // /api/calculadora/templates é AllowAnonymous (usado pela calculadora pública)
         => (await AnonClient.GetAsync("/api/calculadora/templates"))
             .StatusCode.Should().Be(HttpStatusCode.OK);
 }
@@ -846,8 +824,7 @@ public class ChatTokenControllerTests : IntegrationTestBase
         var body  = await resp.Content.ReadFromJsonAsync<ChatTokenResponse>();
         var token = body!.ChatToken;
 
-        // Decodifica o payload sem validar assinatura (só verificamos a estrutura)
-        var parts   = token.Split('.');
+        var parts = token.Split('.');
         parts.Should().HaveCount(3, "JWT deve ter 3 partes separadas por ponto");
 
         var payload = System.Text.Encoding.UTF8.GetString(
@@ -856,16 +833,16 @@ public class ChatTokenControllerTests : IntegrationTestBase
         payload.Should().Contain("tenant_id",  "claim 'tenant_id' deve estar no payload");
     }
 
-   private static string PadBase64(string s)
-{
-    s = s.Replace('-', '+').Replace('_', '/');
-    return (s.Length % 4) switch
+    private static string PadBase64(string s)
     {
-        2 => s + "==",
-        3 => s + "=",
-        _ => s
-    };
-}
+        s = s.Replace('-', '+').Replace('_', '/');
+        return (s.Length % 4) switch
+        {
+            2 => s + "==",
+            3 => s + "=",
+            _ => s
+        };
+    }
 
     private record ChatTokenResponse(string ChatToken, int ExpiresIn);
 }
@@ -885,15 +862,12 @@ public class MetricsControllerTests : IntegrationTestBase
 
     [Fact(DisplayName = "GET /api/metrics com token → 200")]
     public async Task GetMetrics_ComToken_Retorna200()
-    {
-        var resp = await AuthClient.GetAsync("/api/metrics");
-        resp.StatusCode.Should().Be(HttpStatusCode.OK);
-    }
+        => (await AuthClient.GetAsync("/api/metrics"))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
 
     [Fact(DisplayName = "GET /api/metrics retorna snapshot com campos esperados")]
     public async Task GetMetrics_RetornaSnapshotCompleto()
     {
-        // Faz algumas requests antes para popular o MetricsCollector
         await AuthClient.GetAsync("/api/products");
         await AuthClient.GetAsync("/api/customers");
 
@@ -902,7 +876,7 @@ public class MetricsControllerTests : IntegrationTestBase
 
         var body = await resp.Content.ReadFromJsonAsync<MetricsSnapshot>();
         body.Should().NotBeNull();
-        body!.JanelaMinutos.Should().Be(5,  "janela deve ser de 5 minutos");
+        body!.JanelaMinutos.Should().Be(5);
         body.RequestsPorSeg.Should().BeGreaterThanOrEqualTo(0);
         body.LatenciaMediaMs.Should().BeGreaterThanOrEqualTo(0);
         body.LatenciaP99Ms.Should().BeGreaterThanOrEqualTo(0);
@@ -914,12 +888,9 @@ public class MetricsControllerTests : IntegrationTestBase
     public async Task GetMetrics_AposRequests_RegistraEndpoints()
     {
         await AuthClient.GetAsync("/api/products");
-
         var resp = await AuthClient.GetAsync("/api/metrics");
         var body = await resp.Content.ReadFromJsonAsync<MetricsSnapshot>();
-
-        body!.TotalRequests.Should().BeGreaterThan(0,
-            "deve ter registrado ao menos 1 request após chamar /api/products");
+        body!.TotalRequests.Should().BeGreaterThan(0);
     }
 
     private class MetricsSnapshot
@@ -940,194 +911,120 @@ public class MetricsControllerTests : IntegrationTestBase
         public double LatenciaMediaMs { get; set; }
     }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  FASE 0 — TESTES OBRIGATÓRIOS DE ISOLAMENTO
-//
-//  Estes são os critérios de pronto da Fase 0. Os três testes DEVEM estar
-//  vermelhos antes das correções e VERDES depois. O CI bloqueia merge
-//  se qualquer um falhar.
-//
-//  NOTA: InMemory EF Core não executa HasQueryFilter em todas as situações,
-//  mas com a correção do construtor (IRequestTenant por instância), o filtro
-//  é avaliado corretamente porque cada contexto usa seu próprio TenantId.
-// ═══════════════════════════════════════════════════════════════════════════════
+    // ── FASE 0 — isolamento cross-tenant ─────────────────────────────────────
 
-/// <summary>
-/// FASE 0 — Teste #1: Isolamento Cross-Tenant em Produtos
-///
-/// Cria um produto com JWT do Tenant A e verifica que o Tenant B
-/// não o vê ao chamar GET /api/products. Prova que o HasQueryFilter
-/// com GetTenantId() por instância está funcionando na API.
-/// </summary>
-// IClassFixture removido intencionalmente.
-// Motivo: o EF Core InMemory compila o HasQueryFilter com o valor do AsyncLocal
-// na PRIMEIRA compilação da query e usa esse valor para todo o cache. Quando o
-// FASE0 #1 roda antes do #2, a query fica compilada com tenantB e o FASE0 #2
-// nunca consegue ver o produto de tenantA.
-//
-// Cada instância da classe recebe sua própria ErpApiFactory → InMemory DB novo
-// + compiled query cache limpo → sem contaminação cruzada entre testes.
-public class Fase0TenantIsolationTests : IDisposable
-{
-    private readonly ErpApiFactory _factory = new();
-
-    public void Dispose() => _factory.Dispose();
-
-
-    [Fact(DisplayName = "FASE0 #1 — Produto do Tenant A NÃO aparece para Tenant B")]
-    public async Task Produto_TenantA_NaoAparece_Para_TenantB()
+    public class Fase0TenantIsolationTests : IDisposable
     {
-        // ── Arrange ──────────────────────────────────────────────────────────
-        var tenantA = Guid.NewGuid();
-        var tenantB = Guid.NewGuid();
+        private readonly ErpApiFactory _factory = new();
+        public void Dispose() => _factory.Dispose();
 
-        // TenantScope: garante AsyncLocal correto durante o SaveChanges do seed.
-        // Sem isso, o construtor AppDbContext(options, IRequestTenant) seta o
-        // AsyncLocal para Guid.Empty (sem request HTTP), e o request filho herda Guid.Empty.
-        using (new TenantScope(tenantA))
+        [Fact(DisplayName = "FASE0 #1 — Produto do Tenant A NÃO aparece para Tenant B")]
+        public async Task Produto_TenantA_NaoAparece_Para_TenantB()
         {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            db.Products.Add(new ERP.Domain.Entities.Product
+            var tenantA = Guid.NewGuid();
+            var tenantB = Guid.NewGuid();
+
+            using (new TenantScope(tenantA))
             {
-                Id        = Guid.NewGuid(),
-                TenantId  = tenantA,
-                Name      = "Cimento CP-II 50kg — TenantA",
-                SalePrice = 35.90m,
-                Stock     = 100,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-            });
-            await db.SaveChangesAsync();
-        } // Dispose() reseta AsyncLocal para Guid.Empty — sem vazamento entre testes
+                using var scope = _factory.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                db.Products.Add(new ERP.Domain.Entities.Product
+                {
+                    Id = Guid.NewGuid(), TenantId = tenantA,
+                    Name = "Cimento CP-II 50kg — TenantA",
+                    SalePrice = 35.90m, Stock = 100,
+                    CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+                });
+                await db.SaveChangesAsync();
+            }
 
-        // ── Act — Tenant B consulta produtos ─────────────────────────────────
-        var clientB = _factory.CreateClient();
-        clientB.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue(
-                "Bearer", _factory.GerarToken(tenantId: tenantB));
+            var clientB = _factory.CreateClient();
+            clientB.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", _factory.GerarToken(tenantId: tenantB));
 
-        var resp = await clientB.GetAsync("/api/products");
-
-        // ── Assert ───────────────────────────────────────────────────────────
-        resp.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await resp.Content.ReadAsStringAsync();
-
-        // Tenant B NÃO deve ver o produto do Tenant A
-        body.Should().NotContain("Cimento CP-II 50kg — TenantA", "produto do Tenant A nao deve vazar para Tenant B (LGPD)");
-    }
-
-    [Fact(DisplayName = "FASE0 #2 — Produto do Tenant A aparece corretamente para Tenant A")]
-    public async Task Produto_TenantA_Aparece_Para_TenantA()
-    {
-        // ── Arrange ──────────────────────────────────────────────────────────
-        var tenantA   = Guid.NewGuid();
-        var produtoId = Guid.NewGuid();
-
-        using (new TenantScope(tenantA))
-        {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            db.Products.Add(new ERP.Domain.Entities.Product
-            {
-                Id        = produtoId,
-                TenantId  = tenantA,
-                Name      = $"Argamassa AC-II — TenantA-{produtoId:N}",
-                SalePrice = 22.50m,
-                Stock     = 50,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-            });
-            await db.SaveChangesAsync();
+            var resp = await clientB.GetAsync("/api/products");
+            resp.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await resp.Content.ReadAsStringAsync())
+                .Should().NotContain("Cimento CP-II 50kg — TenantA");
         }
 
-        // ── Act — Tenant A consulta seus próprios produtos ────────────────────
-        var clientA = _factory.CreateClient();
-        clientA.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue(
-                "Bearer", _factory.GerarToken(tenantId: tenantA));
-
-        var resp = await clientA.GetAsync("/api/products");
-
-        // ── Assert ───────────────────────────────────────────────────────────
-        resp.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await resp.Content.ReadAsStringAsync();
-
-        body.Should().Contain($"TenantA-{produtoId:N}", "Tenant A deve ver seus proprios produtos");
-    }
-
-    [Fact(DisplayName = "FASE0 #3 — GET /api/haver/saldo com cliente de outro tenant retorna 0 (não vaza)")]
-    public async Task Haver_ClienteOutroTenant_NaoVazaDado()
-    {
-        // ── Arrange ──────────────────────────────────────────────────────────
-        var tenantA = Guid.NewGuid();
-        var tenantB = Guid.NewGuid();
-
-        // Cria cliente do Tenant A com saldo Haver
-        var clienteId = Guid.NewGuid();
-        using (new TenantScope(tenantA))
+        [Fact(DisplayName = "FASE0 #2 — Produto do Tenant A aparece corretamente para Tenant A")]
+        public async Task Produto_TenantA_Aparece_Para_TenantA()
         {
-            using var scope = _factory.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            db.Customers.Add(new ERP.Domain.Entities.Customer
+            var tenantA   = Guid.NewGuid();
+            var produtoId = Guid.NewGuid();
+
+            using (new TenantScope(tenantA))
             {
-                Id           = clienteId,
-                TenantId     = tenantA,
-                Name         = "Cliente do Tenant A",
-                HaverBalance = 500m,
-                CreatedAt    = DateTime.UtcNow,
-                UpdatedAt    = DateTime.UtcNow,
-            });
-            await db.SaveChangesAsync();
+                using var scope = _factory.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                db.Products.Add(new ERP.Domain.Entities.Product
+                {
+                    Id = produtoId, TenantId = tenantA,
+                    Name = $"Argamassa AC-II — TenantA-{produtoId:N}",
+                    SalePrice = 22.50m, Stock = 50,
+                    CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+                });
+                await db.SaveChangesAsync();
+            }
+
+            var clientA = _factory.CreateClient();
+            clientA.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", _factory.GerarToken(tenantId: tenantA));
+
+            var resp = await clientA.GetAsync("/api/products");
+            resp.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await resp.Content.ReadAsStringAsync())
+                .Should().Contain($"TenantA-{produtoId:N}");
         }
 
-        // ── Act — Tenant B tenta ver saldo do cliente do Tenant A ────────────
-        var clientB = _factory.CreateClient();
-        clientB.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue(
-                "Bearer", _factory.GerarToken(tenantId: tenantB));
-
-        var resp = await clientB.GetAsync($"/api/haver/saldo/{clienteId}");
-
-        // ── Assert ───────────────────────────────────────────────────────────
-        // Deve retornar 200 com saldo 0 (cliente não encontrado neste tenant)
-        // OU 404/403. De qualquer forma, NÃO deve retornar saldo de R$ 500.
-        if (resp.IsSuccessStatusCode)
+        [Fact(DisplayName = "FASE0 #3 — GET /api/haver/saldo com cliente de outro tenant retorna 0")]
+        public async Task Haver_ClienteOutroTenant_NaoVazaDado()
         {
-            var body = await resp.Content.ReadAsStringAsync();
-            body.Should().NotContain("500", "saldo do Tenant A nao deve vazar para Tenant B");
-        }
-        else
-        {
-            resp.StatusCode.Should().BeOneOf(
-                HttpStatusCode.NotFound,
-                HttpStatusCode.Forbidden,
-                HttpStatusCode.Unauthorized);
+            var tenantA   = Guid.NewGuid();
+            var tenantB   = Guid.NewGuid();
+            var clienteId = Guid.NewGuid();
+
+            using (new TenantScope(tenantA))
+            {
+                using var scope = _factory.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                db.Customers.Add(new ERP.Domain.Entities.Customer
+                {
+                    Id = clienteId, TenantId = tenantA,
+                    Name = "Cliente do Tenant A", HaverBalance = 500m,
+                    CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+                });
+                await db.SaveChangesAsync();
+            }
+
+            var clientB = _factory.CreateClient();
+            clientB.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", _factory.GerarToken(tenantId: tenantB));
+
+            var resp = await clientB.GetAsync($"/api/haver/saldo/{clienteId}");
+
+            if (resp.IsSuccessStatusCode)
+                (await resp.Content.ReadAsStringAsync()).Should().NotContain("500");
+            else
+                resp.StatusCode.Should().BeOneOf(
+                    HttpStatusCode.NotFound, HttpStatusCode.Forbidden, HttpStatusCode.Unauthorized);
         }
     }
-}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  F1.1 — DUAL-TENANT ISOLATION TESTS
-//
-//  Objetivo: provar que nenhum dos controllers sensíveis vaza dados entre
-//  tenants. Um por controller, cobrindo os 8 mais críticos além dos 3 do FASE0.
-//
-//  Padrão: seed com TenantId=A, requisição com JWT de TenantId=B,
-//          verifica que o identificador único do dado de A não aparece.
-//
-//  Junto com Fase0TenantIsolationTests → 11 testes de isolamento no total.
 // ═══════════════════════════════════════════════════════════════════════════════
+
 public class F11DualTenantTests : IClassFixture<ErpApiFactory>
 {
     private readonly ErpApiFactory _factory;
     public F11DualTenantTests(ErpApiFactory factory) => _factory = factory;
 
-    // ── helper: seed com TenantScope (garante AsyncLocal correto) ─────────────
     private async Task SeedAsync(Guid tenantId, Action<AppDbContext> seed)
     {
-        using var ts = new TenantScope(tenantId);
+        using var ts    = new TenantScope(tenantId);
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         seed(db);
@@ -1138,12 +1035,10 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
     {
         var c = _factory.CreateClient();
         c.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue(
-                "Bearer", _factory.GerarToken(tenantId: tenantId));
+            new AuthenticationHeaderValue("Bearer", _factory.GerarToken(tenantId: tenantId));
         return c;
     }
 
-    // ── 1. Customers ────────────────────────────────────────────────────────
     [Fact(DisplayName = "F1.1 — Customers: Tenant B nao ve clientes do Tenant A")]
     [Trait("F11", "DualTenant")]
     public async Task Customers_TenantB_NaoVeClientesDeTenantA()
@@ -1163,7 +1058,6 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         (await resp.Content.ReadAsStringAsync()).Should().NotContain(marker);
     }
 
-    // ── 2. Sales ────────────────────────────────────────────────────────────
     [Fact(DisplayName = "F1.1 — Sales: Tenant B nao ve vendas do Tenant A")]
     [Trait("F11", "DualTenant")]
     public async Task Sales_TenantB_NaoVeVendasDeTenantA()
@@ -1184,7 +1078,6 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         (await resp.Content.ReadAsStringAsync()).Should().NotContain(saleNum);
     }
 
-    // ── 3. Orcamentos ───────────────────────────────────────────────────────
     [Fact(DisplayName = "F1.1 — Orcamentos: Tenant B nao ve orcamentos do Tenant A")]
     [Trait("F11", "DualTenant")]
     public async Task Orcamentos_TenantB_NaoVeOrcamentosDeTenantA()
@@ -1206,7 +1099,6 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         (await resp.Content.ReadAsStringAsync()).Should().NotContain(marker);
     }
 
-    // ── 4. Contas a Receber ─────────────────────────────────────────────────
     [Fact(DisplayName = "F1.1 — ContasReceber: Tenant B nao ve contas do Tenant A")]
     [Trait("F11", "DualTenant")]
     public async Task ContasReceber_TenantB_NaoVeContasDeTenantA()
@@ -1227,7 +1119,6 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         (await resp.Content.ReadAsStringAsync()).Should().NotContain(marker);
     }
 
-    // ── 5. Contas a Pagar ───────────────────────────────────────────────────
     [Fact(DisplayName = "F1.1 — ContasPagar: Tenant B nao ve contas do Tenant A")]
     [Trait("F11", "DualTenant")]
     public async Task ContasPagar_TenantB_NaoVeContasDeTenantA()
@@ -1248,7 +1139,6 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         (await resp.Content.ReadAsStringAsync()).Should().NotContain(marker);
     }
 
-    // ── 6. Fidelidade ───────────────────────────────────────────────────────
     [Fact(DisplayName = "F1.1 — Fidelidade: saldo de cliente do Tenant A e 0 para Tenant B")]
     [Trait("F11", "DualTenant")]
     public async Task Fidelidade_ClienteTenantA_SaldoZeroParaTenantB()
@@ -1261,27 +1151,17 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         {
             Id = Guid.NewGuid(), TenantId = tenantA,
             CustomerId = clienteId, Tipo = "Credito",
-            Pontos = 500, Data = DateTime.UtcNow,
-            Descricao = "Compra teste"
+            Pontos = 500, Data = DateTime.UtcNow, Descricao = "Compra teste"
         }));
 
-        var resp = await ClientFor(tenantB)
-            .GetAsync($"/api/fidelidade/{clienteId}/saldo");
+        var resp = await ClientFor(tenantB).GetAsync($"/api/fidelidade/{clienteId}/saldo");
 
         if (resp.IsSuccessStatusCode)
-        {
-            var body = await resp.Content.ReadAsStringAsync();
-            body.Should().NotContain("500",
-                "pontos do Tenant A nao devem aparecer para Tenant B");
-        }
+            (await resp.Content.ReadAsStringAsync()).Should().NotContain("500");
         else
-        {
-            resp.StatusCode.Should().BeOneOf(
-                HttpStatusCode.NotFound, HttpStatusCode.Forbidden);
-        }
+            resp.StatusCode.Should().BeOneOf(HttpStatusCode.NotFound, HttpStatusCode.Forbidden);
     }
 
-    // ── 7. Pedidos de Compra ────────────────────────────────────────────────
     [Fact(DisplayName = "F1.1 — PedidosCompra: Tenant B nao ve pedidos do Tenant A")]
     [Trait("F11", "DualTenant")]
     public async Task PedidosCompra_TenantB_NaoVePedidosDeTenantA()
@@ -1294,8 +1174,7 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         {
             Id = Guid.NewGuid(), TenantId = tenantA, Numero = marker,
             Status = ERP.Domain.Enums.StatusPedidoCompra.Rascunho,
-            DataPedido = DateTime.UtcNow,
-            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            DataPedido = DateTime.UtcNow, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
         }));
 
         var resp = await ClientFor(tenantB).GetAsync("/api/pedidos-compra");
@@ -1303,7 +1182,6 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         (await resp.Content.ReadAsStringAsync()).Should().NotContain(marker);
     }
 
-    // ── 8. Entregas ─────────────────────────────────────────────────────────
     [Fact(DisplayName = "F1.1 — Entregas: Tenant B nao ve entregas do Tenant A")]
     [Trait("F11", "DualTenant")]
     public async Task Entregas_TenantB_NaoVeEntregasDeTenantA()
@@ -1324,14 +1202,11 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         (await resp.Content.ReadAsStringAsync()).Should().NotContain(marker);
     }
-    // ── 9. Devolucao via API (1.5.2 fix — órfão de tenant) ─────────────────
+
     [Fact(DisplayName = "F1.1 — Devolucao: POST autenticado nao retorna 500")]
     [Trait("F11", "DualTenant")]
     public async Task Devolucao_ComAuth_NaoRetorna500()
     {
-        // Verifica que o endpoint exige auth e retorna erro de negócio (não 500).
-        // O fix real (TenantId no INSERT) requer teste com SQL Server real;
-        // este garante que o caminho não explode com NullReference após a refatoração.
         var resp = await ClientFor(Guid.NewGuid()).PostAsJsonAsync("/api/devolucao",
             new
             {
@@ -1339,9 +1214,379 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
                 Items  = new[] { new { ProductId = Guid.NewGuid(), Quantidade = 1m, Motivo = "Teste" } }
             });
 
-        resp.StatusCode.Should().NotBe(HttpStatusCode.InternalServerError,
-            "após injetar IRequestTenant o construtor nao deve explodir");
-        resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized,
-            "JWT foi enviado — nao deve ser 401");
+        resp.StatusCode.Should().NotBe(HttpStatusCode.InternalServerError);
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  1.7.8 — REGRESSÃO DE SEGURANÇA
+//
+//  Cobre os fixes críticos da Fase 1.7:
+//  • 1.7.2 — Shopee webhook: body obrigatório na assinatura (body forgery)
+//  • 1.7.3 — ML webhook: replay protection (timestamp > 5min rejeitado)
+//  • 1.7.4 — MustChangePassword: middleware bloqueia endpoints / libera troca de senha
+//  • 1.6.1 — Cross-tenant auth: credenciais de tenant A rejeitadas em tenant B
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── 1.7.2 + 1.7.3: Webhook Signature Validator (testes unitários puros) ───────
+
+public class WebhookSignatureValidatorTests
+{
+    // Chaves fictícias de teste — sem dependência de config/DB/HTTP
+    private const string MlSecret  = "ml_test_secret_key_32bytes_padding!";
+    private const string ShopeeKey = "shopee_test_key_32bytes_padding_!!";
+    private const string ShopeeId  = "12345";
+    private const string ShopeeUrl =
+        "https://api.ttsoft.com.br/api/marketplace/shopee/webhook/00000000-0000-0000-0000-000000000001";
+
+    // ── ML ──────────────────────────────────────────────────────────────────
+
+    [Fact(DisplayName = "1.7.3 — ML: assinatura válida + timestamp recente → aceito")]
+    public void ML_AssinaturaValida_Aceito()
+    {
+        var body = """{"topic":"orders","resource":"/orders/123"}""";
+        var tsMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+        var sig  = HmacML(tsMs, body);
+
+        WebhookSignatureValidator.ValidateML($"ts={tsMs}&v1={sig}", body, MlSecret)
+            .Should().BeTrue("HMAC correto + timestamp recente deve ser aceito");
+    }
+
+    [Fact(DisplayName = "1.7.3 — ML: timestamp > 5min → replay rejeitado")]
+    public void ML_TimestampAntigo_Rejeitado()
+    {
+        var body  = """{"topic":"orders","resource":"/orders/123"}""";
+        var tsMs  = DateTimeOffset.UtcNow.AddMinutes(-6).ToUnixTimeMilliseconds().ToString();
+        var sig   = HmacML(tsMs, body);
+
+        WebhookSignatureValidator.ValidateML($"ts={tsMs}&v1={sig}", body, MlSecret)
+            .Should().BeFalse("timestamp > 5min deve ser rejeitado como replay (1.7.3)");
+    }
+
+    [Fact(DisplayName = "1.7.3 — ML: HMAC inválido → rejeitado")]
+    public void ML_HmacInvalido_Rejeitado()
+    {
+        var tsMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+        WebhookSignatureValidator.ValidateML(
+            $"ts={tsMs}&v1=cafebabe00112233aabbccdd", """{"topic":"orders"}""", MlSecret)
+            .Should().BeFalse();
+    }
+
+    [Fact(DisplayName = "1.7.3 — ML: header ausente → rejeitado")]
+    public void ML_HeaderAusente_Rejeitado() =>
+        WebhookSignatureValidator.ValidateML(null, """{"topic":"orders"}""", MlSecret)
+            .Should().BeFalse();
+
+    [Fact(DisplayName = "1.7.3 — ML: body alterado após assinatura → HMAC não bate")]
+    public void ML_BodyAlterado_Rejeitado()
+    {
+        var tsMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+        var sig  = HmacML(tsMs, """{"topic":"orders","resource":"/orders/123"}""");
+
+        WebhookSignatureValidator.ValidateML(
+            $"ts={tsMs}&v1={sig}",
+            """{"topic":"orders","resource":"/orders/999"}""",  // body diferente
+            MlSecret)
+            .Should().BeFalse("body alterado invalida o HMAC");
+    }
+
+    // ── Shopee ───────────────────────────────────────────────────────────────
+
+    [Fact(DisplayName = "1.7.2 — Shopee: assinatura com body correto → aceito")]
+    public void Shopee_AssinaturaComBody_Aceita()
+    {
+        var body = """{"code":4,"shopid":12345}""";
+        var tsS  = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        var sig  = HmacShopee(body);
+        var auth = $"{ShopeeId}|{tsS}|{sig}";
+
+        WebhookSignatureValidator.ValidateShopee(auth, ShopeeUrl, body, ShopeeId, ShopeeKey)
+            .Should().BeTrue("HMAC com body correto deve ser aceito (1.7.2)");
+    }
+
+    [Fact(DisplayName = "1.7.2 — Shopee: body forjado (diferente do assinado) → rejeitado")]
+    public void Shopee_BodyForjado_Rejeitado()
+    {
+        // CENÁRIO DO AUDIT: atacante captura Authorization legítimo e substitui o body
+        var bodyOriginal = """{"code":4,"shopid":12345}""";
+        var bodyForjado  = """{"code":4,"shopid":12345,"stock_update":{"qty":0}}""";
+        var tsS  = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        var sig  = HmacShopee(bodyOriginal); // assinou o body original
+        var auth = $"{ShopeeId}|{tsS}|{sig}";
+
+        // Envia o body FORJADO com o Authorization do body original
+        WebhookSignatureValidator.ValidateShopee(auth, ShopeeUrl, bodyForjado, ShopeeId, ShopeeKey)
+            .Should().BeFalse(
+                "body forjado deve ser rejeitado — vulnerabilidade corrigida na 1.7.2: " +
+                "sem body na assinatura, atacante podia zerar estoque reutilizando Authorization capturado");
+    }
+
+    [Fact(DisplayName = "1.7.2 — Shopee: timestamp > 5min → replay rejeitado")]
+    public void Shopee_TimestampAntigo_Rejeitado()
+    {
+        var body = """{"code":4}""";
+        var tsS  = DateTimeOffset.UtcNow.AddMinutes(-6).ToUnixTimeSeconds().ToString();
+        var sig  = HmacShopee(body);
+        var auth = $"{ShopeeId}|{tsS}|{sig}";
+
+        WebhookSignatureValidator.ValidateShopee(auth, ShopeeUrl, body, ShopeeId, ShopeeKey)
+            .Should().BeFalse("timestamp > 5min deve ser rejeitado como replay");
+    }
+
+    [Fact(DisplayName = "1.7.2 — Shopee: partnerId errado → rejeitado")]
+    public void Shopee_PartnerIdErrado_Rejeitado()
+    {
+        var body = """{"code":4}""";
+        var tsS  = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        var sig  = HmacShopee(body);
+        var auth = $"99999|{tsS}|{sig}"; // partnerId diferente do configurado
+
+        WebhookSignatureValidator.ValidateShopee(auth, ShopeeUrl, body, ShopeeId, ShopeeKey)
+            .Should().BeFalse("partnerId errado deve ser rejeitado");
+    }
+
+    [Fact(DisplayName = "1.7.2 — Shopee: header ausente → rejeitado")]
+    public void Shopee_HeaderAusente_Rejeitado() =>
+        WebhookSignatureValidator.ValidateShopee(null, ShopeeUrl, "{}", ShopeeId, ShopeeKey)
+            .Should().BeFalse();
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private string HmacML(string ts, string body)
+    {
+        using var h = new HMACSHA256(Encoding.UTF8.GetBytes(MlSecret));
+        return Convert.ToHexString(h.ComputeHash(Encoding.UTF8.GetBytes($"{ts}.{body}")))
+                      .ToLowerInvariant();
+    }
+
+    private string HmacShopee(string body)
+    {
+        using var h = new HMACSHA256(Encoding.UTF8.GetBytes(ShopeeKey));
+        return Convert.ToHexString(h.ComputeHash(Encoding.UTF8.GetBytes($"{ShopeeUrl}|{body}")))
+                      .ToLowerInvariant();
+    }
+}
+
+// ── 1.7.4: MustChangePassword Middleware (testes de integração) ───────────────
+
+public class MustChangePasswordTests : IntegrationTestBase
+{
+    public MustChangePasswordTests(ErpApiFactory f) : base(f) { }
+
+    [Fact(DisplayName = "1.7.4 — claim must_change_password=true → 403 em endpoint normal")]
+    public async Task MustChange_BloqueiaTodosEndpoints()
+    {
+        var token  = Factory.GerarToken(mustChangePassword: true);
+        var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+
+        var resp = await client.GetAsync("/api/products");
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "MustChangePasswordMiddleware deve bloquear todos os endpoints com must_change_password=true");
+
+        var body = await resp.Content.ReadAsStringAsync();
+        body.Should().Contain("mustChangePassword",
+            "resposta 403 deve indicar o motivo do bloqueio no body JSON");
+    }
+
+    [Fact(DisplayName = "1.7.4 — claim must_change_password=true → libera /api/auth/change-password")]
+    public async Task MustChange_LiberaEndpointTrocaDeSenha()
+    {
+        var token  = Factory.GerarToken(mustChangePassword: true);
+        var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+
+        // Payload inválido propositalmente — o que importa é que o middleware NÃO bloqueie (não 403)
+        // O controller vai responder 400/404 por dados inválidos, mas não 403
+        var resp = await client.PostAsync("/api/auth/change-password",
+            Json(new ChangePasswordDto { CurrentPassword = "qualquer", NewPassword = "12345678" }));
+
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden,
+            "o endpoint /api/auth/change-password deve ser liberado pelo middleware mesmo com a flag");
+    }
+
+    [Fact(DisplayName = "1.7.4 — JWT sem must_change_password → acesso normal")]
+    public async Task SemMustChange_AcessoNormal()
+    {
+        // Token gerado pelo helper padrão não tem a flag → acesso irrestrito
+        var resp = await AuthClient.GetAsync("/api/products");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK,
+            "usuário sem must_change_password deve ter acesso normal a todos os endpoints");
+    }
+
+    [Fact(DisplayName = "1.7.4 — claim must_change_password=true → /api/auth/login também liberado")]
+    public async Task MustChange_LiberaEndpointLogin()
+    {
+        var token  = Factory.GerarToken(mustChangePassword: true);
+        var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+
+        // Login é AllowAnonymous — middleware não deve bloquear
+        var resp = await client.PostAsync("/api/auth/login",
+            Json(new LoginDto { Username = "admin", Password = "wrong" }));
+
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden,
+            "/api/auth/login deve ser liberado pelo MustChangePasswordMiddleware");
+    }
+
+    [Fact(DisplayName = "1.7.4 — claim must_change_password=true → bloqueia /api/customers")]
+    public async Task MustChange_BloqueiaCustomers()
+    {
+        var token  = Factory.GerarToken(mustChangePassword: true);
+        var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+
+        (await client.GetAsync("/api/customers"))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact(DisplayName = "1.7.4 — claim must_change_password=true → bloqueia /api/sales")]
+    public async Task MustChange_BloqueiaSales()
+    {
+        var token  = Factory.GerarToken(mustChangePassword: true);
+        var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+
+        (await client.GetAsync("/api/sales"))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+}
+
+// ── 1.6.1: Cross-Tenant Auth Regression ──────────────────────────────────────
+
+public class CrossTenantAuthTests : IntegrationTestBase
+{
+    public CrossTenantAuthTests(ErpApiFactory f) : base(f) { }
+
+    [Fact(DisplayName = "1.6.1 — Login com CNPJ de tenant diferente → 401 (cross-tenant auth fix)")]
+    public async Task Login_CNPJTenantErrado_Retorna401()
+    {
+        // CNPJ que não tem nenhum usuário cadastrado no InMemory DB
+        // GetByUsernameAndTenantAsync filtra por username + tenantId → retorna null → 401
+        var cnpjSemUsuario = "00000000000191";
+        var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Tenant-CNPJ", cnpjSemUsuario);
+
+        var resp = await client.PostAsJsonAsync("/api/auth/login",
+            new { Username = "admin", Password = "admin123" });
+
+        resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
+            "credenciais de um tenant não devem funcionar no contexto de outro tenant (1.6.1)");
+    }
+
+    [Fact(DisplayName = "1.6.1 — POST /api/auth/change-password sem auth → 401")]
+    public async Task ChangePassword_SemToken_Retorna401()
+        => (await AnonClient.PostAsync("/api/auth/change-password",
+                Json(new ChangePasswordDto { CurrentPassword = "old", NewPassword = "new12345" })))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+    [Fact(DisplayName = "1.7.4 — POST /api/auth/change-password com auth → não é 403 (middleware libera)")]
+    public async Task ChangePassword_ComAuth_NaoBloqueado()
+    {
+        // Mesmo sem a flag, o endpoint deve ser acessível (e falhar por lógica de negócio, não middleware)
+        var resp = await AuthClient.PostAsync("/api/auth/change-password",
+            Json(new ChangePasswordDto { CurrentPassword = "errada", NewPassword = "nova12345" }));
+
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+        // Deve ser 400 (senha errada) ou 404 (usuário não existe no InMemory DB de teste)
+        resp.StatusCode.Should().BeOneOf(HttpStatusCode.BadRequest, HttpStatusCode.NotFound);
+    }
+
+// Adicionar ao final de ControllersIntegrationTests.cs (antes do último })
+// 1.8 — Teste RBAC negativo (2.8 do roadmap)
+// Garante que [HasPermission] não é removido acidentalmente de write endpoints críticos.
+
+public class RbacNegativeTests : IntegrationTestBase
+{
+    public RbacNegativeTests(ErpApiFactory f) : base(f) { }
+
+    [Fact(DisplayName = "1.8 — PUT /api/customers/{id} sem CustomerEdit → 403")]
+    public async Task Customers_SemCustomerEdit_Retorna403()
+    {
+        // JWT com todas as permissoes exceto CustomerEdit
+        var perms  = Permissions.All.Where(p => p != Permissions.CustomerEdit).ToArray();
+        var token  = Factory.GerarToken(permissoes: perms);
+        var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+
+        // [HasPermission] verifica antes de qualquer DB lookup — 403 independe de o cliente existir
+        var resp = await client.PutAsync(
+            $"/api/customers/{Guid.NewGuid()}",
+            Json(new { Name = "Tentativa", Document = "00000000000" }));
+
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "usuario sem customers.edit nao deve conseguir editar clientes (PII)");
+    }
+
+    [Fact(DisplayName = "1.8 — DELETE /api/customers/{id} sem CustomerDelete → 403")]
+    public async Task Customers_SemCustomerDelete_Retorna403()
+    {
+        var perms  = Permissions.All.Where(p => p != Permissions.CustomerDelete).ToArray();
+        var token  = Factory.GerarToken(permissoes: perms);
+        var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+
+        var resp = await client.DeleteAsync($"/api/customers/{Guid.NewGuid()}");
+
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "usuario sem customers.delete nao deve conseguir excluir clientes");
+    }
+
+    [Fact(DisplayName = "1.8 — POST /api/fidelidade/{id}/resgatar sem FidelidadeUse → 403")]
+    public async Task Fidelidade_SemFidelidadeUse_Retorna403()
+    {
+        var perms  = Permissions.All.Where(p => p != Permissions.FidelidadeUse).ToArray();
+        var token  = Factory.GerarToken(permissoes: perms);
+        var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+
+        var resp = await client.PostAsync(
+            $"/api/fidelidade/{Guid.NewGuid()}/resgatar",
+            Json(new { Pontos = 100 }));
+
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "usuario sem fidelidade.use nao deve resgatar pontos");
+    }
+
+    [Fact(DisplayName = "1.8 — DELETE /api/entregas/{id} sem EntregasManage → 403")]
+    public async Task Entregas_SemEntregasManage_Retorna403()
+    {
+        var perms  = Permissions.All.Where(p => p != Permissions.EntregasManage).ToArray();
+        var token  = Factory.GerarToken(permissoes: perms);
+        var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+
+        var resp = await client.DeleteAsync($"/api/entregas/{Guid.NewGuid()}");
+
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "usuario sem entregas.manage nao deve excluir entregas");
+    }
+
+    [Fact(DisplayName = "1.8 — GET /api/bi/dre-detalhado sem ReportFinancial → 403")]
+    public async Task Bi_SemReportFinancial_Retorna403()
+    {
+        var perms  = Permissions.All.Where(p => p != Permissions.ReportFinancial).ToArray();
+        var token  = Factory.GerarToken(permissoes: perms);
+        var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+
+        var resp = await client.GetAsync("/api/bi/dre-detalhado");
+
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "usuario sem report.financial nao deve ver DRE detalhado");
+    }
+}
+
 }

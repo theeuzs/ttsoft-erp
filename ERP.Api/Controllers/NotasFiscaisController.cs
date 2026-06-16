@@ -4,6 +4,7 @@ using ERP.Application.DTOs.FocusNfe;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -40,6 +41,7 @@ public class NotasFiscaisController : ControllerBase
         => Ok(await _notasService.GetAllAsync(pagina, tam, ct));
 
     /// <summary>Emite NFC-e via FocusNFe.</summary>
+    [HasPermission(Permissions.NotasFiscaisView)]
     [HttpPost("nfce/emitir")]
     public async Task<IActionResult> EmitirNfce([FromBody] EmitirNfceRequest req)
     {
@@ -93,6 +95,7 @@ public class NotasFiscaisController : ControllerBase
     }
 
     /// <summary>Cancela uma NFC-e ou NF-e emitida.</summary>
+    [HasPermission(Permissions.NotasFiscaisView)]
     [HttpPost("{referencia}/cancelar")]
     public async Task<IActionResult> Cancelar(
         string referencia, [FromBody] CancelarNotaRequest req)

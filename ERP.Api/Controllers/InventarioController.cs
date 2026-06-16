@@ -3,6 +3,7 @@ using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 /// <summary>
@@ -76,6 +77,7 @@ public class InventarioController : ControllerBase
     /// Registra a contagem de um item e retorna divergência imediata.
     /// Lookup via IProductService — sem acesso direto ao DbContext.
     /// </summary>
+    [HasPermission(Permissions.InventarioView)]
     [HttpPost("contar")]
     public async Task<IActionResult> ContarItem([FromBody] ContarItemInputDto dto)
     {
@@ -96,6 +98,7 @@ public class InventarioController : ControllerBase
     }
 
     /// <summary>Aplica ajustes de inventário em lote via IInventarioService.</summary>
+    [HasPermission(Permissions.StockAdjust)]
     [HttpPost("aplicar-ajustes")]
     public async Task<IActionResult> AplicarAjustes([FromBody] AjusteInputDto dto)
     {
@@ -120,6 +123,7 @@ public class InventarioController : ControllerBase
     /// ObterProdutosAsync é adequado aqui: o cruzamento exige todos os produtos
     /// da lista de contagem, que já é um conjunto limitado pelo usuário.
     /// </summary>
+    [HasPermission(Permissions.InventarioView)]
     [HttpPost("relatorio-divergencias")]
     public async Task<IActionResult> RelatorioDivergencias(
         [FromBody] List<ItemContadoInputDto> itens)

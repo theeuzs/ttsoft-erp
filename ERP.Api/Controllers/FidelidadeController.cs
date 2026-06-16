@@ -7,6 +7,7 @@ using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -37,6 +38,7 @@ public class FidelidadeController : ControllerBase
     }
 
     /// <summary>Resgata pontos — chamado pelo PDV ao finalizar venda com desconto fidelidade.</summary>
+    [HasPermission(Permissions.FidelidadeUse)]
     [HttpPost("{customerId:guid}/resgatar")]
     public async Task<IActionResult> Resgatar(Guid customerId, [FromBody] ResgatarPontosRequest req)
     {

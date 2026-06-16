@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -52,6 +53,7 @@ public class TintometricoController : ControllerBase
     }
 
     /// <summary>Cria ou atualiza fórmula de um produto (upsert).</summary>
+    [HasPermission(Permissions.ProductEdit)]
     [HttpPost]
     public async Task<IActionResult> Upsert([FromBody] SalvarFormulaDto dto, CancellationToken ct = default)
     {
@@ -95,6 +97,7 @@ public class TintometricoController : ControllerBase
     }
 
     /// <summary>Remove fórmula de um produto.</summary>
+    [HasPermission(Permissions.ProductEdit)]
     [HttpDelete("produto/{productId:guid}")]
     public async Task<IActionResult> Delete(Guid productId, CancellationToken ct = default)
     {

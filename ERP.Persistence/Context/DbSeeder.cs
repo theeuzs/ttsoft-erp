@@ -45,7 +45,6 @@ public static class DbSeeder
         }
         else
         {
-            // Garante que Supervisor existe mesmo em tenants antigos
             var roles = context.Roles.IgnoreQueryFilters()
                 .Where(r => r.TenantId == tenantId).ToList();
 
@@ -64,7 +63,6 @@ public static class DbSeeder
         // ── 2. Permissões ─────────────────────────────────────────────────────
         if (!context.Permissions.IgnoreQueryFilters().Any(p => p.TenantId == tenantId))
         {
-            // Todas as permissões do sistema
             var allPerms = new List<Permission>
             {
                 // PDV / Vendas
@@ -78,8 +76,15 @@ public static class DbSeeder
                 new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "product.edit",       Description = "Criar e editar produtos" },
                 new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "product.edit.price", Description = "Alterar preço de produtos" },
                 new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "stock.adjust",       Description = "Ajuste de estoque" },
-                // Clientes / Haver
+                // Clientes
+                new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "customers.edit",     Description = "Criar e editar clientes (PII)" },
+                new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "customers.delete",   Description = "Excluir clientes permanentemente" },
+                // Fidelidade
+                new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "fidelidade.use",     Description = "Resgatar pontos de fidelidade" },
+                // Haver
                 new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "haver.edit",         Description = "Depositar e retirar Haver" },
+                // Entregas
+                new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "entregas.manage",    Description = "Excluir e alterar status de entregas" },
                 // Financeiro
                 new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "report.financial",   Description = "Dashboard e indicadores" },
                 new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "financeiro.view",    Description = "Contas a receber (F8)" },
@@ -91,15 +96,15 @@ public static class DbSeeder
                 new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "compras.view",       Description = "Módulo de Compras" },
                 new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "inventario.view",    Description = "Inventário" },
                 new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "notasfiscais.view",  Description = "Notas Fiscais" },
-                // Admin
+                // Administração
                 new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "users.view",         Description = "Gestão de usuários (F7)" },
                 new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "config.view",        Description = "Configurações do sistema" },
+                new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "role.manage",        Description = "Criar e editar cargos e permissões" },
             };
 
             context.Permissions.AddRange(allPerms);
             context.SaveChanges();
 
-            // Busca os cargos recém-criados
             var roles = context.Roles.IgnoreQueryFilters()
                 .Where(r => r.TenantId == tenantId).ToList();
 
@@ -108,37 +113,46 @@ public static class DbSeeder
             var supervisor = roles.FirstOrDefault(r => r.Name == "Supervisor");
             var vendedor   = roles.FirstOrDefault(r => r.Name == "Vendedor");
 
-            // ── Administrador: tudo ───────────────────────────────────────────
+            // ── Administrador: todas as permissões ────────────────────────────
             if (admin != null)
                 foreach (var p in allPerms) { admin.Permissions.Add(p); p.Roles.Add(admin); }
 
-            // ── Gerente: tudo exceto config (e agora pode ver users.view) ─────
-            var gerentePerms = allPerms.Where(p => p.Code is not "config.view").ToList();
+            // ── Gerente: tudo exceto config.view e role.manage ────────────────
+            // role.manage exclui o gerente de escalar seus próprios privilégios
+            var gerentePerms = allPerms
+                .Where(p => p.Code is not "config.view" and not "role.manage")
+                .ToList();
             if (gerente != null)
                 foreach (var p in gerentePerms) { gerente.Permissions.Add(p); p.Roles.Add(gerente); }
 
-            // ── Supervisor: PDV + caixa parcial + ver financeiro parcial ──────
+            // ── Supervisor: operacional + relatórios + entregas ───────────────
             var supervisorCodes = new HashSet<string>
             {
-                "sale.discount",     // desconto até limite
-                "cash.view.summary", // ver resumo do caixa
-                "report.financial",  // dashboard
-                "margem.view",       // margem
-                "inventario.view",   // inventário
+                "sale.discount",
+                "cash.view.summary",
+                "report.financial",
+                "margem.view",
+                "inventario.view",
+                "entregas.manage",   // 1.8.2 — supervisor gerencia entregas
+                "fidelidade.use",    // 1.8.1 — supervisor pode resgatar pontos
+                "customers.edit",    // 1.8.1 — supervisor pode editar clientes
             };
             var supervisorPerms = allPerms.Where(p => supervisorCodes.Contains(p.Code)).ToList();
             if (supervisor != null)
                 foreach (var p in supervisorPerms) { supervisor.Permissions.Add(p); p.Roles.Add(supervisor); }
 
-            // ── Vendedor: apenas desconto (com limite) ────────────────────────
-            var vendedorPerms = allPerms.Where(p => p.Code == "sale.discount").ToList();
+            // ── Vendedor: desconto + criar/editar clientes ────────────────────
+            // Vendedor precisa de customers.edit para cadastrar cliente na hora da venda.
+            // NÃO recebe customers.delete, fidelidade.use nem entregas.manage.
+            var vendedorCodes = new HashSet<string> { "sale.discount", "customers.edit" };
+            var vendedorPerms = allPerms.Where(p => vendedorCodes.Contains(p.Code)).ToList();
             if (vendedor != null)
                 foreach (var p in vendedorPerms) { vendedor.Permissions.Add(p); p.Roles.Add(vendedor); }
 
             context.SaveChanges();
         }
 
-        // ── 3. Garante usuário admin absoluto ──────────────────────────────────────────
+        // ── 3. Garante usuário admin absoluto ─────────────────────────────────
         var roleAdmin = context.Roles.IgnoreQueryFilters()
             .FirstOrDefault(r => r.TenantId == tenantId && r.Name == "Administrador");
 
@@ -165,34 +179,84 @@ public static class DbSeeder
         }
         else
         {
-             // Se o cargo admin sumir por algum motivo cósmico, a gente injeta ele e o usuário mestre de novo (fallback extremo)
-             var emergencyAdminRole = new Role { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Administrador", MaxDiscountPercentage = 100m, MaxSangriaValue = 999999m };
-             context.Roles.Add(emergencyAdminRole);
-             context.Users.Add(new User { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Administrador", Username = "admin", PasswordHash = "$2a$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi", IsActive = true, RoleId = emergencyAdminRole.Id });
-             context.SaveChanges();
+            var emergencyAdminRole = new Role
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId,
+                Name = "Administrador",
+                MaxDiscountPercentage = 100m, MaxSangriaValue = 999999m
+            };
+            context.Roles.Add(emergencyAdminRole);
+            context.Users.Add(new User
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId,
+                Name = "Administrador", Username = "admin",
+                PasswordHash = "$2a$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi",
+                IsActive = true, RoleId = emergencyAdminRole.Id
+            });
+            context.SaveChanges();
         }
 
-       // ── 4. PATCH DE BANCOS EXISTENTES ──────────────────────────────
+        // ── 4. PATCH DE BANCOS EXISTENTES ─────────────────────────────────────
         // Garante que todos os cargos tenham MaxSangriaValue correto
-        // e que novas permissões sejam atribuídas aos cargos correspondentes
+        // e que NOVAS permissões sejam semeadas e atribuídas em tenants antigos.
         var dbRoles = context.Roles.IgnoreQueryFilters()
             .Include(r => r.Permissions)
             .Where(r => r.TenantId == tenantId).ToList();
 
-        var dbAdmin     = dbRoles.FirstOrDefault(r => r.Name == "Administrador");
-        var dbGerente   = dbRoles.FirstOrDefault(r => r.Name == "Gerente");
+        var dbAdmin      = dbRoles.FirstOrDefault(r => r.Name == "Administrador");
+        var dbGerente    = dbRoles.FirstOrDefault(r => r.Name == "Gerente");
         var dbSupervisor = dbRoles.FirstOrDefault(r => r.Name == "Supervisor");
-        var dbVendedor  = dbRoles.FirstOrDefault(r => r.Name == "Vendedor");
+        var dbVendedor   = dbRoles.FirstOrDefault(r => r.Name == "Vendedor");
 
-        // Garante MaxDiscountPercentage correto (sem hardcode nos ViewModels)
         if (dbAdmin    != null) { dbAdmin.MaxDiscountPercentage    = 100m; dbAdmin.MaxSangriaValue    = 999999m; }
         if (dbGerente  != null) { dbGerente.MaxDiscountPercentage  = 30m;  dbGerente.MaxSangriaValue  = 5000m;   }
         if (dbSupervisor!=null) { dbSupervisor.MaxDiscountPercentage=15m;  dbSupervisor.MaxSangriaValue=1000m;   }
-        if (dbVendedor != null) { dbVendedor.MaxDiscountPercentage  = 5m;   dbVendedor.MaxSangriaValue  = 0m;     }
+        if (dbVendedor != null) { dbVendedor.MaxDiscountPercentage  = 5m;   dbVendedor.MaxSangriaValue  = 0m;    }
 
-        // ── Patch de permissões faltantes para tenants antigos ─────────────
+        // Garante que todas as permissões do sistema existam no banco para este tenant
+        var allCodes = new Dictionary<string, string>
+        {
+            ["sale.discount"]      = "Conceder desconto em vendas",
+            ["sale.cancel"]        = "Cancelar vendas finalizadas",
+            ["sale.return"]        = "Devolução parcial de itens",
+            ["cash.sangria"]       = "Realizar sangria e suprimento",
+            ["cash.view.summary"]  = "Ver resumo do caixa",
+            ["product.edit"]       = "Criar e editar produtos",
+            ["product.edit.price"] = "Alterar preço de produtos",
+            ["stock.adjust"]       = "Ajuste de estoque",
+            ["customers.edit"]     = "Criar e editar clientes (PII)",       // 1.8.1
+            ["customers.delete"]   = "Excluir clientes permanentemente",    // 1.8.1
+            ["fidelidade.use"]     = "Resgatar pontos de fidelidade",       // 1.8.1
+            ["haver.edit"]         = "Depositar e retirar Haver",
+            ["entregas.manage"]    = "Excluir e alterar status de entregas", // 1.8.2
+            ["report.financial"]   = "Dashboard e indicadores",
+            ["financeiro.view"]    = "Contas a receber (F8)",
+            ["despesas.view"]      = "Contas a pagar / despesas (F9)",
+            ["fluxocaixa.view"]    = "Fluxo de Caixa e DRE",
+            ["margem.view"]        = "Tela de Margem",
+            ["audit.view"]         = "Auditoria (F10)",
+            ["compras.view"]       = "Módulo de Compras",
+            ["inventario.view"]    = "Inventário",
+            ["notasfiscais.view"]  = "Notas Fiscais",
+            ["users.view"]         = "Gestão de usuários (F7)",
+            ["config.view"]        = "Configurações do sistema",
+            ["role.manage"]        = "Criar e editar cargos e permissões",   // 1.7.1
+        };
+
         var todasPerms = context.Permissions.IgnoreQueryFilters()
             .Where(p => p.TenantId == tenantId).ToList();
+
+        // Semeia permissões que ainda não existem no banco deste tenant
+        foreach (var (code, desc) in allCodes)
+        {
+            if (!todasPerms.Any(p => p.Code == code))
+            {
+                var nova = new Permission { Id = Guid.NewGuid(), TenantId = tenantId, Code = code, Description = desc };
+                context.Permissions.Add(nova);
+                todasPerms.Add(nova);
+            }
+        }
+        context.SaveChanges();
 
         void AddPermSeFaltando(Role? role, string code)
         {
@@ -204,20 +268,26 @@ public static class DbSeeder
             }
         }
 
-        // Gerente: recebe users.view e todas as permissões exceto config.view
-        foreach (var p in todasPerms.Where(p => p.Code != "config.view"))
-            AddPermSeFaltando(dbGerente, p.Code);
-
-        // Admin: recebe todas as permissões
+        // Admin: todas as permissões
         foreach (var p in todasPerms)
             AddPermSeFaltando(dbAdmin, p.Code);
 
-        // Supervisor: garante suas permissões mínimas
-        foreach (var code in new[] { "sale.discount", "cash.view.summary", "report.financial", "margem.view", "inventario.view" })
+        // Gerente: tudo exceto config.view e role.manage
+        foreach (var p in todasPerms.Where(p => p.Code is not "config.view" and not "role.manage"))
+            AddPermSeFaltando(dbGerente, p.Code);
+
+        // Supervisor: operacional + relatórios + entregas + fidelidade + clientes
+        foreach (var code in new[]
+        {
+            "sale.discount", "cash.view.summary", "report.financial",
+            "margem.view", "inventario.view",
+            "entregas.manage", "fidelidade.use", "customers.edit"
+        })
             AddPermSeFaltando(dbSupervisor, code);
 
-        // Vendedor: garante sale.discount
-        AddPermSeFaltando(dbVendedor, "sale.discount");
+        // Vendedor: desconto + criar/editar clientes
+        foreach (var code in new[] { "sale.discount", "customers.edit" })
+            AddPermSeFaltando(dbVendedor, code);
 
         context.SaveChanges();
     }

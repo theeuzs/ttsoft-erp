@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -20,6 +21,7 @@ public class ConciliacaoController : ControllerBase
     /// Suporta formato genérico com colunas: Data, Valor, Estabelecimento/Descrição.
     /// Formatos testados: Cielo, Rede, Stone, GetNet (CSV padrão).
     /// </summary>
+    [HasPermission(Permissions.FinanceiroView)]
     [HttpPost("importar-extrato")]
     public async Task<IActionResult> ImportarExtrato(
         [FromForm] IFormFile arquivo,

@@ -4,6 +4,7 @@ using ERP.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -57,6 +58,7 @@ public class FiscalController : ControllerBase
     // ── NFS-e ─────────────────────────────────────────────────────────────────
 
     /// <summary>Emite uma NFS-e via FocusNFe.</summary>
+    [HasPermission(Permissions.NotasFiscaisView)]
     [HttpPost("nfse/emitir")]
     public async Task<IActionResult> EmitirNfse([FromBody] EmitirNfseDto dto)
     {
@@ -80,6 +82,7 @@ public class FiscalController : ControllerBase
     }
 
     /// <summary>Cancela uma NFS-e emitida.</summary>
+    [HasPermission(Permissions.NotasFiscaisView)]
     [HttpDelete("nfse/{referencia}/cancelar")]
     public async Task<IActionResult> CancelarNfse(string referencia, [FromBody] string motivo)
     {
@@ -130,6 +133,7 @@ public class FiscalController : ControllerBase
 
 
     /// <summary>Calcula carga tributária completa de um produto para uma UF destino.</summary>
+    [HasPermission(Permissions.NotasFiscaisView)]
     [HttpPost("calcular-impostos")]
     public IActionResult CalcularImpostos(
         [FromBody] ERP.Infrastructure.Services.ProdutoFiscal produto,

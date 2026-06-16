@@ -4,6 +4,7 @@ using ERP.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -34,6 +35,7 @@ public class SugestaoComprasController : ControllerBase
     /// Agrupa por fornecedor — cada fornecedor gera um pedido separado.
     /// Retorna os IDs dos pedidos criados.
     /// </summary>
+    [HasPermission(Permissions.ComprasView)]
     [HttpPost("gerar-pedido")]
     public async Task<IActionResult> GerarPedido([FromBody] GerarPedidoCompraDto dto)
     {

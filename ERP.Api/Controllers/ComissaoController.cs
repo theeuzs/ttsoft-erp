@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
+using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -19,6 +20,7 @@ public class ComissaoController : ControllerBase
     /// Calcula comissões por vendedor no período.
     /// A taxa de comissão vem do campo PercentualComissao do cargo (Role) do usuário.
     /// </summary>
+    [HasPermission(Permissions.ReportFinancial)]
     [HttpGet]
     public async Task<IActionResult> Get(
         [FromQuery] DateTime? inicio = null,
