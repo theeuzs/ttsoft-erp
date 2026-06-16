@@ -1,3 +1,4 @@
+using ERP.Api.Security;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -15,16 +16,22 @@ public class CargosController : ControllerBase
 
     /// <summary>Lista todos os cargos/roles com suas permissões.</summary>
     [HttpGet]
+    [HasPermission(Permissions.UsersView)]
     public async Task<IActionResult> GetAll()
         => Ok(await _service.GetAllAsync());
 
     /// <summary>Lista todas as permissões disponíveis no sistema.</summary>
     [HttpGet("permissoes")]
+    [HasPermission(Permissions.UsersView)]
     public async Task<IActionResult> GetPermissoes()
         => Ok(await _service.GetAllPermissionsAsync());
 
-    /// <summary>Cria um novo cargo.</summary>
+    /// <summary>
+    /// Cria um novo cargo.
+    /// Requer role.manage — separado de users.view para evitar escalada de privilégio.
+    /// </summary>
     [HttpPost]
+    [HasPermission(Permissions.RoleManage)]
     public async Task<IActionResult> Create([FromBody] CreateRoleDto dto)
     {
         try
@@ -38,8 +45,9 @@ public class CargosController : ControllerBase
         }
     }
 
-    /// <summary>Atualiza permissões de um cargo.</summary>
+    /// <summary>Atualiza permissões de um cargo. Requer role.manage.</summary>
     [HttpPut]
+    [HasPermission(Permissions.RoleManage)]
     public async Task<IActionResult> Update([FromBody] UpdateRoleDto dto)
     {
         try
@@ -53,8 +61,9 @@ public class CargosController : ControllerBase
         }
     }
 
-    /// <summary>Remove um cargo (somente se não tiver usuários vinculados).</summary>
+    /// <summary>Remove um cargo. Requer role.manage.</summary>
     [HttpDelete("{id:guid}")]
+    [HasPermission(Permissions.RoleManage)]
     public async Task<IActionResult> Delete(Guid id)
     {
         var ok = await _service.DeleteAsync(id);

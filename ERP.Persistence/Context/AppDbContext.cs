@@ -62,7 +62,22 @@ public class AppDbContext : DbContext
     /// O EF Core 8 reconhece GetTenantId() como referência captiva avaliada por query.
     /// Trocar para acesso direto ao campo faz o modelo cachear o primeiro tenant e vazar dados.
     /// </remarks>
-    public Guid GetTenantId() => _requestTenant?.TenantId ?? _globalTenantId;
+    /// Resolve o TenantId para gravação/validação de entidades.
+    /// Ordem de prioridade (fix 1.7.6):
+    ///   1. _requestTenant.TenantId  — scoped da requisição HTTP corrente
+    ///   2. _asyncTenantId.Value     — AsyncLocal, flui para CreateScope filhos
+    ///   3. _globalTenantId          — estático do WPF
+    /// Antes do fix, CreateScope + GetGlobalTenantId em TransferenciaService/NfseEmissionService/RoleRepository
+    /// retornava Guid.Empty porque o IRequestTenant do scope-filho não era populado
+    /// e _globalTenantId é sempre Guid.Empty na API. Com o fallback para AsyncLocal,
+    /// o tenant flui automaticamente para qualquer scope-filho criado durante a requisição.
+    public Guid GetTenantId()
+    {
+        if (_requestTenant?.TenantId is Guid rt && rt != Guid.Empty) return rt;
+        var asyncId = _asyncTenantId.Value;
+        if (asyncId != Guid.Empty) return asyncId;
+        return _globalTenantId;
+    }
 
     /// <summary>
     /// Construtor para o WPF Desktop — não injeta IRequestTenant.

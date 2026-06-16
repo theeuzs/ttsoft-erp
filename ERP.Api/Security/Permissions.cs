@@ -38,8 +38,14 @@ public static class Permissions
     public const string NotasFiscaisView = "notasfiscais.view";
 
     // ── Administração ─────────────────────────────────────────────────────────
-    public const string UsersView       = "users.view";
-    public const string ConfigView      = "config.view";
+    public const string UsersView   = "users.view";
+    public const string ConfigView  = "config.view";
+    /// <summary>
+    /// Permite criar, editar e excluir cargos e suas permissões.
+    /// Separado de users.view para evitar escalada de privilégio:
+    /// visualizar ≠ editar o que cada perfil pode fazer.
+    /// </summary>
+    public const string RoleManage  = "role.manage";
 
     /// <summary>Todas as permissões do sistema — usado para seed de Administrador e testes.</summary>
     public static readonly string[] All =
@@ -50,6 +56,6 @@ public static class Permissions
         HaverEdit,
         ReportFinancial, FinanceiroView, DespesasView, FluxoCaixaView, MargemView,
         AuditView, ComprasView, InventarioView, NotasFiscaisView,
-        UsersView, ConfigView
+        UsersView, ConfigView, RoleManage
     ];
 }
