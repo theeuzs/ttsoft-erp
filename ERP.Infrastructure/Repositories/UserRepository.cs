@@ -86,4 +86,17 @@ public class UserRepository : IUserRepository
                 $"UPDATE Users SET FailedLoginAttempts = {failedAttempts}, LockoutEndUtc = NULL WHERE Id = {userId}");
         }
     }
+
+public async Task<User?> GetByIdAsync(Guid userId)
+    => await _context.Users
+        .IgnoreQueryFilters()
+        .FirstOrDefaultAsync(u => u.Id == userId && !u.IsDeleted);
+
+public async Task UpdatePasswordAsync(Guid userId, string newPasswordHash, bool mustChangePassword)
+{
+    var agora = DateTime.UtcNow;
+    await _context.Database.ExecuteSqlInterpolatedAsync(
+        $"UPDATE Users SET PasswordHash={newPasswordHash}, MustChangePassword={mustChangePassword}, UpdatedAt={agora} WHERE Id={userId}");
+}
+
 }

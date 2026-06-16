@@ -92,6 +92,31 @@ public class AuthService : IAuthService
         }, mustChangePassword: user.MustChangePassword);
     }
 
+    /// <summary>
+    /// Troca a senha do usuário autenticado (1.7.4 — MustChangePassword enforcement).
+    /// Valida a senha atual antes de aceitar a nova.
+    /// Ao concluir, seta MustChangePassword = false no banco.
+    /// </summary>
+    public async Task ChangePasswordAsync(Guid userId, string currentPassword, string newPassword)
+    {
+        var user = await _userRepository.GetByIdAsync(userId)
+            ?? throw new KeyNotFoundException("Usuário não encontrado.");
+
+        if (!BCrypt.Net.BCrypt.Verify(currentPassword, user.PasswordHash))
+            throw new InvalidOperationException("Senha atual incorreta.");
+
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 8)
+            throw new InvalidOperationException("A nova senha deve ter no mínimo 8 caracteres.");
+
+        if (newPassword == currentPassword)
+            throw new InvalidOperationException("A nova senha deve ser diferente da senha atual.");
+
+        var hash = BCrypt.Net.BCrypt.HashPassword(newPassword, 12);
+        await _userRepository.UpdatePasswordAsync(userId, hash, mustChangePassword: false);
+
+        Log.Information("Senha alterada com sucesso para usuário {UserId}", userId);
+    }
+
     public async Task EnsureDefaultAdminCreatedAsync()
     {
         if (!await _userRepository.HasAnyAsync())

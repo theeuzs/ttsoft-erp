@@ -379,6 +379,8 @@ app.UseMiddleware<TenantMiddleware>();
 // Limites: 5 req/min/tenant no login, 200 req/min/tenant nas demais rotas.
 app.UseMiddleware<TenantRateLimitMiddleware>();
 
+app.UseMiddleware<MustChangePasswordMiddleware>();
+
 // S2.5: Brute force APÓS rate limiting (que já bloqueia) — só para alertar
 app.UseMiddleware<BruteForceAlertMiddleware>();
 

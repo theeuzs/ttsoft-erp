@@ -15,13 +15,12 @@ public record ProductDto(
     string Unit,
     decimal SalePrice, 
     decimal Stock, 
-    decimal MinStock,           // ✅ Moved before optional parameters
+    decimal MinStock,
     bool IsActive, 
     bool EmCampanha = false, 
     string? ImageUrl = null, 
     string? DescricaoDetalhada = null)
 {
-    // 👇 ADICIONANDO OS CAMPOS QUE FALTAVAM PARA A TELA DE PRODUTOS 👇
     public Guid? CategoryId { get; set; }
     public decimal QuantidadeGrade { get; set; } = 1;
     public Guid? BrandId { get; set; }
@@ -40,30 +39,21 @@ public record ProductDto(
     public string? CSOSN { get; set; }
     public decimal? WholesaleMinQuantity { get; set; }
     public decimal? WholesalePrice { get; set; }
-
-    // Conversão de unidade
     public string?  UnidadeEstoque    { get; set; }
     public string?  UnidadeVenda      { get; set; }
     public decimal  FatorConversao    { get; set; } = 1m;
     public string?  LabelUnidadeVenda { get; set; }
     public bool     UsaConversaoUnidade => FatorConversao != 1m && !string.IsNullOrWhiteSpace(UnidadeVenda);
-
-    // Produto Composto
     public Guid?   ParentProductId   { get; set; }
     public decimal ConversionFactor  { get; set; } = 1m;
     public string? ParentProductName { get; set; }
-
-    // Sprint CDE: preços por grupo
     public decimal PrecoBRevendedor { get; set; } = 0;
     public decimal PrecoCAtacadista { get; set; } = 0;
-
-    // Rastreamento de preço
     public DateTime? SalePriceChangedAt  { get; set; }
     public string?   SalePriceChangedBy  { get; set; }
     public DateTime? CostPriceChangedAt  { get; set; }
     public string?   CostPriceChangedBy  { get; set; }
 }
-    
 
 public class CreateProductDto
 {
@@ -96,24 +86,17 @@ public class CreateProductDto
     public string? CSOSN { get; set; }
     public decimal? WholesaleMinQuantity { get; set; }
     public decimal? WholesalePrice { get; set; }
-
-    // Conversão de unidade
     public string?  UnidadeEstoque    { get; set; }
     public string?  UnidadeVenda      { get; set; }
     public decimal  FatorConversao    { get; set; } = 1m;
     public string?  LabelUnidadeVenda { get; set; }
     public bool     UsaConversaoUnidade => FatorConversao != 1m && !string.IsNullOrWhiteSpace(UnidadeVenda);
-
-    // Produto Composto
     public Guid?   ParentProductId   { get; set; }
     public decimal ConversionFactor  { get; set; } = 1m;
-
-    // Rastreamento de preço
     public DateTime? SalePriceChangedAt  { get; set; }
     public string?   SalePriceChangedBy  { get; set; }
     public DateTime? CostPriceChangedAt  { get; set; }
     public string?   CostPriceChangedBy  { get; set; }
-    // Sprint CDE
     public decimal PrecoBRevendedor { get; set; } = 0;
     public decimal PrecoCAtacadista { get; set; } = 0;
 }
@@ -138,7 +121,6 @@ public class CreateCustomerDto
     public string? Neighborhood      { get; set; }
     public string? City              { get; set; }
     public string? State             { get; set; }
-    // Sprint CDE
     public int     GrupoPreco        { get; set; } = 0;
     public decimal LimiteCredito     { get; set; } = 0;
 }
@@ -163,8 +145,6 @@ public record CustomerDto(
 );
 
 // ── Sale ──────────────────────────────────────────────────
-
-// NOVO: DTO para receber cada pagamento individual da tela
 public class CreateSalePaymentDto
 {
     public PaymentMethod PaymentMethod { get; set; }
@@ -175,16 +155,10 @@ public class CreateSaleDto
 {
     public Guid? CustomerId { get; set; }
     public string? SellerName { get; set; }
-    
-    // 👇 ADICIONADO: O ID de quem está operando o caixa
-    public Guid UsuarioId { get; set; } 
+    public Guid UsuarioId { get; set; }
     public string? Notes { get; set; }
-    
     public decimal DiscountAmount { get; set; }
-    
-    // NOVO: Lista de pagamentos substituindo o pagamento único
     public List<CreateSalePaymentDto> Payments { get; set; } = new();
-    
     public List<CreateSaleItemDto> Items { get; set; } = new();
 }
 
@@ -194,25 +168,21 @@ public class CreateSaleItemDto
     public decimal Quantity        { get; set; }
     public decimal UnitPrice       { get; set; }
     public decimal DiscountPercent { get; set; }
-    /// <summary>Fator de conversão (ex: 6 para cano em barras). Default 1.</summary>
     public decimal FatorConversao  { get; set; } = 1m;
-    /// <summary>Quantidade real a baixar do estoque = Quantity * FatorConversao</summary>
     public decimal QuantidadeEstoque => Quantity * FatorConversao;
-    /// <summary>Total exato do carrinho. Evita diferença por arredondamento do UnitPrice.</summary>
     public decimal TotalItem { get; set; }
 }
 
-// NOVO: DTO para ler os pagamentos no histórico
 public record SalePaymentDto(string PaymentMethod, decimal Amount);
 
 public record SaleDto(
-    Guid Id, 
-    string SaleNumber, 
+    Guid Id,
+    string SaleNumber,
     string? CustomerName,
-    string? SellerName, // 👈 ADICIONE ESTA LINHA AQUI!
-    DateTime SaleDate, 
-    SaleStatus Status, 
-    string PaymentMethods, 
+    string? SellerName,
+    DateTime SaleDate,
+    SaleStatus Status,
+    string PaymentMethods,
     decimal Total,
     string? NfceChave = null,
     string? NfceNumero = null,
@@ -221,21 +191,20 @@ public record SaleDto(
     string? NfceStatusFocus = null,
     string? NfceReferencia = null
 );
-    
 
 public record SaleDetailDto(
-    Guid Id, 
-    string SaleNumber, 
+    Guid Id,
+    string SaleNumber,
     string? CustomerName,
     string? SellerName,
-    Guid? CustomerId, 
-    string? CustomerPhone, // 👈 A MÁGICA NOVA AQUI
-    DateTime SaleDate, 
-    SaleStatus Status, 
-    decimal Subtotal, 
-    decimal DiscountAmount, 
+    Guid? CustomerId,
+    string? CustomerPhone,
+    DateTime SaleDate,
+    SaleStatus Status,
+    decimal Subtotal,
+    decimal DiscountAmount,
     decimal Total,
-    List<SalePaymentDto> Payments, 
+    List<SalePaymentDto> Payments,
     List<SaleItemDto> Items,
     string? Observation);
 
@@ -251,7 +220,6 @@ public record DashboardDto(
     decimal TodaySales, decimal MonthSales,
     decimal AverageTicket, int TotalOrders,
     List<TopProductDto> TopProducts,
-    // Campos extras para o Dashboard completo
     decimal ExpensesThisMonth,
     int     LowStockCount,
     int     ContasVencendoHoje,
@@ -269,67 +237,64 @@ public class LoginDto
     public string Password { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// DTO para troca de senha (1.7.4 — MustChangePassword enforcement).
+/// Enviado para POST /api/auth/change-password.
+/// </summary>
+public class ChangePasswordDto
+{
+    public string CurrentPassword { get; set; } = string.Empty;
+    public string NewPassword     { get; set; } = string.Empty;
+}
+
 public class UserDto
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Username { get; set; } = string.Empty;
-    public string RoleName { get; set; } = string.Empty; 
+    public string RoleName { get; set; } = string.Empty;
     public List<string> Permissions { get; set; } = new();
-    
-    // Limite máximo de desconto percentual permitido para o perfil atual
     public decimal MaxDiscountPercentage { get; set; }
-
-    // Limite máximo de sangria permitido para o perfil atual
     public decimal MaxSangriaValue { get; set; }
-
     public UserDto() { }
 }
+
 public class CreateUserDto
 {
     public string Name { get; set; } = string.Empty;
     public string Username { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
-    // Agora passamos o ID da Role (Administrador, Vendedor, etc)
-    public Guid RoleId { get; set; } 
+    public Guid RoleId { get; set; }
 }
 
-// ==========================================
-// DTOs (As Classes de Dados)
-// ==========================================
-
-// O Caixa em si (Sessão do dia)
+// ── Caixa ─────────────────────────────────────────────────
 public class CaixaDto
 {
     public Guid Id { get; set; }
-    public int NumeroCaixa { get; set; } // Aquele "#8" que aparece no seu print
-    public string OperadorNome { get; set; } = string.Empty; // Ex: "Matheus"
+    public int NumeroCaixa { get; set; }
+    public string OperadorNome { get; set; } = string.Empty;
     public DateTime DataAbertura { get; set; }
     public DateTime? DataFechamento { get; set; }
     public decimal ValorAbertura { get; set; }
     public StatusCaixa Status { get; set; }
-    
-    // Lista de tudo que aconteceu nesse caixa
     public List<CaixaMovimentoDto> Movimentos { get; set; } = new();
 }
 
-// Cada dinheiro que entra ou sai
 public class CaixaMovimentoDto
 {
     public Guid Id { get; set; }
     public Guid CaixaId { get; set; }
     public DateTime DataHora { get; set; }
     public TipoMovimentoCaixa Tipo { get; set; }
-    public string Descricao { get; set; } = string.Empty; // Ex: "ABERTURA", "VENDA #123", "PAGAMENTO MOTOBOY"
-    public decimal Valor { get; set; } // Positivo para entrada, Negativo para saída
+    public string Descricao { get; set; } = string.Empty;
+    public decimal Valor { get; set; }
     public ERP.Domain.Enums.PaymentMethod? FormaPagamento { get; set; }
 }
 
-// DTO para a gente enviar do C# para o banco na hora de abrir a tela
 public class AbrirCaixaDto
 {
     public Guid UsuarioId { get; set; }
-    public string? OperadorNome { get; set; }   // 🟢 NOVO
+    public string? OperadorNome { get; set; }
     public decimal ValorAbertura { get; set; }
 }
 
@@ -341,28 +306,22 @@ public record BrandDto(Guid Id, string Name);
 // ── AuditLog ──────────────────────────────────────────────────────────────
 public class AuditLogDto
 {
-    public Guid     Id         { get; init; }
-    public string?  UserName   { get; init; }
-    public string?  Action     { get; init; }
-    public string?  EntityType { get; init; }
-    public string?  EntityId   { get; init; }
-    public DateTime Timestamp  { get; init; }
-    public string?  MachineName{ get; init; }
-    public string?  OldValues  { get; init; }
-    public string?  NewValues  { get; init; }
+    public Guid     Id          { get; init; }
+    public string?  UserName    { get; init; }
+    public string?  Action      { get; init; }
+    public string?  EntityType  { get; init; }
+    public string?  EntityId    { get; init; }
+    public DateTime Timestamp   { get; init; }
+    public string?  MachineName { get; init; }
+    public string?  OldValues   { get; init; }
+    public string?  NewValues   { get; init; }
 
-    // Campos ignorados na comparação (técnicos / sem valor para o usuário)
     private static readonly HashSet<string> _camposIgnorados = new(StringComparer.OrdinalIgnoreCase)
     {
         "Id", "TenantId", "CreatedAt", "UpdatedAt", "IsDeleted",
         "SaleId", "ProductId", "CustomerId", "SellerId"
     };
 
-    /// <summary>
-    /// Compara OldValues e NewValues e retorna apenas os campos que realmente mudaram,
-    /// em formato legível. Ex: "Preco: 10,00 ➔ 15,00 | Estoque: 50 ➔ 45"
-    /// Para INSERT mostra os campos principais. Para DELETE mostra resumo.
-    /// </summary>
     public string ResumoAlteracoes
     {
         get
@@ -371,13 +330,10 @@ public class AuditLogDto
             {
                 if (Action == "INSERT" && !string.IsNullOrWhiteSpace(NewValues))
                     return FormatarInsert(NewValues);
-
                 if (Action == "DELETE" && !string.IsNullOrWhiteSpace(OldValues))
                     return FormatarDelete(OldValues);
-
                 if (Action == "UPDATE" && !string.IsNullOrWhiteSpace(OldValues) && !string.IsNullOrWhiteSpace(NewValues))
                     return CompararAlteracoes(OldValues, NewValues);
-
                 return string.Empty;
             }
             catch { return "Erro ao processar alterações"; }
@@ -388,17 +344,11 @@ public class AuditLogDto
     {
         var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(newJson);
         if (dict == null) return string.Empty;
-
-        // Prioriza campos mais relevantes para exibir no INSERT
         var prioridade = new[] { "Name", "ProductName", "Descricao", "SaleNumber", "Username", "Total", "Status" };
         var partes = new List<string>();
-
         foreach (var campo in prioridade)
-        {
             if (dict.TryGetValue(campo, out var val) && val.ValueKind != System.Text.Json.JsonValueKind.Null)
                 partes.Add($"{campo}: {FormatarValor(val)}");
-        }
-
         return partes.Any() ? string.Join(" | ", partes) : "Novo registro criado";
     }
 
@@ -406,12 +356,10 @@ public class AuditLogDto
     {
         var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(oldJson);
         if (dict == null) return "Registro excluído";
-
         var prioridade = new[] { "Name", "ProductName", "Descricao", "SaleNumber", "Username" };
         foreach (var campo in prioridade)
             if (dict.TryGetValue(campo, out var val) && val.ValueKind != System.Text.Json.JsonValueKind.Null)
                 return $"Excluído: {FormatarValor(val)}";
-
         return "Registro excluído";
     }
 
@@ -419,32 +367,19 @@ public class AuditLogDto
     {
         var antes  = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(oldJson);
         var depois = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(newJson);
-
         if (antes == null || depois == null) return string.Empty;
-
         var alteracoes = new List<string>();
-
-        // Como o AppDbContext já salva APENAS os campos modificados nos JSONs de UPDATE,
-        // todos os campos presentes são alterações reais — basta exibi-los.
         foreach (var kvp in depois)
         {
             if (_camposIgnorados.Contains(kvp.Key)) continue;
-
             string strDepois = FormatarValor(kvp.Value);
             string strAntes  = antes.TryGetValue(kvp.Key, out var va) ? FormatarValor(va) : "(novo)";
-
-            // Normaliza para comparação: remove zeros à direita em decimais
-            string normAntes  = NormalizarNumero(strAntes);
-            string normDepois = NormalizarNumero(strDepois);
-
-            if (normAntes != normDepois)
+            if (NormalizarNumero(strAntes) != NormalizarNumero(strDepois))
                 alteracoes.Add($"{kvp.Key}: {strAntes} ➔ {strDepois}");
         }
-
         return alteracoes.Any() ? string.Join("  |  ", alteracoes) : "Sem alterações detectadas";
     }
 
-    /// <summary>Normaliza "5.90" e "5.9" para o mesmo valor para evitar falsos positivos.</summary>
     private static string NormalizarNumero(string val)
     {
         if (decimal.TryParse(val, System.Globalization.NumberStyles.Any,
@@ -463,19 +398,18 @@ public class AuditLogDto
         _                                     => el.GetRawText()
     };
 
-    // Construtor para compatibilidade com o código existente
     public AuditLogDto() { }
 }
 
 // ── Devolução Parcial ─────────────────────────────────────────────────────
 public class DevolucaoItemDto
 {
-    public Guid    ProductId   { get; set; }
-    public string  ProductName { get; set; } = string.Empty;
+    public Guid    ProductId         { get; set; }
+    public string  ProductName       { get; set; } = string.Empty;
     public decimal QuantidadeVendida  { get; set; }
     public decimal QuantidadeDevolver { get; set; }
-    public decimal UnitPrice   { get; set; }
-    public decimal ValorTotal  => QuantidadeDevolver * UnitPrice;
+    public decimal UnitPrice          { get; set; }
+    public decimal ValorTotal         => QuantidadeDevolver * UnitPrice;
 }
 
 public class CreateDevolucaoDto
@@ -492,6 +426,7 @@ public record DevolucaoResultDto(
     string  NumeroVendaOriginal,
     string  NomeCliente,
     List<DevolucaoItemDto> ItensDevolvidos);
+
 // ── DTOs de Cargos e Permissões ────────────────────────────────────────────
 public class RoleDto
 {
@@ -499,7 +434,7 @@ public class RoleDto
     public string  Name                  { get; set; } = string.Empty;
     public decimal MaxDiscountPercentage { get; set; }
     public decimal MaxSangriaValue       { get; set; }
-    public decimal PercentualComissao    { get; set; } = 0; // Sprint CDE
+    public decimal PercentualComissao    { get; set; } = 0;
     public List<string> PermissionCodes  { get; set; } = new();
     public List<Guid>   PermissionIds    { get; set; } = new();
     public int  UserCount                { get; set; }
@@ -519,7 +454,7 @@ public class UpdateRoleDto
     public Guid    Id                    { get; set; }
     public decimal MaxDiscountPercentage { get; set; }
     public decimal MaxSangriaValue       { get; set; }
-    public decimal PercentualComissao    { get; set; } = 0; // Sprint CDE
+    public decimal PercentualComissao    { get; set; } = 0;
     public List<Guid> PermissionIds      { get; set; } = new();
 }
 
@@ -531,13 +466,13 @@ public class CreateRoleDto
     public List<Guid> PermissionIds      { get; set; } = new();
 }
 
-// ── DTO de resultado de login (com suporte a mensagens de bloqueio) ─────────
+// ── DTO de resultado de login ─────────────────────────────────────────────
 public class LoginResultDto
 {
     public bool     Sucedeu            { get; private set; }
     public string?  Mensagem           { get; private set; }
     public UserDto? Usuario            { get; private set; }
-    /// <summary>Se true, o portal/WPF deve redirecionar para tela de troca de senha (1.6.8).</summary>
+    /// <summary>Se true, redirecionar para troca de senha (1.6.8 / 1.7.4).</summary>
     public bool     MustChangePassword { get; private set; }
 
     public static LoginResultDto Sucesso(UserDto usuario, bool mustChangePassword = false) =>
@@ -550,28 +485,27 @@ public class LoginResultDto
 // ── DTOs de Parcelamento ────────────────────────────────────────────────────
 public class GerarParcelasDto
 {
-    public Guid       SaleId          { get; set; }
-    public Guid       CustomerId      { get; set; }
-    public decimal    ValorTotal      { get; set; }
-    public int        NumeroParcelas  { get; set; } = 1;
+    public Guid       SaleId             { get; set; }
+    public Guid       CustomerId         { get; set; }
+    public decimal    ValorTotal         { get; set; }
+    public int        NumeroParcelas     { get; set; } = 1;
     public DateTime   PrimeiroVencimento { get; set; }
-    /// <summary>Intervalo em dias entre parcelas. Padrão: 30 dias.</summary>
-    public int        IntervalosDias  { get; set; } = 30;
-    public string     FormaPagamento  { get; set; } = "A Prazo";
-    public string     Descricao       { get; set; } = string.Empty;
+    public int        IntervalosDias     { get; set; } = 30;
+    public string     FormaPagamento     { get; set; } = "A Prazo";
+    public string     Descricao          { get; set; } = string.Empty;
 }
 
 public class ParcelaDto
 {
-    public Guid     Id              { get; set; }
-    public int      NumeroParcela   { get; set; }
-    public int      TotalParcelas   { get; set; }
-    public decimal  ValorTotal      { get; set; }
-    public decimal  ValorRecebido   { get; set; }
-    public decimal  ValorRestante   => ValorTotal - ValorRecebido;
-    public DateTime DataVencimento  { get; set; }
+    public Guid      Id             { get; set; }
+    public int       NumeroParcela  { get; set; }
+    public int       TotalParcelas  { get; set; }
+    public decimal   ValorTotal     { get; set; }
+    public decimal   ValorRecebido  { get; set; }
+    public decimal   ValorRestante  => ValorTotal - ValorRecebido;
+    public DateTime  DataVencimento { get; set; }
     public DateTime? DataPagamento  { get; set; }
-    public string   Status          { get; set; } = string.Empty;
-    public string   FormaPagamento  { get; set; } = string.Empty;
-    public Guid?    ParcelamentoId  { get; set; }
+    public string    Status         { get; set; } = string.Empty;
+    public string    FormaPagamento { get; set; } = string.Empty;
+    public Guid?     ParcelamentoId { get; set; }
 }
