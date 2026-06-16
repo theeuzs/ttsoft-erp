@@ -1,5 +1,6 @@
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Azure.Storage.Sas;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -8,17 +9,29 @@ namespace ERP.Infrastructure.Services;
 /// <summary>Interface pública do serviço de armazenamento de arquivos.</summary>
 public interface IStorageService
 {
-    /// <summary>Faz upload de imagem de produto. Retorna a URL pública.</summary>
+    /// <summary>Faz upload de imagem de produto. Retorna URL pública (container público).</summary>
     Task<string> UploadImagemProdutoAsync(Guid tenantId, Guid produtoId, Stream stream, string contentType, CancellationToken ct = default);
 
-    /// <summary>Faz upload de foto de comprovante de entrega. Retorna a URL pública.</summary>
+    /// <summary>
+    /// Faz upload de foto de comprovante de entrega.
+    /// Retorna SAS URL de 5 min (container PRIVADO — LGPD).
+    /// </summary>
     Task<string> UploadFotoEntregaAsync(Guid tenantId, Guid entregaId, Stream stream, string contentType, CancellationToken ct = default);
 
     /// <summary>Remove a imagem de um produto.</summary>
     Task DeletarImagemProdutoAsync(Guid tenantId, Guid produtoId, CancellationToken ct = default);
 
-    /// <summary>Lista todas as fotos de uma entrega.</summary>
+    /// <summary>
+    /// Lista todas as fotos de uma entrega.
+    /// Retorna SAS URLs de 5 min (container PRIVADO — LGPD).
+    /// </summary>
     Task<IReadOnlyList<string>> ListarFotosEntregaAsync(Guid tenantId, Guid entregaId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Gera SAS URL de 5 min para uma foto específica de entrega (1.7.5).
+    /// Valida que o blob pertence ao tenant antes de gerar a URL.
+    /// </summary>
+    Task<string> GerarSasFotoEntregaAsync(Guid tenantId, Guid entregaId, string fileName, CancellationToken ct = default);
 }
 
 public class StorageService : IStorageService
@@ -27,6 +40,9 @@ public class StorageService : IStorageService
     private readonly string                  _containerProdutos;
     private readonly string                  _containerEntregas;
     private readonly ILogger<StorageService> _logger;
+
+    /// <summary>Validade do SAS para fotos de entrega (container privado).</summary>
+    private const int SasExpiryMinutes = 5;
 
     public StorageService(IConfiguration config, ILogger<StorageService> logger)
     {
@@ -41,14 +57,14 @@ public class StorageService : IStorageService
         _logger            = logger;
     }
 
+    // ── Produtos (container PÚBLICO — imagens de catálogo) ────────────────────
+
     public async Task<string> UploadImagemProdutoAsync(
         Guid tenantId, Guid produtoId, Stream stream, string contentType, CancellationToken ct = default)
     {
         var container = await GetOrCreateContainerAsync(_containerProdutos, PublicAccessType.Blob, ct);
 
         var ext      = ContentTypeToExt(contentType);
-        // Prefixo {tenantId}/ garante que blobs de tenants diferentes nunca colidam
-        // e que a listagem por prefixo fica naturalmente isolada por tenant.
         var blobName = $"{tenantId}/{produtoId}{ext}";
         var blob     = container.GetBlobClient(blobName);
 
@@ -66,25 +82,6 @@ public class StorageService : IStorageService
         return blob.Uri.ToString();
     }
 
-    public async Task<string> UploadFotoEntregaAsync(
-        Guid tenantId, Guid entregaId, Stream stream, string contentType, CancellationToken ct = default)
-    {
-        var container = await GetOrCreateContainerAsync(_containerEntregas, PublicAccessType.Blob, ct);
-
-        var ext      = contentType == "image/png" ? ".png" : ".jpg";
-        var blobName = $"{tenantId}/{entregaId}/{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}{ext}";
-        var blob     = container.GetBlobClient(blobName);
-
-        await blob.UploadAsync(stream, new BlobUploadOptions
-        {
-            HttpHeaders = new BlobHttpHeaders { ContentType = contentType }
-        }, ct);
-
-        _logger.LogInformation("Foto de entrega {EntregaId} (tenant {TenantId}) enviada: {Url}",
-            entregaId, tenantId, blob.Uri);
-        return blob.Uri.ToString();
-    }
-
     public async Task DeletarImagemProdutoAsync(Guid tenantId, Guid produtoId, CancellationToken ct = default)
     {
         var container = _client.GetBlobContainerClient(_containerProdutos);
@@ -96,21 +93,82 @@ public class StorageService : IStorageService
         }
     }
 
+    // ── Entregas (container PRIVADO — LGPD) ──────────────────────────────────
+
+    public async Task<string> UploadFotoEntregaAsync(
+        Guid tenantId, Guid entregaId, Stream stream, string contentType, CancellationToken ct = default)
+    {
+        // 1.7.5: container privado — fotos de entrega contêm PII (local de entrega, cliente)
+        var container = await GetOrCreatePrivateContainerAsync(_containerEntregas, ct);
+
+        var ext      = contentType == "image/png" ? ".png" : ".jpg";
+        var blobName = $"{tenantId}/{entregaId}/{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}{ext}";
+        var blob     = container.GetBlobClient(blobName);
+
+        await blob.UploadAsync(stream, new BlobUploadOptions
+        {
+            HttpHeaders = new BlobHttpHeaders { ContentType = contentType }
+        }, ct);
+
+        _logger.LogInformation("Foto de entrega {EntregaId} (tenant {TenantId}) enviada como blob privado: {BlobName}",
+            entregaId, tenantId, blobName);
+
+        // Retorna SAS de curta duração em vez de URL pública (container é privado)
+        return GerarSas(blob, SasExpiryMinutes).ToString();
+    }
+
     public async Task<IReadOnlyList<string>> ListarFotosEntregaAsync(
         Guid tenantId, Guid entregaId, CancellationToken ct = default)
     {
         var container = _client.GetBlobContainerClient(_containerEntregas);
-        var urls      = new List<string>();
+        var sasUrls   = new List<string>();
 
         // Prefixo duplo {tenantId}/{entregaId}/ — listagem naturalmente isolada
-        await foreach (var blob in container.GetBlobsAsync(
+        await foreach (var blobItem in container.GetBlobsAsync(
             BlobTraits.None, BlobStates.All,
             prefix: $"{tenantId}/{entregaId}/", cancellationToken: ct))
         {
-            urls.Add(container.GetBlobClient(blob.Name).Uri.ToString());
+            var blob = container.GetBlobClient(blobItem.Name);
+            // 1.7.5: retorna SAS URL em vez de URL pública — container é privado
+            sasUrls.Add(GerarSas(blob, SasExpiryMinutes).ToString());
         }
 
-        return urls;
+        return sasUrls;
+    }
+
+    public async Task<string> GerarSasFotoEntregaAsync(
+        Guid tenantId, Guid entregaId, string fileName, CancellationToken ct = default)
+    {
+        // fileName = apenas o nome do arquivo (ex: "20260615130000000.jpg")
+        // blobName inclui o prefixo de tenant/entrega para isolamento
+        var blobName  = $"{tenantId}/{entregaId}/{fileName}";
+        var container = _client.GetBlobContainerClient(_containerEntregas);
+        var blob      = container.GetBlobClient(blobName);
+
+        if (!await blob.ExistsAsync(ct))
+            throw new FileNotFoundException($"Foto não encontrada: {fileName}");
+
+        return GerarSas(blob, SasExpiryMinutes).ToString();
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Gera uma SAS URL com permissão de leitura por <paramref name="minutes"/> minutos.
+    /// Requer que <see cref="BlobServiceClient"/> tenha sido criado com account key
+    /// (não SAS token) — que é o caso quando se usa connection string completa do Azure.
+    /// </summary>
+    private static Uri GerarSas(BlobClient blob, int minutes)
+    {
+        var sasBuilder = new BlobSasBuilder(
+            BlobSasPermissions.Read,
+            DateTimeOffset.UtcNow.AddMinutes(minutes))
+        {
+            BlobContainerName = blob.BlobContainerName,
+            BlobName          = blob.Name
+        };
+
+        return blob.GenerateSasUri(sasBuilder);
     }
 
     private async Task<BlobContainerClient> GetOrCreateContainerAsync(
@@ -118,6 +176,32 @@ public class StorageService : IStorageService
     {
         var container = _client.GetBlobContainerClient(name);
         await container.CreateIfNotExistsAsync(access, cancellationToken: ct);
+        return container;
+    }
+
+    /// <summary>
+    /// Cria (ou obtém) o container de entregas garantindo acesso PRIVADO.
+    /// Se o container já existia como público, força a política para None
+    /// para satisfazer o requisito LGPD de não expor PII em URL pública.
+    /// </summary>
+    private async Task<BlobContainerClient> GetOrCreatePrivateContainerAsync(
+        string name, CancellationToken ct)
+    {
+        var container = _client.GetBlobContainerClient(name);
+        await container.CreateIfNotExistsAsync(PublicAccessType.None, cancellationToken: ct);
+
+        // Força privado mesmo se o container já existia com acesso público
+        try
+        {
+            await container.SetAccessPolicyAsync(PublicAccessType.None, cancellationToken: ct);
+        }
+        catch (Azure.RequestFailedException ex)
+        {
+            _logger.LogWarning(
+                "Não foi possível confirmar container '{Container}' como privado: {Error}",
+                name, ex.Message);
+        }
+
         return container;
     }
 
