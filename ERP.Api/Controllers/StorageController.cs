@@ -1,3 +1,4 @@
+using ERP.Api.Security;
 using ERP.Application.Interfaces;
 using ERP.Infrastructure.Services;
 using ERP.Persistence.Context;
@@ -5,7 +6,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-using ERP.Api.Security;
 namespace ERP.Api.Controllers;
 
 [ApiController]
@@ -17,15 +17,15 @@ public class StorageController : ControllerBase
     private readonly IRequestTenant   _tenant;
     private readonly AppDbContext     _ctx;
 
+    // Pre-check de Content-Type para UX rápido (devolve erro antes de ler o body).
+    // NÃO é verificação de segurança — a validação real de formato é feita pelo
+    // StorageService via magic bytes (SixLabors.ImageSharp, 1.9).
     private static readonly HashSet<string> _tiposPermitidos =
         ["image/jpeg", "image/png", "image/webp"];
 
     private const long MaxBytes = 5 * 1024 * 1024; // 5 MB
 
-    public StorageController(
-        IStorageService storage,
-        IRequestTenant  tenant,
-        AppDbContext    ctx)
+    public StorageController(IStorageService storage, IRequestTenant tenant, AppDbContext ctx)
     {
         _storage = storage;
         _tenant  = tenant;
@@ -34,10 +34,6 @@ public class StorageController : ControllerBase
 
     // ── Produtos ──────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Faz upload da imagem de um produto do tenant autenticado.
-    /// Valida ownership: retorna 404 se o produto não pertencer ao tenant.
-    /// </summary>
     [HasPermission(Permissions.ProductEdit)]
     [RequestSizeLimit(5_242_880)]
     [HttpPost("produto/{produtoId:guid}/imagem")]
@@ -50,14 +46,20 @@ public class StorageController : ControllerBase
         var erro = ValidarArquivo(arquivo);
         if (erro != null) return BadRequest(new { erro });
 
-        await using var stream = arquivo.OpenReadStream();
-        var url = await _storage.UploadImagemProdutoAsync(
-            _tenant.TenantId, produtoId, stream, arquivo.ContentType, ct);
-
-        return Ok(new { url, mensagem = "Imagem enviada com sucesso." });
+        try
+        {
+            await using var stream = arquivo.OpenReadStream();
+            var url = await _storage.UploadImagemProdutoAsync(
+                _tenant.TenantId, produtoId, stream, arquivo.ContentType, ct);
+            return Ok(new { url, mensagem = "Imagem enviada com sucesso." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // magic bytes inválidos ou formato não permitido (1.9)
+            return BadRequest(new { erro = ex.Message });
+        }
     }
 
-    /// <summary>Remove a imagem de um produto do tenant autenticado.</summary>
     [HasPermission(Permissions.ProductEdit)]
     [HttpDelete("produto/{produtoId:guid}/imagem")]
     public async Task<IActionResult> DeletarImagemProduto(Guid produtoId, CancellationToken ct)
@@ -71,10 +73,6 @@ public class StorageController : ControllerBase
 
     // ── Entregas (container PRIVADO — LGPD) ──────────────────────────────────
 
-    /// <summary>
-    /// Faz upload de foto de comprovante de entrega do tenant autenticado.
-    /// Retorna SAS URL de 5 minutos (container privado por requisito LGPD).
-    /// </summary>
     [RequestSizeLimit(5_242_880)]
     [HttpPost("entrega/{entregaId:guid}/foto")]
     public async Task<IActionResult> UploadFotoEntrega(
@@ -86,22 +84,25 @@ public class StorageController : ControllerBase
         var erro = ValidarArquivo(arquivo);
         if (erro != null) return BadRequest(new { erro });
 
-        await using var stream = arquivo.OpenReadStream();
-        var sasUrl = await _storage.UploadFotoEntregaAsync(
-            _tenant.TenantId, entregaId, stream, arquivo.ContentType, ct);
-
-        return Ok(new
+        try
         {
-            url            = sasUrl,
-            expiresInSeconds = 300,
-            mensagem       = "Foto enviada. A URL expira em 5 minutos — use GET /foto/{fileName} para renovar."
-        });
+            await using var stream = arquivo.OpenReadStream();
+            var sasUrl = await _storage.UploadFotoEntregaAsync(
+                _tenant.TenantId, entregaId, stream, arquivo.ContentType, ct);
+            return Ok(new
+            {
+                url              = sasUrl,
+                expiresInSeconds = 300,
+                mensagem         = "Foto enviada sem EXIF. A URL expira em 5 minutos."
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // magic bytes inválidos ou formato não permitido (1.9)
+            return BadRequest(new { erro = ex.Message });
+        }
     }
 
-    /// <summary>
-    /// Lista todas as fotos de uma entrega do tenant autenticado.
-    /// Retorna SAS URLs de 5 minutos (container privado).
-    /// </summary>
     [HttpGet("entrega/{entregaId:guid}/fotos")]
     public async Task<IActionResult> ListarFotosEntrega(Guid entregaId, CancellationToken ct)
     {
@@ -112,13 +113,6 @@ public class StorageController : ControllerBase
         return Ok(new { entregaId, fotos = sasUrls, expiresInSeconds = 300 });
     }
 
-    /// <summary>
-    /// Gera uma SAS URL de 5 minutos para uma foto específica de entrega (1.7.5).
-    /// Use este endpoint para renovar acesso a uma foto cujo SAS expirou.
-    /// Valida tenant ownership antes de gerar — foto de outro tenant retorna 404.
-    ///
-    /// {*fileName} aceita nomes com extensão (ex: "20260615130000000.jpg")
-    /// </summary>
     [HttpGet("entrega/{entregaId:guid}/foto/{*fileName}")]
     public async Task<IActionResult> GetSasFotoEntrega(
         Guid entregaId, string fileName, CancellationToken ct)
@@ -130,7 +124,6 @@ public class StorageController : ControllerBase
         {
             var sasUrl = await _storage.GerarSasFotoEntregaAsync(
                 _tenant.TenantId, entregaId, fileName, ct);
-
             return Ok(new { url = sasUrl, expiresInSeconds = 300 });
         }
         catch (FileNotFoundException)
@@ -146,11 +139,13 @@ public class StorageController : ControllerBase
         if (arquivo == null || arquivo.Length == 0)
             return "Nenhum arquivo enviado.";
 
-        if (!_tiposPermitidos.Contains(arquivo.ContentType.ToLower()))
-            return $"Tipo não permitido: {arquivo.ContentType}. Use JPEG, PNG ou WebP.";
-
         if (arquivo.Length > MaxBytes)
             return $"Arquivo muito grande: {arquivo.Length / 1024 / 1024:F1}MB. Máximo: 5MB.";
+
+        // Pre-check de Content-Type para UX — falha rápida sem ler o body.
+        // Não é validação de segurança: o StorageService valida magic bytes via ImageSharp.
+        if (!_tiposPermitidos.Contains(arquivo.ContentType.ToLower()))
+            return $"Tipo não permitido: {arquivo.ContentType}. Use JPEG, PNG ou WebP.";
 
         return null;
     }
