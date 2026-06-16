@@ -3,6 +3,7 @@ using Azure.Storage.Blobs.Models;
 using Azure.Storage.Sas;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using SkiaSharp;
 
 namespace ERP.Infrastructure.Services;
 
@@ -11,14 +12,14 @@ public interface IStorageService
 {
     /// <summary>
     /// Faz upload de imagem de produto.
-    /// 1.9: valida magic bytes antes do upload (Content-Type declarado pelo cliente é ignorado).
+    /// 1.9: valida magic bytes + remove EXIF via re-encode (SkiaSharp).
     /// Retorna URL pública (container público — catálogo).
     /// </summary>
     Task<string> UploadImagemProdutoAsync(Guid tenantId, Guid produtoId, Stream stream, string contentType, CancellationToken ct = default);
 
     /// <summary>
     /// Faz upload de foto de comprovante de entrega.
-    /// 1.7.5: container PRIVADO (LGPD). 1.9: magic bytes validados.
+    /// 1.7.5: container PRIVADO (LGPD). 1.9: magic bytes + GPS/EXIF removidos via re-encode.
     /// Retorna SAS URL de 5 min.
     /// </summary>
     Task<string> UploadFotoEntregaAsync(Guid tenantId, Guid entregaId, Stream stream, string contentType, CancellationToken ct = default);
@@ -64,25 +65,27 @@ public class StorageService : IStorageService
     public async Task<string> UploadImagemProdutoAsync(
         Guid tenantId, Guid produtoId, Stream stream, string contentType, CancellationToken ct = default)
     {
-        // 1.9: valida magic bytes — rejeita arquivos com Content-Type forjado
-        var (realContentType, ext) = await ValidarMagicBytesAsync(stream, ct);
-
-        var container = await GetOrCreateContainerAsync(_containerProdutos, PublicAccessType.Blob, ct);
-        var blobName  = $"{tenantId}/{produtoId}{ext}";
-        var blob      = container.GetBlobClient(blobName);
-
-        await blob.UploadAsync(stream, new BlobUploadOptions
+        // 1.9: magic bytes + EXIF removido via re-encode (SkiaSharp)
+        var (cleanStream, realContentType, ext) = await ProcessarImagemAsync(stream, ct);
+        await using (cleanStream)
         {
-            HttpHeaders = new BlobHttpHeaders
-            {
-                ContentType  = realContentType,   // usa tipo detectado, não o do cliente
-                CacheControl = "public, max-age=31536000"
-            }
-        }, ct);
+            var container = await GetOrCreateContainerAsync(_containerProdutos, PublicAccessType.Blob, ct);
+            var blobName  = $"{tenantId}/{produtoId}{ext}";
+            var blob      = container.GetBlobClient(blobName);
 
-        _logger.LogInformation("Imagem produto {ProdutoId} (tenant {TenantId}): {Url}",
-            produtoId, tenantId, blob.Uri);
-        return blob.Uri.ToString();
+            await blob.UploadAsync(cleanStream, new BlobUploadOptions
+            {
+                HttpHeaders = new BlobHttpHeaders
+                {
+                    ContentType  = realContentType,
+                    CacheControl = "public, max-age=31536000"
+                }
+            }, ct);
+
+            _logger.LogInformation("Imagem produto {ProdutoId} (tenant {TenantId}): {Url}",
+                produtoId, tenantId, blob.Uri);
+            return blob.Uri.ToString();
+        }
     }
 
     public async Task DeletarImagemProdutoAsync(Guid tenantId, Guid produtoId, CancellationToken ct = default)
@@ -101,26 +104,25 @@ public class StorageService : IStorageService
         Guid tenantId, Guid entregaId, Stream stream, string contentType, CancellationToken ct = default)
     {
         // 1.7.5: container privado — fotos de entrega contêm PII
-        // 1.9: magic bytes validados — Content-Type declarado pelo cliente é ignorado
-        //
-        // TODO (EXIF/LGPD): adicionar remoção de metadados GPS quando uma biblioteca
-        // free-commercial for escolhida (SkiaSharp MIT ou Magick.NET Apache 2.0).
-        // Hoje a foto chega ao Azure com EXIF intacto — o container privado + SAS 5min
-        // mitiga o risco de exposição, mas geolocalização ainda está nos bytes.
-        var (realContentType, ext) = await ValidarMagicBytesAsync(stream, ct);
-
-        var container = await GetOrCreatePrivateContainerAsync(_containerEntregas, ct);
-        var blobName  = $"{tenantId}/{entregaId}/{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}{ext}";
-        var blob      = container.GetBlobClient(blobName);
-
-        await blob.UploadAsync(stream, new BlobUploadOptions
+        // 1.9: magic bytes + GPS/EXIF removidos via re-encode (LGPD — Art. 5º, II)
+        //      Câmeras de celular embutem coordenadas GPS no EXIF. O re-encode pelo
+        //      SkiaSharp garante que os metadados não chegam ao Azure Blob Storage.
+        var (cleanStream, realContentType, ext) = await ProcessarImagemAsync(stream, ct);
+        await using (cleanStream)
         {
-            HttpHeaders = new BlobHttpHeaders { ContentType = realContentType }
-        }, ct);
+            var container = await GetOrCreatePrivateContainerAsync(_containerEntregas, ct);
+            var blobName  = $"{tenantId}/{entregaId}/{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}{ext}";
+            var blob      = container.GetBlobClient(blobName);
 
-        _logger.LogInformation("Foto entrega {EntregaId} (tenant {TenantId}): {BlobName}",
-            entregaId, tenantId, blobName);
-        return GerarSas(blob, SasExpiryMinutes).ToString();
+            await blob.UploadAsync(cleanStream, new BlobUploadOptions
+            {
+                HttpHeaders = new BlobHttpHeaders { ContentType = realContentType }
+            }, ct);
+
+            _logger.LogInformation("Foto entrega {EntregaId} (tenant {TenantId}): {BlobName}",
+                entregaId, tenantId, blobName);
+            return GerarSas(blob, SasExpiryMinutes).ToString();
+        }
     }
 
     public async Task<IReadOnlyList<string>> ListarFotosEntregaAsync(
@@ -156,48 +158,75 @@ public class StorageService : IStorageService
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// 1.9 — Valida magic bytes do arquivo sem dependências externas.
+    /// 1.9 — Valida magic bytes, confirma que é uma imagem real e remove TODOS os metadados
+    /// via re-encode com SkiaSharp (MIT).
     ///
-    /// O Content-Type HTTP é enviado pelo cliente e pode ser forjado trivialmente.
-    /// Um atacante autenticado pode enviar um .html ou .svg com script malicioso
-    /// declarando Content-Type: image/jpeg. Esta função lê os primeiros bytes reais
-    /// do arquivo e identifica o formato por assinatura binária (magic bytes),
-    /// independente do que o cliente declarou.
+    /// Fluxo de segurança:
+    ///   1. Lê os primeiros 12 bytes e identifica o formato por assinatura binária.
+    ///      Um .html renomeado como .jpg tem magic bytes 3C 21 44 4F — rejeitado.
+    ///   2. Decodifica com SKBitmap.Decode — se falhar, o arquivo é inválido/corrompido.
+    ///   3. Re-encode via SkiaSharp: o bitmap decodificado é salvo em novo stream.
+    ///      O SkiaSharp NÃO preserva metadados no encode — EXIF, GPS, IPTC, XMP
+    ///      desaparecem porque o encoder escreve apenas pixels + cabeçalho mínimo.
     ///
-    /// Assinaturas verificadas:
-    ///   JPEG : FF D8 FF
-    ///   PNG  : 89 50 4E 47 0D 0A 1A 0A
-    ///   WebP : 52 49 46 46 ?? ?? ?? ?? 57 45 42 50  (RIFF....WEBP)
-    ///
-    /// Garante que a extensão e o Content-Type gravados no Azure sejam os reais,
-    /// não os declarados pelo cliente.
+    /// O stream retornado é sempre um MemoryStream novo — o original não é modificado.
     /// </summary>
-    private static async Task<(string ContentType, string Extension)>
-        ValidarMagicBytesAsync(Stream input, CancellationToken ct)
+    private static async Task<(MemoryStream Stream, string ContentType, string Extension)>
+        ProcessarImagemAsync(Stream input, CancellationToken ct)
     {
+        // Lê tudo em memória (limite: 5MB enforçado pelo [RequestSizeLimit] no controller)
         input.Position = 0;
-        var header = new byte[12];
-        var read   = await input.ReadAsync(header.AsMemory(0, 12), ct);
-        input.Position = 0; // reset: stream será lido novamente no upload
+        using var ms   = new MemoryStream();
+        await input.CopyToAsync(ms, ct);
+        var bytes = ms.ToArray();
 
-        if (read < 3)
+        // 1. Detecta formato por magic bytes — independente do Content-Type HTTP
+        var (contentType, skFormat, ext) = DetectarFormato(bytes);
+
+        // 2. Decodifica e valida integridade (SKBitmap.Decode retorna null se inválido)
+        using var bitmap = SKBitmap.Decode(bytes);
+        if (bitmap == null)
+            throw new InvalidOperationException(
+                "Arquivo não é uma imagem válida ou está corrompido.");
+
+        // 3. Re-encode sem metadados: SkiaSharp escreve apenas pixels no output
+        var quality = skFormat == SKEncodedImageFormat.Jpeg ? 85 : 100;
+        using var encoded = bitmap.Encode(skFormat, quality);
+        if (encoded == null)
+            throw new InvalidOperationException(
+                $"Falha ao processar imagem no formato {ext}.");
+
+        var output = new MemoryStream();
+        encoded.SaveTo(output);
+        output.Position = 0;
+        return (output, contentType, ext);
+    }
+
+    /// <summary>
+    /// Detecta o formato real pelo conteúdo binário, não pelo header HTTP.
+    /// Suporta JPEG, PNG e WebP — os únicos formatos aceitos pelo sistema.
+    /// </summary>
+    private static (string ContentType, SKEncodedImageFormat Format, string Extension)
+        DetectarFormato(byte[] bytes)
+    {
+        if (bytes.Length < 3)
             throw new InvalidOperationException("Arquivo inválido ou corrompido.");
 
         // JPEG: FF D8 FF
-        if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF)
-            return ("image/jpeg", ".jpg");
+        if (bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
+            return ("image/jpeg", SKEncodedImageFormat.Jpeg, ".jpg");
 
         // PNG: 89 50 4E 47 0D 0A 1A 0A
-        if (read >= 8 &&
-            header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47 &&
-            header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A)
-            return ("image/png", ".png");
+        if (bytes.Length >= 8 &&
+            bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47 &&
+            bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A)
+            return ("image/png", SKEncodedImageFormat.Png, ".png");
 
         // WebP: RIFF????WEBP (bytes 0-3 = RIFF, bytes 8-11 = WEBP)
-        if (read >= 12 &&
-            header[0] == 0x52 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x46 &&
-            header[8] == 0x57 && header[9] == 0x45 && header[10] == 0x42 && header[11] == 0x50)
-            return ("image/webp", ".webp");
+        if (bytes.Length >= 12 &&
+            bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46 &&
+            bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50)
+            return ("image/webp", SKEncodedImageFormat.Webp, ".webp");
 
         throw new InvalidOperationException(
             "Arquivo não é uma imagem válida. Envie JPEG, PNG ou WebP.");
