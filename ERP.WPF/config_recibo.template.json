@@ -1,0 +1,9 @@
+{
+  "CaminhoLogo": "Assets\\logo_cliente.png",
+  "RazaoSocial": "<RAZAO_SOCIAL_AQUI>",
+  "NomeFantasia": "<NOME_FANTASIA_AQUI>",
+  "Telefone": "<TELEFONE_AQUI>",
+  "Endereco": "<ENDERECO_AQUI>",
+  "TokenFocusNfe": "<CONFIGURAR_VIA_TELA_DE_SETUP>",
+  "UsarAmbienteProducao": false
+}
