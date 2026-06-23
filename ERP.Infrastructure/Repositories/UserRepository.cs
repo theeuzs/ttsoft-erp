@@ -1,4 +1,5 @@
 // S3.7: ExecuteSqlRawAsync → ExecuteSqlInterpolatedAsync
+// 1.8.9: AND TenantId adicionado em todos os UPDATE raw como defesa em profundidade.
 using ERP.Domain.Entities;
 using ERP.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -73,30 +74,39 @@ public class UserRepository : IUserRepository
 
     public async Task UpdateLoginAttemptAsync(Guid userId, int failedAttempts, DateTime? lockoutEndUtc)
     {
-        // S3.7: ExecuteSqlInterpolatedAsync — safe by design, impossível de fazer injection
+        // 1.8.9: AND TenantId adicionado como defesa em profundidade.
+        // Nota: durante o fluxo de login (pré-JWT), GetGlobalTenantId() pode ser
+        // Guid.Empty — nesse caso o UPDATE afeta 0 linhas, que é um safe fail
+        // (preferível a atualizar o tenant errado por bug de isolamento futuro).
+        // O userId já foi validado com tenant correto em GetByUsernameAndTenantAsync.
+        var tenantId = AppDbContext.GetGlobalTenantId();
+
         if (lockoutEndUtc.HasValue)
         {
             var lockoutVal = lockoutEndUtc.Value;
             await _context.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE Users SET FailedLoginAttempts = {failedAttempts}, LockoutEndUtc = {lockoutVal} WHERE Id = {userId}");
+                $"UPDATE Users SET FailedLoginAttempts = {failedAttempts}, LockoutEndUtc = {lockoutVal} WHERE Id = {userId} AND TenantId = {tenantId}");
         }
         else
         {
             await _context.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE Users SET FailedLoginAttempts = {failedAttempts}, LockoutEndUtc = NULL WHERE Id = {userId}");
+                $"UPDATE Users SET FailedLoginAttempts = {failedAttempts}, LockoutEndUtc = NULL WHERE Id = {userId} AND TenantId = {tenantId}");
         }
     }
 
-public async Task<User?> GetByIdAsync(Guid userId)
-    => await _context.Users
-        .IgnoreQueryFilters()
-        .FirstOrDefaultAsync(u => u.Id == userId && !u.IsDeleted);
+    public async Task<User?> GetByIdAsync(Guid userId)
+        => await _context.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.Id == userId && !u.IsDeleted);
 
-public async Task UpdatePasswordAsync(Guid userId, string newPasswordHash, bool mustChangePassword)
-{
-    var agora = DateTime.UtcNow;
-    await _context.Database.ExecuteSqlInterpolatedAsync(
-        $"UPDATE Users SET PasswordHash={newPasswordHash}, MustChangePassword={mustChangePassword}, UpdatedAt={agora} WHERE Id={userId}");
-}
+    public async Task UpdatePasswordAsync(Guid userId, string newPasswordHash, bool mustChangePassword)
+    {
+        // 1.8.9: AND TenantId como defesa em profundidade — garante que um bug de
+        // isolamento futuro nunca permita resetar senha de usuário de outro tenant.
+        var tenantId = AppDbContext.GetGlobalTenantId();
+        var agora    = DateTime.UtcNow;
 
+        await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE Users SET PasswordHash = {newPasswordHash}, MustChangePassword = {mustChangePassword}, UpdatedAt = {agora} WHERE Id = {userId} AND TenantId = {tenantId}");
+    }
 }

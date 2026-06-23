@@ -1,4 +1,6 @@
 // S3.7: ExecuteSqlRawAsync → ExecuteSqlInterpolatedAsync
+// 1.8.9: verificação de ownership por tenant antes dos DELETE/INSERT raw.
+//        PermissionRole não tem TenantId — proteção via check no Role pai.
 using ERP.Domain.Entities;
 using ERP.Domain.Interfaces;
 using ERP.Persistence.Context;
@@ -43,6 +45,17 @@ public class RoleRepository : IRoleRepository
         decimal maxDiscount, decimal maxSangria,
         decimal percentualComissao = 0)
     {
+        // 1.8.9: PermissionRole não tem coluna TenantId (tabela de junção pura).
+        // Defesa em profundidade: verifica que o roleId pertence ao tenant atual
+        // ANTES dos DELETE/INSERT raw — impede que bug futuro de isolamento permita
+        // editar permissões de roles de outros tenants via IDOR neste endpoint.
+        var tenantId  = AppDbContext.GetGlobalTenantId();
+        var roleExiste = await _ctx.Roles
+            .IgnoreQueryFilters()
+            .AnyAsync(r => r.Id == roleId && r.TenantId == tenantId);
+
+        if (!roleExiste) return; // role não pertence a este tenant — rejeição silenciosa
+
         var role = await _ctx.Roles
             .AsTracking()
             .FirstOrDefaultAsync(r => r.Id == roleId);
