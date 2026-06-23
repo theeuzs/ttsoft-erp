@@ -1,6 +1,7 @@
 // S1.2 — VULN #2 CORRIGIDA: [AllowAnonymous] removido de GetByCliente.
-// Adicionado [Authorize] + verificação que o clienteId pertence ao tenant do JWT.
+// 1.8.6 — RBAC adicionado nos 3 endpoints de escrita (orcamento.manage).
 
+using ERP.Api.Security;
 using ERP.Api.Services;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
@@ -49,7 +50,11 @@ public class OrcamentosController : ControllerBase
         return Ok(await _service.GetTaxaConversaoAsync(ini, end));
     }
 
-    /// <summary>Converte orçamento em venda.</summary>
+    /// <summary>
+    /// Converte orçamento em venda — cria Sale, baixa estoque, gera ContaReceber.
+    /// 1.8.6: requer orcamento.manage — Vendedor não pode converter sem aprovação.
+    /// </summary>
+    [HasPermission(Permissions.OrcamentoManage)]
     [HttpPost("{id:guid}/converter")]
     public async Task<IActionResult> Converter(Guid id)
     {
@@ -62,7 +67,11 @@ public class OrcamentosController : ControllerBase
         catch (Exception ex)         { return BadRequest(new { erro = ex.Message }); }
     }
 
-    /// <summary>Agenda (ou reagenda) o follow-up de um orçamento.</summary>
+    /// <summary>
+    /// Agenda (ou reagenda) o follow-up de um orçamento.
+    /// 1.8.6: requer orcamento.manage.
+    /// </summary>
+    [HasPermission(Permissions.OrcamentoManage)]
     [HttpPut("{id:guid}/agendar-followup")]
     public async Task<IActionResult> AgendarFollowUp(Guid id, [FromBody] AgendarFollowUpDto dto)
     {
@@ -74,7 +83,11 @@ public class OrcamentosController : ControllerBase
         catch (KeyNotFoundException) { return NotFound(); }
     }
 
-    /// <summary>Registra o resultado de um contato com o cliente.</summary>
+    /// <summary>
+    /// Registra o resultado de um contato com o cliente.
+    /// 1.8.6: requer orcamento.manage.
+    /// </summary>
+    [HasPermission(Permissions.OrcamentoManage)]
     [HttpPut("{id:guid}/registrar-contato")]
     public async Task<IActionResult> RegistrarContato(Guid id, [FromBody] RegistrarContatoDto dto)
     {
@@ -92,7 +105,6 @@ public class OrcamentosController : ControllerBase
     /// Os orçamentos já são filtrados por tenant via HasQueryFilter do EF Core.
     /// </summary>
     [HttpGet("cliente/{clienteId:guid}")]
-    [Authorize]
     [ProducesResponseType(200)]
     public async Task<IActionResult> GetByCliente(Guid clienteId)
     {

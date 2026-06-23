@@ -41,6 +41,14 @@ public static class Permissions
     /// <summary>Permite excluir entrega e alterar status/motorista (operacional sensível).</summary>
     public const string EntregasManage = "entregas.manage";
 
+    // ── Orçamentos ────────────────────────────────────────────────────────────
+    /// <summary>
+    /// Permite converter orçamento em venda, agendar follow-up e registrar contato.
+    /// 1.8.6: Vendedor pode criar orçamentos mas não pode convertê-los sem aprovação
+    /// — evita que vendedor burle fluxo de aprovação gerando vendas diretamente.
+    /// </summary>
+    public const string OrcamentoManage = "orcamento.manage";
+
     // ── Financeiro ────────────────────────────────────────────────────────────
     public const string ReportFinancial = "report.financial";
     public const string FinanceiroView  = "financeiro.view";
@@ -79,8 +87,9 @@ public static class Permissions
         FidelidadeUse,
         HaverEdit,
         EntregasManage,
+        OrcamentoManage,
         ReportFinancial, FinanceiroView, DespesasView, FluxoCaixaView, MargemView,
         AuditView, ComprasView, InventarioView, NotasFiscaisView,
-        UsersView, ConfigView, RoleManage
+        UsersView, ConfigView, RoleManage,
     ];
 }
