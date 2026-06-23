@@ -1,9 +1,10 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>4d376197-6ed8-41a2-9f94-2934a06559c6</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,12 +14,12 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.0" />
-    <PackageReference Include="Swashbuckle.AspNetCore"                  Version="6.6.2" />
-    <PackageReference Include="Serilog.AspNetCore"                      Version="8.0.2" />
-    <PackageReference Include="AutoMapper"                               Version="14.0.0" />
-    <PackageReference Include="FluentValidation.AspNetCore"             Version="11.3.0" />
-    <PackageReference Include="AspNetCoreRateLimit"                     Version="5.0.0" />
-    <PackageReference Include="AspNetCore.HealthChecks.SqlServer"       Version="8.0.2" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.2" />
+    <PackageReference Include="AutoMapper" Version="14.0.0" />
+    <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.0" />
+    <PackageReference Include="AspNetCoreRateLimit" Version="5.0.0" />
+    <PackageReference Include="AspNetCore.HealthChecks.SqlServer" Version="8.0.2" />
     <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.22.0" />
 
     <!--

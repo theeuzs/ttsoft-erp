@@ -4,6 +4,8 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
+@implements IDisposable
+
 @if (!Auth.LoggedIn)
 {
     <ERP.Portal.Pages.Login />
@@ -137,7 +139,7 @@ else
 
 @code {
     private bool _open = false;
-
+ 
     private record MenuItem(string Icon, string Label, string Url);
     private readonly MenuItem[] _menu =
     [
@@ -148,7 +150,7 @@ else
         new("📦", "Produtos",           "/produtos"),
         new("👤", "Clientes",           "/clientes"),
         new("💰", "Vendas",             "/vendas"),
-
+ 
         // ── Fiscal e Financeiro ───────────────────────────────────────────────
         new("🧾", "Notas Fiscais",      "/notas-fiscais"),
         new("🔄", "Devoluções",         "/devolucoes"),
@@ -157,7 +159,7 @@ else
         new("💸", "Contas Pagar",       "/contas-pagar"),
         new("💵", "Comissões",          "/comissoes"),
         new("🔄", "Conciliação Cartões",  "/conciliacao"),
-
+ 
         // ── Estoque e Compras ─────────────────────────────────────────────────
         new("🏪", "Estoque",            "/estoque"),
         new("📦", "Inventário",         "/inventario"),
@@ -165,7 +167,7 @@ else
         new("🛒", "Sugestão Compras",   "/sugestao-compras"),
         new("🚚", "Entregas",           "/entregas"),
         new("🏪", "Transferências",     "/transferencias"),
-
+ 
        // ── Vendas e CRM ──────────────────────────────────────────────────────────────
         new("📋", "Orçamentos",         "/orcamentos"),
         new("📞", "CRM / Follow-up",    "/crm"),
@@ -173,29 +175,32 @@ else
         new("🏗️", "Calculadora",        "/calculadora"),
         new("🎨", "Tintométrico",        "/tintometrico"),
         new("🤝", "Autoatend. Cliente", "/cliente"),
-
+ 
         // ── Relatórios e BI ───────────────────────────────────────────────────
         new("📄", "Relatórios",         "/relatorios"),
         new("📈", "BI / Análises",      "/bi"),
-
+ 
         // ── Gestão ───────────────────────────────────────────────────────────
         new("👔", "Cargos",             "/cargos"),
         new("⚙️", "Configurações",      "/configuracoes"),
         new("🔍", "Auditoria",          "/auditoria"),
-
+ 
         // ── Painéis especiais ─────────────────────────────────────────────────
         new("📺", "Dashboard TV",       "/tv"),
         new("🚚", "App Motorista",      "/motorista"),
-
+ 
         // ── Roadmap ───────────────────────────────────────────────────────────
         new("🗺️", "Próximas Melhorias", "/roadmap"),
     ];
-
+ 
     private bool _darkMode = false;
-
+ 
     protected override async Task OnInitializedAsync()
     {
         await Auth.CarregarSessaoAsync();
+        VerificarMustChange();
+        Nav.LocationChanged += OnLocationChanged;
+ 
         try
         {
             var tema = await JS.InvokeAsync<string>("initTheme");
@@ -203,16 +208,36 @@ else
         }
         catch { }
     }
-
+ 
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        VerificarMustChange();
+    }
+ 
+    private void VerificarMustChange()
+    {
+        if (Auth.LoggedIn && Auth.MustChangePassword)
+        {
+            var uri = Nav.ToBaseRelativePath(Nav.Uri);
+            if (!uri.StartsWith("trocar-senha", StringComparison.OrdinalIgnoreCase))
+                Nav.NavigateTo("/trocar-senha");
+        }
+    }
+ 
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+ 
     private async Task ToggleDarkMode()
     {
         var novoTema = await JS.InvokeAsync<string>("toggleDarkMode");
         _darkMode = novoTema == "dark";
     }
-
+ 
     private void Toggle() => _open = !_open;
     private void Fechar() => _open = false;
-
+ 
     private async Task LogoutAsync()
     {
         await Auth.LogoutAsync();

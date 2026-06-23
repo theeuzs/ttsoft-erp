@@ -1,0 +1,119 @@
+@page "/trocar-senha"
+@using ERP.Portal.Services
+@inject AuthService Auth
+@inject ApiClient Api
+@inject NavigationManager Nav
+
+<div style="display:flex; align-items:center; justify-content:center; min-height:100vh; background:linear-gradient(135deg,#1E293B,#1E62A6);">
+    <div style="background:white; border-radius:16px; padding:40px; width:380px; box-shadow:0 20px 60px rgba(0,0,0,.3);">
+        <div style="text-align:center; margin-bottom:24px;">
+            <div style="font-size:32px;">🔒</div>
+            <div style="font-size:20px; font-weight:800; color:#1E62A6; margin-top:8px;">Troca de senha obrigatória</div>
+            <div style="font-size:13px; color:#94A3B8; margin-top:6px;">
+                Por segurança, defina uma nova senha antes de continuar.
+            </div>
+        </div>
+
+        <div style="margin-bottom:16px;">
+            <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">SENHA ATUAL</label>
+            <input @bind="_senhaAtual" type="password" placeholder="••••••••"
+                   style="width:100%; padding:10px; border:1px solid #CBD5E1; border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+        </div>
+        <div style="margin-bottom:16px;">
+            <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">NOVA SENHA (mín. 8 caracteres)</label>
+            <input @bind="_novaSenha" type="password" placeholder="••••••••"
+                   style="width:100%; padding:10px; border:1px solid #CBD5E1; border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+        </div>
+        <div style="margin-bottom:24px;">
+            <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">CONFIRMAR NOVA SENHA</label>
+            <input @bind="_confirmar" type="password" placeholder="••••••••"
+                   style="width:100%; padding:10px; border:1px solid #CBD5E1; border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_erro))
+        {
+            <div style="background:#FEE2E2; color:#EF4444; padding:10px; border-radius:8px; font-size:13px; margin-bottom:16px;">
+                @_erro
+            </div>
+        }
+        @if (!string.IsNullOrEmpty(_sucesso))
+        {
+            <div style="background:#DCFCE7; color:#16A34A; padding:10px; border-radius:8px; font-size:13px; margin-bottom:16px;">
+                @_sucesso
+            </div>
+        }
+
+        <button @onclick="ConfirmarAsync" disabled="@_loading"
+                style="width:100%; background:#1E62A6; color:white; border:none; padding:12px;
+                border-radius:8px; font-size:15px; font-weight:700; cursor:pointer;">
+            @(_loading ? "Salvando..." : "CONFIRMAR NOVA SENHA")
+        </button>
+    </div>
+</div>
+
+@code {
+    private string _senhaAtual = "";
+    private string _novaSenha  = "";
+    private string _confirmar  = "";
+    private string _erro       = "";
+    private string _sucesso    = "";
+    private bool   _loading    = false;
+
+    protected override void OnInitialized()
+    {
+        // Não permite acessar esta página sem ter passado pelo login.
+        // Se Auth.CarregarSessaoAsync() já rodou no bootstrap do app (App.razor/MainLayout),
+        // LoggedIn reflete o token salvo mesmo após F5.
+        if (!Auth.LoggedIn)
+        {
+            Nav.NavigateTo("/login");
+        }
+    }
+
+    private async Task ConfirmarAsync()
+    {
+        _erro = ""; _sucesso = "";
+
+        if (_novaSenha != _confirmar)
+        {
+            _erro = "A confirmação não corresponde à nova senha.";
+            return;
+        }
+        if (_novaSenha.Length < 8)
+        {
+            _erro = "A nova senha deve ter no mínimo 8 caracteres.";
+            return;
+        }
+
+        _loading = true;
+        var resp = await Api.PostAsync("api/auth/change-password", new
+        {
+            currentPassword = _senhaAtual,
+            newPassword     = _novaSenha
+        });
+        _loading = false;
+
+        if (resp.IsSuccessStatusCode)
+        {
+            _sucesso = "Senha alterada com sucesso! Redirecionando para login...";
+            await Auth.LogoutAsync();
+            await Task.Delay(1500);
+            Nav.NavigateTo("/login", forceLoad: true);
+        }
+        else
+        {
+            try
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                var doc  = System.Text.Json.JsonDocument.Parse(body);
+                _erro = doc.RootElement.TryGetProperty("erro", out var e)
+                    ? e.GetString() ?? "Erro ao trocar senha."
+                    : "Erro ao trocar senha.";
+            }
+            catch
+            {
+                _erro = "Erro ao trocar senha. Verifique a senha atual e tente novamente.";
+            }
+        }
+    }
+}

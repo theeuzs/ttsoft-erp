@@ -3,6 +3,7 @@ using ERP.Application.Interfaces;
 using ERP.WPF.Commands;
 using ERP.WPF.State;
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
 
@@ -118,6 +119,26 @@ public class LoginViewModel : BaseViewModel
 
             if (resultado.Sucedeu && resultado.Usuario is { } user)
             {
+                // 2.5 — MustChangePassword: bloqueia entrada no sistema até a senha
+                // ser trocada. Antes desta correção, o WPF ignorava completamente
+                // a flag e dava acesso total mesmo com a senha padrão "admin123"
+                // — bypass total da política que a API já enforçava via middleware.
+                if (resultado.MustChangePassword)
+                {
+                    var trocarVm  = new TrocarSenhaViewModel(_authService, user.Id);
+                    var trocarWin = new ERP.WPF.Views.TrocarSenhaView { DataContext = trocarVm };
+                    trocarWin.ConectarResultado(trocarVm);
+
+                    var trocou = trocarWin.ShowDialog();
+                    if (trocou != true)
+                    {
+                        MensagemErro = "Você precisa trocar a senha para continuar.";
+                        return; // fecha o modal sem trocar = não entra no sistema
+                    }
+                    // Senha trocada com sucesso — segue o login normalmente
+                    // com os dados de 'user' já obtidos no LoginAsync original.
+                }
+
                 AppSession.Login(
                     user.Id,
                     user.Name,

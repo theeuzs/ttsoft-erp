@@ -54,7 +54,17 @@
         _loading = true; _erro = "";
         var ok = await Auth.LoginAsync(_cnpj, _usuario, _senha);
         _loading = false;
-        if (ok) Nav.NavigateTo("/dashboard");
-        else _erro = "Usuário, senha ou CNPJ incorretos.";
+        if (ok)
+        {
+            // 2.4 — MustChangePassword: redireciona para troca de senha obrigatória
+            // antes de liberar acesso ao dashboard. Sem isso, o admin bootstrap
+            // (admin/admin123) navega pro dashboard e fica preso vendo tudo vazio,
+            // porque a API bloqueia (403) qualquer endpoint exceto change-password.
+            Nav.NavigateTo(Auth.MustChangePassword ? "/trocar-senha" : "/dashboard");
+        }
+        else
+        {
+            _erro = "Usuário, senha ou CNPJ incorretos.";
+        }
     }
 }
