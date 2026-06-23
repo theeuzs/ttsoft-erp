@@ -15,6 +15,13 @@ public static class BackupService
     private const int    MaxBackupsLocais = 30;
     private const int    MaxBackupsNuvem  = 30;
 
+    // ── Timeout estendido para BACKUP DATABASE ────────────────────────────────
+    // O comando BACKUP DATABASE pode demorar vários minutos conforme o volume de dados
+    // cresce. O timeout padrão do SqlClient é 30s — suficiente no início, mas começa
+    // a falhar conforme o banco cresce (erro: "Tempo Limite de Execução Expirado").
+    // 300s (5 min) é seguro para bancos de até ~50GB em rede local; ajuste se necessário.
+    private const int BackupCommandTimeoutSeconds = 300;
+
     // ── Detecta se está conectado no Azure SQL ────────────────────────
     private static bool IsAzureSql()
     {
@@ -76,11 +83,23 @@ public static class BackupService
 
             // Sanitiza dbName e caminho antes de usar na string SQL
             // BACKUP DATABASE não aceita parâmetros @p0 — sanitização é a proteção correta aqui
-            string dbNameSeguro    = SanitizarParaBackup(dbName, "nome do banco");
-            string caminhoSeguro   = SanitizarParaBackup(caminhoAbsoluto, "caminho do backup");
+            string dbNameSeguro  = SanitizarParaBackup(dbName, "nome do banco");
+            string caminhoSeguro = SanitizarParaBackup(caminhoAbsoluto, "caminho do backup");
 
-            await dbContext.Database.ExecuteSqlRawAsync(
-                $"BACKUP DATABASE [{dbNameSeguro}] TO DISK = N'{caminhoSeguro}' WITH INIT");
+            // Estende o timeout SOMENTE para o BACKUP DATABASE, sem afetar o resto do sistema.
+            // O timeout padrão (30s) é insuficiente conforme o banco cresce — causa o erro
+            // "Tempo Limite de Execução Expirado" nas madrugadas. Restauramos após o backup.
+            var timeoutOriginal = dbContext.Database.GetCommandTimeout();
+            dbContext.Database.SetCommandTimeout(BackupCommandTimeoutSeconds);
+            try
+            {
+                await dbContext.Database.ExecuteSqlRawAsync(
+                    $"BACKUP DATABASE [{dbNameSeguro}] TO DISK = N'{caminhoSeguro}' WITH INIT");
+            }
+            finally
+            {
+                dbContext.Database.SetCommandTimeout(timeoutOriginal);
+            }
 
             LimparBackupsAntigos(PastaBackupLocal, MaxBackupsLocais);
 
