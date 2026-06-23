@@ -8,11 +8,13 @@ public class DevolucaoService : IDevolucaoService
 {
     private readonly IUnitOfWork    _uow;
     private readonly IHaverService  _haverService;
+    private readonly IRequestTenant _tenant;
 
-    public DevolucaoService(IUnitOfWork uow, IHaverService haverService)
+    public DevolucaoService(IUnitOfWork uow, IHaverService haverService, IRequestTenant tenant)
     {
         _uow          = uow;
         _haverService = haverService;
+        _tenant       = tenant;
     }
 
     public async Task<decimal> GetQuantidadeJaDevolvida(Guid saleId, Guid productId)
@@ -57,25 +59,36 @@ public class DevolucaoService : IDevolucaoService
                 item.ProductId, -item.QuantidadeDevolver, allowNegative: true);
         }
 
+        // S8 FIX: OperadorNome do JWT — não confiar no body (trilha de auditoria com repúdio).
+        var operadorNome = _tenant.UserName;
+
+        // S8 FIX: valorTotal recalculado no servidor usando preços da venda original.
+        // Antes: dto.Items[].ValorTotal vinha do cliente → fraude de haver (ex.: 1 un → R$ 9.999.999 de crédito).
+        // Agora: UnitPrice × (1 − DiscountPercent/100) × QuantidadeDevolver, tudo da venda original.
+        decimal valorTotal = 0m;
+
         // 3. Registra cada item devolvido para controle futuro (anti-exploit)
         foreach (var item in itensValidos)
         {
+            var itemVenda        = venda.Items.First(i => i.ProductId == item.ProductId);
+            var unitPriceEfetivo = itemVenda.UnitPrice * (1m - itemVenda.DiscountPercent / 100m);
+            var valorItem        = unitPriceEfetivo * item.QuantidadeDevolver;
+            valorTotal          += valorItem;
+
             await _uow.Devolucoes.AddAsync(new Domain.Entities.SaleItemDevolucao
             {
                 SaleId              = dto.VendaId,
                 ProductId           = item.ProductId,
                 ProductName         = item.ProductName,
                 QuantidadeDevolvida = item.QuantidadeDevolver,
-                ValorDevolvido      = item.ValorTotal,
+                ValorDevolvido      = valorItem,     // ← preço autoritativo
                 Motivo              = dto.Motivo,
-                OperadorNome        = dto.OperadorNome,
+                OperadorNome        = operadorNome,  // ← JWT
                 DataDevolucao       = DateTime.Now,
             });
         }
 
         // 4. Credita Haver ao cliente
-        decimal valorTotal = itensValidos.Sum(i => i.ValorTotal);
-
         if (dto.CustomerId.HasValue && valorTotal > 0)
         {
             string descricao = $"Devolução parcial - Venda {venda.SaleNumber ?? dto.VendaId.ToString()[..8].ToUpper()}";
@@ -84,7 +97,7 @@ public class DevolucaoService : IDevolucaoService
 
             await _haverService.RegistrarMovimentoVendaAsync(
                 dto.CustomerId.Value, valorTotal, "Entrada",
-                descricao, dto.OperadorNome);
+                descricao, operadorNome); // ← JWT
 
             var customer = await _uow.Customers.GetByIdAsync(dto.CustomerId.Value);
             if (customer != null)

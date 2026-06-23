@@ -27,4 +27,7 @@ public interface ICaixaRepository
 
     // Adiciona o movimento direto na tabela, ignorando a memória velha!
     Task AddMovimentoAsync(ERP.Domain.Entities.CaixaMovimento movimento);
+
+    // S8: saldo em dinheiro para validação de sangria (Abertura + Suprimento + VendaDinheiro − Sangria)
+    Task<decimal> GetSaldoDinheiroAsync(Guid caixaId);
 }

@@ -109,8 +109,11 @@ public class ETagMiddleware
         }
         else
         {
-            // Endpoints autenticados: permite revalidação com ETag, sem cache compartilhado
-            ctx.Response.Headers.CacheControl = "private, no-cache";
+            // S8 FIX: no-store impede armazenamento em proxy externo (ex.: Cloudflare na frente da API).
+            // no-cache anterior ainda permitia que proxy tecnicamente conforme armazenasse e revalidasse.
+            // Vary: Authorization garante que CDN/proxy diferencie respostas por token — sem cross-tenant leak via cache.
+            ctx.Response.Headers.CacheControl = "private, no-store, max-age=0";
+            ctx.Response.Headers["Vary"]      = "Authorization";
         }
 
         // Escreve o body original no stream real

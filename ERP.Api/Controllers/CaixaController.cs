@@ -31,13 +31,23 @@ public class CaixaController : ControllerBase
         return caixa is null ? NotFound(new { mensagem = "Nenhum caixa aberto." }) : Ok(caixa);
     }
 
-    /// <summary>Abre um novo caixa.</summary>
+    /// <summary>Abre um novo caixa para o usuário autenticado.</summary>
     [HttpPost("abrir")]
-    public async Task<IActionResult> Abrir([FromBody] AbrirCaixaDto dto)
+    public async Task<IActionResult> Abrir([FromBody] AbrirCaixaRequestDto dto)
     {
+        // S8 FIX: UsuarioId e OperadorNome do JWT — não confiar no body.
+        // Antes: dto.UsuarioId do body permitia abrir caixa em nome de outro usuário (DoS + audit trail falso).
+        var operadorNome = User.FindFirst(ClaimTypes.Name)?.Value
+                        ?? User.FindFirst("name")?.Value
+                        ?? "Operador";
         try
         {
-            await _service.AbrirCaixaAsync(dto);
+            await _service.AbrirCaixaAsync(new AbrirCaixaDto
+            {
+                UsuarioId     = UsuarioId,    // ← JWT
+                OperadorNome  = operadorNome, // ← JWT
+                ValorAbertura = dto.ValorAbertura
+            });
             return Ok(new { mensagem = "Caixa aberto com sucesso." });
         }
         catch (InvalidOperationException ex)
@@ -66,10 +76,17 @@ public class CaixaController : ControllerBase
     [HttpPost("sangria")]
     public async Task<IActionResult> Sangria([FromBody] MovimentoCaixaRequest dto)
     {
-        await _service.RegistrarMovimentoAsync(
-            UsuarioId, dto.Valor, dto.Descricao,
-            PaymentMethod.Dinheiro, TipoMovimentoCaixa.Sangria);
-        return Ok(new { mensagem = "Sangria registrada." });
+        try
+        {
+            await _service.RegistrarMovimentoAsync(
+                UsuarioId, dto.Valor, dto.Descricao,
+                PaymentMethod.Dinheiro, TipoMovimentoCaixa.Sangria);
+            return Ok(new { mensagem = "Sangria registrada." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
     }
 
     /// <summary>Registra suprimento no caixa.</summary>
@@ -77,10 +94,17 @@ public class CaixaController : ControllerBase
     [HttpPost("suprimento")]
     public async Task<IActionResult> Suprimento([FromBody] MovimentoCaixaRequest dto)
     {
-        await _service.RegistrarMovimentoAsync(
-            UsuarioId, dto.Valor, dto.Descricao,
-            PaymentMethod.Dinheiro, TipoMovimentoCaixa.Suprimento);
-        return Ok(new { mensagem = "Suprimento registrado." });
+        try
+        {
+            await _service.RegistrarMovimentoAsync(
+                UsuarioId, dto.Valor, dto.Descricao,
+                PaymentMethod.Dinheiro, TipoMovimentoCaixa.Suprimento);
+            return Ok(new { mensagem = "Suprimento registrado." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
     }
 
     /// <summary>Registra movimento genérico no caixa.</summary>
@@ -93,8 +117,21 @@ public class CaixaController : ControllerBase
         if (!Enum.TryParse<PaymentMethod>(dto.FormaPagamento ?? "Dinheiro", out var forma))
             forma = PaymentMethod.Dinheiro;
 
-        await _service.RegistrarMovimentoAsync(UsuarioId, dto.Valor, dto.Descricao, forma, tipo);
-        return Ok(new { mensagem = "Movimento registrado." });
+        // S8 FIX: tipos restritos exigem a mesma permissão que os endpoints dedicados.
+        // Antes: POST /movimento?Tipo=Sangria bypass total de [HasPermission(CashSangria)] em /sangria.
+        var tipoRestrito = tipo is TipoMovimentoCaixa.Sangria or TipoMovimentoCaixa.Suprimento;
+        if (tipoRestrito && !User.HasClaim("permission", Permissions.CashSangria))
+            return Forbid();
+
+        try
+        {
+            await _service.RegistrarMovimentoAsync(UsuarioId, dto.Valor, dto.Descricao, forma, tipo);
+            return Ok(new { mensagem = "Movimento registrado." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
     }
 }
 

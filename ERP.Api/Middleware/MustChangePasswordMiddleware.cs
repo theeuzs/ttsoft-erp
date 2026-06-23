@@ -37,7 +37,10 @@ public class MustChangePasswordMiddleware
             {
                 var path = context.Request.Path.Value ?? "";
                 var permitido = _caminhoPermitidos.Any(p =>
-                    path.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+                    // S8 FIX: StartsWith puro aceita "/api/auth/login-history" como whitelist.
+                    // Equals cobre o path exato; StartsWith(p + "/") cobre sub-rotas reais.
+                    path.Equals(p, StringComparison.OrdinalIgnoreCase) ||
+                    path.StartsWith(p + "/", StringComparison.OrdinalIgnoreCase));
 
                 if (!permitido)
                 {

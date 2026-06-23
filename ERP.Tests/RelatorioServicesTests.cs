@@ -15,11 +15,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Data.Sqlite;
 
 namespace ERP.Tests;
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  HELPER
+//  HELPER — InMemory (sem SQL real)
 // ═══════════════════════════════════════════════════════════════════════════════
 internal class FakeRequestTenant : ERP.Application.Interfaces.IRequestTenant
 {
@@ -70,6 +71,50 @@ internal static class TestDb
         return provider;
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  HELPER — SQLite in-process (executa SQL real — necessário para ExecuteSqlInterpolatedAsync)
+//
+//  S8: HaverService.LancarAsync usa UPDATE atômico com WHERE condicional.
+//  InMemory ignora ExecuteSqlInterpolatedAsync (sempre retorna 0), então qualquer
+//  teste que chame LancarAsync — inclusive os de sucesso — precisa de SQLite.
+//
+//  Uso: using var db = TestDbSqlite.Create(tid, ctx => { seed }); var service = new HaverService(db, tenant);
+// ═══════════════════════════════════════════════════════════════════════════════
+internal static class TestDbSqlite
+{
+    /// <summary>
+    /// Cria um AppDbContext com banco SQLite in-process isolado.
+    /// O chamador é responsável por fazer Dispose() do contexto retornado (using var).
+    /// </summary>
+    public static AppDbContext Create(Guid tenantId, Action<AppDbContext>? seed = null)
+    {
+        // Conexão SQLite em memória com nome único — isolada por teste
+        var connection = new SqliteConnection($"DataSource=haver_{Guid.NewGuid():N};Mode=Memory;Cache=Shared");
+        connection.Open();
+
+        AppDbContext.SetGlobalTenantId(tenantId);
+        AppDbContext.SetQueryTenantId(tenantId);
+
+        var tenant = new FakeRequestTenant { TenantId = tenantId };
+
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        var db = new AppDbContext(options, tenant);
+        db.Database.EnsureCreated(); // aplica schema sem EF Migrations
+
+        if (seed is not null)
+        {
+            seed(db);
+            db.SaveChanges();
+        }
+
+        return db;
+    }
+}
+
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  DRE SERVICE
@@ -276,67 +321,91 @@ public class ComissaoServiceTests
 // ═══════════════════════════════════════════════════════════════════════════════
 public class HaverServiceTests
 {
+    // ObterSaldoAsync usa apenas LINQ — InMemory funciona corretamente.
     [Fact]
     public async Task ObterSaldoAsync_RetornaSaldoCorreto()
     {
-        var tid = Guid.NewGuid();
-        AppDbContext.SetGlobalTenantId(tid);
-        AppDbContext.SetQueryTenantId(tid);        
+        var tid        = Guid.NewGuid();
         var customerId = Guid.NewGuid();
 
-        var sp = TestDb.Create("haver_saldo", ctx =>
-        {
-            ctx.Customers.Add(new Customer { Id = customerId, Name = "Cliente X", HaverBalance = 250m, TenantId = tid });
-        }, tenantId: tid);
+        using var db = TestDbSqlite.Create(tid, ctx =>
+            ctx.Customers.Add(new Customer { Id = customerId, Name = "Cliente X", HaverBalance = 250m, TenantId = tid }));
 
-        using var scope1 = sp.CreateScope();
-        var mockTenant1 = new Mock<IRequestTenant>();
-        mockTenant1.Setup(t => t.TenantId).Returns(tid);
-        var db1 = scope1.ServiceProvider.GetRequiredService<ERP.Persistence.Context.AppDbContext>();
-        var saldo = await new HaverService(db1, mockTenant1.Object).ObterSaldoAsync(customerId);
+        var tenant = new FakeRequestTenant { TenantId = tid };
+        var saldo  = await new HaverService(db, tenant).ObterSaldoAsync(customerId);
 
         Assert.Equal(250m, saldo);
+    }
+
+    // S8: LancarAsync usa ExecuteSqlInterpolatedAsync — requer SQLite (InMemory ignora SQL real).
+    [Fact]
+    public async Task LancarAsync_Entrada_SaldoAtualizado()
+    {
+        var tid        = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+
+        using var db = TestDbSqlite.Create(tid, ctx =>
+            ctx.Customers.Add(new Customer { Id = customerId, Name = "Cliente X", HaverBalance = 100m, TenantId = tid }));
+
+        var tenant  = new FakeRequestTenant { TenantId = tid };
+        var service = new HaverService(db, tenant);
+
+        // Não deve lançar exceção
+        await service.LancarAsync(customerId, 50m, "Entrada", "Depósito", "Teste");
+
+        // Verifica UPDATE via IgnoreQueryFilters: AsyncLocal pode variar em continuações async
+        // — não usar ObterSaldoAsync aqui para evitar dependência do filtro de tenant em teste.
+        db.ChangeTracker.Clear();
+        var customerAtualizado = await db.Customers
+            .AsNoTracking()
+            .IgnoreQueryFilters()
+            .FirstAsync(c => c.Id == customerId);
+
+        Assert.Equal(150m, customerAtualizado.HaverBalance);
+
+        // Verifica também que MovimentoHaver foi registrado
+        var movimentos = await db.MovimentosHaver
+            .AsNoTracking()
+            .IgnoreQueryFilters()
+            .Where(m => m.CustomerId == customerId)
+            .ToListAsync();
+        Assert.Single(movimentos);
+        Assert.Equal(50m, movimentos[0].Valor);
     }
 
     [Fact]
     public async Task LancarAsync_Saida_SaldoInsuficiente_LancaExcecao()
     {
-        var tid = Guid.NewGuid();
-        AppDbContext.SetGlobalTenantId(tid);
-        AppDbContext.SetQueryTenantId(tid);        
+        var tid        = Guid.NewGuid();
         var customerId = Guid.NewGuid();
 
-        var sp = TestDb.Create("haver_insuficiente", ctx =>
-        {
-            ctx.Customers.Add(new Customer { Id = customerId, Name = "Cliente Y", HaverBalance = 10m, TenantId = tid });
-        }, tenantId: tid);
+        using var db = TestDbSqlite.Create(tid, ctx =>
+            ctx.Customers.Add(new Customer { Id = customerId, Name = "Cliente Y", HaverBalance = 10m, TenantId = tid }));
 
-        using var scope2 = sp.CreateScope();
-        var mockTenant2 = new Mock<IRequestTenant>();
-        mockTenant2.Setup(t => t.TenantId).Returns(tid);
-        var db2 = scope2.ServiceProvider.GetRequiredService<ERP.Persistence.Context.AppDbContext>();
-        var service = new HaverService(db2, mockTenant2.Object);
+        var tenant  = new FakeRequestTenant { TenantId = tid };
+        var service = new HaverService(db, tenant);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => service.LancarAsync(customerId, 50m, "Saida", "Retirada", "Teste"));
+        Assert.Contains("Saldo Haver insuficiente", ex.Message);
     }
 
+    // S8: cliente inexistente → InvalidOperationException (não KeyNotFoundException).
+    // O UPDATE atômico retorna rows=0 tanto para saldo insuficiente quanto para cliente inexistente;
+    // a mensagem diferencia o caso pelo tipo da operação.
     [Fact]
-    public async Task LancarAsync_ClienteInexistente_LancaKeyNotFoundException()
+    public async Task LancarAsync_ClienteInexistente_LancaInvalidOperationException()
     {
         var tid = Guid.NewGuid();
-        AppDbContext.SetGlobalTenantId(tid);
-        AppDbContext.SetQueryTenantId(tid);
 
-        var sp      = TestDb.Create("haver_naoexiste", tenantId: tid);
-        using var scope3 = sp.CreateScope();
-        var emptyTenant = new Mock<IRequestTenant>();
-        emptyTenant.Setup(t => t.TenantId).Returns(tid);
-        var db3 = scope3.ServiceProvider.GetRequiredService<ERP.Persistence.Context.AppDbContext>();
-        var service = new HaverService(db3, emptyTenant.Object);
+        using var db = TestDbSqlite.Create(tid); // sem seed — banco vazio
 
-        await Assert.ThrowsAsync<KeyNotFoundException>(
+        var tenant  = new FakeRequestTenant { TenantId = tid };
+        var service = new HaverService(db, tenant);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => service.LancarAsync(Guid.NewGuid(), 10m, "Entrada", "Dep.", "Teste"));
+        Assert.Contains("não encontrado", ex.Message);
     }
 }
 

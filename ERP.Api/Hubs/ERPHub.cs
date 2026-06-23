@@ -124,16 +124,14 @@ public class ERPChatHub : Hub
         }
         else
         {
-            // Fallback para WPF legado sem ChatToken — aceita query string
-            // mas com log de aviso para forçar migração gradual
-            tenantId    = httpContext?.Request.Query["tenant"].ToString();
-            nomeUsuario = httpContext?.Request.Query["user"].ToString() ?? "Terminal";
-
-            if (!string.IsNullOrEmpty(tenantId))
-                Serilog.Log.Warning(
-                    "ERPChatHub: conexão sem ChatToken JWT de {Tenant}/{User} — " +
-                    "migrar para POST /api/auth/chat-token",
-                    tenantId, nomeUsuario);
+            // S8 FIX: fallback removido — ChatToken JWT é obrigatório.
+            // WPF e Portal já emitem ChatToken via POST /api/auth/chat-token.
+            // Fallback anterior permitia spoofar tenant e user via query string sem autenticação.
+            Context.Abort();
+            Serilog.Log.Warning(
+                "ERPChatHub: conexão rejeitada — ChatToken JWT ausente ou inválido ({IP})",
+                httpContext?.Connection.RemoteIpAddress);
+            return;
         }
 
         var sala = httpContext?.Request.Query["sala"].ToString();

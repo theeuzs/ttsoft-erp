@@ -63,4 +63,20 @@ public class CaixaRepository : ICaixaRepository
     {
         await _context.AddAsync(movimento);
     }
+
+    // S8: computa saldo em dinheiro para validação de sangria.
+    // Abertura + Suprimento + vendas em dinheiro - Sangrias.
+    // Movimentos de venda sem FormaPagamento explícita contam como dinheiro (legado).
+    public async Task<decimal> GetSaldoDinheiroAsync(Guid caixaId)
+    {
+        return await _context.CaixaMovimentos
+            .AsNoTracking()
+            .Where(m => m.CaixaId == caixaId)
+            .SumAsync(m =>
+                m.Tipo == TipoMovimentoCaixa.Sangria    ? -m.Valor :
+                m.Tipo == TipoMovimentoCaixa.Suprimento ?  m.Valor :
+                m.Tipo == TipoMovimentoCaixa.Abertura   ?  m.Valor :
+                (m.FormaPagamento == ERP.Domain.Enums.PaymentMethod.Dinheiro
+                 || m.FormaPagamento == null)            ?  m.Valor : 0m);
+    }
 }

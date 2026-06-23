@@ -144,7 +144,7 @@ public class DevolucaoViewModel : BaseViewModel
             {
                 VendaId      = _venda.Id,
                 CustomerId   = _customerId,
-                OperadorNome = ERP.WPF.State.AppSession.UserName ?? "Sistema",
+                // S8: OperadorNome removido — derivado do JWT no servidor (IRequestTenant.UserName)
                 Motivo       = Motivo,
                 Itens        = itens.Select(i => new DevolucaoItemDto
                 {

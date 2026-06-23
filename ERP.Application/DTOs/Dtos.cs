@@ -298,6 +298,15 @@ public class AbrirCaixaDto
     public decimal ValorAbertura { get; set; }
 }
 
+/// <summary>
+/// S8: DTO público para POST /api/caixa/abrir.
+/// UsuarioId e OperadorNome são sempre derivados do JWT no controller — não expostos ao cliente.
+/// </summary>
+public class AbrirCaixaRequestDto
+{
+    public decimal ValorAbertura { get; set; }
+}
+
 // ── Supplier / Category / Brand ───────────────────────────────────────────
 public record SupplierDto(Guid Id, string Name);
 public record CategoryDto(Guid Id, string Name);
@@ -414,11 +423,11 @@ public class DevolucaoItemDto
 
 public class CreateDevolucaoDto
 {
-    public Guid              VendaId      { get; set; }
-    public Guid?             CustomerId   { get; set; }
-    public string            OperadorNome { get; set; } = string.Empty;
-    public string            Motivo       { get; set; } = string.Empty;
-    public List<DevolucaoItemDto> Itens   { get; set; } = new();
+    public Guid              VendaId    { get; set; }
+    public Guid?             CustomerId { get; set; }
+    // S8: OperadorNome removido do DTO público — derivado do JWT no DevolucaoService (IRequestTenant.UserName)
+    public string            Motivo     { get; set; } = string.Empty;
+    public List<DevolucaoItemDto> Itens { get; set; } = new();
 }
 
 public record DevolucaoResultDto(

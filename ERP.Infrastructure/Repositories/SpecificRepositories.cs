@@ -85,9 +85,11 @@ public class CustomerRepository : Repository<Customer>, ICustomerRepository
 
     public async Task<Customer?> GetByDocumentAsync(string document)
     {
+        // S8 FIX: removido IgnoreQueryFilters() — HasQueryFilter de tenant aplica.
+        // Dedup de cliente por CPF/CNPJ é scoped ao tenant do usuário autenticado.
+        // Pessoa física com mesmo CPF em duas lojas distintas são clientes separados.
         return await _ctx.Customers
             .AsNoTracking()
-            .IgnoreQueryFilters()
             .FirstOrDefaultAsync(c => c.Document == document);
     }
 

@@ -339,12 +339,12 @@
 
         var payload = new
         {
-            VendaId      = _venda!.Id,
-            CustomerId   = _venda.CustomerId,
-            OperadorNome = "Portal Web",
-            Motivo       = _motivo,
-            Destino      = _destino,
-            Itens        = itens
+            VendaId    = _venda!.Id,
+            CustomerId = _venda.CustomerId,
+            // S8: OperadorNome removido — derivado do JWT no servidor (IRequestTenant.UserName)
+            Motivo     = _motivo,
+            Destino    = _destino,
+            Itens      = itens
         };
 
         var resp = await Api.PostAsync("api/devolucao", payload);

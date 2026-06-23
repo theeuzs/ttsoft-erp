@@ -94,6 +94,16 @@ public class SaleService : ISaleService
         await using var tx = await _uow.BeginTransactionAsync();
         try
         {
+            // S8 FIX: busca GrupoPreco do cliente para aplicar tabela de preço correta no servidor.
+            // Antes: UnitPrice vinha inteiramente do cliente → subfaturamento arbitrário contornando qualquer política.
+            var grupoPreco = ERP.Domain.Enums.GrupoPreco.A; // default varejo
+            if (dto.CustomerId.HasValue)
+            {
+                var clienteGrupo = await _uow.Customers.GetByIdAsync(dto.CustomerId.Value);
+                if (clienteGrupo != null)
+                    grupoPreco = clienteGrupo.GrupoPreco;
+            }
+
             // 2. Baixa de Estoque (atômica — segura em multi-terminal)
             foreach (var itemDto in dto.Items)
             {
@@ -127,6 +137,16 @@ public class SaleService : ISaleService
                         $"(necessário: {qtdEstoque:N2}, disponível no estoque). " +
                         $"Outro terminal pode ter vendido o último item agora mesmo.");
 
+                // S8 FIX: UnitPrice sempre do servidor (Product.GetPrecoParaGrupo), nunca do cliente.
+                // WholesalePrice se quantidade atinge mínimo definido no cadastro.
+                var unitPrice = product.GetPrecoParaGrupo(grupoPreco);
+                if (product.WholesalePrice.HasValue
+                    && product.WholesaleMinQuantity.HasValue
+                    && itemDto.Quantity >= product.WholesaleMinQuantity.Value)
+                    unitPrice = product.WholesalePrice.Value;
+
+                var totalItem = unitPrice * itemDto.Quantity * (1m - itemDto.DiscountPercent / 100m);
+
                 sale.Items.Add(new SaleItem
                 {
                     Id              = Guid.NewGuid(),
@@ -134,9 +154,9 @@ public class SaleService : ISaleService
                     ProductId       = product.Id,
                     ProductName     = product.Name,
                     Quantity        = qtdEstoque,
-                    UnitPrice       = itemDto.UnitPrice,
+                    UnitPrice       = unitPrice,            // ← servidor
                     DiscountPercent = itemDto.DiscountPercent,
-                    TotalItem       = itemDto.TotalItem
+                    TotalItem       = totalItem             // ← recomputado
                 });
             }
 
@@ -310,6 +330,11 @@ public async Task<IEnumerable<SalesReportItemDto>> GetSalesReportAsync(DateTime 
         
         await _uow.CommitAsync();
     }
+    // S8 FIX: new Random() sem seed explícito → colisão em chamadas concorrentes dentro de ~15ms (seed = TickCount).
+    // ThreadLocal garante instância isolada por thread com seed por GUID → zero colisão.
+    private static readonly ThreadLocal<Random> _rng =
+        new(() => new Random(Guid.NewGuid().GetHashCode()));
+
     private static string GenerateSaleNumber()
-        => $"VND{DateTime.Now:yyyyMMddHHmmss}{new Random().Next(100, 999)}";
+        => $"VND{DateTime.UtcNow:yyyyMMddHHmmssfff}{_rng.Value!.Next(100, 999)}";
 }

@@ -252,35 +252,27 @@ public class HaverService : IHaverService
 
     public async Task LancarAsync(Guid customerId, decimal valor, string tipo, string descricao, string operadorNome)
     {
-        if (tipo == "Saida")
-        {
-            // HasQueryFilter garante que só clientes deste tenant são consultados
-            var saldoAtual = await _db.Customers.AsNoTracking()
-                .Where(c => c.Id == customerId)
-                .Select(c => c.HaverBalance)
-                .FirstOrDefaultAsync();
+        var delta    = tipo == "Entrada" ? valor : -valor;
+        var tenantId = _tenant.TenantId;
 
-            if (valor > saldoAtual)
-                throw new InvalidOperationException("Saldo Haver insuficiente.");
-        }
+        // S8 FIX: UPDATE atômico com WHERE condicional — elimina TOCTOU.
+        // Padrão anterior: read saldo → check → read customer → check → write (duas transações distintas).
+        // Vetor: duas Saídas concorrentes com saldo = 100 → ambas passam no check com saldo 100 → cliente consome 200.
+        // Agora: UPDATE só executa se HaverBalance + delta >= 0; segunda transação concorrente retorna rows = 0.
+        // Nota: InMemory não executa SQL real → testes que chamam LancarAsync("Saida") precisam de SQLite in-process.
+        var rows = await _db.Database.ExecuteSqlInterpolatedAsync(
+            $@"UPDATE Customers
+               SET HaverBalance = HaverBalance + {delta},
+                   UpdatedAt    = {DateTime.UtcNow}
+               WHERE Id       = {customerId}
+                 AND TenantId = {tenantId}
+                 AND (HaverBalance + {delta}) >= 0");
 
-        decimal delta    = tipo == "Entrada" ? valor : -valor;
-        var     tenantId = _tenant.TenantId;
-
-        // Busca o cliente (HasQueryFilter já garante isolamento de tenant)
-        var customer = await _db.Customers
-            .Where(c => c.Id == customerId)
-            .FirstOrDefaultAsync();
-
-        if (customer is null)
-            throw new KeyNotFoundException($"Cliente {customerId} não encontrado.");
-
-        // Valida saldo se for saída
-        if (tipo == "Saida" && customer.HaverBalance < valor)
-            throw new InvalidOperationException($"Saldo insuficiente: R${customer.HaverBalance:F2}");
-
-        // Atualiza saldo via EF Core (funciona com InMemory e SQL Server)
-        customer.HaverBalance += delta;
+        if (rows == 0)
+            throw new InvalidOperationException(
+                tipo == "Saida"
+                    ? "Saldo Haver insuficiente para esta operação."
+                    : "Cliente não encontrado neste tenant.");
 
         _db.MovimentosHaver.Add(new MovimentoHaver
         {
