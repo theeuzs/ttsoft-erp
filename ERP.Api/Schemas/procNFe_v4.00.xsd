@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ============================================================
+     procNFe_v4.00.xsd
+     NF-e com Protocolo de Autorização de Uso — v4.00
+     Compatível com NT2026.004 (CNPJ Alfanumérico)
+     Criado para ConstruTTor ERP (TTSoft) — S9 fix
+     Referencia: leiauteNFe_v4.00.xsd (presente na mesma pasta)
+     ============================================================ -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+           xmlns="http://www.portalfiscal.inf.br/nfe"
+           targetNamespace="http://www.portalfiscal.inf.br/nfe"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified">
+
+  <!-- Inclui o leiaute completo da NF-e (infNFe, TNFe, todos os tipos) -->
+  <xs:include schemaLocation="leiauteNFe_v4.00.xsd"/>
+
+  <!-- ============================================================
+       Elemento raiz: nfeProc
+       Contém a NF-e (NFe) + o protocolo de autorização (protNFe)
+       ============================================================ -->
+  <xs:element name="nfeProc">
+    <xs:annotation>
+      <xs:documentation>NF-e com Protocolo de Autorização de Uso</xs:documentation>
+    </xs:annotation>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="NFe"/>
+        <xs:element name="protNFe" type="TProtNFe"/>
+      </xs:sequence>
+      <xs:attribute name="versao" type="TVerNFe" use="required"/>
+    </xs:complexType>
+  </xs:element>
+
+  <!-- ============================================================
+       TProtNFe — protocolo retornado pela SEFAZ após autorização
+       ============================================================ -->
+  <xs:complexType name="TProtNFe">
+    <xs:annotation>
+      <xs:documentation>Protocolo de status resultado do processamento da NF-e</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="infProt">
+        <xs:annotation>
+          <xs:documentation>Dados do protocolo de status da NF-e</xs:documentation>
+        </xs:annotation>
+        <xs:complexType>
+          <xs:sequence>
+            <!-- Identificação do Ambiente: 1=Produção 2=Homologação -->
+            <xs:element name="tpAmb" type="TAmb"/>
+            <!-- Versão do Aplicativo que processou a NF-e -->
+            <xs:element name="verAplic" type="TVerAplic"/>
+            <!-- Chave de Acesso da NF-e (44 dígitos) -->
+            <xs:element name="chNFe" type="TChNFe"/>
+            <!-- Data e hora do recebimento pela SEFAZ -->
+            <xs:element name="dhRecbto" type="TDateTimeUTC"/>
+            <!-- Número do Protocolo (ausente em rejeição) -->
+            <xs:element name="nProt" type="TProt" minOccurs="0"/>
+            <!-- Digest Value da NF-e processada (ausente em rejeição) -->
+            <xs:element name="digVal" type="xs:base64Binary" minOccurs="0"/>
+            <!-- Código do Status da NF-e: 100=Autorizado, 302=Duplicada, etc. -->
+            <xs:element name="cStat" type="TStat"/>
+            <!-- Motivo do Status (descrição do código) -->
+            <xs:element name="xMotivo" type="TMotivo"/>
+            <!-- Chaves de NF-e Pendentes (apenas em contingência) -->
+            <xs:element name="chNFePend" type="TChNFe" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+          <!-- Id opcional para referenciar o infProt na assinatura -->
+          <xs:attribute name="Id" type="xs:ID" use="optional"/>
+        </xs:complexType>
+      </xs:element>
+      <!-- Assinatura digital do protocolo (opcional — SEFAZ nem sempre assina) -->
+      <xs:element ref="ds:Signature" minOccurs="0"/>
+    </xs:sequence>
+    <!-- Versão do leiaute do protNFe: deve ser 4.00 -->
+    <xs:attribute name="versao" type="TVerNFe" use="required"/>
+  </xs:complexType>
+
+</xs:schema>
