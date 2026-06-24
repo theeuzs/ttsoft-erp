@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Xml;
 using System.Xml.Linq;
+using System.Xml.Schema;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using ERP.Domain.Interfaces;
@@ -21,12 +24,58 @@ namespace ERP.Application.Services
 
         public async Task<NfeImportDto> LerXmlNfeAsync(string caminhoArquivo)
         {
+            // S9 FIX: validações de segurança antes de parsear o XML.
+            // Antes: XDocument.Load(caminho) sem DTD prohibition, sem limite de tamanho,
+            //        sem XSD — atacante com permissão de importar NF-e podia subir XML forjado.
+
+            // 1. Limite de tamanho de arquivo (5 MB) — antes de abrir o XmlReader
+            var fileInfo = new FileInfo(caminhoArquivo);
+            if (!fileInfo.Exists)
+                throw new FileNotFoundException("Arquivo NF-e não encontrado.", caminhoArquivo);
+            if (fileInfo.Length > 5_242_880) // 5 MB
+                throw new InvalidOperationException(
+                    $"Arquivo NF-e muito grande ({fileInfo.Length / 1024 / 1024} MB). Máximo: 5 MB.");
+
             var dto = await Task.Run(() =>
             {
-                var doc = XDocument.Load(caminhoArquivo);
+                // 2. XmlReaderSettings defensivo
+                var settings = new XmlReaderSettings
+                {
+                    DtdProcessing             = DtdProcessing.Prohibit, // XXE: proíbe DTD externo/interno
+                    XmlResolver               = null,                    // XXE: bloqueia resolução de entidades externas
+                    MaxCharactersFromEntities = 1_000_000,               // bomb: limita expansão de entidades
+                    MaxCharactersInDocument   = 5_000_000,               // bomb: ~5MB descomprimido
+                    ValidationType            = ValidationType.None,     // default: sem XSD ainda
+                };
 
-                var infNFe = doc.Descendants().FirstOrDefault(x => x.Name.LocalName == "infNFe") 
+                // 3. XSD opcional — valida estrutura se o schema estiver presente.
+                //    Colocar procNFe_v4.00.xsd em ERP.Api/Schemas/ e marcar como "Copy if newer".
+                //    Download: https://www.nfe.fazenda.gov.br/portal/ → Schemas Atuais XML
+                var schemaPath = Path.Combine(AppContext.BaseDirectory, "Schemas", "procNFe_v4.00.xsd");
+                if (File.Exists(schemaPath))
+                {
+                    settings.ValidationType = ValidationType.Schema;
+                    settings.Schemas.Add(null, schemaPath);
+                    settings.ValidationEventHandler += (_, e) =>
+                    {
+                        if (e.Severity == XmlSeverityType.Error)
+                            throw new InvalidOperationException(
+                                $"XML não conforme NF-e v4.00: {e.Message}");
+                    };
+                }
+
+                XDocument doc;
+                using (var reader = XmlReader.Create(caminhoArquivo, settings))
+                    doc = XDocument.Load(reader);
+
+                var infNFe = doc.Descendants().FirstOrDefault(x => x.Name.LocalName == "infNFe")
                     ?? throw new Exception("Arquivo inválido. Isso não parece ser um XML de NF-e.");
+
+                // 4. Limite de itens — impede NF-e sintética com 100k <det> consumindo toda a RAM
+                var detElements = infNFe.Elements().Where(x => x.Name.LocalName == "det").ToList();
+                if (detElements.Count > 1000)
+                    throw new InvalidOperationException(
+                        $"NF-e com {detElements.Count} itens excede o limite de 1000.");
 
                 var ide = infNFe.Elements().FirstOrDefault(x => x.Name.LocalName == "ide");
                 var emit = infNFe.Elements().FirstOrDefault(x => x.Name.LocalName == "emit");
@@ -69,8 +118,6 @@ namespace ERP.Application.Services
                     }
                 }
 
-                var detElements = infNFe.Elements().Where(x => x.Name.LocalName == "det");
-                
                 foreach (var det in detElements)
                 {
                     var prod = det.Elements().FirstOrDefault(x => x.Name.LocalName == "prod");

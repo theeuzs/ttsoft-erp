@@ -41,31 +41,44 @@ public class CaixaService : ICaixaService
 
     public async Task AbrirCaixaAsync(AbrirCaixaDto dto)
     {
-        // 🟢 Verifica se ESTE USUÁRIO já tem caixa aberto (não qualquer um)
+        // Verificação rápida no código (evita round-trip desnecessário ao banco na maioria dos casos)
         var caixaExistente = await _uow.Caixas.GetCaixaAbertoByUsuarioAsync(dto.UsuarioId);
         if (caixaExistente != null)
             throw new InvalidOperationException("Você já tem um caixa aberto!");
 
         var novoCaixa = new Caixa
         {
-            NumeroCaixa = _rng.Value!.Next(100, 999),
-            UsuarioId = dto.UsuarioId,
-            OperadorNome = dto.OperadorNome ?? "Operador",  // 🟢 Agora vem do DTO
-            DataAbertura = DateTime.Now,
+            NumeroCaixa   = _rng.Value!.Next(100, 999),
+            UsuarioId     = dto.UsuarioId,
+            OperadorNome  = dto.OperadorNome ?? "Operador",
+            DataAbertura  = DateTime.Now,
             ValorAbertura = dto.ValorAbertura,
-            Status = StatusCaixa.Aberto
+            Status        = StatusCaixa.Aberto
         };
 
         novoCaixa.Movimentos.Add(new CaixaMovimento
         {
-            Tipo = TipoMovimentoCaixa.Abertura,
+            Tipo      = TipoMovimentoCaixa.Abertura,
             Descricao = "TROCO INICIAL (ABERTURA)",
-            Valor = dto.ValorAbertura,
-            DataHora = DateTime.Now
+            Valor     = dto.ValorAbertura,
+            DataHora  = DateTime.Now
         });
 
         await _uow.Caixas.AddAsync(novoCaixa);
-        await _uow.CommitAsync();
+
+        try
+        {
+            await _uow.CommitAsync();
+        }
+        catch (Exception ex)
+            when (ex.InnerException?.Message.Contains("IX_Caixa_UsuarioTenantAberto") == true
+               || ex.InnerException?.Message.Contains("UNIQUE") == true)
+        {
+            // S9: unique partial index no banco captura TOCTOU — dois cliques simultâneos no
+            // botão "Abrir Caixa" que passam pelo check em código chegam aqui com erro amigável.
+            // Não referenciamos DbUpdateException diretamente (ERP.Application não depende de EF Core).
+            throw new InvalidOperationException("Você já tem um caixa aberto!", ex);
+        }
     }
 
     // 🟢 Registra movimento no caixa DO USUÁRIO
