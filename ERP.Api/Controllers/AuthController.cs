@@ -103,6 +103,9 @@ public class AuthController : ControllerBase
             new(JwtRegisteredClaimNames.Jti,  Guid.NewGuid().ToString()),
             new("tenant_id",                  tenantId.ToString()),
             new("role_name",                  user.RoleName),
+            // S9: limite de desconto da role no token — lido pelo TenantMiddleware → IRequestTenant.
+            // Evita lookup no DB por venda; Admin=100, Gerente=30, Supervisor=15, Vendedor=5.
+            new("max_discount", user.MaxDiscountPercentage.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)),
         };
 
         foreach (var perm in user.Permissions)

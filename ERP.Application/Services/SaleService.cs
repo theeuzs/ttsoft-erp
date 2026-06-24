@@ -18,13 +18,17 @@ public class SaleService : ISaleService
     private readonly IValidator<CreateSaleDto> _validator;
     private readonly IHaverService _haverService;
     private readonly IFidelidadeService? _fidelidade;
+    private readonly IRequestTenant _tenant;
 
-    public SaleService(IUnitOfWork uow, IMapper mapper, IValidator<CreateSaleDto> validator, IHaverService haverService, IFidelidadeService? fidelidade = null)
+    public SaleService(IUnitOfWork uow, IMapper mapper, IValidator<CreateSaleDto> validator,
+                       IHaverService haverService, IRequestTenant tenant,
+                       IFidelidadeService? fidelidade = null)
     {
-        _uow = uow;
-        _mapper = mapper;
-        _validator = validator;
+        _uow          = uow;
+        _mapper       = mapper;
+        _validator    = validator;
         _haverService = haverService;
+        _tenant       = tenant;
         _fidelidade   = fidelidade;
     }
 
@@ -136,6 +140,15 @@ public class SaleService : ISaleService
                         $"Estoque insuficiente para '{produtoEstoque.Name}' " +
                         $"(necessário: {qtdEstoque:N2}, disponível no estoque). " +
                         $"Outro terminal pode ter vendido o último item agora mesmo.");
+
+                // S9 FIX: DiscountPercent validado contra o limite da role (claim max_discount no JWT).
+                // Antes: cliente mandava DiscountPercent: 100 → produto de R$ 1.000 saía por R$ 0,00.
+                // Admin=100%, Gerente=30%, Supervisor=15%, Vendedor=5%.
+                if (itemDto.DiscountPercent < 0)
+                    throw new InvalidOperationException("Desconto não pode ser negativo.");
+                if (itemDto.DiscountPercent > _tenant.MaxDiscountPercentage)
+                    throw new InvalidOperationException(
+                        $"Desconto de {itemDto.DiscountPercent:F2}% excede o limite do seu cargo ({_tenant.MaxDiscountPercentage:F2}%).");
 
                 // S8 FIX: UnitPrice sempre do servidor (Product.GetPrecoParaGrupo), nunca do cliente.
                 // WholesalePrice se quantidade atinge mínimo definido no cadastro.

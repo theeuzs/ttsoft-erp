@@ -41,6 +41,14 @@ public class TenantMiddleware
             requestTenant.UserName = context.User.FindFirst(ClaimTypes.Name)?.Value
                                   ?? context.User.FindFirst("name")?.Value
                                   ?? "API";
+
+            // S9: limite de desconto da role — lido do claim JWT para evitar lookup no DB por venda.
+            var maxDescStr = context.User.FindFirst("max_discount")?.Value;
+            if (decimal.TryParse(maxDescStr,
+                    System.Globalization.NumberStyles.Number,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var maxDesc))
+                requestTenant.MaxDiscountPercentage = maxDesc;
         }
 
         // S2.1: empurra TenantId, UserId e UserName para o LogContext do Serilog.

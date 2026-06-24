@@ -23,7 +23,8 @@ namespace ERP.Tests.Application.Services
         private readonly Mock<IUnitOfWork> _uowMock;
         private readonly Mock<IMapper> _mapperMock;
         private readonly Mock<IValidator<CreateSaleDto>> _validatorMock;
-        private readonly Mock<IHaverService> _haverServiceMock; 
+        private readonly Mock<IHaverService> _haverServiceMock;
+        private readonly Mock<IRequestTenant> _tenantMock;
         private readonly SaleService _saleService;
 
         public SaleServiceTests()
@@ -31,7 +32,12 @@ namespace ERP.Tests.Application.Services
             _uowMock = new Mock<IUnitOfWork>();
             _mapperMock = new Mock<IMapper>();
             _validatorMock = new Mock<IValidator<CreateSaleDto>>();
-            _haverServiceMock = new Mock<IHaverService>(); 
+            _haverServiceMock = new Mock<IHaverService>();
+
+            // S9: mock de IRequestTenant com MaxDiscountPercentage = 100 (Admin) por padrão nos testes.
+            // Testes específicos de validação de desconto usam tenantMock.Setup(...) explicitamente.
+            _tenantMock = new Mock<IRequestTenant>();
+            _tenantMock.Setup(t => t.MaxDiscountPercentage).Returns(100m);
 
             // Simula que a validação do FluentValidation passou com sucesso
             _validatorMock.Setup(v => v.ValidateAsync(It.IsAny<ValidationContext<CreateSaleDto>>(), It.IsAny<CancellationToken>()))
@@ -59,7 +65,7 @@ namespace ERP.Tests.Application.Services
             txMock.Setup(t => t.DisposeAsync()).Returns(ValueTask.CompletedTask);
             _uowMock.Setup(u => u.BeginTransactionAsync()).ReturnsAsync(txMock.Object);
 
-            _saleService = new SaleService(_uowMock.Object, _mapperMock.Object, _validatorMock.Object, _haverServiceMock.Object);
+            _saleService = new SaleService(_uowMock.Object, _mapperMock.Object, _validatorMock.Object, _haverServiceMock.Object, _tenantMock.Object);
         }
 
         [Fact(DisplayName = "CriarVenda - Deve processar a venda e baixar o estoque corretamente")]
@@ -253,6 +259,61 @@ namespace ERP.Tests.Application.Services
             // O CommitAsync da transação NÃO deve ter sido chamado (falhou antes)
             txMock.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Never,
                 "tx.CommitAsync nao deve ser chamado se _uow.CommitAsync falhou");
+        }
+
+        // S9: desconto acima do limite da role deve ser rejeitado pelo servidor
+        [Fact(DisplayName = "CriarVenda - DiscountPercent acima do MaxDiscountPercentage da role → InvalidOperationException")]
+        [Trait("Categoria", "Vendas - Segurança")]
+        public async Task CriarVenda_DescontoAcimaDoLimite_LancaExcecao()
+        {
+            // Arrange
+            var produtoId = Guid.NewGuid();
+            var usuarioId = Guid.NewGuid();
+            var produtoFake = new Product
+            {
+                Id        = produtoId,
+                Name      = "Produto Teste",
+                Stock     = 10,
+                SalePrice = 100m,
+                TenantId  = Guid.NewGuid()
+            };
+
+            var dto = new CreateSaleDto
+            {
+                UsuarioId = usuarioId,
+                Items    = new List<CreateSaleItemDto>
+                {
+                    new() { ProductId = produtoId, Quantity = 1, DiscountPercent = 20m } // 20% > 5% do Vendedor
+                },
+                Payments = new List<CreateSalePaymentDto>
+                {
+                    new() { PaymentMethod = ERP.Domain.Enums.PaymentMethod.Dinheiro, Amount = 80m }
+                }
+            };
+
+            // Caixa aberto — necessário para chegar na validação de desconto
+            _uowMock.Setup(u => u.Caixas.GetCaixaAbertoByUsuarioAsync(usuarioId))
+                    .ReturnsAsync(new Caixa { Id = Guid.NewGuid() });
+
+            _uowMock.Setup(u => u.Products.GetByIdAsync(produtoId)).ReturnsAsync(produtoFake);
+            _uowMock.Setup(u => u.Products.BaixarEstoqueAtomicoAsync(It.IsAny<Guid>(), It.IsAny<decimal>(), It.IsAny<bool>()))
+                    .ReturnsAsync(true);
+
+            // Role Vendedor: MaxDiscountPercentage = 5%
+            _tenantMock.Setup(t => t.MaxDiscountPercentage).Returns(5m);
+
+            var txMock = new Mock<ITransaction>();
+            txMock.Setup(t => t.CommitAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+            txMock.Setup(t => t.RollbackAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+            txMock.Setup(t => t.DisposeAsync()).Returns(ValueTask.CompletedTask);
+            _uowMock.Setup(u => u.BeginTransactionAsync()).ReturnsAsync(txMock.Object);
+
+            // Act & Assert — SaleService envolve exceções do loop em Exception("ERRO NA VENDA (revertido): ...")
+            var ex = await Assert.ThrowsAsync<Exception>(
+                () => _saleService.CreateAsync(dto));
+
+            Assert.IsType<InvalidOperationException>(ex.InnerException);
+            Assert.Contains("excede o limite", ex.InnerException!.Message);
         }
     }
 }

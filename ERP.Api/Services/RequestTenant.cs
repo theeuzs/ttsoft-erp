@@ -4,7 +4,8 @@ namespace ERP.Api.Services;
 
 public class RequestTenant : IRequestTenant
 {
-    public Guid   TenantId { get; set; } = Guid.Empty;
-    public Guid   UserId   { get; set; } = Guid.Empty;
-    public string UserName { get; set; } = string.Empty;
+    public Guid    TenantId              { get; set; } = Guid.Empty;
+    public Guid    UserId                { get; set; } = Guid.Empty;
+    public string  UserName              { get; set; } = string.Empty;
+    public decimal MaxDiscountPercentage { get; set; } = 0m;
 }

@@ -18,7 +18,9 @@ namespace ERP.WPF.Services;
 /// </summary>
 public class WpfRequestTenant : IRequestTenant
 {
-    public Guid   TenantId { get => AppDbContext.GetGlobalTenantId(); set { } }
-    public Guid   UserId   { get => AppDbContext.GetCurrentUserId();   set { } }
-    public string UserName { get => AppDbContext.GetCurrentUserName(); set { } }
+    public Guid    TenantId              { get => AppDbContext.GetGlobalTenantId(); set { } }
+    public Guid    UserId                { get => AppDbContext.GetCurrentUserId();   set { } }
+    public string  UserName              { get => AppDbContext.GetCurrentUserName(); set { } }
+    // S9: lê o limite de desconto da sessão WPF — populado pelo AppSession.Login após autenticação.
+    public decimal MaxDiscountPercentage { get => ERP.WPF.State.AppSession.MaxDiscountPercentage; set { } }
 }
