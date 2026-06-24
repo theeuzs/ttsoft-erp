@@ -358,12 +358,15 @@ app.UseSerilogRequestLogging(opts =>
     };
 });
 
-app.UseSwagger();
-app.UseSwaggerUI(opt =>
+if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 {
-    opt.SwaggerEndpoint("/swagger/v1/swagger.json", "TTSoft ERP API v1");
-    opt.RoutePrefix = string.Empty;
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(opt =>
+    {
+        opt.SwaggerEndpoint("/swagger/v1/swagger.json", "TTSoft ERP API v1");
+        opt.RoutePrefix = "swagger"; // não na raiz — evita conflito com SPA
+    });
+}
 
 app.UseHttpsRedirection();
 app.UseRouting();
