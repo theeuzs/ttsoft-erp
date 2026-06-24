@@ -413,6 +413,107 @@ public class HaverServiceTests
 // ═══════════════════════════════════════════════════════════════════════════════
 //  INVENTÁRIO SERVICE
 // ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+//  FIDELIDADE SERVICE
+// ═══════════════════════════════════════════════════════════════════════════════
+public class FidelidadeServiceTests
+{
+    // S9: ResgatarPontosAsync usa ExecuteSqlInterpolatedAsync — requer SQLite.
+    [Fact]
+    public async Task ResgatarPontosAsync_SaldoSuficiente_DebitaERetornaValor()
+    {
+        var tid        = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+
+        using var db = TestDbSqlite.Create(tid, ctx =>
+        {
+            // PontosFidelidade tem FK para Customers — precisa do Customer primeiro
+            ctx.Customers.Add(new Customer { Id = customerId, Name = "Cliente Teste", TenantId = tid });
+            ctx.PontosFidelidade.Add(new ERP.Domain.Entities.PontosFidelidade
+            {
+                CustomerId = customerId, TenantId = tid,
+                Tipo = "Credito", Pontos = 500, Descricao = "Acúmulo", Data = DateTime.UtcNow
+            });
+        });
+
+        var tenant  = new FakeRequestTenant { TenantId = tid };
+        var service = new FidelidadeService(db, tenant);
+
+        var valor = await service.ResgatarPontosAsync(customerId, 100, "Resgate PDV");
+
+        // 100 pontos × R$ 0,01 = R$ 1,00
+        Assert.Equal(1.00m, valor);
+
+        // Confirma que o débito foi inserido
+        db.ChangeTracker.Clear();
+        var debito = await db.PontosFidelidade
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(p => p.CustomerId == customerId && p.Tipo == "Debito");
+        Assert.NotNull(debito);
+        Assert.Equal(100, debito!.Pontos);
+    }
+
+    [Fact]
+    public async Task ResgatarPontosAsync_SaldoInsuficiente_LancaExcecao()
+    {
+        var tid        = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+
+        using var db = TestDbSqlite.Create(tid, ctx =>
+        {
+            ctx.Customers.Add(new Customer { Id = customerId, Name = "Cliente Teste", TenantId = tid });
+            ctx.PontosFidelidade.Add(new ERP.Domain.Entities.PontosFidelidade
+            {
+                CustomerId = customerId, TenantId = tid,
+                Tipo = "Credito", Pontos = 50, Descricao = "Acúmulo", Data = DateTime.UtcNow
+            });
+        });
+
+        var tenant  = new FakeRequestTenant { TenantId = tid };
+        var service = new FidelidadeService(db, tenant);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.ResgatarPontosAsync(customerId, 200, "Resgate PDV"));
+
+        Assert.Contains("Saldo insuficiente", ex.Message);
+    }
+
+    // S9: teste de concorrência — dois resgates simultâneos com saldo para apenas um.
+    // Com INSERT condicional atômico, exatamente um deve ter sucesso e o outro deve falhar.
+    [Fact]
+    public async Task ResgatarPontosAsync_DoisResgatesConcorrentes_ApenasUmSucede()
+    {
+        var tid        = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+
+        using var db = TestDbSqlite.Create(tid, ctx =>
+        {
+            ctx.Customers.Add(new Customer { Id = customerId, Name = "Cliente Teste", TenantId = tid });
+            ctx.PontosFidelidade.Add(new ERP.Domain.Entities.PontosFidelidade
+            {
+                CustomerId = customerId, TenantId = tid,
+                Tipo = "Credito", Pontos = 1000, Descricao = "Acúmulo", Data = DateTime.UtcNow
+            });
+        });
+
+        var tenant   = new FakeRequestTenant { TenantId = tid };
+        var service1 = new FidelidadeService(db, tenant);
+        var service2 = new FidelidadeService(db, tenant);
+
+        // Dispara dois resgates de 1000 pts cada — saldo só cobre um
+        var t1 = service1.ResgatarPontosAsync(customerId, 1000, "PDV1");
+        var t2 = service2.ResgatarPontosAsync(customerId, 1000, "PDV2");
+
+        var resultados = await Task.WhenAll(
+            t1.ContinueWith(t => t.Exception is null ? "ok" : "fail"),
+            t2.ContinueWith(t => t.Exception is null ? "ok" : "fail"));
+
+        // Exatamente um deve ter sucesso
+        Assert.Single(resultados, r => r == "ok");
+        Assert.Single(resultados, r => r == "fail");
+    }
+}
+
 public class InventarioServiceTests
 {
     [Fact]

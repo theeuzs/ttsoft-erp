@@ -61,20 +61,35 @@ public class FidelidadeService : IFidelidadeService
 
     public async Task<decimal> ResgatarPontosAsync(Guid customerId, int pontos, string descricao = "Resgate PDV")
     {
-        var saldo = await GetSaldoAsync(customerId);
-        if (pontos > saldo)
-            throw new InvalidOperationException($"Saldo insuficiente: {saldo} pts disponíveis, {pontos} pts solicitados.");
+        if (pontos <= 0)
+            throw new InvalidOperationException("Quantidade de pontos inválida.");
 
-        _db.Set<PontosFidelidade>().Add(new PontosFidelidade
-        {
-            CustomerId = customerId,
-            Tipo       = "Debito",
-            Pontos     = pontos,
-            Descricao  = descricao,
-            Data       = DateTime.UtcNow
-        });
+        var tenantId = _tenant.TenantId;
+        var agora    = DateTime.UtcNow;
+        var novoId   = Guid.NewGuid();
 
-        await _db.SaveChangesAsync();
+        // S9 FIX: INSERT condicional atômico — mesmo padrão do HaverService.LancarAsync.
+        // Antes: read saldo → check → insert debit (três operações separadas).
+        // Vetor: dois PDVs simultâneos com cliente de 1.000 pts → ambos lêem saldo=1.000,
+        //        ambos passam no check, ambos debitam → cliente usa 2.000 pts com saldo de 1.000.
+        // Agora: a condição vive no WHERE do INSERT — sem janela de race entre read e write.
+        // rows=0 pode significar saldo insuficiente OU cliente de outro tenant (ambos bloqueados).
+        var rows = await _db.Database.ExecuteSqlInterpolatedAsync(
+            $@"INSERT INTO PontosFidelidade
+                   (Id, TenantId, CustomerId, Tipo, Pontos, Descricao, Data, CreatedAt, UpdatedAt, IsDeleted)
+               SELECT {novoId}, {tenantId}, {customerId}, 'Debito', {pontos}, {descricao}, {agora}, {agora}, {agora}, 0
+               WHERE (
+                   SELECT COALESCE(SUM(CASE WHEN Tipo = 'Credito' THEN Pontos ELSE -Pontos END), 0)
+                   FROM   PontosFidelidade
+                   WHERE  CustomerId = {customerId}
+                     AND  TenantId   = {tenantId}
+                     AND  IsDeleted  = 0
+               ) >= {pontos}");
+
+        if (rows == 0)
+            throw new InvalidOperationException(
+                $"Saldo insuficiente para resgatar {pontos} pontos.");
+
         return pontos * ValorPorPonto;
     }
 
