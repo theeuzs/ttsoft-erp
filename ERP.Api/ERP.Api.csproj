@@ -40,6 +40,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- S9: schemas XSD NF-e v4.00 (NT2026.004) copiados para o diretório de saída.
+         Carregados em runtime pelo NfeImportService para validação estrutural do XML. -->
+    <None Update="Schemas\*.xsd">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\ERP.Application\ERP.Application.csproj" />
     <ProjectReference Include="..\ERP.Infrastructure\ERP.Infrastructure.csproj" />
     <ProjectReference Include="..\ERP.Persistence\ERP.Persistence.csproj" />
