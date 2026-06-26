@@ -1,6 +1,6 @@
 using ERP.Application.Interfaces;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using System;
 using System.Linq;
 using System.Net.Http;
@@ -27,7 +27,7 @@ namespace ERP.Infrastructure.Services;
 /// </summary>
 public class SefazConsultaService : ISefazConsultaService
 {
-    private readonly ILogger<SefazConsultaService> _log;
+    
     private readonly string _tpAmb;
     private readonly X509Certificate2?  _cert;
 
@@ -45,7 +45,7 @@ public class SefazConsultaService : ISefazConsultaService
         { 53, "https://nfe.sefazrs.rs.gov.br/ws/NFeConsultaProtocolo/NFeConsultaProtocolo4.asmx" }, // DF
         { 32, "https://nfe.sefazrs.rs.gov.br/ws/NFeConsultaProtocolo/NFeConsultaProtocolo4.asmx" }, // ES
         { 25, "https://nfe.sefazrs.rs.gov.br/ws/NFeConsultaProtocolo/NFeConsultaProtocolo4.asmx" }, // PB
-        { 41, "https://nfe.sefazrs.rs.gov.br/ws/NFeConsultaProtocolo/NFeConsultaProtocolo4.asmx" }, // PR ← Vila Verde
+        { 41, "https://nfe.sefa.pr.gov.br/nfe/NFeConsultaProtocolo4" }, // PR ← Vila Verde (SEFA-PR)
         { 33, "https://nfe.sefazrs.rs.gov.br/ws/NFeConsultaProtocolo/NFeConsultaProtocolo4.asmx" }, // RJ
         { 11, "https://nfe.sefazrs.rs.gov.br/ws/NFeConsultaProtocolo/NFeConsultaProtocolo4.asmx" }, // RO
         { 14, "https://nfe.sefazrs.rs.gov.br/ws/NFeConsultaProtocolo/NFeConsultaProtocolo4.asmx" }, // RR
@@ -75,9 +75,8 @@ public class SefazConsultaService : ISefazConsultaService
         { 35, "https://nfe.fazenda.sp.gov.br/ws/nfeConsulta2.asmx" },                                       // SP
     };
 
-    public SefazConsultaService(IConfiguration config, ILogger<SefazConsultaService> log)
+    public SefazConsultaService(IConfiguration config)
     {
-        _log    = log;
         _tpAmb  = config["Sefaz:Ambiente"] ?? "1";
 
         var certPath   = config["Sefaz:CertificadoPath"];
@@ -89,17 +88,17 @@ public class SefazConsultaService : ISefazConsultaService
             {
                 _cert = new X509Certificate2(certPath, certSenha,
                     X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet);
-                _log.LogInformation("Sefaz: certificado carregado — {Subject} válido até {NotAfter:dd/MM/yyyy}",
+                Log.Information("Sefaz: certificado carregado — {Subject} válido até {NotAfter:dd/MM/yyyy}",
                     _cert.Subject, _cert.NotAfter);
             }
             catch (Exception ex)
             {
-                _log.LogWarning(ex, "Sefaz: falha ao carregar certificado de {Path} — Fase 3 desativada.", certPath);
+                Log.Warning(ex, "Sefaz: falha ao carregar certificado de {Path} — Fase 3 desativada.", certPath);
             }
         }
         else
         {
-            _log.LogInformation("Sefaz: CertificadoPath não configurado — consulta SEFAZ (Fase 3) desativada.");
+            Log.Information("Sefaz: CertificadoPath não configurado — consulta SEFAZ (Fase 3) desativada.");
         }
     }
 
@@ -110,15 +109,38 @@ public class SefazConsultaService : ISefazConsultaService
 
         if (string.IsNullOrWhiteSpace(chNFe) || chNFe.Length != 44)
         {
-            _log.LogWarning("Sefaz: chNFe inválida '{ChNFe}' — consulta ignorada.", chNFe);
+            Log.Warning("Sefaz: chNFe inválida '{ChNFe}' — consulta ignorada.", chNFe);
             return null;
         }
 
-        if (!int.TryParse(chNFe[..2], out var cUF) || !Endpoints.TryGetValue(cUF, out var endpoint))
+        if (!int.TryParse(chNFe[..2], out var cUF))
         {
-            _log.LogWarning("Sefaz: UF {CUF} sem endpoint mapeado — consulta ignorada.", chNFe[..2]);
+            Log.Warning("Sefaz: UF {CUF} inválida na chNFe — consulta ignorada.", chNFe[..2]);
             return null;
         }
+
+        // Homologação usa endpoints diferentes de produção
+        bool ehHomologacao = _tpAmb == "2";
+        string? endpoint;
+        if (ehHomologacao)
+        {
+            // Para homologação, PR e estados SVRS usam subdomínio nfe-homologacao
+            var svrsHom = "https://nfe-homologacao.sefazrs.rs.gov.br/ws/NFeConsultaProtocolo/NFeConsultaProtocolo4.asmx";
+            var svrsUFs = new[] { 12,27,16,53,32,25,41,33,11,14,42,28,17,43 };
+            endpoint = svrsUFs.Contains(cUF) ? svrsHom : Endpoints.GetValueOrDefault(cUF);
+        }
+        else
+        {
+            endpoint = Endpoints.GetValueOrDefault(cUF);
+        }
+
+        if (endpoint is null)
+        {
+            Log.Warning("Sefaz: UF {CUF} sem endpoint mapeado — consulta ignorada.", cUF);
+            return null;
+        }
+
+        Log.Information("Sefaz: consultando {Endpoint} para chNFe {ChNFe} (Ambiente={Amb})", endpoint, chNFe, _tpAmb);
 
         var soap = BuildSoapEnvelope(cUF, chNFe, _tpAmb);
 
@@ -139,40 +161,51 @@ public class SefazConsultaService : ISefazConsultaService
         }
         catch (Exception ex)
         {
-            _log.LogWarning(ex, "Sefaz: falha ao consultar {Endpoint} para chNFe {ChNFe}.", endpoint, chNFe);
+            Log.Warning(ex, "Sefaz: falha ao consultar {Endpoint} para chNFe {ChNFe}.", endpoint, chNFe);
             return null; // skip gracioso — SEFAZ temporariamente indisponível
         }
 
         var xml = await resp.Content.ReadAsStringAsync(ct);
+        Log.Debug("Sefaz: resposta bruta HTTP {Status} para {ChNFe}: {Xml}",
+            (int)resp.StatusCode, chNFe, xml.Length > 800 ? xml[..800] : xml);
         return ParseRetorno(xml, chNFe);
     }
 
     // ── SOAP envelope NFeConsultaProtocolo4 ─────────────────────────────────
+    // ATENÇÃO: sem qualquer whitespace entre tags — SEFAZ retorna cStat=588
+    // se houver espaços, tabs ou quebras de linha entre elementos XML.
     private static string BuildSoapEnvelope(int cUF, string chNFe, string tpAmb) =>
-        $"""
-         <?xml version="1.0" encoding="UTF-8"?>
-         <soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
-           <soap12:Header>
-             <nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4">
-               <cUF>{cUF}</cUF>
-               <versaoDados>4.00</versaoDados>
-             </nfeCabecMsg>
-           </soap12:Header>
-           <soap12:Body>
-             <nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4">
-               <consSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">
-                 <tpAmb>{tpAmb}</tpAmb>
-                 <xServ>CONSULTAR</xServ>
-                 <chNFe>{chNFe}</chNFe>
-               </consSitNFe>
-             </nfeDadosMsg>
-           </soap12:Body>
-         </soap12:Envelope>
-         """;
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+        "<soap12:Envelope xmlns:soap12=\"http://www.w3.org/2003/05/soap-envelope\">" +
+        "<soap12:Header>" +
+        "<nfeCabecMsg xmlns=\"http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4\">" +
+        $"<cUF>{cUF}</cUF>" +
+        "<versaoDados>4.00</versaoDados>" +
+        "</nfeCabecMsg>" +
+        "</soap12:Header>" +
+        "<soap12:Body>" +
+        "<nfeDadosMsg xmlns=\"http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4\">" +
+        $"<consSitNFe xmlns=\"http://www.portalfiscal.inf.br/nfe\" versao=\"4.00\">" +
+        $"<tpAmb>{tpAmb}</tpAmb>" +
+        "<xServ>CONSULTAR</xServ>" +
+        $"<chNFe>{chNFe}</chNFe>" +
+        "</consSitNFe>" +
+        "</nfeDadosMsg>" +
+        "</soap12:Body>" +
+        "</soap12:Envelope>";
 
     // ── Parse da resposta retConsSitNFe ──────────────────────────────────────
     private SefazConsultaResultado? ParseRetorno(string xml, string chNFe)
     {
+        // Verifica se é XML antes de tentar parsear (evita crash em respostas HTML/erro)
+        var trimmed = xml.TrimStart();
+        if (!trimmed.StartsWith("<"))
+        {
+            Log.Warning("Sefaz: resposta não é XML para {ChNFe} (primeiros 200 chars): {Snippet}",
+                chNFe, xml[..Math.Min(200, xml.Length)]);
+            return null;
+        }
+
         try
         {
             var doc  = XDocument.Parse(xml);
@@ -182,7 +215,7 @@ public class SefazConsultaService : ISefazConsultaService
             var ret  = doc.Descendants(ns + "retConsSitNFe").FirstOrDefault();
             if (ret is null)
             {
-                _log.LogWarning("Sefaz: resposta sem retConsSitNFe para {ChNFe}. XML: {Xml}", chNFe, xml[..Math.Min(500, xml.Length)]);
+                Log.Warning("Sefaz: resposta sem retConsSitNFe para {ChNFe}. XML: {Xml}", chNFe, xml[..Math.Min(500, xml.Length)]);
                 return null;
             }
 
@@ -195,7 +228,7 @@ public class SefazConsultaService : ISefazConsultaService
             // cStat 100 = Autorizado; 150 = Autorizado fora de prazo (contingência)
             bool autorizada = cStat is "100" or "150";
 
-            _log.LogInformation("Sefaz: chNFe={ChNFe} → cStat={CStat} {XMotivo} nProt={NProt}",
+            Log.Information("Sefaz: chNFe={ChNFe} → cStat={CStat} {XMotivo} nProt={NProt}",
                 chNFe, cStat, xMotivo, nProt);
 
             return new SefazConsultaResultado(cStat, xMotivo, nProt,
@@ -203,7 +236,7 @@ public class SefazConsultaService : ISefazConsultaService
         }
         catch (Exception ex)
         {
-            _log.LogWarning(ex, "Sefaz: erro ao parsear retorno para {ChNFe}.", chNFe);
+            Log.Warning(ex, "Sefaz: erro ao parsear retorno para {ChNFe}.", chNFe);
             return null;
         }
     }
