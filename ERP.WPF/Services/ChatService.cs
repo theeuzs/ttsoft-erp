@@ -106,7 +106,7 @@ public class ChatService
                 Mensagens.Add(new ChatMensagem
                 {
                     De = "Sistema", Hora = DateTime.Now.ToString("HH:mm"),
-                    Texto = "❌ Sem conexão com o servidor. Faça um git push para publicar o chat na API.",
+                    Texto = "❌ Sem conexão com o servidor. Tente novamente.",
                     EhMinha = false 
                 }));
             return;
