@@ -23,3 +23,7 @@ config_recibo.json
 
 *.userprefs
 secrets.json
+ERP.WPF/appsettings.json
+ERP.WPF/appsettings.*.json
+
+ERP.WPF/appsettings.json
