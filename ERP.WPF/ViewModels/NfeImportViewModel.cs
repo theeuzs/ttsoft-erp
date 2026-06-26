@@ -65,9 +65,31 @@ public class NfeImportViewModel : BaseViewModel
                 // 🔥 A MÁGICA ACONTECE AQUI: O motor lê o arquivo e joga na nossa gaveta!
                 NotaFiscal = await _nfeImportService.LerXmlNfeAsync(openFileDialog.FileName);
             }
+            catch (System.IO.FileNotFoundException ex)
+            {
+                MessageBox.Show($"Arquivo não encontrado:\n{ex.FileName}",
+                    "Arquivo não encontrado", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Assinatura") || ex.Message.Contains("assinatura") || ex.Message.Contains("certificado") || ex.Message.Contains("adulterado"))
+            {
+                MessageBox.Show(
+                    $"⚠️ Esta nota fiscal não passou na verificação de segurança.\n\n" +
+                    $"Motivo: {ex.Message}\n\n" +
+                    $"O arquivo pode ter sido modificado após a emissão. " +
+                    $"Solicite o XML original diretamente ao fornecedor.",
+                    "Nota Fiscal inválida", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("SEFAZ") || ex.Message.Contains("rejeitada"))
+            {
+                MessageBox.Show(
+                    $"⚠️ Nota fiscal rejeitada pela SEFAZ.\n\n{ex.Message}\n\n" +
+                    $"Não é possível importar uma nota não autorizada.",
+                    "Rejeitada pela SEFAZ", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erro ao ler o XML: {ex.Message}", "Erro de Leitura", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Erro ao ler o arquivo XML:\n\n{ex.Message}",
+                    "Erro de Leitura", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
