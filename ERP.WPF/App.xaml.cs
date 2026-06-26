@@ -340,6 +340,7 @@ public partial class App : System.Windows.Application
         services.AddScoped<IContaPagarService, ContaPagarService>();
         services.AddScoped<IContaReceberService, ContaReceberService>();
         services.AddScoped<INfeImportService, NfeImportService>();
+        services.AddScoped<ISefazConsultaService, SefazConsultaService>();
         services.AddScoped<ISpedService, SpedService>();
         services.AddScoped<INfceEmissionService, NfceEmissionService>();
         services.AddScoped<INfeEmissionService, NfeEmissionService>();

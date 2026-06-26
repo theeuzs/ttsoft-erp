@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+using System.Security.Cryptography.Xml;
 using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
@@ -15,11 +18,13 @@ namespace ERP.Application.Services
 {
     public class NfeImportService : INfeImportService
     {
-        private readonly IUnitOfWork _uow;
+        private readonly IUnitOfWork             _uow;
+        private readonly ISefazConsultaService?  _sefaz; // Fase 3 — opcional (null quando sem cert)
 
-        public NfeImportService(IUnitOfWork uow)
+        public NfeImportService(IUnitOfWork uow, ISefazConsultaService? sefaz = null)
         {
-            _uow = uow;
+            _uow   = uow;
+            _sefaz = sefaz;
         }
 
         public async Task<NfeImportDto> LerXmlNfeAsync(string caminhoArquivo)
@@ -67,6 +72,15 @@ namespace ERP.Application.Services
                 XDocument doc;
                 using (var reader = XmlReader.Create(caminhoArquivo, settings))
                     doc = XDocument.Load(reader);
+
+                // ── Fase 2: validação da assinatura digital ICP-Brasil ───────────────
+                // Carrega o XML como XmlDocument (obrigatório para SignedXml) com
+                // PreserveWhitespace=true — sem isso a canonicalização C14N diverge e a
+                // verificação falha mesmo em arquivos íntegros.
+                var xmlDocAssinatura = new XmlDocument { PreserveWhitespace = true };
+                xmlDocAssinatura.Load(caminhoArquivo);
+                ValidarAssinaturaXml(xmlDocAssinatura);
+                // ────────────────────────────────────────────────────────────────────
 
                 var infNFe = doc.Descendants().FirstOrDefault(x => x.Name.LocalName == "infNFe")
                     ?? throw new Exception("Arquivo inválido. Isso não parece ser um XML de NF-e.");
@@ -161,7 +175,120 @@ namespace ERP.Application.Services
                 }
             }
 
+            // ── Fase 3: consulta SEFAZ para confirmar autorização ────────────────
+            // Verifica que a chNFe existe no ambiente SEFAZ, está autorizada e não foi
+            // cancelada. Skip gracioso quando ISefazConsultaService não tem certificado
+            // configurado (dev/staging) ou quando SEFAZ está temporariamente indisponível.
+            if (_sefaz is not null && !string.IsNullOrWhiteSpace(dto.ChaveAcesso))
+            {
+                var resultado = await _sefaz.ConsultarAsync(dto.ChaveAcesso);
+                if (resultado is not null && !resultado.Autorizada)
+                    throw new InvalidOperationException(
+                        $"NF-e rejeitada pela SEFAZ: {resultado.CStat} — {resultado.XMotivo}. " +
+                        $"A nota não pode ser importada pois não está autorizada.");
+            }
+            // ────────────────────────────────────────────────────────────────────
+
             return dto;
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // Fase 2 — Validação de assinatura digital ICP-Brasil
+        // ════════════════════════════════════════════════════════════════════
+        /// <summary>
+        /// Verifica a assinatura digital da NF-e contra o certificado embutido no XML.
+        /// Garante que o arquivo não foi adulterado após assinatura pelo emissor.
+        ///
+        /// O que valida:
+        ///   1. Presença de pelo menos um elemento Signature (xmldsig)
+        ///   2. Validade temporal do certificado (NotBefore / NotAfter)
+        ///   3. Integridade criptográfica: DigestValue (hash do infNFe) e SignatureValue (RSA/ECDSA)
+        ///   4. Cadeia ICP-Brasil: verifica contra CAs instaladas no SO; log de aviso se raiz ausente
+        ///
+        /// Limitação: não consulta LCR/OCSP — revogação de certificado requer Fase 3 (SEFAZ).
+        /// </summary>
+        private static void ValidarAssinaturaXml(XmlDocument xmlDoc)
+        {
+            const string NsDigSig = "http://www.w3.org/2000/09/xmldsig#";
+
+            // 1. Localiza elementos Signature (pode ter 2: NFe + protNFe)
+            var signatures = xmlDoc.GetElementsByTagName("Signature", NsDigSig);
+            if (signatures.Count == 0)
+                throw new InvalidOperationException(
+                    "NF-e sem assinatura digital — arquivo possivelmente forjado ou corrompido.");
+
+            // Valida a primeira assinatura (NFe — assina infNFe)
+            var sigElement = signatures[0] as XmlElement
+                ?? throw new InvalidOperationException("Elemento Signature inválido.");
+
+            var signedXml = new SignedXml(xmlDoc);
+            signedXml.LoadXml(sigElement);
+
+            // 2. Extrai certificado do KeyInfo
+            X509Certificate2? cert = null;
+            foreach (KeyInfoClause clause in signedXml.KeyInfo)
+            {
+                if (clause is KeyInfoX509Data x509Data && x509Data.Certificates.Count > 0)
+                {
+                    cert = x509Data.Certificates[0] as X509Certificate2;
+                    break;
+                }
+            }
+
+            if (cert is null)
+                throw new InvalidOperationException(
+                    "Certificado digital não encontrado na assinatura da NF-e.");
+
+            // 3. Validade temporal do certificado
+            var agora = DateTime.UtcNow;
+            if (agora < cert.NotBefore.ToUniversalTime() || agora > cert.NotAfter.ToUniversalTime())
+                throw new InvalidOperationException(
+                    $"Certificado digital do emissor expirado ou ainda não válido. " +
+                    $"Válido: {cert.NotBefore:dd/MM/yyyy} a {cert.NotAfter:dd/MM/yyyy}.");
+
+            // 4. Verificação criptográfica (DigestValue + SignatureValue)
+            // verifySignatureOnly=true: verifica a crypto sem checar cadeia de confiança aqui
+            bool assinaturaValida = signedXml.CheckSignature(cert, verifySignatureOnly: true);
+            if (!assinaturaValida)
+                throw new InvalidOperationException(
+                    "Assinatura digital da NF-e inválida — o arquivo pode ter sido adulterado após a emissão.");
+
+            // 5. Cadeia ICP-Brasil (opcional — depende das CAs raiz instaladas no SO)
+            // Em Windows: instalar "Autoridade Certificadora Raiz Brasileira v10" via certmgr.msc
+            // Em Linux (Azure App Service): montar bundle ICP-Brasil via DOTNET_SSL_DIRS ou custom trust store
+            using var chain = new X509Chain();
+            chain.ChainPolicy.RevocationMode      = X509RevocationMode.NoCheck;  // sem CRL/OCSP online
+            chain.ChainPolicy.VerificationFlags   = X509VerificationFlags.IgnoreRootRevocationUnknown
+                                                  | X509VerificationFlags.AllowUnknownCertificateAuthority;
+
+            chain.Build(cert); // ignoramos o bool — avaliamos os flags individualmente abaixo
+
+            // Falha apenas em erros criptográficos reais (cert expirado já foi pego acima)
+            // UntrustedRoot é warning — raiz ICP-Brasil pode não estar no store do SO
+            var errosCriticos = chain.ChainStatus
+                .Where(s => s.Status is X509ChainStatusFlags.NotSignatureValid
+                                     or X509ChainStatusFlags.Revoked)
+                .ToList();
+
+            if (errosCriticos.Count > 0)
+            {
+                var detalhes = string.Join("; ", errosCriticos.Select(s => s.StatusInformation.Trim()));
+                throw new InvalidOperationException(
+                    $"Cadeia de certificado ICP-Brasil com erro crítico: {detalhes}");
+            }
+
+            // Aviso se raiz ICP-Brasil não encontrada (não bloqueia importação)
+            var avisoRaiz = chain.ChainStatus
+                .Any(s => s.Status == X509ChainStatusFlags.UntrustedRoot
+                        || s.Status == X509ChainStatusFlags.PartialChain);
+            if (avisoRaiz)
+            {
+                Serilog.Log.Warning(
+                    "NfeImportService: raiz ICP-Brasil não encontrada no trust store do SO. " +
+                    "Assinatura criptográfica verificada, mas cadeia de confiança incompleta. " +
+                    "Instale a CA raiz ICP-Brasil para validação completa. Cert: {Subject}",
+                    cert.Subject);
+            }
         }
 
         public async Task<(int Novos, int Atualizados, Guid PedidoCompraId)> SalvarEAtualizarEstoqueAsync(NfeImportDto notaFiscal)
