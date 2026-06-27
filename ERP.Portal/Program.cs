@@ -12,6 +12,7 @@ var apiUrl = builder.Configuration["ApiUrl"] ?? "https://erp-ttsoft-api-g8bde4f6
 builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(apiUrl) });
 builder.Services.AddBlazoredLocalStorage();
 builder.Services.AddScoped<ERP.Portal.Services.AuthService>();
+builder.Services.AddScoped<CadastroApiService>();
 builder.Services.AddScoped<ERP.Portal.Services.ApiClient>();
 builder.Services.AddSingleton(sp =>
     new ERP.Portal.Services.PortalChatService(apiUrl));

@@ -1,0 +1,137 @@
+@page "/cadastro"
+@using ERP.Application.DTOs
+@using ERP.Portal.Services
+@inject CadastroApiService CadastroService
+@inject NavigationManager Nav
+
+<div style="display:flex; align-items:center; justify-content:center; min-height:100vh; background:linear-gradient(135deg,#1E293B,#1E62A6);">
+    <div style="background:white; border-radius:16px; padding:40px; width:440px; box-shadow:0 20px 60px rgba(0,0,0,.3);">
+
+        @if (_sucesso)
+        {
+            <!-- Tela de sucesso -->
+            <div style="text-align:center;">
+                <div style="font-size:48px; margin-bottom:16px;">✅</div>
+                <div style="font-size:22px; font-weight:800; color:#16A34A; margin-bottom:8px;">Cadastro realizado!</div>
+                <div style="font-size:14px; color:#64748B; margin-bottom:24px; line-height:1.6;">
+                    @_mensagemSucesso<br/>
+                    <strong>Verifique seu e-mail</strong> para os dados de acesso.
+                </div>
+                <button @onclick="IrParaLogin"
+                        style="width:100%; background:#1E62A6; color:white; border:none; padding:12px;
+                        border-radius:8px; font-size:15px; font-weight:700; cursor:pointer;">
+                    Acessar o Portal →
+                </button>
+            </div>
+        }
+        else
+        {
+            <!-- Formulário de cadastro -->
+            <div style="text-align:center; margin-bottom:28px;">
+                <div style="font-size:32px;">🏗️</div>
+                <div style="font-size:22px; font-weight:800; color:#1E62A6; margin-top:8px;">TTSoft ERP</div>
+                <div style="font-size:13px; color:#94A3B8; margin-top:4px;">Criar nova conta</div>
+            </div>
+
+            <!-- CNPJ -->
+            <div style="margin-bottom:14px;">
+                <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">CNPJ DA EMPRESA *</label>
+                <input @bind="_dto.Cnpj" placeholder="00.000.000/0000-00"
+                       style="width:100%; padding:10px; border:1px solid #CBD5E1; border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+            </div>
+
+            <!-- Razão Social -->
+            <div style="margin-bottom:14px;">
+                <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">RAZÃO SOCIAL *</label>
+                <input @bind="_dto.RazaoSocial" placeholder="Nome da sua empresa"
+                       style="width:100%; padding:10px; border:1px solid #CBD5E1; border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+            </div>
+
+            <!-- Email -->
+            <div style="margin-bottom:14px;">
+                <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">E-MAIL *</label>
+                <input @bind="_dto.Email" type="email" placeholder="contato@suaempresa.com.br"
+                       style="width:100%; padding:10px; border:1px solid #CBD5E1; border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+            </div>
+
+            <!-- WhatsApp -->
+            <div style="margin-bottom:14px;">
+                <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">WHATSAPP</label>
+                <input @bind="_dto.Whatsapp" placeholder="(41) 99999-9999"
+                       style="width:100%; padding:10px; border:1px solid #CBD5E1; border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+            </div>
+
+            <!-- Cidade / Estado -->
+            <div style="display:flex; gap:10px; margin-bottom:14px;">
+                <div style="flex:2;">
+                    <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">CIDADE</label>
+                    <input @bind="_dto.Cidade" placeholder="Curitiba"
+                           style="width:100%; padding:10px; border:1px solid #CBD5E1; border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+                </div>
+                <div style="flex:1;">
+                    <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">ESTADO</label>
+                    <input @bind="_dto.Estado" placeholder="PR" maxlength="2"
+                           style="width:100%; padding:10px; border:1px solid #CBD5E1; border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+                </div>
+            </div>
+
+            <!-- Senha -->
+            <div style="margin-bottom:20px;">
+                <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">SENHA DE ACESSO *</label>
+                <input @bind="_dto.Senha" type="password" placeholder="Mínimo 6 caracteres"
+                       style="width:100%; padding:10px; border:1px solid #CBD5E1; border-radius:8px; font-size:14px; box-sizing:border-box;"/>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_erro))
+            {
+                <div style="background:#FEE2E2; color:#EF4444; padding:10px; border-radius:8px; font-size:13px; margin-bottom:16px;">
+                    ⚠️ @_erro
+                </div>
+            }
+
+            <button @onclick="CadastrarAsync" disabled="@_loading"
+                    style="width:100%; background:#1E62A6; color:white; border:none; padding:12px;
+                    border-radius:8px; font-size:15px; font-weight:700; cursor:pointer; margin-bottom:12px;">
+                @(_loading ? "Criando conta..." : "CRIAR CONTA GRATUITA")
+            </button>
+
+            <div style="text-align:center; font-size:13px; color:#64748B;">
+                Já tem conta?
+                <span @onclick="IrParaLogin"
+                      style="color:#1E62A6; font-weight:600; cursor:pointer; text-decoration:underline;">
+                    Entrar
+                </span>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private CadastroRequestDto _dto     = new();
+    private string             _erro    = "";
+    private bool               _loading = false;
+    private bool               _sucesso = false;
+    private string             _mensagemSucesso = "";
+
+    private async Task CadastrarAsync()
+    {
+        _loading = true;
+        _erro    = "";
+
+        var (sucesso, mensagem, loginUrl) = await CadastroService.CadastrarAsync(_dto);
+
+        _loading = false;
+
+        if (sucesso)
+        {
+            _sucesso         = true;
+            _mensagemSucesso = mensagem;
+        }
+        else
+        {
+            _erro = mensagem;
+        }
+    }
+
+    private void IrParaLogin() => Nav.NavigateTo("/login");
+}
