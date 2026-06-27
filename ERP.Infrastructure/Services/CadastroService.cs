@@ -127,7 +127,7 @@ public class CadastroService : ICadastroService
         try
         {
             var smtpHost  = _config["Email:SmtpHost"]    ?? "smtppro.zoho.com";
-            var smtpPort  = int.Parse(_config["Email:SmtpPort"] ?? "465");
+            var smtpPort  = int.Parse(_config["Email:SmtpPort"] ?? "587");
             var smtpUser  = _config["Email:Usuario"]     ?? "";
             var smtpSenha = _config["Email:Senha"]       ?? "";
 
