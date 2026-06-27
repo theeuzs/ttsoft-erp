@@ -61,7 +61,7 @@ public class AuthService : IAuthService
                 ? DateTime.UtcNow.AddMinutes(MinutosBloqueio)
                 : null;
 
-            await _userRepository.UpdateLoginAttemptAsync(user.Id, n, lockout);
+            await _userRepository.UpdateLoginAttemptAsync(user.Id, tenantId, n, lockout);
 
             Log.Warning("Senha errada: '{Username}'. Tentativa {N}/{Max}.", dto.Username, n, MaxTentativas);
 
@@ -74,7 +74,7 @@ public class AuthService : IAuthService
 
         // Sucesso — reset contador
         if (user.FailedLoginAttempts > 0 || user.LockoutEndUtc.HasValue)
-            await _userRepository.UpdateLoginAttemptAsync(user.Id, 0, null);
+            await _userRepository.UpdateLoginAttemptAsync(user.Id, tenantId, 0, null);
 
         Log.Information("Login OK: '{Username}' ({Nome}){Flag}",
             user.Username, user.Name,

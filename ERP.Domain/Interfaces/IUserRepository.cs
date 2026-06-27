@@ -19,7 +19,7 @@ public interface IUserRepository
     Task AddAsync(User user);
     Task DeleteAsync(Guid id);
     /// <summary>Persiste tentativas de login falhadas e/ou reset do contador.</summary>
-    Task UpdateLoginAttemptAsync(Guid userId, int failedAttempts, DateTime? lockoutEndUtc);
+    Task UpdateLoginAttemptAsync(Guid userId, Guid tenantId, int failedAttempts, DateTime? lockoutEndUtc);
     Task<User?> GetByIdAsync(Guid userId);
     Task UpdatePasswordAsync(Guid userId, string newPasswordHash, bool mustChangePassword);
 }

@@ -89,7 +89,7 @@ namespace ERP.Tests.Application.Security
                 new LoginDto { Username = "joao", Password = "Senha@123" }, TenantTeste);
 
             _repoMock.Verify(r =>
-                r.UpdateLoginAttemptAsync(user.Id, 0, null),
+                r.UpdateLoginAttemptAsync(user.Id, TenantTeste, 0, null),
                 Times.Once);
         }
 
@@ -118,7 +118,7 @@ namespace ERP.Tests.Application.Security
 
             result.Sucedeu.Should().BeFalse();
             _repoMock.Verify(r =>
-                r.UpdateLoginAttemptAsync(user.Id, 2, null),
+                r.UpdateLoginAttemptAsync(user.Id, TenantTeste, 2, null),
                 Times.Once);
         }
 
@@ -137,6 +137,7 @@ namespace ERP.Tests.Application.Security
             _repoMock.Verify(r =>
                 r.UpdateLoginAttemptAsync(
                     user.Id,
+                    TenantTeste,
                     5,
                     It.Is<DateTime?>(d => d.HasValue && d.Value > DateTime.UtcNow)),
                 Times.Once);
@@ -155,7 +156,7 @@ namespace ERP.Tests.Application.Security
             result.Sucedeu.Should().BeFalse();
             result.Mensagem.Should().Contain("bloqueada");
             _repoMock.Verify(r =>
-                r.UpdateLoginAttemptAsync(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<DateTime?>()),
+                r.UpdateLoginAttemptAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<DateTime?>()),
                 Times.Never);
         }
 
