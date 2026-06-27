@@ -1,4 +1,4 @@
-using ERP.Application.DTOs;
+using ERP.Portal.Models;
 using System.Net.Http.Json;
 
 namespace ERP.Portal.Services;
