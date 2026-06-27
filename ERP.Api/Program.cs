@@ -136,6 +136,7 @@ builder.Services.AddSingleton<IRateLimitCounterStore, MemoryCacheRateLimitCounte
 builder.Services.AddSingleton<IRateLimitConfiguration, RateLimitConfiguration>();
 builder.Services.AddSingleton<IProcessingStrategy,    AsyncKeyLockProcessingStrategy>();
 builder.Services.AddScoped<ISefazConsultaService, SefazConsultaService>();
+builder.Services.AddScoped<ICadastroService, CadastroService>();
 
 // ── Fase 2 ────────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<ERP.Infrastructure.Services.ITransferenciaService,
