@@ -6,7 +6,11 @@
 
 @implements IDisposable
 
-@if (!Auth.LoggedIn)
+@if (!Auth.LoggedIn && Nav.ToBaseRelativePath(Nav.Uri).StartsWith("cadastro", StringComparison.OrdinalIgnoreCase))
+{
+    @Body
+}
+else if (!Auth.LoggedIn)
 {
     <ERP.Portal.Pages.Login />
 }
