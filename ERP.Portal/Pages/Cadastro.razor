@@ -1,5 +1,5 @@
 @page "/cadastro"
-@using ERP.Application.DTOs
+@using ERP.Portal.Models
 @using ERP.Portal.Services
 @inject CadastroApiService CadastroService
 @inject NavigationManager Nav
@@ -78,7 +78,7 @@
             <!-- Senha -->
             <div style="margin-bottom:20px;">
                 <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">SENHA DE ACESSO *</label>
-                <input @bind="_dto.Senha" type="password" placeholder="Mínimo 8 caracteres com 1 número"
+                <input @bind="_dto.Senha" type="password" placeholder="Mínimo 12 caracteres com 1 número"
                        style="width:100%; padding:10px; border:1px solid #CBD5E1; border-radius:8px; font-size:14px; box-sizing:border-box;"/>
             </div>
 

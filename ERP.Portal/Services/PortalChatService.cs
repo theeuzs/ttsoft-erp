@@ -12,6 +12,7 @@ public class PortalChatService : IAsyncDisposable
 {
     private HubConnection? _connection;
     private readonly string _apiUrl;
+    private string _jwtToken = string.Empty; // S10: guardado para refresh no Closed
 
     public List<ChatMensagem> Mensagens   { get; } = new();
     public event Action?      OnMensagemNova;
@@ -25,6 +26,7 @@ public class PortalChatService : IAsyncDisposable
     {
         NomeUsuario = nomeUsuario;
         TenantId    = tenantId;
+        _jwtToken   = jwtToken; // S10: guardado para refresh automático no Closed
 
         if (_connection != null)
         {
@@ -118,11 +120,12 @@ public class PortalChatService : IAsyncDisposable
             catch { }
         });
 
-        // Reconexão automática: recarrega histórico
-        _connection.Reconnected += async _ =>
+        // S10 FIX: refresh do chatToken no Closed — token de 5 min pode ter expirado.
+        // Quando a conexão fecha (token expirado ou queda de rede), reconecta com token novo.
+        _connection.Closed += async _ =>
         {
-            // O hub re-envia o histórico automaticamente no OnConnectedAsync
-            await Task.CompletedTask;
+            await Task.Delay(2000);
+            await ConectarAsync(NomeUsuario, TenantId, _jwtToken);
         };
 
         try { await _connection.StartAsync(); }

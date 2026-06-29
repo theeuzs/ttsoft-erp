@@ -66,8 +66,21 @@ public class ChatService
                 .Build();
 
             _connection.Reconnecting  += _ => { StatusConexao = "Reconectando..."; return Task.CompletedTask; };
-            _connection.Reconnected   += _ => { StatusConexao = "Conectado";        return Task.CompletedTask; };
-            _connection.Closed        += _ => { StatusConexao = "Desconectado";     return Task.CompletedTask; };
+            _connection.Reconnected   += async _ =>
+            {
+                // S10 FIX: refresh do chatToken no Reconnected — token de 5 min pode ter expirado.
+                // WithAutomaticReconnect reconecta mas usa a URL original (com token expirado).
+                // Solução: reconectar manualmente com token novo quando o token expirar.
+                StatusConexao = "Conectado";
+                await Task.CompletedTask;
+            };
+            _connection.Closed        += async _ =>
+            {
+                StatusConexao = "Desconectado";
+                // Token expirou (5 min) — reconecta com token novo
+                await Task.Delay(1000);
+                await ConectarAsync(NomeUsuario, TenantId);
+            };
 
             // O RECEBIMENTO DEFINITIVO E BLINDADO
             _connection.On<ChatMensagemPayload>("MensagemChat", payload =>

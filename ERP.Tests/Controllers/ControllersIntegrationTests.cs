@@ -1595,4 +1595,154 @@ public class RbacNegativeTests : IntegrationTestBase
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//  S10 — REGRESSÃO N1: UpdateLoginAttemptAsync sem SetGlobalTenantId
+//  Garante que brute-force lockout funciona na API (não só no WPF).
+//  CRÍTICO: estes testes NÃO chamam AppDbContext.SetGlobalTenantId() no setup.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+[Collection("ErpApi")]
+public class S10BruteForceRegressaoTests : IClassFixture<ErpApiFactory>
+{
+    private readonly ErpApiFactory _factory;
+
+    // CNPJ fictício com dígitos verificadores válidos para o teste
+    private const string CnpjTeste = "11222333000181";
+
+    // Hash BCrypt de "SenhaCorreta@123" — pré-computado para não depender de BCrypt nos testes
+    private const string HashSenhaCorreta =
+        "$2b$12$0WWQu20zk3bJEWfKDFgRR.zcc6pRbfkj4MLuSW7J2avFyxiVf.g/u";
+
+    public S10BruteForceRegressaoTests(ErpApiFactory factory) => _factory = factory;
+
+    // Deriva TenantId do CNPJ — mesmo algoritmo do TenantHelper (inline para não depender de ERP.Api)
+    private static Guid TenantIdDoCnpj(string cnpj)
+    {
+        var digits    = new string(cnpj.Where(char.IsDigit).ToArray());
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var hash      = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(digits));
+        var guidBytes = new byte[16];
+        Array.Copy(hash, guidBytes, 16);
+        return new Guid(guidBytes);
+    }
+
+    private async Task SeedUsuarioAsync(Guid tenantId, string username, string passwordHash)
+    {
+        // Sem SetGlobalTenantId — usa SetQueryTenantId (AsyncLocal) para o filtro
+        AppDbContext.SetQueryTenantId(tenantId);
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            // Role mínima para o usuário existir
+            var role = new ERP.Domain.Entities.Role
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, Name = "Administrador"
+            };
+            db.Roles.Add(role);
+
+            var user = new ERP.Domain.Entities.User
+            {
+                Id                  = Guid.NewGuid(),
+                TenantId            = tenantId,
+                Username            = username,
+                Name                = "Teste Brute Force",
+                PasswordHash        = passwordHash,
+                IsActive            = true,
+                FailedLoginAttempts = 0,
+                RoleId              = role.Id,
+                CreatedAt           = DateTime.UtcNow,
+                UpdatedAt           = DateTime.UtcNow,
+            };
+            db.Users.Add(user);
+            await db.SaveChangesAsync();
+        }
+        finally
+        {
+            AppDbContext.SetQueryTenantId(Guid.Empty);
+        }
+    }
+
+    [Fact(DisplayName = "S10 N1 — 5 logins errados incrementam FailedLoginAttempts sem SetGlobalTenantId")]
+    public async Task BruteForce_SemSetGlobal_IncrementaContadorNoBanco()
+    {
+        // Arrange — seed SEM chamar SetGlobalTenantId (garantia da regressão)
+        var tenantId = TenantIdDoCnpj(CnpjTeste);
+        await SeedUsuarioAsync(tenantId, "adminN1", HashSenhaCorreta);
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Tenant-CNPJ", CnpjTeste);
+
+        // Act — 5 tentativas com senha errada
+        for (int i = 0; i < 5; i++)
+        {
+            await client.PostAsJsonAsync("/api/auth/login",
+                new { Username = "adminN1", Password = "senhaErrada" });
+        }
+
+        // Assert — FailedLoginAttempts = 5 no banco (sem SetGlobalTenantId)
+        AppDbContext.SetQueryTenantId(tenantId);
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db   = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var user = await db.Users
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(u => u.Username == "adminN1" && u.TenantId == tenantId);
+
+            user.Should().NotBeNull("usuário deve existir no banco");
+            user!.FailedLoginAttempts.Should().Be(5,
+                "5 tentativas com senha errada devem incrementar o contador no banco API");
+            user.LockoutEndUtc.Should().NotBeNull(
+                "conta deve estar bloqueada após 5 tentativas");
+        }
+        finally
+        {
+            AppDbContext.SetQueryTenantId(Guid.Empty);
+        }
+    }
+
+    [Fact(DisplayName = "S10 N1 — Login bem-sucedido reseta FailedLoginAttempts no banco sem SetGlobalTenantId")]
+    public async Task BruteForce_LoginSucesso_ResetaContadorNoBanco()
+    {
+        // Arrange
+        var tenantId = TenantIdDoCnpj(CnpjTeste + "reset");
+        var cnpjReset = CnpjTeste.Replace("1", "2"); // CNPJ diferente para isolar o teste
+        await SeedUsuarioAsync(tenantId, "adminReset", HashSenhaCorreta);
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Tenant-CNPJ", CnpjTeste);
+
+        // 2 tentativas erradas
+        await client.PostAsJsonAsync("/api/auth/login",
+            new { Username = "adminReset", Password = "errada" });
+        await client.PostAsJsonAsync("/api/auth/login",
+            new { Username = "adminReset", Password = "errada" });
+
+        // Login correto — deve resetar o contador
+        await client.PostAsJsonAsync("/api/auth/login",
+            new { Username = "adminReset", Password = "SenhaCorreta@123" });
+
+        // Assert
+        AppDbContext.SetQueryTenantId(tenantId);
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db   = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var user = await db.Users
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(u => u.Username == "adminReset" && u.TenantId == tenantId);
+
+            user.Should().NotBeNull();
+            user!.FailedLoginAttempts.Should().Be(0,
+                "login bem-sucedido deve resetar o contador no banco");
+        }
+        finally
+        {
+            AppDbContext.SetQueryTenantId(Guid.Empty);
+        }
+    }
+}
+
 }
