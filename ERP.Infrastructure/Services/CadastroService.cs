@@ -47,16 +47,27 @@ public class CadastroService : ICadastroService
         // 2. Deriva TenantId — mesmo algoritmo SHA-256 do WPF/TenantHelper
         var tenantId = CnpjParaTenantId(cnpjLimpo);
 
-        // 3. Verifica se tenant já existe
+        // 3. Verifica se tenant já existe — resposta GENÉRICA (não vaza se CNPJ existe)
+        // S10 FIX: antes retornava "já existe" distinguível de "criado" → user enumeration
         var tenantExistente = await _uow.Users.GetByUsernameAndTenantAsync("admin", tenantId);
         if (tenantExistente != null)
-            throw new InvalidOperationException("Este CNPJ já possui um cadastro ativo. Acesse o portal ou recupere sua senha.");
+            throw new InvalidOperationException(
+                "Se este CNPJ já possui cadastro, você receberá um e-mail com os dados de acesso. " +
+                "Caso contrário, verifique o CNPJ informado.");
 
-        // 4. Cria Roles padrão via DbContext (IRoleRepository.CreateAsync tem assinatura diferente)
-        var roleAdmin    = new Role { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Administrador",  PercentualComissao = 0 };
+        // 4. Cria Permissions padrão (mesmo conjunto do DbSeeder)
+        // S10 FIX: antes criava roles sem permissions — admin não conseguia fazer nada no Portal
+        var allPerms = CriarPermissoesPadrao(tenantId);
+        _db.Permissions.AddRange(allPerms);
+
+        // 5. Cria Roles com permissões vinculadas
+        var roleAdmin    = new Role { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Administrador",  PercentualComissao = 0, MaxDiscountPercentage = 100, MaxSangriaValue = 99999 };
         var roleVendedor = new Role { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Vendedor",       PercentualComissao = 0 };
         var roleCaixa    = new Role { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Operador Caixa", PercentualComissao = 0 };
-        var roleGerente  = new Role { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Gerente",        PercentualComissao = 0 };
+        var roleGerente  = new Role { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Gerente",        PercentualComissao = 0, MaxDiscountPercentage = 50 };
+
+        // Administrador recebe todas as permissões
+        foreach (var p in allPerms) { roleAdmin.Permissions.Add(p); p.Roles.Add(roleAdmin); }
 
         _db.Roles.AddRange(roleAdmin, roleVendedor, roleCaixa, roleGerente);
 
@@ -70,7 +81,7 @@ public class CadastroService : ICadastroService
             Username           = "admin",
             PasswordHash       = senhaHash,
             IsActive           = true,
-            MustChangePassword = false,
+            MustChangePassword = true,
             RoleId             = roleAdmin.Id
         };
 
@@ -80,8 +91,9 @@ public class CadastroService : ICadastroService
         Log.Information("Onboarding: novo tenant criado — CNPJ={Cnpj} TenantId={TenantId} RazaoSocial={RazaoSocial}",
             cnpjLimpo, tenantId, dto.RazaoSocial);
 
-        // 6. Envia e-mail de boas-vindas (sem bloquear — falha é logada, não propagada)
-        _ = EnviarEmailBoasVindasAsync(dto.Email, dto.RazaoSocial, dto.Cnpj, dto.Senha);
+        // S10 FIX: senha removida do e-mail. Usuário usa a senha definida no cadastro.
+        // E-mail confirma acesso mas não expõe credencial.
+        _ = EnviarEmailBoasVindasAsync(dto.Email, dto.RazaoSocial, dto.Cnpj);
 
         return new CadastroResponseDto
         {
@@ -100,7 +112,36 @@ public class CadastroService : ICadastroService
         return new Guid(guidBytes);
     }
 
-    // ── Validação de CNPJ (dígitos verificadores) ────────────────────────
+    // ── Cria permissões padrão (mesmo conjunto do DbSeeder) ──────────────────
+    private static List<Permission> CriarPermissoesPadrao(Guid tenantId) =>
+    [
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "sale.discount",      Description = "Conceder desconto em vendas" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "sale.cancel",        Description = "Cancelar vendas finalizadas" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "sale.return",        Description = "Devolução parcial de itens" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "cash.sangria",       Description = "Realizar sangria e suprimento" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "cash.view.summary",  Description = "Ver resumo do caixa" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "product.edit",       Description = "Criar e editar produtos" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "product.edit.price", Description = "Alterar preço de produtos" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "stock.adjust",       Description = "Ajuste de estoque" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "customers.edit",     Description = "Criar e editar clientes" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "customers.delete",   Description = "Excluir clientes" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "fidelidade.use",     Description = "Resgatar pontos de fidelidade" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "haver.edit",         Description = "Depositar e retirar Haver" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "entregas.manage",    Description = "Gerir entregas" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "orcamento.manage",   Description = "Converter orçamento em venda" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "report.financial",   Description = "Dashboard e indicadores" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "financeiro.view",    Description = "Contas a receber" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "despesas.view",      Description = "Contas a pagar" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "fluxocaixa.view",    Description = "Fluxo de Caixa e DRE" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "margem.view",        Description = "Tela de Margem" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "audit.view",         Description = "Auditoria" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "compras.view",       Description = "Módulo de Compras" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "inventario.view",    Description = "Inventário" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "notasfiscais.view",  Description = "Notas Fiscais" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "users.view",         Description = "Gestão de usuários" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "config.view",        Description = "Configurações do sistema" },
+        new() { Id = Guid.NewGuid(), TenantId = tenantId, Code = "role.manage",        Description = "Criar e editar cargos" },
+    ];
     private static bool ValidarCnpj(string cnpj)
     {
         if (cnpj.Distinct().Count() == 1) return false; // 00000000000000 inválido
@@ -122,7 +163,7 @@ public class CadastroService : ICadastroService
     }
 
     // ── E-mail de boas-vindas via Zoho SMTP ──────────────────────────────
-    private async Task EnviarEmailBoasVindasAsync(string emailDestino, string razaoSocial, string cnpj, string senha)
+    private async Task EnviarEmailBoasVindasAsync(string emailDestino, string razaoSocial, string cnpj)
     {
         try
         {
@@ -147,16 +188,13 @@ public class CadastroService : ICadastroService
   </div>
   <div style=""background:#f8fafc;padding:24px;border:1px solid #e2e8f0;border-radius:0 0 8px 8px"">
     <p>Olá, <strong>{razaoSocial}</strong>!</p>
-    <p>Seu cadastro no TTSoft ERP foi realizado com sucesso. Aqui estão seus dados de acesso:</p>
+    <p>Seu cadastro no TTSoft ERP foi realizado com sucesso. Acesse o sistema com o CNPJ e a senha que você definiu no cadastro.</p>
 
     <div style=""background:white;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0"">
       <p style=""margin:0 0 8px""><strong>🌐 Portal:</strong> <a href=""https://app.ttsofts.com.br"">app.ttsofts.com.br</a></p>
       <p style=""margin:0 0 8px""><strong>🏢 CNPJ:</strong> {cnpj}</p>
-      <p style=""margin:0 0 8px""><strong>👤 Usuário:</strong> admin</p>
-      <p style=""margin:0""><strong>🔑 Senha:</strong> {senha}</p>
+      <p style=""margin:0""><strong>👤 Usuário:</strong> admin</p>
     </div>
-
-    <p style=""color:#ef4444"">⚠️ Por segurança, altere sua senha no primeiro acesso.</p>
 
     <div style=""text-align:center;margin:24px 0"">
       <a href=""https://app.ttsofts.com.br""

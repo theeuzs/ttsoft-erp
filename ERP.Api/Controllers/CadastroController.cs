@@ -40,8 +40,12 @@ public class CadastroController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto.Email))
             return BadRequest("E-mail é obrigatório.");
 
-        if (string.IsNullOrWhiteSpace(dto.Senha) || dto.Senha.Length < 6)
-            return BadRequest("Senha deve ter no mínimo 6 caracteres.");
+        // S10 FIX: senha mínima de 8 chars + pelo menos 1 número (antes: 6 chars qualquer)
+        if (string.IsNullOrWhiteSpace(dto.Senha) || dto.Senha.Length < 8)
+            return BadRequest("Senha deve ter no mínimo 8 caracteres.");
+
+        if (!dto.Senha.Any(char.IsDigit))
+            return BadRequest("Senha deve conter pelo menos um número.");
 
         try
         {
