@@ -4,6 +4,7 @@ using ERP.WPF.Commands;
 using ERP.WPF.State;
 using System;
 using System.Linq;
+using System.Net.Http.Json;
 using System.Threading.Tasks;
 using System.Windows.Input;
 
@@ -150,6 +151,10 @@ public class LoginViewModel : BaseViewModel
                 ERP.Persistence.Context.AppDbContext.SetCurrentUser(user.Id, user.Name);
                 ERP.WPF.State.AppSession.DataVencimentoLicenca = resultadoLicenca.DataVencimento;
 
+                // S10 FIX: Obtém JWT da API para uso no ChatService (melhor esforço).
+                // Se a API estiver indisponível, o chat fica offline mas o sistema funciona.
+                _ = ObterJwtDaApiAsync(cnpjCliente, this.Usuario, this.Senha);
+
                 OnLoginResult?.Invoke(this, true);
             }
             else
@@ -165,5 +170,34 @@ public class LoginViewModel : BaseViewModel
         {
             IsBusy = false;
         }
+    }
+
+    // S10 FIX: Obtém JWT da API após auth local — usado pelo ChatService para
+    // autenticar no ERPChatHub. Fire-and-forget: falha não impede o login.
+    private static async Task ObterJwtDaApiAsync(string cnpj, string usuario, string senha)
+    {
+        var apiUrl = AppSession.ApiBaseUrl;
+        if (string.IsNullOrEmpty(apiUrl)) return;
+
+        try
+        {
+            using var http = new System.Net.Http.HttpClient
+            {
+                Timeout = TimeSpan.FromSeconds(8)
+            };
+            http.DefaultRequestHeaders.Add("X-Tenant-CNPJ", cnpj);
+
+            var body = new { username = usuario, password = senha };
+            var resp = await http.PostAsJsonAsync($"{apiUrl}/api/auth/login", body);
+
+            if (resp.IsSuccessStatusCode)
+            {
+                var json = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                var jwt  = json.GetProperty("token").GetString();
+                if (!string.IsNullOrEmpty(jwt))
+                    AppSession.JwtToken = jwt;
+            }
+        }
+        catch { /* Chat offline — não impede o login */ }
     }
 }

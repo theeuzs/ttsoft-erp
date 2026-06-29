@@ -130,7 +130,7 @@
     protected override async Task OnInitializedAsync()
     {
         if (!_chatSvc.Conectado && Auth.LoggedIn)
-            await _chatSvc.ConectarAsync(Auth.Usuario ?? "Portal", Auth.TenantId ?? "default");
+            await _chatSvc.ConectarAsync(Auth.Usuario ?? "Portal", Auth.TenantId ?? "default", Auth.Token ?? "");
 
         _chatSvc.OnMensagemNova += OnNovaMensagem;
     }

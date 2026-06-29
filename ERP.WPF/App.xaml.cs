@@ -340,7 +340,6 @@ public partial class App : System.Windows.Application
         services.AddScoped<IContaPagarService, ContaPagarService>();
         services.AddScoped<IContaReceberService, ContaReceberService>();
         services.AddScoped<INfeImportService, NfeImportService>();
-        services.AddScoped<ISefazConsultaService, SefazConsultaService>();
         services.AddScoped<ISpedService, SpedService>();
         services.AddScoped<INfceEmissionService, NfceEmissionService>();
         services.AddScoped<INfeEmissionService, NfeEmissionService>();
@@ -432,8 +431,11 @@ public partial class App : System.Windows.Application
         services.AddTransient<BIViewModel>();
         services.AddTransient<CatalogoViewModel>();
         services.AddSingleton<ERP.WPF.Services.ChatService>(_ =>
-            new ERP.WPF.Services.ChatService(
-                "https://erp-ttsoft-api-g8bde4f6aqcwb9aw.brazilsouth-01.azurewebsites.net"));
+        {
+            var url = "https://erp-ttsoft-api-g8bde4f6aqcwb9aw.brazilsouth-01.azurewebsites.net";
+            ERP.WPF.State.AppSession.ApiBaseUrl = url; // S10: usado pelo LoginViewModel para obter JWT
+            return new ERP.WPF.Services.ChatService(url);
+        });
         services.AddTransient<OrcamentosViewModel>();
         services.AddTransient<FinanceiroViewModel>();
         services.AddTransient<ContaPagarViewModel>();

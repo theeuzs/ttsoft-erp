@@ -25,6 +25,14 @@ public static class AppSession
     // Caixa ativo do operador
     public static Guid? CaixaId { get; set; }
 
+    // S10 FIX: JWT da API — obtido após login local, usado pelo ChatService para
+    // autenticar no ERPChatHub via POST /api/auth/chat-token.
+    // Vazio quando API indisponível — chat fica offline, resto do sistema funciona.
+    public static string JwtToken   { get; set; } = string.Empty;
+
+    // URL base da API — setada em App.xaml.cs, lida pelo LoginViewModel
+    public static string ApiBaseUrl { get; set; } = string.Empty;
+
     public static void Login(
         Guid id,
         string name,
@@ -61,6 +69,7 @@ public static class AppSession
         MaxDiscountPercentage = 0m;
         MaxSangriaValue       = 0m;
         CaixaId               = null;
+        JwtToken              = string.Empty;
 
         ERP.Domain.CurrentUser.Id   = null;
         ERP.Domain.CurrentUser.Name = string.Empty;

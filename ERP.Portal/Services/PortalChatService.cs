@@ -21,7 +21,7 @@ public class PortalChatService : IAsyncDisposable
 
     public PortalChatService(string apiUrl) => _apiUrl = apiUrl;
 
-    public async Task ConectarAsync(string nomeUsuario, string tenantId, string? sala = null)
+    public async Task ConectarAsync(string nomeUsuario, string tenantId, string jwtToken = "", string? sala = null)
     {
         NomeUsuario = nomeUsuario;
         TenantId    = tenantId;
@@ -32,10 +32,22 @@ public class PortalChatService : IAsyncDisposable
             _connection = null;
         }
 
-        var userSeguro   = Uri.EscapeDataString(nomeUsuario);
-        var tenantSeguro = Uri.EscapeDataString(tenantId);
-        var salaSegura   = sala != null ? $"&sala={Uri.EscapeDataString(sala)}" : "";
-        var urlCompleta  = $"{_apiUrl}/hubs/erp-chat?user={userSeguro}&tenant={tenantSeguro}{salaSegura}";
+        // S10 FIX: Obter chatToken via POST /api/auth/chat-token antes de conectar.
+        // Antes: passava user/tenant em query string — spoofável.
+        // Agora: chatToken JWT validado pelo ERPChatHub.
+        var chatToken = await ObterChatTokenAsync(jwtToken);
+
+        string urlCompleta;
+        if (!string.IsNullOrEmpty(chatToken))
+        {
+            var salaSegura = sala != null ? $"&sala={Uri.EscapeDataString(sala)}" : "";
+            urlCompleta    = $"{_apiUrl}/hubs/erp-chat?chatToken={Uri.EscapeDataString(chatToken)}{salaSegura}";
+        }
+        else
+        {
+            // Sem chatToken → hub vai rejeitar. Chat fica offline.
+            return;
+        }
 
         _connection = new HubConnectionBuilder()
             .WithUrl(urlCompleta)
@@ -138,6 +150,28 @@ public class PortalChatService : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         if (_connection != null) await _connection.DisposeAsync();
+    }
+
+    // S10 FIX: Obtém chatToken de curta duração via POST /api/auth/chat-token.
+    // jwtToken = Bearer JWT do usuário (armazenado em LocalStorage pelo AuthService do Portal).
+    private async Task<string?> ObterChatTokenAsync(string jwtToken)
+    {
+        if (string.IsNullOrEmpty(jwtToken)) return null;
+
+        try
+        {
+            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+            http.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", jwtToken);
+
+            var resp = await http.PostAsync($"{_apiUrl}/api/auth/chat-token", null);
+            if (!resp.IsSuccessStatusCode) return null;
+
+            var json = await resp.Content.ReadAsStringAsync();
+            var doc  = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.GetProperty("chatToken").GetString();
+        }
+        catch { return null; }
     }
 }
 

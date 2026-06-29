@@ -35,9 +35,30 @@ public class ChatService
                 _connection = null;
             }
 
-            string userSeguro = Uri.EscapeDataString(nomeUsuario);
-            string tenantSeguro = Uri.EscapeDataString(tenantId);
-            string urlCompleta = $"{_apiUrl}/hubs/erp-chat?user={userSeguro}&tenant={tenantSeguro}";
+            // S10 FIX: Obter chatToken via POST /api/auth/chat-token (JWT de 5 min).
+            // Antes: passava user/tenant em query string — spoofável.
+            // Agora: chatToken JWT validado pelo hub.
+            var chatToken = await ObterChatTokenAsync();
+
+            string urlCompleta;
+            if (!string.IsNullOrEmpty(chatToken))
+            {
+                urlCompleta = $"{_apiUrl}/hubs/erp-chat?chatToken={Uri.EscapeDataString(chatToken)}";
+            }
+            else
+            {
+                // Fallback degradado: sem chatToken → hub vai rejeitar a conexão.
+                // Mostra mensagem de chat offline em vez de conectar com query string spoofável.
+                StatusConexao = "Offline — JWT não disponível. Faça login novamente.";
+                System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+                    Mensagens.Add(new ChatMensagem
+                    {
+                        De = "Sistema", Hora = DateTime.Now.ToString("HH:mm"),
+                        Texto = "✕ Chat indisponível: JWT não obtido. Verifique a conexão com o servidor.",
+                        EhMinha = false
+                    }));
+                return;
+            }
 
             _connection = new HubConnectionBuilder()
                 .WithUrl(urlCompleta)
@@ -106,7 +127,7 @@ public class ChatService
                 Mensagens.Add(new ChatMensagem
                 {
                     De = "Sistema", Hora = DateTime.Now.ToString("HH:mm"),
-                    Texto = "❌ Sem conexão com o servidor. Tente novamente.",
+                    Texto = "✕ Sem conexão com o servidor. Tente novamente.",
                     EhMinha = false 
                 }));
             return;
@@ -145,9 +166,31 @@ public class ChatService
             try { await _connection.StopAsync(); } catch { }
         }
     }
-}
 
-public class ChatMensagemPayload
+    // S10 FIX: Obtém chatToken de curta duração (5 min) via POST /api/auth/chat-token.
+    // Requer JWT em AppSession.JwtToken (obtido no login via ObterJwtDaApiAsync).
+    // Retorna null se JWT indisponível ou API inacessível.
+    private async Task<string?> ObterChatTokenAsync()
+    {
+        var jwt = ERP.WPF.State.AppSession.JwtToken;
+        if (string.IsNullOrEmpty(jwt)) return null;
+
+        try
+        {
+            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+            http.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", jwt);
+
+            var resp = await http.PostAsync($"{_apiUrl}/api/auth/chat-token", null);
+            if (!resp.IsSuccessStatusCode) return null;
+
+            var json      = await resp.Content.ReadAsStringAsync();
+            var doc       = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.GetProperty("chatToken").GetString();
+        }
+        catch { return null; }
+    }
+}public class ChatMensagemPayload
 {
     [JsonPropertyName("de")]
     public string De { get; set; } = string.Empty;
