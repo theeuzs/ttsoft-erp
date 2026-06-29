@@ -1005,7 +1005,13 @@ public class MetricsControllerTests : IntegrationTestBase
             var resp = await clientB.GetAsync($"/api/haver/saldo/{clienteId}");
 
             if (resp.IsSuccessStatusCode)
-                (await resp.Content.ReadAsStringAsync()).Should().NotContain("500");
+            {
+                // S10 FIX: NotContain("500") era falso positivo — UUID no body pode conter "500".
+                // Verifica que o saldo retornado é 0 (isolamento cross-tenant funcionando).
+                var body = await resp.Content.ReadAsStringAsync();
+                body.Should().Contain("\"saldo\":0",
+                    because: "cliente de outro tenant não deve ter saldo visível");
+            }
             else
                 resp.StatusCode.Should().BeOneOf(
                     HttpStatusCode.NotFound, HttpStatusCode.Forbidden, HttpStatusCode.Unauthorized);

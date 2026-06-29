@@ -49,18 +49,20 @@ public class ConciliacaoController : ControllerBase
             if (string.IsNullOrWhiteSpace(linha)) continue;
             if (cabecalho is null) { cabecalho = linha; continue; }
 
-            // S9: cap de linhas — impede CSV com milhões de linhas consumindo toda a RAM/CPU.
+            // S9: cap de linhas
             if (linhas.Count >= MaxLinhas)
                 return BadRequest(new { erro = $"Extrato muito grande. Máximo: {MaxLinhas} linhas por importação." });
 
-            linhas.Add(linha.Split(sep));
+            // S10 FIX: parser RFC 4180 — trata campos com aspas e vírgulas internas.
+            // Antes: linha.Split(sep) quebrava em "R$ 1.234,56" quando sep=','.
+            linhas.Add(ParseCsvLine(linha, sep));
         }
 
         if (cabecalho is null || !linhas.Any())
             return BadRequest(new { erro = "CSV vazio ou sem dados." });
 
         // Detecta colunas por nome no cabeçalho
-        var cols = cabecalho.Split(sep).Select(c => c.Trim().ToLower()).ToArray();
+        var cols = ParseCsvLine(cabecalho, sep).Select(c => c.Trim().ToLower()).ToArray();
         int idxData  = FindCol(cols, "data", "date", "dt");
         int idxValor = FindCol(cols, "valor", "value", "amount", "vl");
         int idxDesc  = FindCol(cols, "descricao", "descricão", "estabelecimento", "description", "historico");
@@ -145,6 +147,39 @@ public class ConciliacaoController : ControllerBase
     {
         if (string.IsNullOrEmpty(s)) return "";
         return "=-+@\t".Contains(s[0]) ? "'" + s : s;
+    }
+
+    // S10: Parser RFC 4180 — trata campos entre aspas com delimitadores internos.
+    // Ex: "R$ 1.234,56";"Loja ""Silva"" Ltda" → ["R$ 1.234,56", "Loja \"Silva\" Ltda"]
+    private static string[] ParseCsvLine(string line, char sep)
+    {
+        var fields  = new List<string>();
+        var current = new System.Text.StringBuilder();
+        bool inQuotes = false;
+
+        for (int i = 0; i < line.Length; i++)
+        {
+            char c = line[i];
+
+            if (inQuotes)
+            {
+                if (c == '"')
+                {
+                    // Aspas duplas dentro de campo quoted → aspas literais
+                    if (i + 1 < line.Length && line[i + 1] == '"') { current.Append('"'); i++; }
+                    else inQuotes = false; // fecha o campo quoted
+                }
+                else current.Append(c);
+            }
+            else
+            {
+                if (c == '"') inQuotes = true;
+                else if (c == sep) { fields.Add(current.ToString()); current.Clear(); }
+                else current.Append(c);
+            }
+        }
+        fields.Add(current.ToString());
+        return fields.ToArray();
     }
 
     private static int FindCol(string[] cols, params string[] candidatos)

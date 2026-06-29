@@ -15,6 +15,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
@@ -321,6 +322,23 @@ builder.Services.AddSwaggerGen(opt =>
 
 builder.Services.AddScoped<IFidelidadeService, FidelidadeService>();
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("cadastro-strict", o =>
+    {
+        o.PermitLimit = 3;
+        o.Window      = TimeSpan.FromHours(1);
+        o.QueueLimit  = 0;
+    });
+
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.StatusCode = 429;
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            new { erro = "Muitas tentativas de cadastro. Tente novamente em 1 hora." }, token);
+    };
+});
+
 var app = builder.Build();
 
 // ── S1.3: Exception handler seguro ───────────────────────────────────────────
@@ -375,6 +393,7 @@ app.UseRouting();
 app.UseCors("ApiPolicy");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 // TenantMiddleware APÓS autenticação — para ter claims disponíveis
 // S2.1: já enriquece o LogContext com TenantId e UserId

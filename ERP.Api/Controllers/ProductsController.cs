@@ -1,8 +1,10 @@
 using ERP.Api.Security;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Persistence.Context;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -13,11 +15,13 @@ public class ProductsController : ControllerBase
 {
     private readonly IProductService          _service;
     private readonly IProdutoAgregadoService  _agregados;
+    private readonly AppDbContext             _db;
 
-    public ProductsController(IProductService service, IProdutoAgregadoService agregados)
+    public ProductsController(IProductService service, IProdutoAgregadoService agregados, AppDbContext db)
     {
         _service   = service;
         _agregados = agregados;
+        _db        = db;
     }
 
     /// <summary>Lista produtos com paginação e busca opcional.</summary>
@@ -154,15 +158,54 @@ public class ProductsController : ControllerBase
         [FromQuery] int     page      = 1,
         [FromQuery] int     pageSize  = 24,
         [FromQuery] string? search    = null,
-        [FromQuery] string? categoria = null)
+        [FromQuery] string? categoria = null,
+        [FromQuery] Guid?   tenantId  = null)
     {
-        var result = await _service.GetPagedAsync(page, pageSize, search);
-        var items  = result.Items
-            .Where(p => p.IsActive && p.Stock > 0)
-            .Where(p => string.IsNullOrEmpty(categoria) || p.CategoryName == categoria)
-            .Select(p => new { p.Id, p.Name, p.CategoryName, p.Barcode,
-                               p.Unit, p.SalePrice, p.Stock, ImageUrl = (string?)null });
-        return Ok(new { Items = items, TotalItems = items.Count(), Page = page, PageSize = pageSize });
+        // S10 FIX: filtros aplicados no banco, não em memória após paginação.
+        // Antes: GetPagedAsync(24 itens) → filtrar em memória → TotalItems = count(página) ← errado.
+        // Agora: filtros no IQueryable → Skip/Take → TotalItems = count(antes do skip) ← correto.
+
+        // TenantId: se JWT presente, vem do HasQueryFilter automaticamente.
+        // Se AllowAnonymous sem JWT, aceita tenantId como query param (catálogo público de loja específica).
+        var query = _db.Products.AsNoTracking()
+            .Where(p => p.IsActive && !p.IsDeleted);
+
+        // Filtro de tenant explícito para acesso anônimo
+        if (tenantId.HasValue && tenantId.Value != Guid.Empty)
+            query = query.IgnoreQueryFilters()
+                         .Where(p => p.IsActive && !p.IsDeleted && p.TenantId == tenantId.Value);
+
+        // Filtra com estoque disponível
+        query = query.Where(p => p.Stock > 0);
+
+        // Busca por nome ou código de barras
+        if (!string.IsNullOrWhiteSpace(search))
+            query = query.Where(p => p.Name.Contains(search) || p.Barcode.Contains(search));
+
+        // Filtro por categoria
+        if (!string.IsNullOrWhiteSpace(categoria))
+            query = query.Where(p => p.Category != null && p.Category.Name == categoria);
+
+        var total = await query.CountAsync();
+
+        var items = await query
+            .OrderBy(p => p.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(p => new
+            {
+                p.Id,
+                p.Name,
+                CategoryName = p.Category != null ? p.Category.Name : "",
+                p.Barcode,
+                p.Unit,
+                SalePrice = p.SalePrice,
+                Stock     = p.Stock,
+                ImageUrl  = (string?)null
+            })
+            .ToListAsync();
+
+        return Ok(new { Items = items, TotalItems = total, Page = page, PageSize = pageSize });
     }
 }
 

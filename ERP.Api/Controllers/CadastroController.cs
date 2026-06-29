@@ -2,12 +2,13 @@ using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace ERP.Api.Controllers;
 
 /// <summary>
 /// Onboarding self-service — endpoint público (sem autenticação).
-/// Rate limiting aplicado via TenantRateLimitMiddleware (3 req/hora por IP).
+/// Rate limiting: 3 req/hora/IP via sliding window (S10).
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -21,11 +22,7 @@ public class CadastroController : ControllerBase
         _cadastroService = cadastroService;
     }
 
-    /// <summary>
-    /// Cria um novo tenant no sistema.
-    /// Deriva TenantId via SHA-256(CNPJ) — compatível com o WPF.
-    /// Cria roles padrão, usuário admin e envia e-mail de boas-vindas.
-    /// </summary>
+    [EnableRateLimiting("cadastro-strict")]
     [HttpPost]
     [ProducesResponseType(typeof(CadastroResponseDto), 200)]
     [ProducesResponseType(typeof(string), 400)]
