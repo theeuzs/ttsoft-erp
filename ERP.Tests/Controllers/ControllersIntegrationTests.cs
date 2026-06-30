@@ -1745,4 +1745,235 @@ public class S10BruteForceRegressaoTests : IClassFixture<ErpApiFactory>
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//  S11 — Rate limit do /api/cadastro particionado por IP (X-Forwarded-For)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+[Collection("ErpApi")]
+public class S11CadastroRateLimitTests : IClassFixture<ErpApiFactory>
+{
+    private readonly ErpApiFactory _factory;
+    public S11CadastroRateLimitTests(ErpApiFactory factory) => _factory = factory;
+
+    private static object CadastroBody(int n) => new
+    {
+        Cnpj        = $"1122233300{n:D4}",
+        RazaoSocial = $"Empresa Teste {n}",
+        Email       = $"teste{n}@exemplo.com",
+        Senha       = "senhaForte123",
+    };
+
+    [Fact(DisplayName = "S11 — 3 cadastros do mesmo IP em 1h, 4º recebe 429")]
+    public async Task CadastroRateLimit_PorIp_Bloqueia4taTentativa()
+    {
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.10");
+
+        for (int i = 0; i < 3; i++)
+        {
+            var resp = await client.PostAsJsonAsync("/api/cadastro", CadastroBody(i));
+            // Pode ser 200 ou 400 (CNPJ com dígito verificador inválido), mas NUNCA 429
+            ((int)resp.StatusCode).Should().NotBe(429,
+                "as 3 primeiras tentativas do mesmo IP não devem ser bloqueadas pelo rate limit");
+        }
+
+        var quarta = await client.PostAsJsonAsync("/api/cadastro", CadastroBody(99));
+        ((int)quarta.StatusCode).Should().Be(429,
+                "a 4ª tentativa do mesmo IP em 1h deve ser bloqueada");
+    }
+
+    [Fact(DisplayName = "S11 — Cadastros de IPs diferentes não compartilham bucket")]
+    public async Task CadastroRateLimit_IpsDiferentes_NaoCompartilhamBucket()
+    {
+        using var clientA = _factory.CreateClient();
+        clientA.DefaultRequestHeaders.Add("X-Forwarded-For", "198.51.100.20");
+
+        using var clientB = _factory.CreateClient();
+        clientB.DefaultRequestHeaders.Add("X-Forwarded-For", "198.51.100.21");
+
+        // 3 tentativas de A — nenhuma deve ser 429
+        for (int i = 0; i < 3; i++)
+        {
+            var resp = await clientA.PostAsJsonAsync("/api/cadastro", CadastroBody(100 + i));
+            ((int)resp.StatusCode).Should().NotBe(429);
+        }
+
+        // 3 tentativas de B (IP diferente) — também nenhuma deve ser 429,
+        // provando que o balde de A não afeta B (partitioner funcionando).
+        for (int i = 0; i < 3; i++)
+        {
+            var resp = await clientB.PostAsJsonAsync("/api/cadastro", CadastroBody(200 + i));
+            ((int)resp.StatusCode).Should().NotBe(429,
+                "IP diferente não deve compartilhar o balde de rate limit de outro IP");
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  S11 — Oráculo de enumeração via status code (CNPJ existente vs novo)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+[Collection("ErpApi")]
+public class S11CadastroEnumeracaoTests : IClassFixture<ErpApiFactory>
+{
+    private readonly ErpApiFactory _factory;
+    public S11CadastroEnumeracaoTests(ErpApiFactory factory) => _factory = factory;
+
+    // CNPJ com dígitos verificadores válidos (gerador conhecido para testes)
+    private const string CnpjValido = "11222333000181";
+
+    private static object Body(string cnpj, int n) => new
+    {
+        Cnpj        = cnpj,
+        RazaoSocial = $"Empresa Enum {n}",
+        Email       = $"enum{n}@exemplo.com",
+        Senha       = "senhaForte123",
+    };
+
+    [Fact(DisplayName = "S11 — CNPJ já existente retorna 200 (mesmo status do CNPJ novo)")]
+    public async Task Cadastro_CnpjExistente_Retorna200IgualAoNovo()
+    {
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.50");
+
+        // Primeiro cadastro — CNPJ novo, deve criar e retornar 200
+        var primeiro = await client.PostAsJsonAsync("/api/cadastro", Body(CnpjValido, 1));
+        primeiro.StatusCode.Should().Be(HttpStatusCode.OK,
+            "primeiro cadastro com CNPJ novo deve ser bem-sucedido");
+
+        // Segundo cadastro — MESMO CNPJ, já existe
+        using var client2 = _factory.CreateClient();
+        client2.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.51"); // IP diferente p/ não bater rate limit
+
+        var segundo = await client2.PostAsJsonAsync("/api/cadastro", Body(CnpjValido, 2));
+
+        // S11 FIX: ambos devem retornar 200 — fecha o oráculo de enumeração
+        segundo.StatusCode.Should().Be(HttpStatusCode.OK,
+            "CNPJ já existente deve retornar o MESMO status code (200) que CNPJ novo, " +
+            "para não permitir enumeração de clientes via diferença de status HTTP");
+
+        var corpo1 = await primeiro.Content.ReadAsStringAsync();
+        var corpo2 = await segundo.Content.ReadAsStringAsync();
+
+        // Mensagens devem ser estruturalmente idênticas (não vazam diferença)
+        corpo2.Should().NotContain("admin e usuário",
+            "resposta para CNPJ já existente não deve conter detalhes específicos do cadastro");
+    }
+
+    [Fact(DisplayName = "S11 — CNPJ malformado continua retornando 400 (validação real)")]
+    public async Task Cadastro_CnpjMalformado_Retorna400()
+    {
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.60");
+
+        var resp = await client.PostAsJsonAsync("/api/cadastro", Body("123", 99));
+
+        resp.StatusCode.Should().Be(HttpStatusCode.BadRequest,
+            "CNPJ malformado (não 14 dígitos) é erro de validação real, não oráculo — continua 400");
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  S11 — Catálogo público requer opt-in (CatalogoPublicoHabilitado)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+[Collection("ErpApi")]
+public class S11CatalogoPublicoOptInTests : IClassFixture<ErpApiFactory>
+{
+    private readonly ErpApiFactory _factory;
+    public S11CatalogoPublicoOptInTests(ErpApiFactory factory) => _factory = factory;
+
+    private async Task<Guid> SeedTenantComProdutoAsync(
+        bool catalogoHabilitado, bool mostrarPreco = false, bool mostrarEstoque = false)
+    {
+        var tenantId = Guid.NewGuid();
+        AppDbContext.SetQueryTenantId(tenantId);
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            db.Branches.Add(new ERP.Domain.Entities.Branch
+            {
+                Id       = Guid.NewGuid(),
+                TenantId = tenantId,
+                Name     = "Matriz Teste",
+                IsMatriz = true,
+                CatalogoPublicoHabilitado = catalogoHabilitado,
+                CatalogoMostrarPreco      = mostrarPreco,
+                CatalogoMostrarEstoque    = mostrarEstoque,
+            });
+
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id         = Guid.NewGuid(),
+                TenantId   = tenantId,
+                Name       = "Produto Teste Catálogo",
+                Barcode    = "7891234567890",
+                Unit       = "UN",
+                IsActive   = true,
+                SalePrice  = 99.90m,
+                Stock      = 50,
+            });
+
+            await db.SaveChangesAsync();
+            return tenantId;
+        }
+        finally
+        {
+            AppDbContext.SetQueryTenantId(Guid.Empty);
+        }
+    }
+
+    [Fact(DisplayName = "S11 — Tenant SEM opt-in retorna 404 no catálogo público")]
+    public async Task Catalogo_SemOptIn_Retorna404()
+    {
+        var tenantId = await SeedTenantComProdutoAsync(catalogoHabilitado: false);
+
+        var client = _factory.CreateClient();
+        var resp   = await client.GetAsync($"/api/products/catalogo?tenantId={tenantId}");
+
+        resp.StatusCode.Should().Be(HttpStatusCode.NotFound,
+            "tenant sem CatalogoPublicoHabilitado não deve expor produtos via catálogo público");
+    }
+
+    [Fact(DisplayName = "S11 — Tenant COM opt-in mas sem MostrarPreco/Estoque oculta esses campos")]
+    public async Task Catalogo_ComOptIn_SemMostrarPrecoEstoque_OcultaCampos()
+    {
+        var tenantId = await SeedTenantComProdutoAsync(
+            catalogoHabilitado: true, mostrarPreco: false, mostrarEstoque: false);
+
+        var client = _factory.CreateClient();
+        var resp   = await client.GetAsync($"/api/products/catalogo?tenantId={tenantId}");
+
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await resp.Content.ReadAsStringAsync();
+
+        body.Should().Contain("Produto Teste Catálogo",
+            "nome do produto deve aparecer (catálogo habilitado)");
+        body.Should().Contain("\"salePrice\":null",
+            "preço não deve aparecer sem opt-in explícito de CatalogoMostrarPreco");
+        body.Should().Contain("\"stock\":null",
+            "estoque não deve aparecer sem opt-in explícito de CatalogoMostrarEstoque");
+    }
+
+    [Fact(DisplayName = "S11 — Tenant COM opt-in completo expõe preço e estoque")]
+    public async Task Catalogo_ComOptInCompleto_ExpoePrecoEEstoque()
+    {
+        var tenantId = await SeedTenantComProdutoAsync(
+            catalogoHabilitado: true, mostrarPreco: true, mostrarEstoque: true);
+
+        var client = _factory.CreateClient();
+        var resp   = await client.GetAsync($"/api/products/catalogo?tenantId={tenantId}");
+
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await resp.Content.ReadAsStringAsync();
+
+        body.Should().Contain("99.9",
+            "preço deve aparecer quando o tenant optou por CatalogoMostrarPreco");
+        body.Should().NotContain("\"stock\":null",
+            "estoque deve aparecer quando o tenant optou por CatalogoMostrarEstoque");
+    }
+}
+
 }

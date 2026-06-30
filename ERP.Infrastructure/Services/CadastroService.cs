@@ -47,13 +47,13 @@ public class CadastroService : ICadastroService
         // 2. Deriva TenantId — mesmo algoritmo SHA-256 do WPF/TenantHelper
         var tenantId = CnpjParaTenantId(cnpjLimpo);
 
-        // 3. Verifica se tenant já existe — resposta GENÉRICA (não vaza se CNPJ existe)
-        // S10 FIX: antes retornava "já existe" distinguível de "criado" → user enumeration
+        // 3. Verifica se tenant já existe — S11 FIX: exceção dedicada (não
+        // InvalidOperationException genérica) para que o Controller possa
+        // engolir e retornar 200 com mensagem idêntica ao caso de sucesso,
+        // fechando o oráculo de enumeração via status code (S11 N3a).
         var tenantExistente = await _uow.Users.GetByUsernameAndTenantAsync("admin", tenantId);
         if (tenantExistente != null)
-            throw new InvalidOperationException(
-                "Se este CNPJ já possui cadastro, você receberá um e-mail com os dados de acesso. " +
-                "Caso contrário, verifique o CNPJ informado.");
+            throw new ERP.Application.Exceptions.TenantJaExisteException();
 
         // 4. Cria Permissions padrão (mesmo conjunto do DbSeeder)
         // S10 FIX: antes criava roles sem permissions — admin não conseguia fazer nada no Portal

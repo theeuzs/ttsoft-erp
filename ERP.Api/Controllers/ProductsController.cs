@@ -4,6 +4,7 @@ using ERP.Application.Interfaces;
 using ERP.Persistence.Context;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
@@ -151,9 +152,10 @@ public class ProductsController : ControllerBase
         await _service.UpdateAsync(updateDto);
         return NoContent();
     }
-    /// <summary>Catálogo público — não requer autenticação.</summary>
+    /// <summary>Catálogo público — não requer autenticação. Requer opt-in do tenant (S11).</summary>
     [HttpGet("catalogo")]
     [AllowAnonymous]
+    [EnableRateLimiting("catalogo-publico")]
     public async Task<IActionResult> GetCatalogo(
         [FromQuery] int     page      = 1,
         [FromQuery] int     pageSize  = 24,
@@ -165,15 +167,33 @@ public class ProductsController : ControllerBase
         // Antes: GetPagedAsync(24 itens) → filtrar em memória → TotalItems = count(página) ← errado.
         // Agora: filtros no IQueryable → Skip/Take → TotalItems = count(antes do skip) ← correto.
 
-        // TenantId: se JWT presente, vem do HasQueryFilter automaticamente.
-        // Se AllowAnonymous sem JWT, aceita tenantId como query param (catálogo público de loja específica).
         var query = _db.Products.AsNoTracking()
             .Where(p => p.IsActive && !p.IsDeleted);
 
-        // Filtro de tenant explícito para acesso anônimo
+        // ── S11 FIX: opt-in obrigatório para acesso anônimo a tenant explícito ──
+        // Antes: qualquer tenantId (derivável de CNPJ público via SHA-256) retornava
+        // catálogo completo com preço e estoque — vazamento de inteligência comercial
+        // (concorrente raspa preços/estoque/portfólio de qualquer cliente TTSoft).
+        // Agora: tenant precisa habilitar explicitamente CatalogoPublicoHabilitado
+        // na filial matriz. Sem isso, 404 — não revela se o tenant existe ou não.
+        bool mostrarPreco   = false;
+        bool mostrarEstoque = false;
+
         if (tenantId.HasValue && tenantId.Value != Guid.Empty)
+        {
+            var matriz = await _db.Branches.AsNoTracking()
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(b => b.TenantId == tenantId.Value && b.IsMatriz);
+
+            if (matriz is null || !matriz.CatalogoPublicoHabilitado)
+                return NotFound(new { erro = "Catálogo público não disponível para esta loja." });
+
+            mostrarPreco   = matriz.CatalogoMostrarPreco;
+            mostrarEstoque = matriz.CatalogoMostrarEstoque;
+
             query = query.IgnoreQueryFilters()
                          .Where(p => p.IsActive && !p.IsDeleted && p.TenantId == tenantId.Value);
+        }
 
         // Filtra com estoque disponível
         query = query.Where(p => p.Stock > 0);
@@ -199,8 +219,11 @@ public class ProductsController : ControllerBase
                 CategoryName = p.Category != null ? p.Category.Name : "",
                 p.Barcode,
                 p.Unit,
-                SalePrice = p.SalePrice,
-                Stock     = p.Stock,
+                // S11 FIX: preço e estoque só aparecem se o tenant optou explicitamente
+                // (CatalogoMostrarPreco / CatalogoMostrarEstoque). Tenant autenticado
+                // (sem tenantId explícito — chamada interna) sempre vê tudo.
+                SalePrice = (!tenantId.HasValue || mostrarPreco) ? (decimal?)p.SalePrice : null,
+                Stock     = (!tenantId.HasValue || mostrarEstoque) ? (decimal?)p.Stock : null,
                 ImageUrl  = (string?)null
             })
             .ToListAsync();

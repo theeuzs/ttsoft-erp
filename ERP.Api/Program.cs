@@ -1,4 +1,3 @@
-
 using ERP.Api.Hubs;
 using ERP.Api.Middleware;
 using ERP.Api.Services;
@@ -13,6 +12,7 @@ using ERP.Persistence.Context;
 using AspNetCoreRateLimit;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.RateLimiting;
@@ -22,6 +22,7 @@ using Serilog;
 using Serilog.Context;
 using System.IO.Compression;
 using System.Text;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -118,7 +119,7 @@ builder.Services.AddScoped<ERP.Infrastructure.Services.AuditSqlService>();
 
 builder.Services.AddMemoryCache();
 
-// ── Rate Limiting ─────────────────────────────────────────────────────────────
+// ── Rate Limiting (AspNetCoreRateLimit — geral por IP, todas as rotas) ───────
 builder.Services.Configure<IpRateLimitOptions>(opt =>
 {
     opt.EnableEndpointRateLimiting = true;
@@ -322,21 +323,58 @@ builder.Services.AddSwaggerGen(opt =>
 
 builder.Services.AddScoped<IFidelidadeService, FidelidadeService>();
 
+// ── S11: Rate limiter particionado por IP (substitui o balde global da S10) ──
+// S10 tinha AddFixedWindowLimiter("cadastro-strict", ...) sem partitioner —
+// virava um ÚNICO balde de 3/hora compartilhado por TODO o tráfego anônimo
+// do mundo inteiro. Qualquer pico de marketing (link em rede social) congelava
+// o onboarding para todo mundo, e um atacante distribuído derrubava o endpoint
+// com facilidade. AddPolicy + RateLimitPartition.GetFixedWindowLimiter cria um
+// balde independente por IP — isolamento real entre clientes.
 builder.Services.AddRateLimiter(options =>
 {
-    options.AddFixedWindowLimiter("cadastro-strict", o =>
-    {
-        o.PermitLimit = 3;
-        o.Window      = TimeSpan.FromHours(1);
-        o.QueueLimit  = 0;
-    });
+    options.AddPolicy("cadastro-strict", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString()
+                       ?? context.Request.Headers["X-Forwarded-For"].ToString()
+                       ?? "anon",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 3,
+                Window      = TimeSpan.FromHours(1),
+                QueueLimit  = 0,
+            }));
+
+    // S11: rate limit do catálogo público — mais permissivo que o cadastro
+    // (100/hora/IP), mas ainda impede scraping massivo mesmo de tenants opt-in.
+    options.AddPolicy("catalogo-publico", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString()
+                       ?? context.Request.Headers["X-Forwarded-For"].ToString()
+                       ?? "anon",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 100,
+                Window      = TimeSpan.FromHours(1),
+                QueueLimit  = 0,
+            }));
 
     options.OnRejected = async (context, token) =>
     {
         context.HttpContext.Response.StatusCode = 429;
         await context.HttpContext.Response.WriteAsJsonAsync(
-            new { erro = "Muitas tentativas de cadastro. Tente novamente em 1 hora." }, token);
+            new { erro = "Muitas tentativas. Tente novamente mais tarde." }, token);
     };
+});
+
+// ── S11: Forwarded headers — necessário em Azure App Service para que
+// context.Connection.RemoteIpAddress reflita o IP real do cliente (e não o
+// IP interno do load balancer do Azure). Sem isso, todos os requests teriam
+// o mesmo "IP" (do LB) e o partitioner acima viraria um balde global de novo.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 var app = builder.Build();
@@ -357,6 +395,10 @@ app.UseExceptionHandler(errApp => errApp.Run(async ctx =>
 }));
 
 app.UseResponseCompression();
+
+// S11: ForwardedHeaders DEVE vir cedo no pipeline — antes de qualquer
+// middleware que leia Connection.RemoteIpAddress (rate limiter, logging, etc).
+app.UseForwardedHeaders();
 
 // S2.3: CorrelationId PRIMEIRO — para que todos os middlewares seguintes já
 // tenham o ID disponível no LogContext e no TraceIdentifier

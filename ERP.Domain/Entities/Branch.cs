@@ -15,6 +15,18 @@ public class Branch : BaseEntity
     public bool    IsMatriz   { get; set; } = false;
     public bool    IsActive   { get; set; } = true;
 
+    // ── S11: Opt-in para catálogo público (FIX vazamento N4 da 11ª auditoria) ──
+    // Antes: GetCatalogo aceitava qualquer tenantId sem checagem — vazava
+    // preço/estoque/portfólio de qualquer cliente TTSoft para quem soubesse o CNPJ.
+    // Default = false em todos os 3 — tenant precisa optar explicitamente por
+    // expor cada nível de informação.
+    /// <summary>Habilita o endpoint público /api/products/catalogo para este tenant. Default: false.</summary>
+    public bool CatalogoPublicoHabilitado { get; set; } = false;
+    /// <summary>Mostra SalePrice no catálogo público (requer CatalogoPublicoHabilitado). Default: false.</summary>
+    public bool CatalogoMostrarPreco      { get; set; } = false;
+    /// <summary>Mostra Stock no catálogo público (requer CatalogoPublicoHabilitado). Default: false.</summary>
+    public bool CatalogoMostrarEstoque    { get; set; } = false;
+
     // Navegação
     public ICollection<ProductBranchStock> Stocks { get; set; } = new List<ProductBranchStock>();
 }
