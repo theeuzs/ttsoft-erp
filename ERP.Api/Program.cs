@@ -140,6 +140,13 @@ builder.Services.AddSingleton<IProcessingStrategy,    AsyncKeyLockProcessingStra
 builder.Services.AddScoped<ISefazConsultaService, SefazConsultaService>();
 builder.Services.AddScoped<ICadastroService, CadastroService>();
 
+// S11: BrasilAPI para validação de CNPJ na Receita Federal
+builder.Services.AddHttpClient<BrasilApiService>(client =>
+{
+    client.BaseAddress = new Uri("https://brasilapi.com.br/");
+    client.Timeout     = TimeSpan.FromSeconds(10);
+});
+
 // ── Fase 2 ────────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<ERP.Infrastructure.Services.ITransferenciaService,
                             ERP.Infrastructure.Services.TransferenciaService>();
@@ -373,13 +380,8 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
-    System.Net.IPAddress.Parse("23.96.0.0"), 11));   // Azure East US
-options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
-    System.Net.IPAddress.Parse("191.232.0.0"), 13)); // Azure Brazil South
-options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
-    System.Net.IPAddress.Parse("20.0.0.0"), 8));     // Azure global modern range
-options.KnownProxies.Clear();
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 var app = builder.Build();

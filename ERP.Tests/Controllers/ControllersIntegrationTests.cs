@@ -17,6 +17,7 @@ using System.Text.Json;
 using ERP.Api.Security;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Infrastructure.Services;
 using ERP.Persistence.Context;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
@@ -30,6 +31,19 @@ using System.Security.Claims;
 using Xunit;
 
 namespace ERP.Tests.Controllers;
+
+// ── S11: Stub HTTP handler para BrasilApiService nos testes ──────────────────
+// Simula BrasilAPI indisponível (503) → fail-open → cadastro prossegue sem validação RFB.
+// Evita dependência de rede externa nos testes de integração.
+public class StubHttpHandler : HttpMessageHandler
+{
+    private readonly System.Net.HttpStatusCode _statusCode;
+    public StubHttpHandler(System.Net.HttpStatusCode statusCode) => _statusCode = statusCode;
+
+    protected override Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request, CancellationToken cancellationToken)
+        => Task.FromResult(new HttpResponseMessage(_statusCode));
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  FACTORY — substitui SQL Server por InMemory e fornece helpers
@@ -84,6 +98,13 @@ public class ErpApiFactory : WebApplicationFactory<Program>
                         RoleClaimType            = "role_name"
                     };
                 });
+
+            // S11: stub do BrasilApiService para testes — retorna null (fail-open)
+            // evita chamadas reais à BrasilAPI durante a suite de testes.
+            services.RemoveAll<BrasilApiService>();
+            services.AddHttpClient<BrasilApiService>()
+                .ConfigurePrimaryHttpMessageHandler(() =>
+                    new StubHttpHandler(System.Net.HttpStatusCode.ServiceUnavailable));
         });
     }
 

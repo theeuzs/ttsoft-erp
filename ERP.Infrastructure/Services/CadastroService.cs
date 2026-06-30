@@ -23,15 +23,17 @@ namespace ERP.Infrastructure.Services;
 /// </summary>
 public class CadastroService : ICadastroService
 {
-    private readonly IUnitOfWork    _uow;
-    private readonly AppDbContext   _db;
-    private readonly IConfiguration _config;
+    private readonly IUnitOfWork       _uow;
+    private readonly AppDbContext      _db;
+    private readonly IConfiguration   _config;
+    private readonly BrasilApiService  _brasilApi;
 
-    public CadastroService(IUnitOfWork uow, AppDbContext db, IConfiguration config)
+    public CadastroService(IUnitOfWork uow, AppDbContext db, IConfiguration config, BrasilApiService brasilApi)
     {
-        _uow    = uow;
-        _db     = db;
-        _config = config;
+        _uow       = uow;
+        _db        = db;
+        _config    = config;
+        _brasilApi = brasilApi;
     }
 
     public async Task<CadastroResponseDto> CadastrarTenantAsync(CadastroRequestDto dto)
@@ -43,6 +45,33 @@ public class CadastroService : ICadastroService
 
         if (!ValidarCnpj(cnpjLimpo))
             throw new InvalidOperationException("CNPJ inválido. Verifique os dígitos informados.");
+
+        // 1b. S11 — Validação Receita Federal via BrasilAPI (fail-open):
+        //   Nível 1: rejeita CNPJs inativos/baixados/suspensos.
+        //   Nível 2: cruza e-mail informado com e-mail da RFB (log de aviso, sem bloqueio).
+        var dadosRfb = await _brasilApi.ConsultarCnpjAsync(cnpjLimpo);
+        if (dadosRfb != null)
+        {
+            var situacao = dadosRfb.DescricaoSituacaoCadastral?.Trim().ToUpperInvariant();
+            if (situacao != "ATIVA")
+            {
+                Log.Warning("Onboarding bloqueado: CNPJ {Cnpj} situação RFB = {Situacao}", cnpjLimpo, situacao);
+                throw new InvalidOperationException(
+                    $"Este CNPJ consta como \"{dadosRfb.DescricaoSituacaoCadastral}\" na Receita Federal. " +
+                    "Apenas empresas com situação ATIVA podem se cadastrar.");
+            }
+
+            // Nível 2: cruza e-mail (aviso, sem bloqueio)
+            var emailRfb = dadosRfb.Email?.Trim().ToLowerInvariant();
+            var emailDto = dto.Email?.Trim().ToLowerInvariant();
+            if (!string.IsNullOrEmpty(emailRfb) && !string.IsNullOrEmpty(emailDto) && emailRfb != emailDto)
+            {
+                Log.Warning(
+                    "Onboarding: e-mail informado ({EmailDto}) difere do e-mail RFB ({EmailRfb}) para CNPJ {Cnpj}. " +
+                    "Cadastro permitido — monitorar para possível squatting.",
+                    emailDto, emailRfb, cnpjLimpo);
+            }
+        }
 
         // 2. Deriva TenantId — mesmo algoritmo SHA-256 do WPF/TenantHelper
         var tenantId = CnpjParaTenantId(cnpjLimpo);
