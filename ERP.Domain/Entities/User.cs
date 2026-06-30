@@ -11,6 +11,10 @@ public class User : BaseEntity
     /// <summary>1.6.8: Se true, o usuário deve trocar a senha no próximo login.</summary>
     public bool MustChangePassword { get; set; } = false;
 
+    // ── S11: Email para recuperação de senha ──────────────────────────────
+    /// <summary>E-mail do usuário — usado para envio de link de recuperação de senha.</summary>
+    public string? Email { get; set; }
+
     // ── Proteção contra força bruta ──────────────────────────────────────
     /// <summary>Contador de tentativas de login com falha consecutivas.</summary>
     public int FailedLoginAttempts { get; set; } = 0;
@@ -19,5 +23,5 @@ public class User : BaseEntity
 
     // NOVO RBAC: Substitui o antigo Enum
     public Guid? RoleId { get; set; }
-    public Role? Role { get; set; } = null!; // O null! avisa o compilador que o EF Core vai preencher isso
+    public Role? Role { get; set; } = null!;
 }

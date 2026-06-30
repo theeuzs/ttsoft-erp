@@ -1,0 +1,92 @@
+@page "/recuperar-senha"
+@using ERP.Portal.Services
+@inject NavigationManager Nav
+@inject ApiClient Api
+
+<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#1E293B,#1E62A6);">
+    <div style="background:white;border-radius:16px;padding:40px;width:400px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+
+        @if (_enviado)
+        {
+            <div style="text-align:center;">
+                <div style="font-size:48px;margin-bottom:16px;">📧</div>
+                <div style="font-size:20px;font-weight:800;color:#1E62A6;margin-bottom:12px;">Verifique seu e-mail</div>
+                <div style="font-size:14px;color:#64748B;margin-bottom:24px;line-height:1.6;">
+                    Se o e-mail informado estiver cadastrado, você receberá um link de recuperação em breve.
+                </div>
+                <button @onclick='() => Nav.NavigateTo("/login")'
+                        style="width:100%;background:#1E62A6;color:white;border:none;padding:12px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;">
+                    Voltar ao Login
+                </button>
+            </div>
+        }
+        else
+        {
+            <div style="text-align:center;margin-bottom:28px;">
+                <div style="font-size:32px;">🔑</div>
+                <div style="font-size:22px;font-weight:800;color:#1E62A6;margin-top:8px;">TTSoft ERP</div>
+                <div style="font-size:13px;color:#94A3B8;margin-top:4px;">Recuperar senha</div>
+            </div>
+
+            <div style="margin-bottom:14px;">
+                <label style="font-size:12px;font-weight:600;color:#64748B;display:block;margin-bottom:6px;">CNPJ DA EMPRESA</label>
+                <input @bind="_cnpj" placeholder="00.000.000/0000-00"
+                       style="width:100%;padding:10px;border:1px solid #CBD5E1;border-radius:8px;font-size:14px;box-sizing:border-box;"/>
+            </div>
+
+            <div style="margin-bottom:20px;">
+                <label style="font-size:12px;font-weight:600;color:#64748B;display:block;margin-bottom:6px;">E-MAIL CADASTRADO</label>
+                <input @bind="_email" type="email" placeholder="contato@suaempresa.com.br"
+                       style="width:100%;padding:10px;border:1px solid #CBD5E1;border-radius:8px;font-size:14px;box-sizing:border-box;"/>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_erro))
+            {
+                <div style="background:#FEE2E2;color:#EF4444;padding:10px;border-radius:8px;font-size:13px;margin-bottom:16px;">
+                    ⚠️ @_erro
+                </div>
+            }
+
+            <button @onclick="SolicitarAsync" disabled="@_loading"
+                    style="width:100%;background:#1E62A6;color:white;border:none;padding:12px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:12px;">
+                @(_loading ? "Enviando..." : "ENVIAR LINK DE RECUPERAÇÃO")
+            </button>
+
+            <div style="text-align:center;font-size:13px;color:#64748B;">
+                Lembrou a senha?
+                <span @onclick='() => Nav.NavigateTo("/login")'
+                      style="color:#1E62A6;font-weight:600;cursor:pointer;text-decoration:underline;">
+                    Entrar
+                </span>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private string _cnpj    = "";
+    private string _email   = "";
+    private string _erro    = "";
+    private bool   _loading = false;
+    private bool   _enviado = false;
+
+    private async Task SolicitarAsync()
+    {
+        _loading = true;
+        _erro    = "";
+
+        try
+        {
+            await Api.PostAsync("api/auth/forgot-password", new { Cnpj = _cnpj, Email = _email });
+            _enviado = true;
+        }
+        catch
+        {
+            _erro = "Erro ao processar solicitação. Tente novamente.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

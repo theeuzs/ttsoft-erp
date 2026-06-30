@@ -82,6 +82,7 @@ public class CadastroService : ICadastroService
             PasswordHash       = senhaHash,
             IsActive           = true,
             MustChangePassword = true,
+            Email              = dto.Email,   // S11: salvo para recuperação de senha
             RoleId             = roleAdmin.Id
         };
 

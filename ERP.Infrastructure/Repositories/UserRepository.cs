@@ -72,6 +72,15 @@ public class UserRepository : IUserRepository
         }
     }
 
+    public async Task<User?> GetByEmailAndTenantAsync(string email, Guid tenantId)
+        => await _context.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u =>
+                u.Email == email &&
+                u.TenantId == tenantId &&
+                u.IsActive &&
+                !u.IsDeleted);
+
     public async Task UpdateLoginAttemptAsync(Guid userId, Guid tenantId, int failedAttempts, DateTime? lockoutEndUtc)
     {
         // S10 FIX: tenantId agora vem explícito do AuthService.

@@ -10,6 +10,14 @@
 {
     @Body
 }
+else if (!Auth.LoggedIn && Nav.ToBaseRelativePath(Nav.Uri).StartsWith("recuperar-senha", StringComparison.OrdinalIgnoreCase))
+{
+    @Body
+}
+else if (!Auth.LoggedIn && Nav.ToBaseRelativePath(Nav.Uri).StartsWith("nova-senha", StringComparison.OrdinalIgnoreCase))
+{
+    @Body
+}
 else if (!Auth.LoggedIn)
 {
     <ERP.Portal.Pages.Login />

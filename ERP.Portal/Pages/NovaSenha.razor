@@ -1,0 +1,116 @@
+@page "/nova-senha"
+@using ERP.Portal.Services
+@inject NavigationManager Nav
+@inject ApiClient Api
+
+<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#1E293B,#1E62A6);">
+    <div style="background:white;border-radius:16px;padding:40px;width:400px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+
+        @if (_sucesso)
+        {
+            <div style="text-align:center;">
+                <div style="font-size:48px;margin-bottom:16px;">✅</div>
+                <div style="font-size:20px;font-weight:800;color:#16A34A;margin-bottom:12px;">Senha alterada!</div>
+                <div style="font-size:14px;color:#64748B;margin-bottom:24px;">
+                    Sua senha foi redefinida com sucesso. Faça login com a nova senha.
+                </div>
+                <button @onclick='() => Nav.NavigateTo("/login")'
+                        style="width:100%;background:#1E62A6;color:white;border:none;padding:12px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;">
+                    Ir para o Login
+                </button>
+            </div>
+        }
+        else if (string.IsNullOrEmpty(_token))
+        {
+            <div style="text-align:center;color:#EF4444;">
+                <div style="font-size:48px;margin-bottom:16px;">❌</div>
+                <div>Link inválido ou expirado. Solicite um novo link de recuperação.</div>
+                <button @onclick='() => Nav.NavigateTo("/recuperar-senha")'
+                        style="width:100%;margin-top:20px;background:#1E62A6;color:white;border:none;padding:12px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;">
+                    Solicitar novo link
+                </button>
+            </div>
+        }
+        else
+        {
+            <div style="text-align:center;margin-bottom:28px;">
+                <div style="font-size:32px;">🔐</div>
+                <div style="font-size:22px;font-weight:800;color:#1E62A6;margin-top:8px;">Nova Senha</div>
+                <div style="font-size:13px;color:#94A3B8;margin-top:4px;">Defina sua nova senha de acesso</div>
+            </div>
+
+            <div style="margin-bottom:14px;">
+                <label style="font-size:12px;font-weight:600;color:#64748B;display:block;margin-bottom:6px;">NOVA SENHA</label>
+                <input @bind="_novaSenha" type="password" placeholder="Mínimo 8 caracteres com 1 número"
+                       style="width:100%;padding:10px;border:1px solid #CBD5E1;border-radius:8px;font-size:14px;box-sizing:border-box;"/>
+            </div>
+
+            <div style="margin-bottom:20px;">
+                <label style="font-size:12px;font-weight:600;color:#64748B;display:block;margin-bottom:6px;">CONFIRMAR SENHA</label>
+                <input @bind="_confirmar" type="password" placeholder="Repita a nova senha"
+                       style="width:100%;padding:10px;border:1px solid #CBD5E1;border-radius:8px;font-size:14px;box-sizing:border-box;"/>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_erro))
+            {
+                <div style="background:#FEE2E2;color:#EF4444;padding:10px;border-radius:8px;font-size:13px;margin-bottom:16px;">
+                    ⚠️ @_erro
+                </div>
+            }
+
+            <button @onclick="RedefinirAsync" disabled="@_loading"
+                    style="width:100%;background:#1E62A6;color:white;border:none;padding:12px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;">
+                @(_loading ? "Salvando..." : "SALVAR NOVA SENHA")
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    private string _token    = "";
+    private string _novaSenha = "";
+    private string _confirmar = "";
+    private string _erro      = "";
+    private bool   _loading   = false;
+    private bool   _sucesso   = false;
+
+    protected override void OnInitialized()
+    {
+        var uri    = new Uri(Nav.Uri);
+        var query  = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        _token     = query["token"] ?? "";
+    }
+
+    private async Task RedefinirAsync()
+    {
+        _erro = "";
+        if (_novaSenha != _confirmar)
+        {
+            _erro = "As senhas não coincidem.";
+            return;
+        }
+        if (_novaSenha.Length < 8 || !_novaSenha.Any(char.IsDigit))
+        {
+            _erro = "Senha deve ter no mínimo 8 caracteres e conter pelo menos um número.";
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            await Api.PostAsync("api/auth/reset-password",
+                new { Token = _token, NovaSenha = _novaSenha });
+            _sucesso = true;
+        }
+        catch (Exception ex)
+        {
+            _erro = ex.Message.Contains("já foi utilizado")
+                ? "Este link já foi utilizado. Solicite um novo."
+                : "Link inválido ou expirado. Solicite um novo link.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}
