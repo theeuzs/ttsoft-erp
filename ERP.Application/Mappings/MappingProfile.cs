@@ -11,7 +11,12 @@ public class MappingProfile : Profile
     public MappingProfile()
     {
         // Product
+        // S11: .MaxDepth(64) — mitigação de GHSA-rvv3-g6hj-g44x (DoS via recursão).
+        // Product tem ParentProduct (auto-referencial). O map acessa apenas
+        // ParentProduct?.Name (string), não mapeia Product→ProductDto recursivamente,
+        // então o risco real é baixo — mas MaxDepth defende em profundidade.
         CreateMap<Product, ProductDto>()
+            .MaxDepth(64)
             .ConstructUsing(p => new ProductDto(
                 p.Id, p.Name, p.Barcode, p.SKU,
                 p.Category != null ? p.Category.Name : null,
@@ -56,7 +61,7 @@ public class MappingProfile : Profile
                 c.Neighborhood,
                 c.State,
                 c.ZipCode,
-                c.StateRegistration,  // Ie
+                c.StateRegistration,
                 c.Email,
                 (int)c.GrupoPreco,
                 c.LimiteCredito,
@@ -76,7 +81,6 @@ public class MappingProfile : Profile
                 s.Status,
                 string.Join(", ", s.Payments.Select(p => p.PaymentMethod.ToString())),
                 s.Total,
-                // 👇 AGORA SIM, PASSANDO OS DADOS REAIS PARA A TELA DE NOTAS 👇
                 s.NfceChave,
                 s.NfceNumero,
                 s.NfceUrlDanfe,
@@ -85,27 +89,26 @@ public class MappingProfile : Profile
                 s.NfceReferencia
             ));
 
-        // Ensina o AutoMapper a converter a entidade de Pagamento para o DTO
         CreateMap<SalePayment, SalePaymentDto>()
             .ConstructUsing(src => new SalePaymentDto(src.PaymentMethod.ToString(), src.Amount));
 
-       CreateMap<Sale, SaleDetailDto>()
-    .ConstructUsing((s, ctx) => new SaleDetailDto(
-        s.Id,                                           // 1
-        s.SaleNumber,                                   // 2
-        s.Customer != null ? s.Customer.Name : null,    // 3
-        s.SellerName,                                   // 4
-        s.CustomerId,                                   // 5
-        s.Customer != null ? s.Customer.Phone : null,   // 6
-        s.SaleDate,                                     // 7
-        s.Status,                                       // 8
-        s.Subtotal,                                     // 9
-        s.DiscountAmount,                               // 10
-        s.Total,                                        // 11
-        s.Payments.Select(p => new SalePaymentDto(p.PaymentMethod.ToString(), p.Amount)).ToList(), // 12
-        ctx.Mapper.Map<List<SaleItemDto>>(s.Items),     // 13 - Coloquei a vírgula aqui!
-        s.Notes                                   // 14 - 👈 A ÚLTIMA PEÇA ENCAIXA AQUI!
-    ));
+        CreateMap<Sale, SaleDetailDto>()
+            .ConstructUsing((s, ctx) => new SaleDetailDto(
+                s.Id,
+                s.SaleNumber,
+                s.Customer != null ? s.Customer.Name : null,
+                s.SellerName,
+                s.CustomerId,
+                s.Customer != null ? s.Customer.Phone : null,
+                s.SaleDate,
+                s.Status,
+                s.Subtotal,
+                s.DiscountAmount,
+                s.Total,
+                s.Payments.Select(p => new SalePaymentDto(p.PaymentMethod.ToString(), p.Amount)).ToList(),
+                ctx.Mapper.Map<List<SaleItemDto>>(s.Items),
+                s.Notes
+            ));
 
         CreateMap<SaleItem, SaleItemDto>()
             .ConstructUsing(i => new SaleItemDto(

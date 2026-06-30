@@ -6,7 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="AutoMapper" Version="14.0.0" />
-    <PackageReference Include="System.Security.Cryptography.Xml" Version="8.0.1" />
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="8.0.3" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.1.0" />
     <PackageReference Include="Dapper" Version="2.1.66" />
     <PackageReference Include="FluentResults" Version="4.0.0" />
@@ -17,6 +17,12 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Serilog" Version="4.3.1" />
   </ItemGroup>
+  <ItemGroup>
+  <!-- S11: MaxDepth(64) aplicado no MappingProfile (Product map). AutoMapper 14.x
+       não terá patch gratuito — 15.x/16.x são comerciais (LuckyPenny Software).
+       Remover quando migrar para Mapperly. -->
+  <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-rvv3-g6hj-g44x" />
+</ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ERP.Domain\ERP.Domain.csproj" />
   </ItemGroup>

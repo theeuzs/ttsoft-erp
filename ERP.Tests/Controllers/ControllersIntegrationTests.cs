@@ -1609,9 +1609,10 @@ public class S10BruteForceRegressaoTests : IClassFixture<ErpApiFactory>
     // CNPJ fictício com dígitos verificadores válidos para o teste
     private const string CnpjTeste = "11222333000181";
 
-    // Hash BCrypt de "SenhaCorreta@123" — pré-computado para não depender de BCrypt nos testes
-    private const string HashSenhaCorreta =
-        "$2b$12$0WWQu20zk3bJEWfKDFgRR.zcc6pRbfkj4MLuSW7J2avFyxiVf.g/u";
+    // S11 FIX: hash gerado no próprio teste — constante pré-computada era incorreta
+    // e causava falso negativo (3ª tentativa também falhava com senha "correta").
+    private static readonly string HashSenhaCorreta =
+        BCrypt.Net.BCrypt.HashPassword("SenhaCorreta@123", 12);
 
     public S10BruteForceRegressaoTests(ErpApiFactory factory) => _factory = factory;
 
@@ -1706,25 +1707,41 @@ public class S10BruteForceRegressaoTests : IClassFixture<ErpApiFactory>
     [Fact(DisplayName = "S10 N1 — Login bem-sucedido reseta FailedLoginAttempts no banco sem SetGlobalTenantId")]
     public async Task BruteForce_LoginSucesso_ResetaContadorNoBanco()
     {
-        // Arrange
-        var tenantId = TenantIdDoCnpj(CnpjTeste + "reset");
-        var cnpjReset = CnpjTeste.Replace("1", "2"); // CNPJ diferente para isolar o teste
+        // S11 FIX: antes o teste usava CnpjTeste+"reset" para derivar tenantId mas
+        // enviava X-Tenant-CNPJ: CnpjTeste — header apontava para tenant diferente,
+        // login retornava 401 sem chamar UpdateLoginAttemptAsync, assert passava trivialmente.
+        // Agora CNPJ e tenantId são derivados do mesmo valor (CnpjResetTeste).
+        const string CnpjResetTeste = "22333444000107"; // CNPJ válido diferente do CnpjTeste
+        var tenantId = TenantIdDoCnpj(CnpjResetTeste);
         await SeedUsuarioAsync(tenantId, "adminReset", HashSenhaCorreta);
 
         var client = _factory.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Tenant-CNPJ", CnpjTeste);
+        client.DefaultRequestHeaders.Add("X-Tenant-CNPJ", CnpjResetTeste); // mesmo CNPJ do seed
 
-        // 2 tentativas erradas
+        // 2 tentativas erradas — deve incrementar FailedLoginAttempts
         await client.PostAsJsonAsync("/api/auth/login",
             new { Username = "adminReset", Password = "errada" });
         await client.PostAsJsonAsync("/api/auth/login",
             new { Username = "adminReset", Password = "errada" });
+
+        // Verifica que o contador foi de fato incrementado (teste real, não trivial)
+        AppDbContext.SetQueryTenantId(tenantId);
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var userApos2Erros = await db.Users
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(u => u.Username == "adminReset" && u.TenantId == tenantId);
+            userApos2Erros!.FailedLoginAttempts.Should().Be(2,
+                "2 tentativas erradas devem incrementar o contador antes do reset");
+        }
+        AppDbContext.SetQueryTenantId(Guid.Empty);
 
         // Login correto — deve resetar o contador
         await client.PostAsJsonAsync("/api/auth/login",
             new { Username = "adminReset", Password = "SenhaCorreta@123" });
 
-        // Assert
+        // Assert — contador deve ter voltado a 0
         AppDbContext.SetQueryTenantId(tenantId);
         try
         {

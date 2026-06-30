@@ -38,6 +38,12 @@
     -->
     <!-- Já incluso no SDK: Microsoft.AspNetCore.ResponseCompression -->
   </ItemGroup>
+  <ItemGroup>
+  <!-- S11: MaxDepth(64) aplicado no MappingProfile (Product map). AutoMapper 14.x
+       não terá patch gratuito — 15.x/16.x são comerciais (LuckyPenny Software).
+       Remover quando migrar para Mapperly. -->
+  <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-rvv3-g6hj-g44x" />
+</ItemGroup>
 
   <ItemGroup>
     <!-- S9: schemas XSD NF-e v4.00 (NT2026.004) copiados para o diretório de saída.

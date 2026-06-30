@@ -373,8 +373,13 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.KnownNetworks.Clear();
-    options.KnownProxies.Clear();
+    options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
+    System.Net.IPAddress.Parse("23.96.0.0"), 11));   // Azure East US
+options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
+    System.Net.IPAddress.Parse("191.232.0.0"), 13)); // Azure Brazil South
+options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
+    System.Net.IPAddress.Parse("20.0.0.0"), 8));     // Azure global modern range
+options.KnownProxies.Clear();
 });
 
 var app = builder.Build();
