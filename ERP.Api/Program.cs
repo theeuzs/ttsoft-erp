@@ -351,8 +351,7 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit  = 0,
             }));
 
-    // S11: rate limit do catálogo público — mais permissivo que o cadastro
-    // (100/hora/IP), mas ainda impede scraping massivo mesmo de tenants opt-in.
+    // S11: rate limit do catálogo público
     options.AddPolicy("catalogo-publico", context =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: context.Connection.RemoteIpAddress?.ToString()
@@ -361,6 +360,34 @@ builder.Services.AddRateLimiter(options =>
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 100,
+                Window      = TimeSpan.FromHours(1),
+                QueueLimit  = 0,
+            }));
+
+    // S12: rate limit dos endpoints de recuperação de senha
+    // forgot-password: 5/h/IP — impede email bomb + SMTP DoS
+    options.AddPolicy("forgot-password-strict", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString()
+                       ?? context.Request.Headers["X-Forwarded-For"].ToString()
+                       ?? "anon",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window      = TimeSpan.FromHours(1),
+                QueueLimit  = 0,
+            }));
+
+    // reset-password: 10/h/IP — mais permissivo que o forgot (usuário legítimo
+    // pode tentar múltiplas vezes se a senha for rejeitada pela política)
+    options.AddPolicy("reset-password-strict", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString()
+                       ?? context.Request.Headers["X-Forwarded-For"].ToString()
+                       ?? "anon",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
                 Window      = TimeSpan.FromHours(1),
                 QueueLimit  = 0,
             }));

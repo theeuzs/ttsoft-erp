@@ -18,6 +18,10 @@ else if (!Auth.LoggedIn && Nav.ToBaseRelativePath(Nav.Uri).StartsWith("nova-senh
 {
     @Body
 }
+else if (!Auth.LoggedIn && Nav.ToBaseRelativePath(Nav.Uri).StartsWith("confirmar-cadastro", StringComparison.OrdinalIgnoreCase))
+{
+    @Body
+}
 else if (!Auth.LoggedIn)
 {
     <ERP.Portal.Pages.Login />

@@ -1,0 +1,73 @@
+@page "/confirmar-cadastro"
+@using ERP.Portal.Services
+@inject NavigationManager Nav
+@inject ApiClient Api
+
+<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#1E293B,#1E62A6);">
+    <div style="background:white;border-radius:16px;padding:40px;width:440px;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center;">
+
+        @if (_carregando)
+        {
+            <div style="font-size:32px;margin-bottom:16px;">⏳</div>
+            <div style="font-size:16px;color:#64748B;">Confirmando seu cadastro...</div>
+        }
+        else if (_sucesso)
+        {
+            <div style="font-size:48px;margin-bottom:16px;">✅</div>
+            <div style="font-size:22px;font-weight:800;color:#16A34A;margin-bottom:12px;">Conta confirmada!</div>
+            <div style="font-size:14px;color:#64748B;margin-bottom:24px;line-height:1.6;">
+                Sua conta foi ativada com sucesso. Já pode acessar o sistema.
+            </div>
+            <button @onclick='() => Nav.NavigateTo("/login")'
+                    style="width:100%;background:#1E62A6;color:white;border:none;padding:12px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;">
+                Ir para o Login
+            </button>
+        }
+        else
+        {
+            <div style="font-size:48px;margin-bottom:16px;">❌</div>
+            <div style="font-size:20px;font-weight:800;color:#EF4444;margin-bottom:12px;">Link inválido</div>
+            <div style="font-size:14px;color:#64748B;margin-bottom:24px;">
+                @_erro
+            </div>
+            <button @onclick='() => Nav.NavigateTo("/cadastro")'
+                    style="width:100%;background:#1E62A6;color:white;border:none;padding:12px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;">
+                Tentar novo cadastro
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    private bool   _carregando = true;
+    private bool   _sucesso    = false;
+    private string _erro       = "Token inválido ou já utilizado.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var uri   = new Uri(Nav.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var token = query["token"] ?? "";
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            _carregando = false;
+            _erro       = "Token de confirmação não informado.";
+            return;
+        }
+
+        try
+        {
+            await Api.GetAsync<object>($"api/cadastro/confirmar?token={Uri.EscapeDataString(token)}");
+            _sucesso = true;
+        }
+        catch
+        {
+            _erro = "Link inválido ou já utilizado. Tente realizar um novo cadastro.";
+        }
+        finally
+        {
+            _carregando = false;
+        }
+    }
+}

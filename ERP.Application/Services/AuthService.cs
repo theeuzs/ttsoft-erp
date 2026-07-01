@@ -105,14 +105,17 @@ public class AuthService : IAuthService
         if (!BCrypt.Net.BCrypt.Verify(currentPassword, user.PasswordHash))
             throw new InvalidOperationException("Senha atual incorreta.");
 
-        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 8)
-            throw new InvalidOperationException("A nova senha deve ter no mínimo 8 caracteres.");
+        // S12 FIX: usa PasswordPolicy centralizado (antes: 8 chars sem dígito obrigatório)
+        var (ok, erro) = ERP.Application.Helpers.PasswordPolicy.Validar(newPassword);
+        if (!ok) throw new InvalidOperationException(erro!);
 
         if (newPassword == currentPassword)
             throw new InvalidOperationException("A nova senha deve ser diferente da senha atual.");
 
         var hash = BCrypt.Net.BCrypt.HashPassword(newPassword, 12);
-        await _userRepository.UpdatePasswordAsync(userId, hash, mustChangePassword: false);
+
+        // S12 FIX: passa user.TenantId explicitamente (S10 N1 pattern)
+        await _userRepository.UpdatePasswordAsync(userId, user.TenantId, hash, mustChangePassword: false);
 
         Log.Information("Senha alterada com sucesso para usuário {UserId}", userId);
     }

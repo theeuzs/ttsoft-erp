@@ -81,6 +81,12 @@ public class UserRepository : IUserRepository
                 u.IsActive &&
                 !u.IsDeleted);
 
+    // S12: busca por token de confirmação (cross-check e-mail RFB)
+    public async Task<User?> GetByConfirmacaoTokenAsync(string token)
+        => await _context.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.ConfirmacaoToken == token && !u.IsDeleted);
+
     public async Task UpdateLoginAttemptAsync(Guid userId, Guid tenantId, int failedAttempts, DateTime? lockoutEndUtc)
     {
         // S10 FIX: tenantId agora vem explícito do AuthService.
@@ -104,18 +110,16 @@ public class UserRepository : IUserRepository
         await _context.SaveChangesAsync();
     }
 
-    public async Task UpdatePasswordAsync(Guid userId, string newPasswordHash, bool mustChangePassword)
+    public async Task UpdatePasswordAsync(Guid userId, Guid tenantId, string newPasswordHash, bool mustChangePassword)
     {
-        // S10 FIX: GetTenantId() (instância) faz cascata correta:
-        //   1. _requestTenant.TenantId (scoped HTTP request)
-        //   2. _asyncTenantId.Value    (AsyncLocal)
-        //   3. _globalTenantId         (WPF estático)
-        // Refatorado de ExecuteSqlInterpolatedAsync para EF Core load+save.
-        var tenantId = _context.GetTenantId();
-
+        // S12 FIX: tenantId agora vem explícito do caller.
+        // Antes: _context.GetTenantId() -> Guid.Empty em fluxo anônimo (reset-password)
+        // -> InvalidOperationException -> 500 em produção.
+        // Mesmo padrão do UpdateLoginAttemptAsync (S10 N1).
         if (tenantId == Guid.Empty)
             throw new InvalidOperationException(
-                "UpdatePasswordAsync chamado sem tenant — fora de fluxo autenticado.");
+                $"UpdatePasswordAsync chamado sem tenantId (userId={userId}). " +
+                "Senha não pode ser atualizada sem tenant definido.");
 
         var user = await _context.Users
             .IgnoreQueryFilters()

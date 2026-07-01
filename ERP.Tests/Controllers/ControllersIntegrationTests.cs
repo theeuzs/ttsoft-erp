@@ -23,6 +23,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
@@ -52,13 +53,37 @@ public class StubHttpHandler : HttpMessageHandler
 public class ErpApiFactory : WebApplicationFactory<Program>
 {
     public static readonly Guid   TestTenantId = Guid.NewGuid();
-    private const string          JwtKey       = "TestSecretKeyForIntegrationTests_32bytes!";
-    private const string          JwtIssuer    = "ERPTest";
-    private const string          JwtAudience  = "ERPTest";
+    public  const string          JwtKey       = "TestSecretKeyForIntegrationTests_32bytes!";
+    public  const string          JwtIssuer    = "ERPTest";
+    public  const string          JwtAudience  = "ERPTest";
+
+    public ErpApiFactory()
+    {
+        // S12 FIX: injeta JWT config via env vars — precedência > appsettings.json.
+        // ConfigureAppConfiguration não chegava ao _config["Jwt:Key"] lido pelo
+        // AuthController.ResetPassword (validação manual, não o Bearer middleware).
+        // Env vars usam __ para separadores de seção.
+        Environment.SetEnvironmentVariable("Jwt__Key",      JwtKey);
+        Environment.SetEnvironmentVariable("Jwt__Issuer",   JwtIssuer);
+        Environment.SetEnvironmentVariable("Jwt__Audience", JwtAudience);
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+
+        // S12 FIX: injeta chave JWT no IConfiguration para que reset-password
+        // (que lê _config["Jwt:Key"] manualmente) use a mesma chave que o Bearer middleware.
+        // Antes: appsettings.json tinha "CONFIGURADO_VIA_AZURE_APP_SERVICE" → ValidateToken falhava → 400.
+        builder.ConfigureAppConfiguration((_, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Jwt:Key"]      = JwtKey,
+                ["Jwt:Issuer"]   = JwtIssuer,
+                ["Jwt:Audience"] = JwtAudience,
+            });
+        });
 
         builder.ConfigureServices(services =>
         {
@@ -1780,6 +1805,129 @@ public class S10BruteForceRegressaoTests : IClassFixture<ErpApiFactory>
         {
             AppDbContext.SetQueryTenantId(Guid.Empty);
         }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  S12 — REGRESSÃO CRÍTICO: reset-password sem SetGlobalTenantId (não lança 500)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+[Collection("ErpApi")]
+public class S12ResetPasswordRegressaoTests : IClassFixture<ErpApiFactory>
+{
+    private readonly ErpApiFactory _factory;
+    private const string CnpjReset = "33444555000180"; // CNPJ válido diferente dos outros testes
+
+    private static readonly string HashSenhaInicial =
+        BCrypt.Net.BCrypt.HashPassword("SenhaInicial123", 12);
+
+    public S12ResetPasswordRegressaoTests(ErpApiFactory factory) => _factory = factory;
+
+    private static Guid TenantIdDoCnpj(string cnpj)
+    {
+        var digits    = new string(cnpj.Where(char.IsDigit).ToArray());
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var hash      = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(digits));
+        var guidBytes = new byte[16];
+        Array.Copy(hash, guidBytes, 16);
+        return new Guid(guidBytes);
+    }
+
+    [Fact(DisplayName = "S12 CRITICO — POST /api/auth/reset-password com token valido redefine senha (nao lanca 500)")]
+    public async Task ResetPassword_ComTokenValido_RedefineSenhaSem500()
+    {
+        // Arrange: seed usuario com email
+        var tenantId = TenantIdDoCnpj(CnpjReset);
+        var userId   = Guid.NewGuid();
+        var emailReset = "reset@s12teste.com";
+
+        AppDbContext.SetQueryTenantId(tenantId);
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var role = new ERP.Domain.Entities.Role
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, Name = "Administrador"
+            };
+            db.Roles.Add(role);
+
+            db.Users.Add(new ERP.Domain.Entities.User
+            {
+                Id           = userId,
+                TenantId     = tenantId,
+                Username     = "adminS12",
+                Name         = "Admin S12",
+                PasswordHash = HashSenhaInicial,
+                Email        = emailReset,
+                IsActive     = true,
+                RoleId       = role.Id,
+                CreatedAt    = DateTime.UtcNow,
+                UpdatedAt    = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+        finally { AppDbContext.SetQueryTenantId(Guid.Empty); }
+
+        // Gera token de reset usando as MESMAS constantes da ErpApiFactory
+        // (antes usava "TTSoft"/"TTSoft" que não bate com "ERPTest"/"ERPTest" da factory)
+        var jwtKey = ErpApiFactory.JwtKey;
+        var key    = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(
+                         System.Text.Encoding.UTF8.GetBytes(jwtKey));
+        var creds  = new Microsoft.IdentityModel.Tokens.SigningCredentials(
+                         key, Microsoft.IdentityModel.Tokens.SecurityAlgorithms.HmacSha256);
+        var tokenJwt = new System.IdentityModel.Tokens.Jwt.JwtSecurityToken(
+            issuer:   ErpApiFactory.JwtIssuer,
+            audience: ErpApiFactory.JwtAudience,
+            claims:   new[]
+            {
+                new System.Security.Claims.Claim(
+                    System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub, userId.ToString()),
+                new System.Security.Claims.Claim("tid",     tenantId.ToString()),
+                new System.Security.Claims.Claim("purpose", "password-reset"),
+                // S12 FIX: iat explícito — sem ele, jwtToken.IssuedAt = DateTime.MinValue
+                // e o check one-time-use (UpdatedAt > iat + 5s) seria sempre true.
+                new System.Security.Claims.Claim(
+                    System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Iat,
+                    DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
+                    System.Security.Claims.ClaimValueTypes.Integer64),
+            },
+            notBefore: DateTime.UtcNow,
+            expires:   DateTime.UtcNow.AddHours(1),
+            signingCredentials: creds);
+
+        var tokenStr = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler()
+            .WriteToken(tokenJwt);
+
+        // Act: POST /api/auth/reset-password SEM SetGlobalTenantId (regressao S12)
+        var client = _factory.CreateClient();
+        var resp   = await client.PostAsJsonAsync("/api/auth/reset-password",
+            new { Token = tokenStr, NovaSenha = "NovaSenha123forte" });
+
+        // Assert: deve retornar 200 (nao 500 por GetTenantId() == Guid.Empty)
+        resp.StatusCode.Should().Be(System.Net.HttpStatusCode.OK,
+            "reset-password com token valido deve retornar 200, nao 500 — " +
+            "UpdatePasswordAsync deve usar tenantId explicito do token, " +
+            "nao _context.GetTenantId() que retorna Empty em flow anonimo");
+
+        // Verifica que a senha foi de fato alterada no banco
+        AppDbContext.SetQueryTenantId(tenantId);
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db   = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var user = await db.Users
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(u => u.Id == userId);
+
+            user.Should().NotBeNull();
+            BCrypt.Net.BCrypt.Verify("NovaSenha123forte", user!.PasswordHash)
+                .Should().BeTrue("a nova senha deve ter sido salva no banco");
+            BCrypt.Net.BCrypt.Verify("SenhaInicial123", user.PasswordHash)
+                .Should().BeFalse("a senha antiga nao deve mais funcionar");
+        }
+        finally { AppDbContext.SetQueryTenantId(Guid.Empty); }
     }
 }
 

@@ -4,6 +4,7 @@ using ERP.Application.Interfaces;
 using ERP.Domain.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using System.IdentityModel.Tokens.Jwt;
@@ -104,6 +105,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("forgot-password")]
     [AllowAnonymous]
+    [EnableRateLimiting("forgot-password-strict")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
     {
         const string respostaGenerica =
@@ -138,6 +140,11 @@ public class AuthController : ControllerBase
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
                 new Claim("tid",     tenantId.ToString()),
                 new Claim("purpose", "password-reset"),
+                // S12 FIX: iat explícito — sem ele, jwtToken.IssuedAt retorna
+                // DateTime.MinValue, fazendo o check one-time-use sempre falhar
+                new Claim(JwtRegisteredClaimNames.Iat,
+                    DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
+                    ClaimValueTypes.Integer64),
             },
             notBefore: DateTime.UtcNow,
             expires:   DateTime.UtcNow.AddHours(1),
@@ -157,17 +164,23 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("reset-password")]
     [AllowAnonymous]
+    [EnableRateLimiting("reset-password-strict")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
     {
         if (string.IsNullOrWhiteSpace(dto.Token) || string.IsNullOrWhiteSpace(dto.NovaSenha))
             return BadRequest("Token e nova senha são obrigatórios.");
 
-        if (dto.NovaSenha.Length < 8 || !dto.NovaSenha.Any(char.IsDigit))
-            return BadRequest("Senha deve ter no mínimo 8 caracteres e conter pelo menos um número.");
+        // S12 FIX: usa PasswordPolicy centralizado (antes: 8 chars, inconsistente com cadastro 12)
+        var (senhaOk, senhaErro) = ERP.Application.Helpers.PasswordPolicy.Validar(dto.NovaSenha);
+        if (!senhaOk) return BadRequest(senhaErro);
 
         // Valida o JWT de reset
         var jwtKey   = _config["Jwt:Key"]!;
+        // S12 FIX: Clear() preserva os nomes originais das claims JWT (sub, tid, etc.).
+        // Sem isso, JwtSecurityTokenHandler mapeia "sub" → ClaimTypes.NameIdentifier
+        // (namespace SAML longo), e FindFirstValue("sub") retorna null → ArgumentNullException → 500.
         var handler  = new JwtSecurityTokenHandler();
+        handler.InboundClaimTypeMap.Clear();
         JwtSecurityToken? jwtToken;
         ClaimsPrincipal principal;
 
@@ -211,9 +224,10 @@ public class AuthController : ControllerBase
         if (user.UpdatedAt.HasValue && user.UpdatedAt.Value > iat.AddSeconds(5))
             return BadRequest("Este link já foi utilizado. Solicite um novo link de recuperação.");
 
-        // Atualiza senha
+        // Atualiza senha — S12 FIX: passa tenantId explícito (do claim "tid" do JWT de reset)
+        // Antes: UpdatePasswordAsync usava _context.GetTenantId() → Guid.Empty (anônimo) → 500
         var hash = BCrypt.Net.BCrypt.HashPassword(dto.NovaSenha, 12);
-        await _uow.Users.UpdatePasswordAsync(userId, hash, false);
+        await _uow.Users.UpdatePasswordAsync(userId, tenantId, hash, false);
 
         Log.Information("Recuperação de senha: senha redefinida para userId={UserId} tenantId={TenantId}",
             userId, tenantId);

@@ -48,7 +48,9 @@ public class CadastroService : ICadastroService
 
         // 1b. S11 — Validação Receita Federal via BrasilAPI (fail-open):
         //   Nível 1: rejeita CNPJs inativos/baixados/suspensos.
-        //   Nível 2: cruza e-mail informado com e-mail da RFB (log de aviso, sem bloqueio).
+        //   Nível 2 S12: cria admin inativo e envia confirmação para e-mail RFB quando há divergência.
+        bool   divergenciaEmailRfb    = false;
+        string? emailRfbConfirmacao   = null;
         var dadosRfb = await _brasilApi.ConsultarCnpjAsync(cnpjLimpo);
         if (dadosRfb != null)
         {
@@ -61,15 +63,20 @@ public class CadastroService : ICadastroService
                     "Apenas empresas com situação ATIVA podem se cadastrar.");
             }
 
-            // Nível 2: cruza e-mail (aviso, sem bloqueio)
-            var emailRfb = dadosRfb.Email?.Trim().ToLowerInvariant();
+            // S12 FIX: quando há divergência de e-mail, cria admin INATIVO e envia
+            // token de confirmação para o e-mail da RFB — squatting bloqueado porque
+            // atacante não tem acesso ao e-mail oficial da empresa.
+            emailRfbConfirmacao = dadosRfb.Email?.Trim().ToLowerInvariant();
             var emailDto = dto.Email?.Trim().ToLowerInvariant();
-            if (!string.IsNullOrEmpty(emailRfb) && !string.IsNullOrEmpty(emailDto) && emailRfb != emailDto)
+            if (!string.IsNullOrEmpty(emailRfbConfirmacao) &&
+                !string.IsNullOrEmpty(emailDto) &&
+                emailRfbConfirmacao != emailDto)
             {
+                divergenciaEmailRfb = true;
                 Log.Warning(
-                    "Onboarding: e-mail informado ({EmailDto}) difere do e-mail RFB ({EmailRfb}) para CNPJ {Cnpj}. " +
-                    "Cadastro permitido — monitorar para possível squatting.",
-                    emailDto, emailRfb, cnpjLimpo);
+                    "Onboarding: divergência e-mail informado ({EmailDto}) vs RFB ({EmailRfb}) para CNPJ {Cnpj}. " +
+                    "Conta criada INATIVA — confirmação enviada para e-mail RFB.",
+                    emailDto, emailRfbConfirmacao, cnpjLimpo);
             }
         }
 
@@ -101,7 +108,8 @@ public class CadastroService : ICadastroService
         _db.Roles.AddRange(roleAdmin, roleVendedor, roleCaixa, roleGerente);
 
         // 5. Cria usuário admin
-        var senhaHash = BCrypt.Net.BCrypt.HashPassword(dto.Senha);
+        var senhaHash        = BCrypt.Net.BCrypt.HashPassword(dto.Senha);
+        var confirmacaoToken = divergenciaEmailRfb ? Guid.NewGuid().ToString("N") : null;
         var admin = new User
         {
             Id                 = Guid.NewGuid(),
@@ -109,20 +117,35 @@ public class CadastroService : ICadastroService
             Name               = dto.RazaoSocial,
             Username           = "admin",
             PasswordHash       = senhaHash,
-            IsActive           = true,
+            // S12 FIX: IsActive=false quando e-mail informado diverge do e-mail RFB.
+            // Squatting bloqueado: atacante não tem acesso ao e-mail oficial da empresa
+            // e não consegue confirmar o cadastro.
+            IsActive           = !divergenciaEmailRfb,
             MustChangePassword = true,
-            Email              = dto.Email,   // S11: salvo para recuperação de senha
+            Email              = dto.Email,
+            ConfirmacaoToken   = confirmacaoToken,
             RoleId             = roleAdmin.Id
         };
 
         await _uow.Users.AddAsync(admin);
         await _uow.CommitAsync();
 
-        Log.Information("Onboarding: novo tenant criado — CNPJ={Cnpj} TenantId={TenantId} RazaoSocial={RazaoSocial}",
-            cnpjLimpo, tenantId, dto.RazaoSocial);
+        Log.Information("Onboarding: novo tenant criado — CNPJ={Cnpj} TenantId={TenantId} IsActive={IsActive}",
+            cnpjLimpo, tenantId, admin.IsActive);
 
-        // S10 FIX: senha removida do e-mail. Usuário usa a senha definida no cadastro.
-        // E-mail confirma acesso mas não expõe credencial.
+        if (divergenciaEmailRfb && confirmacaoToken != null)
+        {
+            // Envia confirmação para o e-mail da RFB — não o e-mail informado pelo atacante
+            _ = EnviarEmailConfirmacaoAsync(emailRfbConfirmacao!, dto.RazaoSocial, confirmacaoToken);
+            return new CadastroResponseDto
+            {
+                MensagemSucesso = "Cadastro recebido! Para ativar sua conta, verifique o e-mail " +
+                                  "registrado na Receita Federal da sua empresa e clique no link de confirmação.",
+                LoginUrl        = "https://app.ttsofts.com.br"
+            };
+        }
+
+        // Fluxo normal: e-mails coincidem ou BrasilAPI indisponível (fail-open)
         _ = EnviarEmailBoasVindasAsync(dto.Email, dto.RazaoSocial, dto.Cnpj);
 
         return new CadastroResponseDto
@@ -193,6 +216,65 @@ public class CadastroService : ICadastroService
     }
 
     // ── E-mail de boas-vindas via Zoho SMTP ──────────────────────────────
+    // S12: E-mail de confirmação enviado ao e-mail RFB quando há divergência
+    private async Task EnviarEmailConfirmacaoAsync(string emailRfb, string razaoSocial, string token)
+    {
+        try
+        {
+            var smtpHost  = _config["Email:SmtpHost"] ?? "smtppro.zoho.com";
+            var smtpPort  = int.Parse(_config["Email:SmtpPort"] ?? "587");
+            var smtpUser  = _config["Email:Usuario"] ?? "";
+            var smtpSenha = _config["Email:Senha"]   ?? "";
+
+            if (string.IsNullOrWhiteSpace(smtpUser)) return;
+
+            var link = $"https://app.ttsofts.com.br/confirmar-cadastro?token={Uri.EscapeDataString(token)}";
+
+            var corpo = $@"
+<!DOCTYPE html><html><body style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px'>
+  <div style='background:#1a56db;padding:24px;border-radius:8px 8px 0 0;text-align:center'>
+    <h1 style='color:white;margin:0'>TTSoft ERP</h1>
+    <p style='color:#93c5fd;margin:8px 0 0'>Confirme o cadastro da sua empresa</p>
+  </div>
+  <div style='background:#f8fafc;padding:24px;border:1px solid #e2e8f0;border-radius:0 0 8px 8px'>
+    <p>Olá! Recebemos uma solicitação de cadastro no TTSoft ERP para a empresa <strong>{razaoSocial}</strong>.</p>
+    <p>Este e-mail é o registrado oficialmente na Receita Federal para este CNPJ.
+       Para confirmar que você autoriza o cadastro, clique no botão abaixo:</p>
+    <div style='text-align:center;margin:24px 0'>
+      <a href='{link}' style='background:#1a56db;color:white;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:bold'>
+        Confirmar Cadastro →
+      </a>
+    </div>
+    <p style='color:#ef4444;font-size:13px'>
+      ⚠️ Se você não solicitou este cadastro, ignore este e-mail.
+      A conta permanecerá inativa e ninguém conseguirá acessar o sistema.
+    </p>
+    <hr style='border:none;border-top:1px solid #e2e8f0;margin:20px 0'>
+    <p style='color:#64748b;font-size:12px;text-align:center'>
+      TTSoft ERP — Sistema para materiais de construção
+    </p>
+  </div>
+</body></html>";
+
+            using var client = new System.Net.Mail.SmtpClient(smtpHost, smtpPort)
+            {
+                EnableSsl   = true,
+                Credentials = new System.Net.NetworkCredential(smtpUser, smtpSenha)
+            };
+            using var msg = new System.Net.Mail.MailMessage(
+                smtpUser, emailRfb, "🏢 Confirme o cadastro da sua empresa — TTSoft ERP", corpo)
+            {
+                IsBodyHtml = true
+            };
+            await client.SendMailAsync(msg);
+            Log.Information("Onboarding: e-mail de confirmação enviado para {EmailRfb}", emailRfb);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Onboarding: falha ao enviar e-mail de confirmação para {EmailRfb}", emailRfb);
+        }
+    }
+
     private async Task EnviarEmailBoasVindasAsync(string emailDestino, string razaoSocial, string cnpj)
     {
         try

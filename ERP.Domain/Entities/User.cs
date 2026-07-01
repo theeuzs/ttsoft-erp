@@ -15,6 +15,13 @@ public class User : BaseEntity
     /// <summary>E-mail do usuário — usado para envio de link de recuperação de senha.</summary>
     public string? Email { get; set; }
 
+    // ── S12: Token de confirmação de cadastro (cross-check e-mail RFB) ───
+    /// <summary>
+    /// Token enviado ao e-mail RFB quando há divergência no cadastro.
+    /// Null = conta ativa sem pendência de confirmação.
+    /// </summary>
+    public string? ConfirmacaoToken { get; set; }
+
     // ── Proteção contra força bruta ──────────────────────────────────────
     /// <summary>Contador de tentativas de login com falha consecutivas.</summary>
     public int FailedLoginAttempts { get; set; } = 0;

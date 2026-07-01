@@ -18,10 +18,12 @@ namespace ERP.Api.Controllers;
 public class CadastroController : ControllerBase
 {
     private readonly ICadastroService _cadastroService;
+    private readonly ERP.Domain.Interfaces.IUnitOfWork _uow;
 
-    public CadastroController(ICadastroService cadastroService)
+    public CadastroController(ICadastroService cadastroService, ERP.Domain.Interfaces.IUnitOfWork uow)
     {
         _cadastroService = cadastroService;
+        _uow             = uow;
     }
 
     [EnableRateLimiting("cadastro-strict")]
@@ -75,5 +77,35 @@ public class CadastroController : ControllerBase
             // Erros REAIS de validação (CNPJ malformado/dígitos inválidos) continuam 400.
             return BadRequest(ex.Message);
         }
+    }
+
+    /// <summary>
+    /// S12: Confirma cadastro quando o e-mail informado difere do e-mail RFB.
+    /// Token foi enviado para o e-mail oficial da Receita Federal.
+    /// Ativa o admin (IsActive=false → true) e limpa o token.
+    /// </summary>
+    [HttpGet("confirmar")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ConfirmarCadastro([FromQuery] string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return BadRequest("Token de confirmação inválido.");
+
+        var user = await _uow.Users.GetByConfirmacaoTokenAsync(token);
+
+        if (user is null)
+            return BadRequest("Token inválido ou já utilizado.");
+
+        if (user.IsActive && user.ConfirmacaoToken is null)
+            return Ok(new { mensagem = "Conta já está ativa. Faça login normalmente." });
+
+        user.IsActive         = true;
+        user.ConfirmacaoToken = null;
+        user.UpdatedAt        = DateTime.UtcNow;
+        await _uow.CommitAsync();
+
+        Serilog.Log.Information("Onboarding: conta confirmada via token RFB para userId={UserId}", user.Id);
+
+        return Ok(new { mensagem = "Conta confirmada com sucesso! Acesse o portal para fazer login." });
     }
 }

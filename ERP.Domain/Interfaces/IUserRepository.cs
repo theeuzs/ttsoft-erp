@@ -20,7 +20,10 @@ public interface IUserRepository
     Task DeleteAsync(Guid id);
     /// <summary>Persiste tentativas de login falhadas e/ou reset do contador.</summary>
     Task<User?> GetByEmailAndTenantAsync(string email, Guid tenantId);
+
+    /// <summary>S12: Busca usuario pelo token de confirmacao de cadastro (cross-check e-mail RFB).</summary>
+    Task<User?> GetByConfirmacaoTokenAsync(string token);
     Task UpdateLoginAttemptAsync(Guid userId, Guid tenantId, int failedAttempts, DateTime? lockoutEndUtc);
     Task<User?> GetByIdAsync(Guid userId);
-    Task UpdatePasswordAsync(Guid userId, string newPasswordHash, bool mustChangePassword);
+    Task UpdatePasswordAsync(Guid userId, Guid tenantId, string newPasswordHash, bool mustChangePassword);
 }
