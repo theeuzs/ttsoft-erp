@@ -20,7 +20,7 @@
                    style="width:100%; padding:10px; border:1px solid #CBD5E1; border-radius:8px; font-size:14px; box-sizing:border-box;"/>
         </div>
         <div style="margin-bottom:16px;">
-            <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">NOVA SENHA (mín. 8 caracteres)</label>
+            <label style="font-size:12px; font-weight:600; color:#64748B; display:block; margin-bottom:6px;">NOVA SENHA (mín. 12 caracteres + 1 número)</label>
             <input @bind="_novaSenha" type="password" placeholder="••••••••"
                    style="width:100%; padding:10px; border:1px solid #CBD5E1; border-radius:8px; font-size:14px; box-sizing:border-box;"/>
         </div>
@@ -79,9 +79,9 @@
             _erro = "A confirmação não corresponde à nova senha.";
             return;
         }
-        if (_novaSenha.Length < 8)
+        if (_novaSenha.Length < 12 || !_novaSenha.Any(char.IsDigit))
         {
-            _erro = "A nova senha deve ter no mínimo 8 caracteres.";
+            _erro = "A nova senha deve ter no mínimo 12 caracteres e conter pelo menos um número.";
             return;
         }
 

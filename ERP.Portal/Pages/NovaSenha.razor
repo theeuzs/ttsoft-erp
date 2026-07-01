@@ -41,7 +41,7 @@
 
             <div style="margin-bottom:14px;">
                 <label style="font-size:12px;font-weight:600;color:#64748B;display:block;margin-bottom:6px;">NOVA SENHA</label>
-                <input @bind="_novaSenha" type="password" placeholder="Mínimo 8 caracteres com 1 número"
+                <input @bind="_novaSenha" type="password" placeholder="Mínimo 12 caracteres com 1 número"
                        style="width:100%;padding:10px;border:1px solid #CBD5E1;border-radius:8px;font-size:14px;box-sizing:border-box;"/>
             </div>
 
@@ -89,9 +89,9 @@
             _erro = "As senhas não coincidem.";
             return;
         }
-        if (_novaSenha.Length < 8 || !_novaSenha.Any(char.IsDigit))
+        if (_novaSenha.Length < 12 || !_novaSenha.Any(char.IsDigit))
         {
-            _erro = "Senha deve ter no mínimo 8 caracteres e conter pelo menos um número.";
+            _erro = "Senha deve ter no mínimo 12 caracteres e conter pelo menos um número.";
             return;
         }
 

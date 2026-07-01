@@ -62,9 +62,9 @@ public class TrocarSenhaViewModel : BaseViewModel
                 return;
             }
 
-            if (NovaSenha.Length < 8)
+            if (NovaSenha.Length < 12 || !NovaSenha.Any(char.IsDigit))
             {
-                MensagemErro = "A nova senha deve ter no mínimo 8 caracteres.";
+                MensagemErro = "A nova senha deve ter no mínimo 12 caracteres e conter pelo menos um número.";
                 return;
             }
 
