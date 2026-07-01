@@ -1996,6 +1996,57 @@ public class S11CadastroRateLimitTests : IClassFixture<ErpApiFactory>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+//  S12 — Rate limit dos endpoints de recuperação de senha
+// ═══════════════════════════════════════════════════════════════════════════════
+
+[Collection("ErpApi")]
+public class S12RecuperacaoSenhaRateLimitTests : IClassFixture<ErpApiFactory>
+{
+    private readonly ErpApiFactory _factory;
+    public S12RecuperacaoSenhaRateLimitTests(ErpApiFactory factory) => _factory = factory;
+
+    [Fact(DisplayName = "S12 — forgot-password: 5 req do mesmo IP, 6ª recebe 429 (email bomb)")]
+    public async Task ForgotPassword_5ReqMesmoIp_6aRecebe429()
+    {
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.70");
+
+        for (int i = 0; i < 5; i++)
+        {
+            var resp = await client.PostAsJsonAsync("/api/auth/forgot-password",
+                new { Cnpj = "11222333000181", Email = $"teste{i}@forgotlimit.com" });
+            ((int)resp.StatusCode).Should().NotBe(429,
+                $"as primeiras 5 requisições não devem ser bloqueadas");
+        }
+
+        var sexta = await client.PostAsJsonAsync("/api/auth/forgot-password",
+            new { Cnpj = "11222333000181", Email = "teste6@forgotlimit.com" });
+        ((int)sexta.StatusCode).Should().Be(429,
+            "a 6ª requisição do mesmo IP em 1h deve ser bloqueada (email bomb)");
+    }
+
+    [Fact(DisplayName = "S12 — reset-password: 10 req do mesmo IP, 11ª recebe 429")]
+    public async Task ResetPassword_10ReqMesmoIp_11aRecebe429()
+    {
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.80");
+
+        for (int i = 0; i < 10; i++)
+        {
+            var resp = await client.PostAsJsonAsync("/api/auth/reset-password",
+                new { Token = "token-invalido-s12", NovaSenha = "qualquer" });
+            ((int)resp.StatusCode).Should().NotBe(429,
+                "as primeiras 10 requisições não devem ser bloqueadas");
+        }
+
+        var decima_primeira = await client.PostAsJsonAsync("/api/auth/reset-password",
+            new { Token = "token-invalido-s12", NovaSenha = "qualquer" });
+        ((int)decima_primeira.StatusCode).Should().Be(429,
+            "a 11ª requisição do mesmo IP em 1h deve ser bloqueada");
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 //  S11 — Oráculo de enumeração via status code (CNPJ existente vs novo)
 // ═══════════════════════════════════════════════════════════════════════════════
 

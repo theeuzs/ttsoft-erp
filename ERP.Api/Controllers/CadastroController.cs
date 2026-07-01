@@ -41,9 +41,9 @@ public class CadastroController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto.Email))
             return BadRequest("E-mail é obrigatório.");
 
-        // S10 FIX: senha mínima de 12 chars (OWASP 2026) + pelo menos 1 número
-        if (string.IsNullOrWhiteSpace(dto.Senha) || dto.Senha.Length < 12)
-            return BadRequest("Senha deve ter no mínimo 12 caracteres.");
+        // S12 FIX: usa PasswordPolicy centralizado (antes: Length < 12 inline)
+        var (senhaOk, senhaErro) = ERP.Application.Helpers.PasswordPolicy.Validar(dto.Senha);
+        if (!senhaOk) return BadRequest(senhaErro);
 
         if (!dto.Senha.Any(char.IsDigit))
             return BadRequest("Senha deve conter pelo menos um número.");
