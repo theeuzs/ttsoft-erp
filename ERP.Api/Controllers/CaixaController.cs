@@ -13,9 +13,14 @@ namespace ERP.Api.Controllers;
 [Authorize]
 public class CaixaController : ControllerBase
 {
-    private readonly ICaixaService _service;
+    private readonly ICaixaService  _service;
+    private readonly IRequestTenant _tenant;
 
-    public CaixaController(ICaixaService service) => _service = service;
+    public CaixaController(ICaixaService service, IRequestTenant tenant)
+    {
+        _service = service;
+        _tenant  = tenant;
+    }
 
     private Guid UsuarioId => Guid.Parse(
         User.FindFirst(ClaimTypes.NameIdentifier)?.Value
@@ -78,9 +83,11 @@ public class CaixaController : ControllerBase
     {
         try
         {
+            // S13: passa MaxSangriaValue do cargo (IRequestTenant) para SangriaPolicy
             await _service.RegistrarMovimentoAsync(
                 UsuarioId, dto.Valor, dto.Descricao,
-                PaymentMethod.Dinheiro, TipoMovimentoCaixa.Sangria);
+                PaymentMethod.Dinheiro, TipoMovimentoCaixa.Sangria,
+                maxSangriaValue: _tenant.MaxSangriaValue);
             return Ok(new { mensagem = "Sangria registrada." });
         }
         catch (InvalidOperationException ex)

@@ -141,14 +141,12 @@ public class SaleService : ISaleService
                         $"(necessário: {qtdEstoque:N2}, disponível no estoque). " +
                         $"Outro terminal pode ter vendido o último item agora mesmo.");
 
-                // S9 FIX: DiscountPercent validado contra o limite da role (claim max_discount no JWT).
-                // Antes: cliente mandava DiscountPercent: 100 → produto de R$ 1.000 saía por R$ 0,00.
-                // Admin=100%, Gerente=30%, Supervisor=15%, Vendedor=5%.
-                if (itemDto.DiscountPercent < 0)
-                    throw new InvalidOperationException("Desconto não pode ser negativo.");
-                if (itemDto.DiscountPercent > _tenant.MaxDiscountPercentage)
-                    throw new InvalidOperationException(
-                        $"Desconto de {itemDto.DiscountPercent:F2}% excede o limite do seu cargo ({_tenant.MaxDiscountPercentage:F2}%).");
+                // S13: validação de desconto via DescontoPolicy (antes inline — S9)
+                var (descontoOk, descontoErro) = ERP.Application.Helpers.DescontoPolicy.Validar(
+                    itemDto.DiscountPercent,
+                    _tenant.MaxDiscountPercentage,
+                    product.Name);
+                if (!descontoOk) throw new InvalidOperationException(descontoErro!);
 
                 // S8 FIX: UnitPrice sempre do servidor (Product.GetPrecoParaGrupo), nunca do cliente.
                 // WholesalePrice se quantidade atinge mínimo definido no cadastro.
@@ -158,7 +156,8 @@ public class SaleService : ISaleService
                     && itemDto.Quantity >= product.WholesaleMinQuantity.Value)
                     unitPrice = product.WholesalePrice.Value;
 
-                var totalItem = unitPrice * itemDto.Quantity * (1m - itemDto.DiscountPercent / 100m);
+                var totalItem = ERP.Application.Helpers.DescontoPolicy.CalcularTotal(
+                    unitPrice, itemDto.Quantity, itemDto.DiscountPercent);
 
                 sale.Items.Add(new SaleItem
                 {

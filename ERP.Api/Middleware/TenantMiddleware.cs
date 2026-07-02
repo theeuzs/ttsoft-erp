@@ -49,6 +49,14 @@ public class TenantMiddleware
                     System.Globalization.CultureInfo.InvariantCulture,
                     out var maxDesc))
                 requestTenant.MaxDiscountPercentage = maxDesc;
+
+            // S13: limite de sangria da role — mesmo padrão do max_discount.
+            var maxSangriaStr = context.User.FindFirst("max_sangria")?.Value;
+            if (decimal.TryParse(maxSangriaStr,
+                    System.Globalization.NumberStyles.Number,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var maxSangria))
+                requestTenant.MaxSangriaValue = maxSangria;
         }
 
         // S2.1: empurra TenantId, UserId e UserName para o LogContext do Serilog.

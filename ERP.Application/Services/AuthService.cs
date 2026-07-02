@@ -15,8 +15,9 @@ public class AuthService : IAuthService
     private readonly IUserRepository _userRepository;
 
     // ── Política de bloqueio ────────────────────────────────────────────────
-    private const int MaxTentativas   = 5;
-    private const int MinutosBloqueio = 15;
+    // S13: constantes movidas para LockoutPolicy (ERP.Application/Helpers/LockoutPolicy.cs)
+    // private const int MaxTentativas   = 5;
+    // private const int MinutosBloqueio = 15;
 
     public AuthService(IUserRepository userRepository)
     {
@@ -38,9 +39,9 @@ public class AuthService : IAuthService
         }
 
         // Conta bloqueada?
-        if (user.LockoutEndUtc.HasValue && user.LockoutEndUtc > DateTime.UtcNow)
+        if (ERP.Application.Helpers.LockoutPolicy.EstaBloqueada(user.LockoutEndUtc))
         {
-            var min = (int)Math.Ceiling((user.LockoutEndUtc.Value - DateTime.UtcNow).TotalMinutes);
+            var min = ERP.Application.Helpers.LockoutPolicy.MinutosRestantes(user.LockoutEndUtc!.Value);
             Log.Warning("Login bloqueado: '{Username}' por mais {Min} min.", dto.Username, min);
             return LoginResultDto.Falhou(
                 $"Conta bloqueada por excesso de tentativas.\nAguarde {min} minuto(s) ou contate o administrador.");
@@ -56,20 +57,15 @@ public class AuthService : IAuthService
         // Senha errada?
         if (!BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
         {
-            var n = user.FailedLoginAttempts + 1;
-            DateTime? lockout = n >= MaxTentativas
-                ? DateTime.UtcNow.AddMinutes(MinutosBloqueio)
-                : null;
+            var (n, lockout) = ERP.Application.Helpers.LockoutPolicy.Calcular(user.FailedLoginAttempts);
 
             await _userRepository.UpdateLoginAttemptAsync(user.Id, tenantId, n, lockout);
 
-            Log.Warning("Senha errada: '{Username}'. Tentativa {N}/{Max}.", dto.Username, n, MaxTentativas);
+            Log.Warning("Senha errada: '{Username}'. Tentativa {N}/{Max}.",
+                dto.Username, n, ERP.Application.Helpers.LockoutPolicy.MaxTentativas);
 
-            var msg = lockout.HasValue
-                ? $"Usuário ou senha incorretos. Conta bloqueada por {MinutosBloqueio} minutos."
-                : $"Usuário ou senha incorretos. ({MaxTentativas - n} tentativa(s) restante(s))";
-
-            return LoginResultDto.Falhou(msg);
+            return LoginResultDto.Falhou(
+                ERP.Application.Helpers.LockoutPolicy.MensagemErro(n, lockout));
         }
 
         // Sucesso — reset contador

@@ -82,20 +82,22 @@ public class CaixaService : ICaixaService
     }
 
     // 🟢 Registra movimento no caixa DO USUÁRIO
-    public async Task RegistrarMovimentoAsync(Guid usuarioId, decimal valor, string descricao, 
-                                               PaymentMethod formaPagamento, TipoMovimentoCaixa tipo)
+    public async Task RegistrarMovimentoAsync(Guid usuarioId, decimal valor, string descricao,
+                                               PaymentMethod formaPagamento, TipoMovimentoCaixa tipo,
+                                               decimal maxSangriaValue = 0m)
     {
         // S8 FIX: silêncio com caixa fechado → 200 OK fantasma; agora lança exceção (400 no controller).
         var caixaAberto = await _uow.Caixas.GetCaixaAbertoByUsuarioAsync(usuarioId)
             ?? throw new InvalidOperationException("Nenhum caixa aberto para este usuário.");
 
-        // S8 FIX: sangria não pode exceder saldo em dinheiro (integridade contábil).
+        // S13: validação de sangria via SangriaPolicy (antes inline — S8).
+        // Inclui: valor > 0, valor <= saldo, valor <= limite do cargo.
         if (tipo == TipoMovimentoCaixa.Sangria)
         {
             var saldoDinheiro = await _uow.Caixas.GetSaldoDinheiroAsync(caixaAberto.Id);
-            if (valor > saldoDinheiro)
-                throw new InvalidOperationException(
-                    $"Sangria de R$ {valor:F2} excede o saldo em dinheiro do caixa: R$ {saldoDinheiro:F2}.");
+            var (sangriaOk, sangriaErro) = ERP.Application.Helpers.SangriaPolicy.Validar(
+                valor, saldoDinheiro, maxSangriaValue);
+            if (!sangriaOk) throw new InvalidOperationException(sangriaErro!);
         }
 
         var novoMovimento = new CaixaMovimento

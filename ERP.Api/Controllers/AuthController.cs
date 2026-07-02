@@ -306,6 +306,7 @@ public class AuthController : ControllerBase
             // S9: limite de desconto da role no token — lido pelo TenantMiddleware → IRequestTenant.
             // Evita lookup no DB por venda; Admin=100, Gerente=30, Supervisor=15, Vendedor=5.
             new("max_discount", user.MaxDiscountPercentage.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)),
+            new("max_sangria",  user.MaxSangriaValue.ToString("F2",       System.Globalization.CultureInfo.InvariantCulture)),
         };
 
         foreach (var perm in user.Permissions)

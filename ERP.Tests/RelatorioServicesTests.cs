@@ -28,6 +28,7 @@ internal class FakeRequestTenant : ERP.Application.Interfaces.IRequestTenant
     public Guid    UserId                { get; set; }
     public string  UserName              { get; set; } = "test";
     public decimal MaxDiscountPercentage { get; set; } = 100m; // Admin por padrão nos testes
+    public decimal MaxSangriaValue       { get; set; } = 99999m; // Admin por padrão nos testes
 }
 
 internal static class TestDb

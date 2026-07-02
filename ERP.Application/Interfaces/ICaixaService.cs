@@ -13,8 +13,9 @@ public interface ICaixaService
     Task AbrirCaixaAsync(AbrirCaixaDto dto);
 
     // 🟢 Registra movimento no caixa DO USUÁRIO
-    Task RegistrarMovimentoAsync(Guid usuarioId, decimal valor, string descricao, 
-                                  PaymentMethod formaPagamento, TipoMovimentoCaixa tipo);
+    Task RegistrarMovimentoAsync(Guid usuarioId, decimal valor, string descricao,
+                                  PaymentMethod formaPagamento, TipoMovimentoCaixa tipo,
+                                  decimal maxSangriaValue = 0m);
 
     // 🟢 Fecha o caixa DO USUÁRIO
     Task FecharCaixaAsync(Guid usuarioId);

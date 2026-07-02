@@ -23,4 +23,6 @@ public class WpfRequestTenant : IRequestTenant
     public string  UserName              { get => AppDbContext.GetCurrentUserName(); set { } }
     // S9: lê o limite de desconto da sessão WPF — populado pelo AppSession.Login após autenticação.
     public decimal MaxDiscountPercentage { get => ERP.WPF.State.AppSession.MaxDiscountPercentage; set { } }
+    // S13: lê o limite de sangria da sessão WPF — mesmo padrão do MaxDiscountPercentage.
+    public decimal MaxSangriaValue       { get => ERP.WPF.State.AppSession.MaxSangriaValue;       set { } }
 }
