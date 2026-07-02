@@ -27,8 +27,30 @@ public class AppDbContext : DbContext
 
     /// <summary>Define o TenantId para o contexto async atual (por request/test).</summary>
     public static void SetQueryTenantId(Guid id) => _asyncTenantId.Value = id;
-    /// <summary>Lê o TenantId do contexto async atual. Chamado pelo HasQueryFilter.</summary>
-    public static Guid GetQueryTenantId() => _asyncTenantId.Value;
+    /// <summary>
+    /// Lê o TenantId para o HasQueryFilter.
+    /// Cascata de 3 fontes — garante funcionamento em API (AsyncLocal via TenantMiddleware),
+    /// WPF (globalTenantId, setado no startup) e testes (AsyncLocal via SetQueryTenantId).
+    ///
+    /// ATENÇÃO — thread safety no WPF:
+    /// AsyncLocal NÃO é visível em threads do thread pool que não originam do
+    /// contexto onde foi setado. O WPF usa EF Core async (thread pool), então
+    /// AsyncLocal definido no constructor do AppDbContext pode ser perdido.
+    /// Por isso a cascata inclui _globalTenantId como fallback estável para o WPF.
+    /// </summary>
+    public static Guid GetQueryTenantId()
+    {
+        // 1. AsyncLocal: setado pelo TenantMiddleware (API) ou SetQueryTenantId (testes)
+        var asyncVal = _asyncTenantId.Value;
+        if (asyncVal != Guid.Empty) return asyncVal;
+
+        // 2. Global estático: setado no startup do WPF via SetGlobalTenantId()
+        // Fallback necessário porque AsyncLocal pode não fluir para threads do pool no WPF.
+        if (_globalTenantId != Guid.Empty) return _globalTenantId;
+
+        // 3. IRequestTenant (API): lido via construtor do AppDbContext
+        return Guid.Empty;
+    }
 
     /// <summary>Chamado no WPF/login para identificar o usuário nos logs de auditoria.</summary>
     public static void SetCurrentUser(Guid userId, string userName)
@@ -81,14 +103,18 @@ public class AppDbContext : DbContext
 
     /// <summary>
     /// Construtor para o WPF Desktop — não injeta IRequestTenant.
-    /// O tenant vem de _globalTenantId (setado via SetGlobalTenantId).
+    /// O tenant vem de _globalTenantId (setado via SetGlobalTenantId no login).
+    /// NÃO copia _globalTenantId para _asyncTenantId aqui: o _globalTenantId
+    /// no startup (licenca.json) pode ser diferente do tenant do usuário logado.
+    /// GetQueryTenantId() lê _globalTenantId diretamente como fallback.
     /// </summary>
     public AppDbContext(DbContextOptions<AppDbContext> options)
-        : base(options) 
+        : base(options)
     {
-        // CORREÇÃO: Garante que o AsyncLocal seja preenchido no WPF para que o HasQueryFilter funcione
-        if (_globalTenantId != Guid.Empty)
-            _asyncTenantId.Value = _globalTenantId;
+        // S13 FIX: NÃO setar _asyncTenantId.Value = _globalTenantId aqui.
+        // O construtor roda durante o startup com o TenantId do licenca.json,
+        // mas o tenant correto só é conhecido após o login do usuário.
+        // GetQueryTenantId() cai no fallback _globalTenantId (atualizado no login).
     }
 
     /// <summary>
@@ -144,17 +170,28 @@ public class AppDbContext : DbContext
     public DbSet<Veiculo>              Veiculos            { get; set; }
     public DbSet<FormulaTintometrica>  FormulasTintometricas { get; set; }
 
+    // ── TenantFilterHelper: cascata AsyncLocal → _globalTenantId ──────────────
+    // Usado pelo HasQueryFilter em vez de _asyncTenantId diretamente.
+    // Propriedade de instância em objeto capturado → EF Core avalia por query (não cacheia).
+    // S13 FIX: quando AsyncLocal está vazio (WPF sem SetQueryTenantId explícito),
+    // cai no _globalTenantId atualizado no login — corrige "Produto não encontrado" no WPF.
+    private sealed class TenantFilterHelper
+    {
+        private readonly AsyncLocal<Guid> _asyncLocal;
+        public TenantFilterHelper(AsyncLocal<Guid> asyncLocal) => _asyncLocal = asyncLocal;
+        public Guid Value => _asyncLocal.Value != Guid.Empty ? _asyncLocal.Value : _globalTenantId;
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
         base.OnModelCreating(modelBuilder);
 
-        // CRITICAL: captura _asyncTenantId como variável de closure LOCAL.
-        // EF Core trata closures como PARÂMETROS (reavaliados a cada execução de query).
-        // Chamadas de método estático sem argumentos (GetQueryTenantId()) são tratadas
-        // como CONSTANTES (avaliadas uma vez e cacheadas para sempre no InMemory).
-        // Com tenantFilter.Value, cada query lê o AsyncLocal atual — correto por request.
-        var tenantFilter = _asyncTenantId;
+        // S13 FIX: usa TenantFilterHelper em vez de _asyncTenantId diretamente.
+        // tenantFilter.Value cascateia: AsyncLocal (API/testes) → _globalTenantId (WPF).
+        // EF Core avalia propriedades de instância em closures por query (não cacheia),
+        // ao contrário de chamadas de método estático sem argumentos (cacheadas no InMemory).
+        var tenantFilter = new TenantFilterHelper(_asyncTenantId);
 
         // ══════════════════════════════════════════════════════════════
         //  FILTROS GLOBAIS
