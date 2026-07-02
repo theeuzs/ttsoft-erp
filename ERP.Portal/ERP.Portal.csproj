@@ -5,13 +5,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>ERP.Portal</RootNamespace>
-    <!-- S13 FIX: habilita dados completos de globalização no bundle WASM.
-         Necessário para CultureInfo("pt-BR") funcionar no Program.cs.
-         BlazorWebAssemblyI18NAssemblies sozinho não é suficiente — Blazor exige
-         BlazorWebAssemblyLoadAllGlobalizationData para mudança dinâmica de cultura.
-         Sem isso: "Blazor detected a change in the application's culture that is
-         not supported with the current project configuration." e o portal não carrega. -->
-    <BlazorWebAssemblyLoadAllGlobalizationData>true</BlazorWebAssemblyLoadAllGlobalizationData>
   </PropertyGroup>
 
   <ItemGroup>

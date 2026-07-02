@@ -30,7 +30,7 @@
             <div style="@KpiCard("#27AE60")">
                 <div style="font-size:28px; margin-bottom:4px;">💰</div>
                 <div style="font-size:24px; font-weight:800; color:#1E293B;">
-                    @_vendasHoje.ToString("C0")
+                    R$ @_vendasHoje.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))
                 </div>
                 <div style="font-size:12px; color:#94A3B8; font-weight:600;">VENDAS HOJE</div>
                 <div style="font-size:11px; color:#27AE60; margin-top:4px;">
@@ -40,11 +40,11 @@
             <div style="@KpiCard("#1E62A6")">
                 <div style="font-size:28px; margin-bottom:4px;">📅</div>
                 <div style="font-size:24px; font-weight:800; color:#1E293B;">
-                    @_vendasMes.ToString("C0")
+                    R$ @_vendasMes.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))
                 </div>
                 <div style="font-size:12px; color:#94A3B8; font-weight:600;">VENDAS NO MÊS</div>
                 <div style="font-size:11px; color:#1E62A6; margin-top:4px;">
-                    Ticket médio: @(_qtdVendasMes > 0 ? (_vendasMes/_qtdVendasMes).ToString("C0") : "—")
+                    Ticket médio: @(_qtdVendasMes > 0 ? "R$ " + (_vendasMes/_qtdVendasMes).ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("pt-BR")) : "—")
                 </div>
             </div>
             <div style="@KpiCard("#8B5CF6")">
@@ -58,7 +58,7 @@
             <div style="@KpiCard("#EF4444")">
                 <div style="font-size:28px; margin-bottom:4px;">🔴</div>
                 <div style="font-size:24px; font-weight:800; color:#1E293B;">
-                    @_totalInadimplente.ToString("C0")
+                    R$ @_totalInadimplente.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))
                 </div>
                 <div style="font-size:12px; color:#94A3B8; font-weight:600;">INADIMPLÊNCIA</div>
                 <div style="font-size:11px; color:#EF4444; margin-top:4px;">contas vencidas</div>
@@ -118,7 +118,7 @@
                                     @v.Posicao. @v.Nome
                                 </span>
                                 <span style="font-size:13px; font-weight:800; color:#27AE60;">
-                                    @v.TotalVendido.ToString("C0")
+                                    R$ @v.TotalVendido.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))
                                 </span>
                             </div>
                             <div style="background:#F1F5F9; border-radius:4px; height:8px;">
