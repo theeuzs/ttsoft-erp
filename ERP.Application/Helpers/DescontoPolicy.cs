@@ -7,13 +7,15 @@ namespace ERP.Application.Helpers;
 /// </summary>
 public static class DescontoPolicy
 {
+    // Cultura pt-BR para formatação de percentuais nas mensagens de erro.
+    // Garante "10,00%" independente da cultura do servidor/CI (que usa "." como separador).
+    private static readonly System.Globalization.CultureInfo _ptBR =
+        System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
+
     /// <summary>
     /// Valida o percentual de desconto de um item contra o limite máximo permitido pelo cargo.
     /// Retorna (true, null) se válido, (false, mensagemErro) se inválido.
     /// </summary>
-    /// <param name="discountPercent">Desconto solicitado (0–100).</param>
-    /// <param name="maxDiscountPercentage">Limite máximo do cargo do operador.</param>
-    /// <param name="productName">Nome do produto (para mensagem de erro).</param>
     public static (bool Ok, string? Erro) Validar(
         decimal discountPercent,
         decimal maxDiscountPercentage,
@@ -27,7 +29,8 @@ public static class DescontoPolicy
 
         if (discountPercent > maxDiscountPercentage)
             return (false,
-                $"Desconto de {discountPercent:F2}% excede o limite do seu cargo ({maxDiscountPercentage:F2}%)" +
+                $"Desconto de {discountPercent.ToString("F2", _ptBR)}% excede o limite do seu cargo " +
+                $"({maxDiscountPercentage.ToString("F2", _ptBR)}%)" +
                 $"{(productName != null ? $" no produto '{productName}'" : "")}.");
 
         return (true, null);
