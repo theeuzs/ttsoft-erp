@@ -96,11 +96,19 @@ public class CadastroController : ControllerBase
         if (user is null)
             return BadRequest("Token inválido ou já utilizado.");
 
+        // S13 FIX: valida expiração do token (48h)
+        if (user.ConfirmacaoTokenExpiraEm.HasValue &&
+            user.ConfirmacaoTokenExpiraEm.Value < DateTime.UtcNow)
+            return BadRequest(
+                "Link de confirmação expirado (válido por 48h). " +
+                "Solicite um novo cadastro em app.ttsofts.com.br/cadastro");
+
         if (user.IsActive && user.ConfirmacaoToken is null)
             return Ok(new { mensagem = "Conta já está ativa. Faça login normalmente." });
 
-        user.IsActive         = true;
-        user.ConfirmacaoToken = null;
+        user.IsActive                 = true;
+        user.ConfirmacaoToken         = null;
+        user.ConfirmacaoTokenExpiraEm = null;
         user.UpdatedAt        = DateTime.UtcNow;
         await _uow.CommitAsync();
 

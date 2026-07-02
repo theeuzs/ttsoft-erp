@@ -147,6 +147,9 @@ builder.Services.AddHttpClient<BrasilApiService>(client =>
     client.Timeout     = TimeSpan.FromSeconds(10);
 });
 
+// S13: Cleanup de cadastros pendentes expirados (roda a cada 6h)
+builder.Services.AddHostedService<ERP.Api.Services.CleanupCadastrosExpiradosService>();
+
 // ── Fase 2 ────────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<ERP.Infrastructure.Services.ITransferenciaService,
                             ERP.Infrastructure.Services.TransferenciaService>();

@@ -79,6 +79,17 @@ public class CadastroService : ICadastroService
                     emailDto, emailRfbConfirmacao, cnpjLimpo);
             }
         }
+        else if (_brasilApi.CircuitAberto)
+        {
+            // S13 FIX: circuit breaker aberto → fail-safe pessimista.
+            // Em vez de fail-open (squatting possível durante outage da BrasilAPI),
+            // cria admin INATIVO — mesmo fluxo da divergência de e-mail.
+            // Ativar manualmente via /api/cadastro/confirmar ou suporte.
+            divergenciaEmailRfb = true;
+            Log.Warning(
+                "Onboarding: BrasilAPI circuit aberto — CNPJ {Cnpj} criado INATIVO (fail-safe). " +
+                "Ativar manualmente após confirmar via Receita Federal.", cnpjLimpo);
+        }
 
         // 2. Deriva TenantId — mesmo algoritmo SHA-256 do WPF/TenantHelper
         var tenantId = CnpjParaTenantId(cnpjLimpo);
@@ -118,12 +129,16 @@ public class CadastroService : ICadastroService
             Username           = "admin",
             PasswordHash       = senhaHash,
             // S12 FIX: IsActive=false quando e-mail informado diverge do e-mail RFB.
-            // Squatting bloqueado: atacante não tem acesso ao e-mail oficial da empresa
-            // e não consegue confirmar o cadastro.
-            IsActive           = !divergenciaEmailRfb,
-            MustChangePassword = true,
-            Email              = dto.Email,
-            ConfirmacaoToken   = confirmacaoToken,
+            // Squatting bloqueado: atacante não tem acesso ao e-mail oficial da empresa.
+            // S13 FIX: token expira em 48h — sem expiração, squatting vira DoS permanente
+            // (atacante pré-registra → dono real fica bloqueado para sempre).
+            IsActive                 = !divergenciaEmailRfb,
+            MustChangePassword       = true,
+            Email                    = dto.Email,
+            ConfirmacaoToken         = confirmacaoToken,
+            ConfirmacaoTokenExpiraEm = confirmacaoToken != null
+                ? DateTime.UtcNow.AddHours(48)
+                : null,
             RoleId             = roleAdmin.Id
         };
 

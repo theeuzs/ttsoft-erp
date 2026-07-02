@@ -20,7 +20,12 @@ public class User : BaseEntity
     /// Token enviado ao e-mail RFB quando há divergência no cadastro.
     /// Null = conta ativa sem pendência de confirmação.
     /// </summary>
-    public string? ConfirmacaoToken { get; set; }
+    public string?   ConfirmacaoToken         { get; set; }
+
+    // S13 FIX: expiração do token (48h) — sem isso, squatting vira DoS permanente:
+    // atacante pré-registra com e-mail divergente, dono real fica bloqueado para sempre.
+    /// <summary>Data/hora UTC em que o ConfirmacaoToken expira (48h após criação).</summary>
+    public DateTime? ConfirmacaoTokenExpiraEm { get; set; }
 
     // ── Proteção contra força bruta ──────────────────────────────────────
     /// <summary>Contador de tentativas de login com falha consecutivas.</summary>

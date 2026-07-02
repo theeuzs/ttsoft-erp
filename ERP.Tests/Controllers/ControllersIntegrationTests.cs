@@ -2213,4 +2213,117 @@ public class S11CatalogoPublicoOptInTests : IClassFixture<ErpApiFactory>
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//  S13 — Testes do endpoint GET /api/cadastro/confirmar
+// ═══════════════════════════════════════════════════════════════════════════════
+
+[Collection("ErpApi")]
+public class S13ConfirmarCadastroTests : IClassFixture<ErpApiFactory>
+{
+    private readonly ErpApiFactory _factory;
+    public S13ConfirmarCadastroTests(ErpApiFactory factory) => _factory = factory;
+
+    private async Task<(Guid TenantId, string Token)> SeedAdminInativoAsync()
+    {
+        var tenantId = Guid.NewGuid();
+        var token    = Guid.NewGuid().ToString("N");
+
+        AppDbContext.SetQueryTenantId(tenantId);
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var role = new ERP.Domain.Entities.Role
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, Name = "Administrador"
+            };
+            db.Roles.Add(role);
+
+            db.Users.Add(new ERP.Domain.Entities.User
+            {
+                Id               = Guid.NewGuid(),
+                TenantId         = tenantId,
+                Username         = "admin",
+                Name             = "Admin S13",
+                PasswordHash     = BCrypt.Net.BCrypt.HashPassword("SenhaS13_forte1", 4),
+                IsActive         = false,    // inativo — aguardando confirmação RFB
+                ConfirmacaoToken = token,
+                RoleId           = role.Id,
+                CreatedAt        = DateTime.UtcNow,
+                UpdatedAt        = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+        finally { AppDbContext.SetQueryTenantId(Guid.Empty); }
+
+        return (tenantId, token);
+    }
+
+    [Fact(DisplayName = "S13 — /confirmar com token válido ativa admin e limpa token")]
+    public async Task Confirmar_TokenValido_AtivaAdminELimpaToken()
+    {
+        var (tenantId, token) = await SeedAdminInativoAsync();
+
+        var client = _factory.CreateClient();
+        var resp   = await client.GetAsync($"/api/cadastro/confirmar?token={token}");
+
+        resp.StatusCode.Should().Be(HttpStatusCode.OK,
+            "token válido deve ativar o admin e retornar 200");
+
+        AppDbContext.SetQueryTenantId(tenantId);
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            var db   = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var user = await db.Users
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Username == "admin");
+
+            user.Should().NotBeNull();
+            user!.IsActive.Should().BeTrue(
+                "admin deve estar ativo após confirmação");
+            user.ConfirmacaoToken.Should().BeNull(
+                "token deve ser limpo após uso (one-time-use)");
+        }
+        finally { AppDbContext.SetQueryTenantId(Guid.Empty); }
+    }
+
+    [Fact(DisplayName = "S13 — /confirmar com token inválido retorna 400")]
+    public async Task Confirmar_TokenInvalido_Retorna400()
+    {
+        var client = _factory.CreateClient();
+        var resp   = await client.GetAsync("/api/cadastro/confirmar?token=token-que-nao-existe-s13");
+
+        resp.StatusCode.Should().Be(HttpStatusCode.BadRequest,
+            "token inexistente deve retornar 400");
+    }
+
+    [Fact(DisplayName = "S13 — /confirmar sem token retorna 400")]
+    public async Task Confirmar_SemToken_Retorna400()
+    {
+        var client = _factory.CreateClient();
+        var resp   = await client.GetAsync("/api/cadastro/confirmar");
+
+        resp.StatusCode.Should().Be(HttpStatusCode.BadRequest,
+            "requisição sem token deve retornar 400");
+    }
+
+    [Fact(DisplayName = "S13 — /confirmar é idempotente — segundo uso retorna 200 'já ativo'")]
+    public async Task Confirmar_SegundoUso_EhIdempotente()
+    {
+        var (_, token) = await SeedAdminInativoAsync();
+
+        var client = _factory.CreateClient();
+
+        // Primeira chamada — ativa o admin
+        await client.GetAsync($"/api/cadastro/confirmar?token={token}");
+
+        // Segunda chamada — admin já está ativo, token == null → retorna 400 (token não existe mais)
+        var resp2 = await client.GetAsync($"/api/cadastro/confirmar?token={token}");
+        resp2.StatusCode.Should().Be(HttpStatusCode.BadRequest,
+            "token já usado (null no banco) não deve ser encontrado — retorna 400");
+    }
+}
+
 }
