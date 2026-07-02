@@ -290,6 +290,57 @@ public class AuthController : ControllerBase
         }
     }
 
+    // ── S13: Perfil do usuário ─────────────────────────────────────────────────
+
+    /// <summary>Retorna dados do perfil do usuário autenticado (nome, username, email).</summary>
+    [HttpGet("perfil")]
+    [Authorize]
+    public async Task<IActionResult> GetPerfil()
+    {
+        var userIdStr = User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                     ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdStr, out var userId))
+            return Unauthorized();
+
+        var user = await _uow.Users.GetByIdAsync(userId);
+        if (user is null) return NotFound();
+
+        return Ok(new
+        {
+            id       = user.Id,
+            name     = user.Name,
+            username = user.Username,
+            email    = user.Email
+        });
+    }
+
+    /// <summary>
+    /// Atualiza o e-mail do usuário autenticado.
+    /// Usuários criados antes da S11 não tinham e-mail — este endpoint permite cadastrá-lo.
+    /// </summary>
+    [HttpPut("perfil/email")]
+    [Authorize]
+    public async Task<IActionResult> UpdateEmail([FromBody] AtualizarEmailDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.Email) || !dto.Email.Contains('@'))
+            return BadRequest("E-mail inválido.");
+
+        var userIdStr = User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                     ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdStr, out var userId))
+            return Unauthorized();
+
+        var user = await _uow.Users.GetByIdAsync(userId);
+        if (user is null) return NotFound();
+
+        user.Email     = dto.Email.Trim().ToLower();
+        user.UpdatedAt = DateTime.UtcNow;
+        await _uow.CommitAsync();
+
+        Log.Information("Perfil: e-mail atualizado para userId={UserId}", userId);
+        return Ok(new { mensagem = "E-mail atualizado com sucesso." });
+    }
+
     private string GerarToken(UserDto user, Guid tenantId, bool mustChangePassword = false)
     {
         var key     = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));

@@ -54,6 +54,12 @@ else
             <div class="sidebar-footer">
                 <div class="user-name">@Auth.Usuario</div>
                 <div class="user-role">@Auth.Cargo</div>
+                <a href="/perfil"
+                   style="display:block; background:#334155; color:#94A3B8; text-decoration:none;
+                          padding:7px 14px; border-radius:6px; font-size:12px; font-weight:600;
+                          width:100%; margin-bottom:6px; text-align:center; box-sizing:border-box;">
+                    👤 Meu Perfil
+                </a>
                 <button @onclick="ToggleDarkMode"
                         style="background:#334155; color:#94A3B8; border:none; padding:7px 14px;
                         border-radius:6px; cursor:pointer; font-size:12px; font-weight:600;

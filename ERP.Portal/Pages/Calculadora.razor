@@ -336,9 +336,8 @@
         _loading   = false;
 
         // Pré-seleciona template via query string: /calculadora?template=piso_ceramico
-        var uri    = new Uri(Nav.Uri);
-        var query  = System.Web.HttpUtility.ParseQueryString(uri.Query);
-        var tmplId = query["template"];
+        var query  = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
+        var tmplId = query.TryGetValue("template", out var t2) ? t2.ToString() : null;
         if (!string.IsNullOrEmpty(tmplId) && _templates != null)
         {
             var t = _templates.FirstOrDefault(x =>
