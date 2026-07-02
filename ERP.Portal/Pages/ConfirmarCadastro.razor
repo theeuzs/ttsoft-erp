@@ -45,9 +45,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var uri   = new Uri(Nav.Uri);
-        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
-        var token = query["token"] ?? "";
+        // S13 FIX: QueryHelpers é idiomático em Blazor WASM (System.Web.HttpUtility é legado).
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
+        var token = query.TryGetValue("token", out var t) ? t.ToString() : "";
 
         if (string.IsNullOrWhiteSpace(token))
         {

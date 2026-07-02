@@ -5,15 +5,23 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>ERP.Portal</RootNamespace>
+    <!-- S13 FIX: carrega dados ICU de portugues (pt) no bundle WASM.
+         Sem isso, CultureInfo("pt-BR") nao tem os dados de moeda/formato
+         e Blazor WASM usa a locale do browser — num SO europeu vira €.
+         "pt" inclui pt-BR e pt-PT (~400KB extra, aceitavel). -->
+    <BlazorWebAssemblyI18NAssemblies>pt</BlazorWebAssemblyI18NAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly"         Version="8.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly"           Version="8.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="8.0.0" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.Extensions.Http"                            Version="8.0.0" />
-    <PackageReference Include="Blazored.LocalStorage"                                Version="4.4.0" />
-    <PackageReference Include="System.Net.Http.Json"                                 Version="8.0.0" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client"                Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http"                             Version="8.0.0" />
+    <PackageReference Include="Blazored.LocalStorage"                                 Version="4.4.0" />
+    <PackageReference Include="System.Net.Http.Json"                                  Version="8.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client"                   Version="8.0.0" />
+    <!-- S13 FIX: QueryHelpers para substituir System.Web.HttpUtility
+         nas paginas NovaSenha.razor e ConfirmarCadastro.razor -->
+    <PackageReference Include="Microsoft.AspNetCore.WebUtilities"                     Version="8.0.0" />
   </ItemGroup>
 
 </Project>

@@ -118,11 +118,22 @@ public class AuthController : ControllerBase
         if (tenantId == Guid.Empty)
             return Ok(new { mensagem = respostaGenerica });
 
-        // Busca usuário pelo email — silencia erros para não vazar informação
         var user = await _uow.Users.GetByEmailAndTenantAsync(dto.Email.Trim().ToLower(), tenantId);
         if (user is null)
         {
             // Anti-enumeração: aguarda tempo similar ao de geração do token
+            await Task.Delay(200);
+            return Ok(new { mensagem = respostaGenerica });
+        }
+
+        // Usuário encontrado mas sem e-mail cadastrado (criado antes da S11)
+        // GetByEmailAndTenantAsync filtra por e-mail, então user.Email nunca é null aqui.
+        // Este check existe apenas como guard defensivo.
+        if (string.IsNullOrEmpty(user.Email))
+        {
+            Log.Warning("forgot-password: userId={UserId} tenantId={TenantId} não tem e-mail cadastrado. " +
+                "Recuperação impossível — orientar usuário a contatar suporte para atualizar e-mail.",
+                user.Id, tenantId);
             await Task.Delay(200);
             return Ok(new { mensagem = respostaGenerica });
         }

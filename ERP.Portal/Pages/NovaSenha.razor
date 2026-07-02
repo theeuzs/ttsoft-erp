@@ -76,9 +76,10 @@
 
     protected override void OnInitialized()
     {
-        var uri    = new Uri(Nav.Uri);
-        var query  = System.Web.HttpUtility.ParseQueryString(uri.Query);
-        _token     = query["token"] ?? "";
+        // S13 FIX: System.Web.HttpUtility não é idiomático em Blazor WASM.
+        // Usa Microsoft.AspNetCore.WebUtilities.QueryHelpers (já incluído no runtime Blazor).
+        var query  = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
+        _token     = query.TryGetValue("token", out var t) ? t.ToString() : "";
     }
 
     private async Task RedefinirAsync()
