@@ -17,12 +17,15 @@ public class ContaReceberService : IContaReceberService
     private readonly IUnitOfWork    _uow;
     private readonly AppDbContext   _ctx;
     private readonly IRequestTenant _tenant;
+    private readonly AsaasService   _asaas;
 
-    public ContaReceberService(IUnitOfWork uow, AppDbContext ctx, IRequestTenant tenant)
+    public ContaReceberService(
+        IUnitOfWork uow, AppDbContext ctx, IRequestTenant tenant, AsaasService asaas)
     {
         _uow    = uow;
         _ctx    = ctx;
         _tenant = tenant;
+        _asaas  = asaas;
     }
 
     public async Task GerarContaAPrazoAsync(Guid clienteId, Guid? vendaId, decimal valor, string descricao)
@@ -176,4 +179,66 @@ public class ContaReceberService : IContaReceberService
         FormaPagamento = c.FormaPagamento,
         ParcelamentoId = c.ParcelamentoId
     };
+
+    // S15 FIX: movido de ContasReceberController.GerarBoleto — lógica idêntica,
+    // só trocando IActionResult por um resultado tipado que o controller mapeia.
+    public async Task<GerarBoletoResultado> GerarBoletoAsync(Guid contaId)
+    {
+        var conta = await _ctx.ContasReceber
+            .Include(c => c.Customer)
+            .Where(c => c.Id == contaId)
+            .FirstOrDefaultAsync();
+
+        if (conta is null)
+            return new GerarBoletoResultado(GerarBoletoStatus.ContaNaoEncontrada);
+
+        if (!string.IsNullOrEmpty(conta.AsaasPaymentId))
+            return new GerarBoletoResultado(
+                GerarBoletoStatus.JaPossuiBoleto,
+                BoletoUrl: conta.BoletoUrl, InvoiceUrl: conta.InvoiceUrl,
+                BoletoBarCode: conta.BoletoBarCode, AsaasStatus: conta.AsaasStatus);
+
+        if (conta.Customer is null)
+            return new GerarBoletoResultado(
+                GerarBoletoStatus.ClienteNaoVinculado, Erro: "Conta sem cliente vinculado.");
+
+        // 1. Obter/criar cliente no Asaas
+        var cpfCnpj = conta.Customer.Document ?? "";
+        if (string.IsNullOrEmpty(cpfCnpj))
+            return new GerarBoletoResultado(
+                GerarBoletoStatus.ClienteSemDocumento,
+                Erro: "Cliente sem CPF/CNPJ cadastrado. Preencha antes de gerar boleto.");
+
+        var asaasClientId = await _asaas.ObterOuCriarClienteAsync(
+            conta.Customer.Name, cpfCnpj, conta.Customer.Email, conta.Customer.Phone);
+
+        if (asaasClientId is null)
+            return new GerarBoletoResultado(
+                GerarBoletoStatus.FalhaAoRegistrarClienteAsaas,
+                Erro: "Não foi possível registrar o cliente no Asaas. Verifique a API Key.");
+
+        // 2. Gerar boleto
+        var resultado = await _asaas.GerarBoletoAsync(
+            asaasClientId,
+            conta.ValorTotal - conta.ValorRecebido,
+            conta.DataVencimento,
+            $"{conta.Descricao} — Parcela {conta.NumeroParcela}/{conta.TotalParcelas}");
+
+        if (resultado is null)
+            return new GerarBoletoResultado(
+                GerarBoletoStatus.FalhaAoGerarBoleto, Erro: "Erro ao gerar boleto no Asaas.");
+
+        // 3. Salvar IDs na conta
+        conta.AsaasPaymentId = resultado.AsaasPaymentId;
+        conta.BoletoUrl      = resultado.BoletoUrl;
+        conta.InvoiceUrl     = resultado.InvoiceUrl;
+        conta.BoletoBarCode  = resultado.BoletoBarCode;
+        conta.AsaasStatus    = resultado.Status;
+        await _ctx.SaveChangesAsync();
+
+        return new GerarBoletoResultado(
+            GerarBoletoStatus.Sucesso,
+            BoletoUrl: resultado.BoletoUrl, InvoiceUrl: resultado.InvoiceUrl,
+            BoletoBarCode: resultado.BoletoBarCode, AsaasStatus: resultado.Status);
+    }
 }

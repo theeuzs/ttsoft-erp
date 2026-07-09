@@ -50,6 +50,7 @@ public class CadastroService : ICadastroService
         //   Nível 1: rejeita CNPJs inativos/baixados/suspensos.
         //   Nível 2 S12: cria admin inativo e envia confirmação para e-mail RFB quando há divergência.
         bool   divergenciaEmailRfb    = false;
+        bool   circuitBreakerFailSafe = false;
         string? emailRfbConfirmacao   = null;
         var dadosRfb = await _brasilApi.ConsultarCnpjAsync(cnpjLimpo);
         if (dadosRfb != null)
@@ -73,10 +74,14 @@ public class CadastroService : ICadastroService
                 emailRfbConfirmacao != emailDto)
             {
                 divergenciaEmailRfb = true;
+                // S15 FIX: e-mails mascarados no log — endereço completo é dado
+                // pessoal (LGPD) e não precisa aparecer em texto puro no Seq/App
+                // Insights. CNPJ continua em claro (já é logado em claro em vários
+                // outros pontos do sistema, é a chave de negócio, não dado pessoal).
                 Log.Warning(
                     "Onboarding: divergência e-mail informado ({EmailDto}) vs RFB ({EmailRfb}) para CNPJ {Cnpj}. " +
                     "Conta criada INATIVA — confirmação enviada para e-mail RFB.",
-                    emailDto, emailRfbConfirmacao, cnpjLimpo);
+                    MascararEmail(emailDto), MascararEmail(emailRfbConfirmacao), cnpjLimpo);
             }
         }
         else if (_brasilApi.CircuitAberto)
@@ -85,7 +90,15 @@ public class CadastroService : ICadastroService
             // Em vez de fail-open (squatting possível durante outage da BrasilAPI),
             // cria admin INATIVO — mesmo fluxo da divergência de e-mail.
             // Ativar manualmente via /api/cadastro/confirmar ou suporte.
-            divergenciaEmailRfb = true;
+            //
+            // S15 FIX: usa uma flag PRÓPRIA (circuitBreakerFailSafe), não
+            // divergenciaEmailRfb. Antes, esse caminho setava divergenciaEmailRfb=true
+            // mas nunca populava emailRfbConfirmacao (não há e-mail RFB confirmado
+            // aqui — a BrasilAPI nem respondeu). Lá embaixo, o código tentava enviar
+            // e-mail de confirmação para emailRfbConfirmacao! (null forçado) —
+            // silenciosamente nunca saía, e o cliente ficava com a conta INATIVA
+            // sem nenhum jeito de ativar durante um outage da BrasilAPI.
+            circuitBreakerFailSafe = true;
             Log.Warning(
                 "Onboarding: BrasilAPI circuit aberto — CNPJ {Cnpj} criado INATIVO (fail-safe). " +
                 "Ativar manualmente após confirmar via Receita Federal.", cnpjLimpo);
@@ -119,8 +132,14 @@ public class CadastroService : ICadastroService
         _db.Roles.AddRange(roleAdmin, roleVendedor, roleCaixa, roleGerente);
 
         // 5. Cria usuário admin
+        // S15 FIX: precisaConfirmacao cobre os dois casos que exigem conta INATIVA
+        // (divergência de e-mail real E fail-safe de circuit breaker) — antes só
+        // divergenciaEmailRfb era checado aqui, mas os dois casos setavam essa
+        // mesma flag antes do fix acima, então o comportamento de IsActive/token
+        // não muda; só o significado interno da flag ficou correto.
+        var precisaConfirmacao = divergenciaEmailRfb || circuitBreakerFailSafe;
         var senhaHash        = BCrypt.Net.BCrypt.HashPassword(dto.Senha);
-        var confirmacaoToken = divergenciaEmailRfb ? Guid.NewGuid().ToString("N") : null;
+        var confirmacaoToken = precisaConfirmacao ? Guid.NewGuid().ToString("N") : null;
         var admin = new User
         {
             Id                 = Guid.NewGuid(),
@@ -132,7 +151,7 @@ public class CadastroService : ICadastroService
             // Squatting bloqueado: atacante não tem acesso ao e-mail oficial da empresa.
             // S13 FIX: token expira em 48h — sem expiração, squatting vira DoS permanente
             // (atacante pré-registra → dono real fica bloqueado para sempre).
-            IsActive                 = !divergenciaEmailRfb,
+            IsActive                 = !precisaConfirmacao,
             MustChangePassword       = true,
             Email                    = dto.Email,
             ConfirmacaoToken         = confirmacaoToken,
@@ -148,10 +167,10 @@ public class CadastroService : ICadastroService
         Log.Information("Onboarding: novo tenant criado — CNPJ={Cnpj} TenantId={TenantId} IsActive={IsActive}",
             cnpjLimpo, tenantId, admin.IsActive);
 
-        if (divergenciaEmailRfb && confirmacaoToken != null)
+        if (divergenciaEmailRfb && confirmacaoToken != null && emailRfbConfirmacao != null)
         {
             // Envia confirmação para o e-mail da RFB — não o e-mail informado pelo atacante
-            _ = EnviarEmailConfirmacaoAsync(emailRfbConfirmacao!, dto.RazaoSocial, confirmacaoToken);
+            _ = EnviarEmailConfirmacaoAsync(emailRfbConfirmacao, dto.RazaoSocial, confirmacaoToken);
             return new CadastroResponseDto
             {
                 MensagemSucesso = "Cadastro recebido! Para ativar sua conta, verifique o e-mail " +
@@ -160,7 +179,28 @@ public class CadastroService : ICadastroService
             };
         }
 
-        // Fluxo normal: e-mails coincidem ou BrasilAPI indisponível (fail-open)
+        if (circuitBreakerFailSafe)
+        {
+            // S15 FIX: não há e-mail RFB verificado pra mandar confirmação
+            // automática aqui — mandar pro dto.Email (não confiável) anularia a
+            // proteção anti-squatting bem na janela de outage, que é o pior
+            // momento pra isso. Ativação fica pendente de verificação manual,
+            // como o comentário original do S13 já pretendia — mas agora o
+            // cliente é AVISADO disso em vez de esperar um e-mail que nunca sai.
+            Log.Warning(
+                "Onboarding: CNPJ {Cnpj} aguardando ativação manual — BrasilAPI indisponível " +
+                "no momento do cadastro, sem e-mail RFB verificado para confirmação automática.",
+                cnpjLimpo);
+            return new CadastroResponseDto
+            {
+                MensagemSucesso = "Cadastro recebido! No momento não conseguimos confirmar automaticamente " +
+                                  "os dados da sua empresa na Receita Federal. Nossa equipe vai verificar e " +
+                                  "ativar sua conta manualmente em breve — qualquer dúvida, fale com o suporte.",
+                LoginUrl        = "https://app.ttsofts.com.br"
+            };
+        }
+
+        // Fluxo normal: e-mails coincidem
         _ = EnviarEmailBoasVindasAsync(dto.Email, dto.RazaoSocial, dto.Cnpj);
 
         return new CadastroResponseDto
@@ -168,6 +208,17 @@ public class CadastroService : ICadastroService
             MensagemSucesso = $"Cadastro realizado com sucesso! Acesse o portal com CNPJ {dto.Cnpj} e usuário admin.",
             LoginUrl        = "https://app.ttsofts.com.br"
         };
+    }
+
+    // S15 FIX: mascara e-mail para uso em logs — mantém domínio (útil para
+    // diagnóstico/suporte) e oculta a parte local, exceto o primeiro caractere.
+    // "joao.silva@gmail.com" → "j***@gmail.com". Não usar para nada além de log.
+    private static string MascararEmail(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email)) return "(vazio)";
+        var arroba = email.IndexOf('@');
+        if (arroba <= 0) return "***";
+        return $"{email[0]}***{email[arroba..]}";
     }
 
     // ── Deriva TenantId via SHA-256(CNPJ) — mesmo algoritmo do WPF ─────────

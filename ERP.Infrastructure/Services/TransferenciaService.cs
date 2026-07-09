@@ -1,3 +1,13 @@
+// TENANT FIX: AppDbContext.GetGlobalTenantId() → IRequestTenant.TenantId.
+//        Antes: GetGlobalTenantId() retorna Guid.Empty na API (só é setado pelo
+//        WPF no login). CriarAsync gravava a transferência com TenantId=Guid.Empty
+//        — como TransferenciaEstoque tem HasQueryFilter, a transferência recém-criada
+//        desaparecia da visão de quem acabou de criá-la. Mesmo problema em
+//        AjustarEstoqueBranchAsync ao criar um ProductBranchStock novo.
+//        _tenant é injetado no construtor (escopo da requisição HTTP ambiente),
+//        não resolvido de dentro do `scope` de _sp.CreateScope() — mesmo cuidado
+//        já aplicado em NfseEmissionService.
+using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Persistence.Context;
 using Microsoft.EntityFrameworkCore;
@@ -27,7 +37,13 @@ public class CriarTransferenciaDto
 public class TransferenciaService : ITransferenciaService
 {
     private readonly IServiceProvider _sp;
-    public TransferenciaService(IServiceProvider sp) => _sp = sp;
+    private readonly IRequestTenant   _tenant;
+
+    public TransferenciaService(IServiceProvider sp, IRequestTenant tenant)
+    {
+        _sp     = sp;
+        _tenant = tenant;
+    }
 
     public async Task<TransferenciaEstoque> CriarAsync(CriarTransferenciaDto dto)
     {
@@ -38,7 +54,7 @@ public class TransferenciaService : ITransferenciaService
 
         using var scope = _sp.CreateScope();
         var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var tenantId = AppDbContext.GetGlobalTenantId();
+        var tenantId = _tenant.TenantId;
 
         var transferencia = new TransferenciaEstoque
         {
@@ -82,12 +98,13 @@ public class TransferenciaService : ITransferenciaService
             throw new InvalidOperationException("Transferência não pode ser confirmada no status atual.");
 
         // Atualiza estoque por filial (ProductBranchStock)
+        var tenantId = _tenant.TenantId;
         foreach (var item in transf.Itens)
         {
             // Debita origem
-            await AjustarEstoqueBranchAsync(ctx, item.ProductId, transf.OrigemId, -item.Quantidade);
+            await AjustarEstoqueBranchAsync(ctx, tenantId, item.ProductId, transf.OrigemId, -item.Quantidade);
             // Credita destino
-            await AjustarEstoqueBranchAsync(ctx, item.ProductId, transf.DestinoId, item.Quantidade);
+            await AjustarEstoqueBranchAsync(ctx, tenantId, item.ProductId, transf.DestinoId, item.Quantidade);
 
             Log.Information("Transferência {Id}: produto {Prod} {Qtd} un de {Orig} → {Dest}",
                 id, item.ProductId, item.Quantidade, transf.OrigemId, transf.DestinoId);
@@ -140,7 +157,7 @@ public class TransferenciaService : ITransferenciaService
     }
 
     private static async Task AjustarEstoqueBranchAsync(
-        AppDbContext ctx, Guid productId, Guid branchId, decimal delta)
+        AppDbContext ctx, Guid tenantId, Guid productId, Guid branchId, decimal delta)
     {
         var stock = await ctx.ProductBranchStocks
             .AsTracking()
@@ -150,7 +167,7 @@ public class TransferenciaService : ITransferenciaService
         {
             stock = new ProductBranchStock
             {
-                TenantId  = AppDbContext.GetGlobalTenantId(),
+                TenantId  = tenantId,
                 ProductId = productId,
                 BranchId  = branchId,
                 Quantity  = delta

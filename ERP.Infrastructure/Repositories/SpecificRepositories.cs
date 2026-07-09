@@ -17,22 +17,36 @@ public class ProductRepository : Repository<Product>, IProductRepository
 {
     public ProductRepository(AppDbContext ctx) : base(ctx) { }
 
+    // TENANT FIX: AND TenantId= adicionado nas duas queries, fechando a única
+    // exceção no projeto ao padrão de defesa em profundidade em SQL raw (todo o
+    // resto do projeto já inclui TenantId no WHERE — ver ContaPagarService,
+    // ContaReceberService, FidelidadeService, MarketplaceService, RoleRepository).
+    // Mitigado na prática mesmo sem isso, porque o único chamador (SaleService,
+    // DevolucaoService) sempre resolve o productId via GetByIdAsync (que já
+    // filtra por tenant) antes de chegar aqui — mas depender só disso é frágil:
+    // um chamador futuro que passe um productId direto, sem essa checagem prévia,
+    // reintroduziria a mesma classe de bug que já corrigimos em outros 3 lugares.
+    // Usa GetQueryTenantId() (AsyncLocal + fallback _globalTenantId), não
+    // GetGlobalTenantId() sozinho — esse é seguro tanto na API quanto no WPF,
+    // ao contrário do que usamos por engano em RoleRepository/TransferenciaService/
+    // NfseEmissionService antes do fix.
     public async Task<bool> BaixarEstoqueAtomicoAsync(Guid productId, decimal quantidade, bool allowNegative)
     {
         int rows;
+        var tenantId = AppDbContext.GetQueryTenantId();
 
         if (allowNegative)
         {
             // S3.7: ExecuteSqlInterpolatedAsync
             rows = await _ctx.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE Products SET Stock = Stock - {quantidade} WHERE Id = {productId}");
+                $"UPDATE Products SET Stock = Stock - {quantidade} WHERE Id = {productId} AND TenantId = {tenantId}");
         }
         else
         {
             // {quantidade} referenciado duas vezes — variável local evita avaliar duas vezes
             var qtd = quantidade;
             rows = await _ctx.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE Products SET Stock = Stock - {qtd} WHERE Id = {productId} AND Stock >= {qtd}");
+                $"UPDATE Products SET Stock = Stock - {qtd} WHERE Id = {productId} AND TenantId = {tenantId} AND Stock >= {qtd}");
         }
 
         return rows > 0;

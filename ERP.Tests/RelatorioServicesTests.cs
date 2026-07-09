@@ -535,6 +535,51 @@ public class InventarioServiceTests
         Assert.Equal(2, produtos.Count);
     }
 
+    // PERFORMANCE FIX: regressão para o relatório de divergências carregar o
+    // catálogo inteiro em vez de só os produtos pedidos.
+    [Fact]
+    public async Task ObterProdutosPorIdsAsync_RetornaSomenteOsIdsPedidos()
+    {
+        var tid = Guid.NewGuid();
+        AppDbContext.SetGlobalTenantId(tid);
+        AppDbContext.SetQueryTenantId(tid);
+
+        var idA = Guid.NewGuid();
+        var idB = Guid.NewGuid();
+        var idC = Guid.NewGuid();
+
+        var sp = TestDb.Create("inv_por_ids", ctx =>
+        {
+            ctx.Products.AddRange(
+                new Product { Id = idA, Name = "Contado A", SalePrice = 10, TenantId = tid },
+                new Product { Id = idB, Name = "Contado B", SalePrice = 20, TenantId = tid },
+                new Product { Id = idC, Name = "Nao contado C", SalePrice = 30, TenantId = tid });
+        }, tenantId: tid);
+
+        var produtos = await new InventarioService(sp).ObterProdutosPorIdsAsync(new[] { idA, idB });
+
+        Assert.Equal(2, produtos.Count);
+        Assert.Contains(produtos, p => p.ProductId == idA);
+        Assert.Contains(produtos, p => p.ProductId == idB);
+        Assert.DoesNotContain(produtos, p => p.ProductId == idC);
+    }
+
+    [Fact]
+    public async Task ObterProdutosPorIdsAsync_ListaVazia_NaoConsultaBanco()
+    {
+        var tid = Guid.NewGuid();
+        AppDbContext.SetGlobalTenantId(tid);
+        AppDbContext.SetQueryTenantId(tid);
+        var sp = TestDb.Create("inv_por_ids_vazio", ctx =>
+        {
+            ctx.Products.Add(new Product { Id = Guid.NewGuid(), Name = "A", SalePrice = 10, TenantId = tid });
+        }, tenantId: tid);
+
+        var produtos = await new InventarioService(sp).ObterProdutosPorIdsAsync(Array.Empty<Guid>());
+
+        Assert.Empty(produtos);
+    }
+
     [Fact]
     public async Task AplicarAjustesAsync_AtualizaEstoqueCorretamente()
     {

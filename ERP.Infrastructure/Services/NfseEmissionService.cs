@@ -1,3 +1,16 @@
+// TENANT FIX: AppDbContext.GetGlobalTenantId() → IRequestTenant.TenantId.
+//        Antes: GetGlobalTenantId() retorna Guid.Empty na API (só é setado pelo
+//        WPF no login), fazendo toda NFS-e emitida pela API/Portal gravar
+//        TenantId=Guid.Empty. NfseEmitida não tem HasQueryFilter — é filtrada
+//        manualmente por _tenant.TenantId em NotasFiscaisService.GetAllAsync —
+//        então a nota emitida (já transmitida à prefeitura via FocusNFe, real)
+//        nunca mais aparecia na listagem de notas fiscais do próprio lojista.
+//
+//        IMPORTANTE: IRequestTenant é injetado no construtor (escopo da requisição
+//        HTTP ambiente), NÃO resolvido de dentro do `scope` criado por
+//        _sp.CreateScope() abaixo — aquele scope é novo e isolado, então um
+//        RequestTenant resolvido dali viria vazio (TenantId=Guid.Empty de novo),
+//        nunca populado pelo TenantMiddleware da requisição original.
 using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Persistence.Context;
@@ -10,11 +23,14 @@ public class NfseEmissionService : INfseEmissionService
 {
     private readonly IFocusNfeHttpClient _httpClient;
     private readonly IServiceProvider    _sp;
+    private readonly IRequestTenant      _tenant;
 
-    public NfseEmissionService(IFocusNfeHttpClient httpClient, IServiceProvider sp)
+    public NfseEmissionService(
+        IFocusNfeHttpClient httpClient, IServiceProvider sp, IRequestTenant tenant)
     {
         _httpClient = httpClient;
         _sp         = sp;
+        _tenant     = tenant;
     }
 
     public async Task<(bool Sucesso, string Mensagem, NfseEmitida? Nfse)> EmitirAsync(
@@ -80,7 +96,7 @@ public class NfseEmissionService : INfseEmissionService
             ValorServico    = dto.ValorServico,
             AliquotaISS     = dto.AliquotaISS,
             VendaId         = dto.VendaId,
-            TenantId        = AppDbContext.GetGlobalTenantId()
+            TenantId        = _tenant.TenantId
         };
 
         if (result.IsFailed)

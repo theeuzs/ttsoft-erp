@@ -120,8 +120,10 @@ public class InventarioController : ControllerBase
 
     /// <summary>
     /// Gera relatório de divergências entre estoque atual e contagem.
-    /// ObterProdutosAsync é adequado aqui: o cruzamento exige todos os produtos
-    /// da lista de contagem, que já é um conjunto limitado pelo usuário.
+    /// PERFORMANCE FIX: usa ObterProdutosPorIdsAsync — antes chamava
+    /// ObterProdutosAsync() (catálogo inteiro) e filtrava em memória aqui, apesar
+    /// do comentário anterior dizer o contrário. Agora o filtro por ID vai na
+    /// própria query SQL.
     /// </summary>
     [HasPermission(Permissions.InventarioView)]
     [HttpPost("relatorio-divergencias")]
@@ -131,12 +133,9 @@ public class InventarioController : ControllerBase
         if (itens is null || itens.Count == 0)
             return BadRequest(new { erro = "Nenhum item informado." });
 
-        // Busca somente os IDs que o usuário contou — sem SELECT * em Products
-        var ids     = itens.Select(i => i.ProdutoId).Distinct().ToHashSet();
-        var todos   = await _inventario.ObterProdutosAsync();
-        var lookup  = todos
-            .Where(p => ids.Contains(p.ProductId))
-            .ToDictionary(p => p.ProductId);
+        var ids     = itens.Select(i => i.ProdutoId).Distinct().ToList();
+        var todos   = await _inventario.ObterProdutosPorIdsAsync(ids);
+        var lookup  = todos.ToDictionary(p => p.ProductId);
 
         var divergencias = itens
             .Where(i => lookup.ContainsKey(i.ProdutoId))

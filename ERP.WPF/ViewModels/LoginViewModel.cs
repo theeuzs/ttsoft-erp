@@ -21,8 +21,10 @@ public class LoginViewModel : BaseViewModel
     {
         _authService = authService;
         
-        // O botão de login só libera se tiver algo digitado no usuário
-        LoginCommand = new AsyncRelayCommand(_ => RealizarLoginAsync(), _ => !string.IsNullOrWhiteSpace(Usuario));
+        // MUDANÇA: O botão agora só libera se tiver usuário E não estiver processando (IsBusy = false)
+        LoginCommand = new AsyncRelayCommand(
+            _ => RealizarLoginAsync(), 
+            _ => !string.IsNullOrWhiteSpace(Usuario) && !IsBusy);
         
         // MÁGICA: Assim que a tela abre, ele garante que o usuário "admin" exista no banco!
         _ = _authService.EnsureDefaultAdminCreatedAsync();
@@ -38,6 +40,7 @@ public class LoginViewModel : BaseViewModel
             CommandManager.InvalidateRequerySuggested(); 
         } 
     }
+    
     // A senha não usa Binding automático por segurança do WPF, ela vem do Code-Behind
     public string Senha { get; set; } = string.Empty;
 
@@ -50,11 +53,24 @@ public class LoginViewModel : BaseViewModel
     
     public bool TemErro => !string.IsNullOrEmpty(MensagemErro);
 
+    // MUDANÇA: Sobrescrevemos (ou ocultamos) o IsBusy do BaseViewModel para forçar
+    // o CommandManager a reavaliar o botão (ativar/desativar) instantaneamente.
+    public new bool IsBusy
+    {
+        get => base.IsBusy;
+        set
+        {
+            base.IsBusy = value;
+            OnPropertyChanged(nameof(IsBusy));
+            CommandManager.InvalidateRequerySuggested();
+        }
+    }
+
     public ICommand LoginCommand { get; }
 
     private async Task RealizarLoginAsync()
     {
-        IsBusy = true;
+        IsBusy = true; // Inicia a animação do Spinner e desativa o botão
         MensagemErro = string.Empty;
 
         try
@@ -168,7 +184,7 @@ public class LoginViewModel : BaseViewModel
         }
         finally
         {
-            IsBusy = false;
+            IsBusy = false; // Finaliza a animação do Spinner e reativa o botão
         }
     }
 

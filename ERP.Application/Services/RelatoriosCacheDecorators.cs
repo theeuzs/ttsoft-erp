@@ -153,6 +153,14 @@ public class InventarioServiceCached : IInventarioService
         return resultado;
     }
 
+    // Não cacheado: é uma consulta parametrizada por um conjunto de IDs que muda
+    // a cada chamada (itens contados pelo usuário), diferente da listagem geral
+    // acima — cachear por chave de ID-set não traria o mesmo ganho e complicaria
+    // a invalidação sem necessidade.
+    public Task<IReadOnlyList<InventarioProdutoDto>> ObterProdutosPorIdsAsync(
+        IEnumerable<Guid> ids, CancellationToken ct = default)
+        => _inner.ObterProdutosPorIdsAsync(ids, ct);
+
     public async Task AplicarAjustesAsync(IEnumerable<(Guid ProductId, decimal NovoEstoque)> ajustes)
     {
         await _inner.AplicarAjustesAsync(ajustes);

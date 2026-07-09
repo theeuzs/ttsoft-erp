@@ -25,5 +25,3 @@ config_recibo.json
 secrets.json
 ERP.WPF/appsettings.json
 ERP.WPF/appsettings.*.json
-
-ERP.WPF/appsettings.json

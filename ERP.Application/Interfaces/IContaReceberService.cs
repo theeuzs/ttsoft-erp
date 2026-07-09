@@ -27,4 +27,29 @@ public interface IContaReceberService
     Task DarBaixaTotalAsync(Guid contaId);
     Task<(decimal TotalPendente, decimal TotalVencido, int QtdClientes)> GetResumoAsync();
     Task<int> CountInadimplentesAsync();
+
+    // S15 FIX: movido de ContasReceberController.GerarBoleto — controller não
+    // deve tocar AppDbContext/AsaasService diretamente.
+    /// <summary>Gera (ou retorna existente) boleto bancário via Asaas para uma conta a receber.</summary>
+    Task<GerarBoletoResultado> GerarBoletoAsync(Guid contaId);
 }
+
+/// <summary>Status possíveis do resultado de GerarBoletoAsync — controller mapeia 1:1 para HTTP status.</summary>
+public enum GerarBoletoStatus
+{
+    ContaNaoEncontrada,
+    JaPossuiBoleto,
+    ClienteNaoVinculado,
+    ClienteSemDocumento,
+    FalhaAoRegistrarClienteAsaas,
+    FalhaAoGerarBoleto,
+    Sucesso
+}
+
+public record GerarBoletoResultado(
+    GerarBoletoStatus Status,
+    string?           Erro          = null,
+    string?           BoletoUrl     = null,
+    string?           InvoiceUrl    = null,
+    string?           BoletoBarCode = null,
+    string?           AsaasStatus   = null);

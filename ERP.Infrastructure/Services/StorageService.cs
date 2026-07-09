@@ -1,6 +1,7 @@
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Sas;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SkiaSharp;
@@ -32,6 +33,16 @@ public interface IStorageService
 
     /// <summary>Gera SAS URL de 5 min para uma foto específica de entrega (1.7.5).</summary>
     Task<string> GerarSasFotoEntregaAsync(Guid tenantId, Guid entregaId, string fileName, CancellationToken ct = default);
+
+    // S15 FIX: checagens de existência movidas do StorageController — controller
+    // não deve tocar AppDbContext diretamente. Ficam aqui (não num service à parte)
+    // porque são precondição direta das operações de storage acima: não faz
+    // sentido subir/listar/gerar SAS pra um produto ou entrega que não existe.
+    /// <summary>Verifica se o produto existe (qualquer tenant — filtro já aplicado pelo HasQueryFilter).</summary>
+    Task<bool> ProdutoExisteAsync(Guid produtoId, CancellationToken ct = default);
+
+    /// <summary>Verifica se a entrega existe (qualquer tenant — filtro já aplicado pelo HasQueryFilter).</summary>
+    Task<bool> EntregaExisteAsync(Guid entregaId, CancellationToken ct = default);
 }
 
 public class StorageService : IStorageService
@@ -40,11 +51,14 @@ public class StorageService : IStorageService
     private readonly string                  _containerProdutos;
     private readonly string                  _containerEntregas;
     private readonly ILogger<StorageService> _logger;
+    private readonly ERP.Persistence.Context.AppDbContext _ctx;
 
     private const int SasExpiryMinutes = 5;
 
-    public StorageService(IConfiguration config, ILogger<StorageService> logger)
+    public StorageService(
+        IConfiguration config, ILogger<StorageService> logger, ERP.Persistence.Context.AppDbContext ctx)
     {
+        _ctx = ctx;
         var connStr = config["AzureStorage:ConnectionString"]
             ?? throw new InvalidOperationException(
                 "AzureStorage:ConnectionString não configurada. " +
@@ -268,4 +282,11 @@ public class StorageService : IStorageService
         }
         return container;
     }
+
+    // S15 FIX: movidas do StorageController — ver comentário na interface.
+    public async Task<bool> ProdutoExisteAsync(Guid produtoId, CancellationToken ct = default)
+        => await _ctx.Products.AnyAsync(p => p.Id == produtoId, ct);
+
+    public async Task<bool> EntregaExisteAsync(Guid entregaId, CancellationToken ct = default)
+        => await _ctx.Entregas.AnyAsync(e => e.Id == entregaId, ct);
 }

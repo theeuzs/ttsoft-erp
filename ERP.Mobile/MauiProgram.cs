@@ -24,7 +24,20 @@ public static class MauiProgram
         builder.Logging.AddDebug();
 #endif
 
-        var apiUrl = "http://192.168.1.100:5000";
+        // S15 FIX: "http://192.168.1.100:5000" estava hardcoded aqui — funcionava
+        // só na rede local de quem escreveu o código, travava qualquer outro
+        // teste/deploy. Agora diferencia por build config:
+        //   DEBUG:   10.0.2.2 é o alias padrão do emulador Android para o
+        //            localhost da máquina host (convenção conhecida, não um IP
+        //            específico de uma LAN). Testando em device físico ou iOS
+        //            simulator, troque manualmente pelo IP da sua máquina na
+        //            rede local durante o teste.
+        //   RELEASE: aponta direto para a API de produção do ConstruTTor.
+#if DEBUG
+        var apiUrl = "http://10.0.2.2:5000";
+#else
+        var apiUrl = "https://erp-ttsoft-api-g8bde4f6aqcwb9aw.brazilsouth-01.azurewebsites.net";
+#endif
 
         builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(apiUrl) });
         builder.Services.AddBlazoredLocalStorage();

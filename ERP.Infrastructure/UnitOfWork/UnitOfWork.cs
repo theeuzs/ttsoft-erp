@@ -52,7 +52,7 @@ public class UnitOfWork : IUnitOfWork
         Brands        = new BrandRepository(_ctx);
         AuditLogs     = new AuditLogRepository(_ctx);
         Devolucoes    = new DevolucaoRepository(_ctx, requestTenant);
-        Roles         = new RoleRepository(_ctx);
+        Roles         = new RoleRepository(_ctx, requestTenant);
     }
 
     public async Task<int> CommitAsync() => await _ctx.SaveChangesAsync();

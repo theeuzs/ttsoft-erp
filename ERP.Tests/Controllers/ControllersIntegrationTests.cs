@@ -11,6 +11,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -20,6 +21,7 @@ using ERP.Application.Interfaces;
 using ERP.Infrastructure.Services;
 using ERP.Persistence.Context;
 using FluentAssertions;
+using FluentResults;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -44,6 +46,67 @@ public class StubHttpHandler : HttpMessageHandler
     protected override Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
         => Task.FromResult(new HttpResponseMessage(_statusCode));
+}
+
+// ── TENANT FIX: Stub do FocusNFe para testar NfseEmissionService.EmitirAsync ──
+// Evita chamada HTTP real à FocusNFe; sempre responde "autorizado".
+public class StubFocusNfeHttpClient : IFocusNfeHttpClient
+{
+    public void SetApiToken(string token) { }
+
+    public Task<Result<string>> GetAsync(string endpoint)
+        => Task.FromResult(Result.Ok("{}"));
+
+    public Task<Result<string>> PostAsync(string endpoint, object data)
+        => Task.FromResult(Result.Ok(
+            "{\"status\":\"autorizado\",\"numero\":\"12345\"," +
+            "\"codigo_verificacao\":\"ABC123\",\"url\":\"https://focusnfe.com.br/nfse/teste\"}"));
+
+    public Task<Result<string>> DeleteAsync(string endpoint)
+        => Task.FromResult(Result.Ok("{}"));
+
+    public Task<Result<string>> DeleteWithBodyAsync(string endpoint, object data)
+        => Task.FromResult(Result.Ok("{}"));
+}
+
+// ── S15 FIX: Stub do IStorageService — evita construir o StorageService real,
+// que tenta fazer parse de uma connection string do Azure Blob Storage no
+// construtor e lança FormatException quando não há uma configurada (nunca havia,
+// porque StorageController nunca tinha sido exercitado com autenticação real
+// antes — é exatamente por isso que ele não tinha teste nenhum).
+public class StubStorageService : IStorageService
+{
+    private readonly ERP.Persistence.Context.AppDbContext _ctx;
+
+    // S15 FIX: precisa do AppDbContext de verdade pras checagens de existência —
+    // testes existentes (ex: entrega inexistente → 404) dependem do dado real
+    // do InMemory, não dá pra só retornar true sempre aqui.
+    public StubStorageService(ERP.Persistence.Context.AppDbContext ctx) => _ctx = ctx;
+
+    public Task<string> UploadImagemProdutoAsync(
+        Guid tenantId, Guid produtoId, Stream stream, string contentType, CancellationToken ct = default)
+        => Task.FromResult($"https://stub.teste/produtos/{produtoId}.jpg");
+
+    public Task<string> UploadFotoEntregaAsync(
+        Guid tenantId, Guid entregaId, Stream stream, string contentType, CancellationToken ct = default)
+        => Task.FromResult($"https://stub.teste/entregas/{entregaId}/foto.jpg?sas=fake");
+
+    public Task DeletarImagemProdutoAsync(Guid tenantId, Guid produtoId, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    public Task<IReadOnlyList<string>> ListarFotosEntregaAsync(
+        Guid tenantId, Guid entregaId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+
+    public Task<string> GerarSasFotoEntregaAsync(
+        Guid tenantId, Guid entregaId, string fileName, CancellationToken ct = default)
+        => Task.FromResult($"https://stub.teste/entregas/{entregaId}/{fileName}?sas=fake");
+
+    public Task<bool> ProdutoExisteAsync(Guid produtoId, CancellationToken ct = default)
+        => _ctx.Products.AnyAsync(p => p.Id == produtoId, ct);
+
+    public Task<bool> EntregaExisteAsync(Guid entregaId, CancellationToken ct = default)
+        => _ctx.Entregas.AnyAsync(e => e.Id == entregaId, ct);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -130,6 +193,17 @@ public class ErpApiFactory : WebApplicationFactory<Program>
             services.AddHttpClient<BrasilApiService>()
                 .ConfigurePrimaryHttpMessageHandler(() =>
                     new StubHttpHandler(System.Net.HttpStatusCode.ServiceUnavailable));
+
+            // TENANT FIX: stub do IFocusNfeHttpClient — evita chamada real à FocusNFe
+            // e permite testar NfseEmissionService.EmitirAsync fim a fim.
+            services.RemoveAll<IFocusNfeHttpClient>();
+            services.AddScoped<IFocusNfeHttpClient, StubFocusNfeHttpClient>();
+
+            // S15 FIX: stub do IStorageService — evita o StorageService real
+            // quebrar no construtor por falta de connection string do Azure
+            // Blob Storage no ambiente de teste.
+            services.RemoveAll<IStorageService>();
+            services.AddScoped<IStorageService, StubStorageService>();
         });
     }
 
@@ -572,6 +646,58 @@ public class ContasReceberControllerTests : IntegrationTestBase
     public async Task GetAll_ComToken_Retorna200()
         => (await AuthClient.GetAsync("/api/contas-receber/pendentes"))
             .StatusCode.Should().Be(HttpStatusCode.OK);
+
+    // Refatoração pra service layer (IContaReceberService.GerarBoletoAsync) —
+    // estes dois cobrem os dois caminhos que não precisam chamar a API real do
+    // Asaas (conta inexistente, e conta que já tem boleto gerado antes).
+    [Fact(DisplayName = "POST /api/contas-receber/{id}/gerar-boleto — conta inexistente → 404")]
+    public async Task GerarBoleto_ContaInexistente_Retorna404()
+        => (await AuthClient.PostAsync($"/api/contas-receber/{Guid.NewGuid()}/gerar-boleto", null))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+    [Fact(DisplayName = "POST /api/contas-receber/{id}/gerar-boleto — já tem boleto → 200 sem chamar Asaas")]
+    public async Task GerarBoleto_JaPossuiBoleto_Retorna200ComDadosExistentes()
+    {
+        var contaId = Guid.NewGuid();
+
+        using (new TenantScope(ErpApiFactory.TestTenantId))
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var cliente = new ERP.Domain.Entities.Customer
+            {
+                Id = Guid.NewGuid(), TenantId = ErpApiFactory.TestTenantId,
+                Name = "Cliente Teste Boleto", Document = "12345678900",
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            };
+            db.Customers.Add(cliente);
+            db.ContasReceber.Add(new ERP.Domain.Entities.ContaReceber
+            {
+                Id = contaId, TenantId = ErpApiFactory.TestTenantId,
+                CustomerId = cliente.Id, Customer = cliente,
+                ValorTotal = 500m, ValorRecebido = 0m,
+                DataVencimento = DateTime.Today.AddDays(30),
+                Descricao = "Teste boleto já existente",
+                AsaasPaymentId = "pay_ja_existente",
+                BoletoUrl      = "https://asaas.teste/boleto/ja-existente",
+                InvoiceUrl     = "https://asaas.teste/invoice/ja-existente",
+                BoletoBarCode  = "00000000000000000000000000000000000000000",
+                AsaasStatus    = "PENDING",
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var resp = await AuthClient.PostAsync($"/api/contas-receber/{contaId}/gerar-boleto", null);
+
+        resp.StatusCode.Should().Be(HttpStatusCode.OK,
+            "conta já tem AsaasPaymentId — deve retornar os dados existentes sem tentar gerar de novo " +
+            "(e sem precisar chamar a API real do Asaas, que não está disponível no ambiente de teste)");
+
+        var corpo = await resp.Content.ReadAsStringAsync();
+        corpo.Should().Contain("ja-existente");
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -672,6 +798,75 @@ public class CargosControllerTests : IntegrationTestBase
     public async Task GetAll_ComToken_Retorna200()
         => (await AuthClient.GetAsync("/api/cargos"))
             .StatusCode.Should().Be(HttpStatusCode.OK);
+
+    // ── TENANT FIX: regressão para AppDbContext.GetGlobalTenantId() ──────────
+    // Antes do fix, RoleRepository.CreateAsync/UpdatePermissionsAsync usavam
+    // GetGlobalTenantId() (sempre Guid.Empty na API), então:
+    //   • CreateAsync gravava o cargo com TenantId=Guid.Empty — o HasQueryFilter
+    //     do Role escondia o próprio registro do tenant que acabou de criá-lo.
+    //   • UpdatePermissionsAsync checava ownership com TenantId=Guid.Empty,
+    //     roleExiste nunca era true, e o método retornava sem alterar nada.
+    // Nenhum teste existente cobria POST/PUT (só GetAll), por isso o bug
+    // sobreviveu a 14 rodadas de auditoria sem ser pego.
+
+    [Fact(DisplayName = "POST /api/cargos — cargo criado aparece na listagem do mesmo tenant")]
+    public async Task Create_ComToken_CargoApareceNaListagemDoMesmoTenant()
+    {
+        var dto = new CreateRoleDto
+        {
+            Name                  = $"Cargo Teste {Guid.NewGuid():N}",
+            MaxDiscountPercentage = 10,
+            MaxSangriaValue       = 100,
+            PermissionIds         = new List<Guid>()
+        };
+
+        var createResp = await AuthClient.PostAsJsonAsync("/api/cargos", dto);
+        createResp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var created = await createResp.Content.ReadFromJsonAsync<RoleDto>();
+        created.Should().NotBeNull();
+
+        var listResp = await AuthClient.GetAsync("/api/cargos");
+        var lista    = await listResp.Content.ReadFromJsonAsync<List<RoleDto>>();
+
+        lista.Should().Contain(r => r.Id == created!.Id && r.Name == dto.Name,
+            "o cargo criado deve pertencer ao tenant do token e aparecer na listagem do mesmo tenant — " +
+            "antes do fix, ficava órfão com TenantId=Guid.Empty e nunca aparecia aqui");
+    }
+
+    [Fact(DisplayName = "PUT /api/cargos — alteração de permissões realmente persiste")]
+    public async Task Update_ComToken_AlteracaoPersisteNoBanco()
+    {
+        var createDto = new CreateRoleDto
+        {
+            Name                  = $"Cargo Editar {Guid.NewGuid():N}",
+            MaxDiscountPercentage = 5,
+            MaxSangriaValue       = 50,
+            PermissionIds         = new List<Guid>()
+        };
+        var createResp = await AuthClient.PostAsJsonAsync("/api/cargos", createDto);
+        var created    = await createResp.Content.ReadFromJsonAsync<RoleDto>();
+
+        var updateDto = new UpdateRoleDto
+        {
+            Id                    = created!.Id,
+            MaxDiscountPercentage = 42,
+            MaxSangriaValue       = 999,
+            PercentualComissao    = 3,
+            PermissionIds         = new List<Guid>()
+        };
+        var updateResp = await AuthClient.PutAsJsonAsync("/api/cargos", updateDto);
+        updateResp.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var listResp   = await AuthClient.GetAsync("/api/cargos");
+        var lista      = await listResp.Content.ReadFromJsonAsync<List<RoleDto>>();
+        var atualizado = lista.Should().ContainSingle(r => r.Id == created.Id).Subject;
+
+        atualizado.MaxDiscountPercentage.Should().Be(42,
+            "antes do fix, UpdatePermissionsAsync checava ownership com TenantId=Guid.Empty, " +
+            "roleExiste nunca era true, e o update retornava sem alterar nada");
+        atualizado.PercentualComissao.Should().Be(3);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -710,6 +905,60 @@ public class TransferenciasControllerTests : IntegrationTestBase
     public async Task GetAll_ComToken_Retorna200()
         => (await AuthClient.GetAsync("/api/transferencias"))
             .StatusCode.Should().Be(HttpStatusCode.OK);
+
+    // ── TENANT FIX: regressão para AppDbContext.GetGlobalTenantId() ──────────
+    // Antes do fix, TransferenciaService.CriarAsync gravava a transferência com
+    // TenantId=Guid.Empty (GetGlobalTenantId() sempre vazio na API). Como
+    // TransferenciaEstoque tem HasQueryFilter, a transferência recém-criada
+    // desaparecia da visão de quem acabou de criá-la.
+    [Fact(DisplayName = "POST /api/transferencias — transferência criada aparece na listagem do mesmo tenant")]
+    public async Task Criar_ComToken_TransferenciaApareceNaListagemDoMesmoTenant()
+    {
+        var origemId  = Guid.NewGuid();
+        var destinoId = Guid.NewGuid();
+        var productId = Guid.NewGuid();
+        var marker    = $"Transferencia teste {Guid.NewGuid():N}";
+
+        using (new TenantScope(ErpApiFactory.TestTenantId))
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Branches.Add(new ERP.Domain.Entities.Branch
+            {
+                Id = origemId, TenantId = ErpApiFactory.TestTenantId, Name = "Filial Origem Teste",
+                IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            db.Branches.Add(new ERP.Domain.Entities.Branch
+            {
+                Id = destinoId, TenantId = ErpApiFactory.TestTenantId, Name = "Filial Destino Teste",
+                IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id = productId, TenantId = ErpApiFactory.TestTenantId, Name = "Produto Teste Transferencia",
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var dto = new
+        {
+            OrigemId   = origemId,
+            DestinoId  = destinoId,
+            Observacao = marker,
+            Itens      = new[] { new { ProductId = productId, Quantidade = 5m } }
+        };
+
+        var criarResp = await AuthClient.PostAsJsonAsync("/api/transferencias", dto);
+        criarResp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var listResp = await AuthClient.GetAsync($"/api/transferencias?filialId={origemId}");
+        listResp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await listResp.Content.ReadAsStringAsync()).Should().Contain(marker,
+            "a transferência criada deve pertencer ao tenant do token e aparecer na listagem do mesmo tenant — " +
+            "antes do fix, ficava órfã com TenantId=Guid.Empty e nunca aparecia aqui");
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -724,6 +973,37 @@ public class FiscalControllerTests : IntegrationTestBase
     public async Task GetAll_SemToken_Retorna401()
         => (await AnonClient.GetAsync("/api/fiscal/aliquota-icms/SP"))
             .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+    // ── TENANT FIX: regressão para AppDbContext.GetGlobalTenantId() ──────────
+    // Antes do fix, NfseEmissionService.EmitirAsync gravava TenantId=Guid.Empty
+    // (GetGlobalTenantId() sempre vazio na API). NfseEmitida não tem HasQueryFilter,
+    // mas NotasFiscaisService.GetAllAsync filtra manualmente por _tenant.TenantId —
+    // então a nota emitida nunca aparecia de novo na listagem do próprio lojista,
+    // mesmo já tendo sido transmitida de verdade à FocusNFe/prefeitura.
+    [Fact(DisplayName = "POST /api/fiscal/nfse/emitir — NFS-e emitida aparece na listagem do mesmo tenant")]
+    public async Task EmitirNfse_ComToken_NotaApareceNaListagemDoMesmoTenant()
+    {
+        var dto = new EmitirNfseDto
+        {
+            TomadorNome      = "Cliente Teste",
+            TomadorCpfCnpj   = "12345678900",
+            DescricaoServico = "Serviço de teste — regressão tenant fix",
+            ValorServico     = 150m,
+            AliquotaISS      = 2m
+        };
+
+        var emitirResp = await AuthClient.PostAsJsonAsync("/api/fiscal/nfse/emitir", dto);
+        emitirResp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var listResp = await AuthClient.GetAsync("/api/notas-fiscais");
+        listResp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var pagina = await listResp.Content.ReadFromJsonAsync<PagedResult<NotaFiscalDto>>();
+
+        pagina!.Items.Should().Contain(n => n.DescricaoServico == dto.DescricaoServico,
+            "a NFS-e emitida deve pertencer ao tenant do token e aparecer na listagem do mesmo tenant — " +
+            "antes do fix, ficava órfã com TenantId=Guid.Empty e nunca aparecia aqui");
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2323,6 +2603,386 @@ public class S13ConfirmarCadastroTests : IClassFixture<ErpApiFactory>
         var resp2 = await client.GetAsync($"/api/cadastro/confirmar?token={token}");
         resp2.StatusCode.Should().Be(HttpStatusCode.BadRequest,
             "token já usado (null no banco) não deve ser encontrado — retorna 400");
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  S15 — Cobertura de teste para os 5 controllers que injetam AppDbContext direto
+//  e não tinham NENHUM teste de integração (achado da auditoria de código):
+//  ComissaoController, ConciliacaoController, ConfigController, StorageController,
+//  TintometricoController. ChatTokenController, o 6º item da lista original, já
+//  tinha 3 testes próprios (linha ~1030) — a auditoria original errou ao contá-lo
+//  como sem cobertura, por causa de um regex de busca grosseiro demais que agrupava
+//  "/api/auth/chat-token" sob o prefixo genérico "/api/auth".
+// ═══════════════════════════════════════════════════════════════════════════════
+
+public class ComissaoControllerTests : IntegrationTestBase
+{
+    public ComissaoControllerTests(ErpApiFactory f) : base(f) { }
+
+    [Fact(DisplayName = "GET /api/comissao sem token → 401")]
+    public async Task Get_SemToken_Retorna401()
+        => (await AnonClient.GetAsync("/api/comissao"))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+    [Fact(DisplayName = "GET /api/comissao com token → 200")]
+    public async Task Get_ComToken_Retorna200()
+        => (await AuthClient.GetAsync("/api/comissao"))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+    // Refatoração pra service layer (IComissaoRelatorioService) — este teste
+    // cobre o cálculo em si, não só o smoke test de auth acima.
+    [Fact(DisplayName = "GET /api/comissao — calcula comissão usando o percentual do cargo do vendedor")]
+    public async Task Get_ComVendaEPercentualDeCargo_CalculaComissaoCorretamente()
+    {
+        var roleId       = Guid.NewGuid();
+        var vendedorNome = $"Vendedor Teste {Guid.NewGuid():N}";
+        var hoje         = DateTime.Today;
+
+        using (new TenantScope(ErpApiFactory.TestTenantId))
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            db.Roles.Add(new ERP.Domain.Entities.Role
+            {
+                Id = roleId, TenantId = ErpApiFactory.TestTenantId, Name = "Vendedor Comissionado",
+                PercentualComissao = 10m,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            db.Users.Add(new ERP.Domain.Entities.User
+            {
+                Id = Guid.NewGuid(), TenantId = ErpApiFactory.TestTenantId,
+                Name = vendedorNome, Username = $"user_{Guid.NewGuid():N}",
+                PasswordHash = "hash", RoleId = roleId,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            db.Sales.Add(new ERP.Domain.Entities.Sale
+            {
+                Id = Guid.NewGuid(), TenantId = ErpApiFactory.TestTenantId,
+                SaleNumber = "T-0001", SellerName = vendedorNome,
+                SaleDate = hoje, Status = ERP.Domain.Enums.SaleStatus.SemNota,
+                Total = 1000m,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var resp = await AuthClient.GetAsync(
+            $"/api/comissao?inicio={hoje:yyyy-MM-dd}&fim={hoje.AddDays(1):yyyy-MM-dd}");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var resultado = await resp.Content.ReadFromJsonAsync<ComissaoRelatorioDto>();
+        resultado.Should().NotBeNull();
+
+        var linha = resultado!.Vendedores.Should()
+            .ContainSingle(v => v.Vendedor == vendedorNome).Subject;
+        linha.TotalVendido.Should().Be(1000m);
+        linha.PercentualComissao.Should().Be(10m);
+        linha.ValorComissao.Should().Be(100m, "10% de 1000 deve dar 100");
+    }
+}
+
+public class ConfigControllerTests : IntegrationTestBase
+{
+    public ConfigControllerTests(ErpApiFactory f) : base(f) { }
+
+    [Fact(DisplayName = "GET /api/config sem token → 401")]
+    public async Task Get_SemToken_Retorna401()
+        => (await AnonClient.GetAsync("/api/config"))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+    [Fact(DisplayName = "GET /api/config com token → 200")]
+    public async Task Get_ComToken_Retorna200()
+        => (await AuthClient.GetAsync("/api/config"))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+    [Fact(DisplayName = "GET /api/config/public sem token → 200 (AllowAnonymous)")]
+    public async Task GetPublic_SemToken_Retorna200()
+        => (await AnonClient.GetAsync("/api/config/public"))
+            .StatusCode.Should().Be(HttpStatusCode.OK,
+                "endpoint público usado pela calculadora/catálogo sem login não deve exigir token");
+
+    // S15 FIX — regressão: GetPublic (AllowAnonymous) sempre caía no fallback
+    // "Loja" pra QUALQUER tenantId passado, porque o HasQueryFilter de Branch
+    // fica travado em Guid.Empty numa chamada anônima (TenantMiddleware só
+    // popula o tenant em requisição autenticada) — o filtro global e o
+    // .Where(tid) explícito se combinavam com AND e nunca batiam. Isso quebrava
+    // Calculadora Pública e Catálogo Público na prática, silenciosamente.
+    [Fact(DisplayName = "GET /api/config/public?tenantId=X sem token — retorna a loja real, não o fallback")]
+    public async Task GetPublic_SemTokenComTenantIdReal_RetornaLojaReal_NaoOFallback()
+    {
+        var nomeReal = $"Vila Verde Teste {Guid.NewGuid():N}";
+
+        using (new TenantScope(ErpApiFactory.TestTenantId))
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Branches.Add(new ERP.Domain.Entities.Branch
+            {
+                Id = Guid.NewGuid(), TenantId = ErpApiFactory.TestTenantId,
+                Name = nomeReal, Telefone = "41999998888",
+                IsMatriz = true, IsActive = true,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var resp = await AnonClient.GetAsync($"/api/config/public?tenantId={ErpApiFactory.TestTenantId}");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var corpo = await resp.Content.ReadAsStringAsync();
+        corpo.Should().Contain(nomeReal,
+            "antes do fix, isso sempre voltava \"Loja\" (fallback) mesmo passando um tenantId real — " +
+            "o HasQueryFilter travado em Guid.Empty escondia a filial de qualquer chamada anônima");
+        corpo.Should().NotContain("\"nomeFantasia\":\"Loja\"");
+    }
+}
+
+public class StorageControllerTests : IntegrationTestBase
+{
+    public StorageControllerTests(ErpApiFactory f) : base(f) { }
+
+    [Fact(DisplayName = "GET /api/storage/entrega/{id}/fotos sem token → 401")]
+    public async Task ListarFotosEntrega_SemToken_Retorna401()
+        => (await AnonClient.GetAsync($"/api/storage/entrega/{Guid.NewGuid()}/fotos"))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+    [Fact(DisplayName = "GET /api/storage/entrega/{id}/fotos com token, entrega inexistente → 404")]
+    public async Task ListarFotosEntrega_ComTokenEntregaInexistente_Retorna404()
+        => (await AuthClient.GetAsync($"/api/storage/entrega/{Guid.NewGuid()}/fotos"))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound,
+                "controller deve construir via DI e executar a checagem de existência da entrega");
+
+    // Refatoração pra service layer (IStorageService.ProdutoExisteAsync) — prova
+    // o caminho de sucesso: produto que existe de verdade não deve cair no 404.
+    [Fact(DisplayName = "DELETE /api/storage/produto/{id}/imagem com produto existente → 204")]
+    public async Task DeletarImagemProduto_ComProdutoExistente_Retorna204()
+    {
+        var produtoId = Guid.NewGuid();
+
+        using (new TenantScope(ErpApiFactory.TestTenantId))
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id = produtoId, TenantId = ErpApiFactory.TestTenantId,
+                Name = "Produto Teste Storage", SalePrice = 10m,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var resp = await AuthClient.DeleteAsync($"/api/storage/produto/{produtoId}/imagem");
+        resp.StatusCode.Should().Be(HttpStatusCode.NoContent,
+            "produto existe de verdade — ProdutoExisteAsync deve confirmar isso e o fluxo deve seguir");
+    }
+}
+
+public class ConciliacaoControllerTests : IntegrationTestBase
+{
+    public ConciliacaoControllerTests(ErpApiFactory f) : base(f) { }
+
+    [Fact(DisplayName = "POST /api/conciliacao/importar-extrato sem token → 401")]
+    public async Task ImportarExtrato_SemToken_Retorna401()
+        => (await AnonClient.PostAsync("/api/conciliacao/importar-extrato", null))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+    [Fact(DisplayName = "POST /api/conciliacao/importar-extrato sem arquivo → 400")]
+    public async Task ImportarExtrato_SemArquivo_Retorna400()
+    {
+        using var form = new MultipartFormDataContent();
+        var resp = await AuthClient.PostAsync("/api/conciliacao/importar-extrato", form);
+
+        resp.StatusCode.Should().Be(HttpStatusCode.BadRequest,
+            "controller deve construir via DI, autorizar, e validar a ausência do arquivo CSV");
+    }
+
+    // Refatoração pra service layer (IConciliacaoService) — este teste cobre o
+    // cruzamento em si: venda semeada + CSV com transação correspondente devem
+    // vir conciliados na resposta.
+    [Fact(DisplayName = "POST /api/conciliacao/importar-extrato — concilia venda com transação correspondente do CSV")]
+    public async Task ImportarExtrato_ComVendaCorrespondente_ConciliaCorretamente()
+    {
+        var dataVenda = new DateTime(2026, 3, 15);
+        var numeroVenda = $"T-{Guid.NewGuid():N}"[..10];
+
+        using (new TenantScope(ErpApiFactory.TestTenantId))
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Sales.Add(new ERP.Domain.Entities.Sale
+            {
+                Id = Guid.NewGuid(), TenantId = ErpApiFactory.TestTenantId,
+                SaleNumber = numeroVenda, SaleDate = dataVenda,
+                Status = ERP.Domain.Enums.SaleStatus.SemNota, Total = 150.00m,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var csv = "Data;Valor;Descricao\n2026-03-15;150,00;Compra Teste\n";
+        using var form = new MultipartFormDataContent();
+        var arquivoContent = new StringContent(csv);
+        form.Add(arquivoContent, "arquivo", "extrato.csv");
+
+        var resp = await AuthClient.PostAsync("/api/conciliacao/importar-extrato", form);
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var corpo = await resp.Content.ReadAsStringAsync();
+        corpo.Should().Contain("\"conciliados\":1");
+        corpo.Should().Contain(numeroVenda,
+            "o número da venda conciliada deve aparecer no item correspondente do resultado");
+    }
+}
+
+public class TintometricoControllerTests : IntegrationTestBase
+{
+    public TintometricoControllerTests(ErpApiFactory f) : base(f) { }
+
+    [Fact(DisplayName = "GET /api/tintometrico sem token → 401")]
+    public async Task GetAll_SemToken_Retorna401()
+        => (await AnonClient.GetAsync("/api/tintometrico"))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+    [Fact(DisplayName = "GET /api/tintometrico com token → 200")]
+    public async Task GetAll_ComToken_Retorna200()
+        => (await AuthClient.GetAsync("/api/tintometrico"))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+    [Fact(DisplayName = "GET /api/tintometrico/produto/{id} com token, produto sem fórmula → 404")]
+    public async Task GetPorProduto_ComTokenProdutoInexistente_Retorna404()
+        => (await AuthClient.GetAsync($"/api/tintometrico/produto/{Guid.NewGuid()}"))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+    // S16 FIX — regressão: Upsert não validava que ProductId pertence ao tenant
+    // atual. Um ProductId de OUTRO tenant passava batido (HasQueryFilter bloqueia
+    // a leitura, então o código entrava no ramo "não existe, cria nova"), gerando
+    // uma fórmula órfã que quebrava GetAll/GetByProduto depois (Include(Product)
+    // retorna null, NullReferenceException ao montar o DTO). DoS auto-infligido.
+    [Fact(DisplayName = "POST /api/tintometrico com ProductId de outro tenant → 404, não cria fórmula órfã")]
+    public async Task Upsert_ComProductIdDeOutroTenant_Retorna404NaoCriaFormulaOrfa()
+    {
+        var tenantB   = Guid.NewGuid();
+        var productId = Guid.NewGuid();
+
+        using (new TenantScope(tenantB))
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id = productId, TenantId = tenantB,
+                Name = "Produto de Outro Tenant", SalePrice = 30m,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        // AuthClient está autenticado pro tenant de teste padrão, não pro tenantB
+        var dto = new
+        {
+            ProductId = productId,
+            Fabricante = "Suvinil",
+            CodigoFabricante = "SV-999",
+            NomeCor = "Não Deveria Existir",
+            Base = "Base A",
+            RendimentoM2PorLitro = 10m,
+            DemaosRecomendadas = 2
+        };
+        var resp = await AuthClient.PostAsJsonAsync("/api/tintometrico", dto);
+
+        resp.StatusCode.Should().Be(HttpStatusCode.NotFound,
+            "ProductId de outro tenant não deve ser aceito — antes desse fix, isso criava " +
+            "uma fórmula órfã (TenantId do chamador, ProductId de outro tenant)");
+
+        // Confirma que nenhuma fórmula órfã foi criada de fato
+        using (new TenantScope(ErpApiFactory.TestTenantId))
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var existeOrfa = await db.FormulasTintometricas
+                .IgnoreQueryFilters()
+                .AnyAsync(f => f.ProductId == productId);
+            existeOrfa.Should().BeFalse("nenhuma fórmula deveria ter sido criada pro ProductId de outro tenant");
+        }
+    }    // Refatoração pra service layer (ITintometricoService) — cobre o fluxo real:
+    // cria produto, salva fórmula (upsert), calcula tinta pra uma área e confere
+    // a matemática (não só os smoke tests acima).
+    [Fact(DisplayName = "POST /api/tintometrico + GET calcular — upsert salva e cálculo bate a matemática")]
+    public async Task UpsertECalcular_ComFormulaSalva_CalculaLitrosCorretamente()
+    {
+        var productId = Guid.NewGuid();
+
+        using (new TenantScope(ErpApiFactory.TestTenantId))
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id = productId, TenantId = ErpApiFactory.TestTenantId,
+                Name = "Tinta Teste Fosca", SalePrice = 50m,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var upsertDto = new
+        {
+            ProductId = productId,
+            Fabricante = "Suvinil",
+            CodigoFabricante = "SV-001",
+            NomeCor = "Branco Neve",
+            Base = "Base A",
+            RendimentoM2PorLitro = 10m,
+            DemaosRecomendadas = 2
+        };
+        var upsertResp = await AuthClient.PostAsJsonAsync("/api/tintometrico", upsertDto);
+        upsertResp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var getResp = await AuthClient.GetAsync($"/api/tintometrico/produto/{productId}");
+        getResp.StatusCode.Should().Be(HttpStatusCode.OK,
+            "fórmula deve existir logo após o upsert");
+
+        // 20 m² * 2 demãos / 10 m²/L = 4,0 litros exatos
+        var calcResp = await AuthClient.GetAsync(
+            $"/api/tintometrico/calcular/{productId}?areaM2=20");
+        calcResp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var resultado = await calcResp.Content.ReadFromJsonAsync<CalculoTintaResultadoDto>();
+        resultado.Should().NotBeNull();
+        resultado!.LitrosNecessarios.Should().Be(4.0m);
+        resultado.CustoEstimado.Should().Be(200m, "4 litros * R$50 (preço do produto) = R$200");
+    }
+
+    [Fact(DisplayName = "GET /api/tintometrico/calcular/{id}?areaM2=0 — área inválida → 400")]
+    public async Task Calcular_AreaZeroOuNegativa_Retorna400()
+    {
+        var productId = Guid.NewGuid();
+
+        using (new TenantScope(ErpApiFactory.TestTenantId))
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id = productId, TenantId = ErpApiFactory.TestTenantId,
+                Name = "Tinta Teste Area Invalida", SalePrice = 50m,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            db.FormulasTintometricas.Add(new ERP.Domain.Entities.FormulaTintometrica
+            {
+                Id = Guid.NewGuid(), TenantId = ErpApiFactory.TestTenantId, ProductId = productId,
+                Fabricante = "Suvinil", CodigoFabricante = "SV-002", NomeCor = "Azul",
+                Base = "Base B", RendimentoM2PorLitro = 10m, DemaosRecomendadas = 2,
+                CreatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        (await AuthClient.GetAsync($"/api/tintometrico/calcular/{productId}?areaM2=0"))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 }
 

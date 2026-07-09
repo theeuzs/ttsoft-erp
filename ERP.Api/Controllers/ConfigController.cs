@@ -1,9 +1,6 @@
 using ERP.Application.Interfaces;
-using ERP.Domain.Entities;
-using ERP.Persistence.Context;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 using ERP.Api.Security;
 namespace ERP.Api.Controllers;
@@ -12,14 +9,9 @@ namespace ERP.Api.Controllers;
 [Route("api/[controller]")]
 public class ConfigController : ControllerBase
 {
-    private readonly AppDbContext   _db;
-    private readonly IRequestTenant _tenant;
+    private readonly IConfigLojaService _config;
 
-    public ConfigController(AppDbContext db, IRequestTenant tenant)
-    {
-        _db     = db;
-        _tenant = tenant;
-    }
+    public ConfigController(IConfigLojaService config) => _config = config;
 
     /// <summary>
     /// Config pública da loja — usada pela CalculadoraPublica e CatalogoPublico.
@@ -27,85 +19,26 @@ public class ConfigController : ControllerBase
     /// </summary>
     [HttpGet("public")]
     [AllowAnonymous]
-    public async Task<IActionResult> GetPublic([FromQuery] Guid? tenantId = null)
+    public async Task<IActionResult> GetPublic(
+        [FromQuery] Guid? tenantId = null, CancellationToken ct = default)
     {
-        // Quando chamado sem JWT, o tenantId vem como query param (calculadora pública)
-        var tid = tenantId ?? _tenant.TenantId;
-        if (tid == Guid.Empty) return Ok(new { NomeFantasia = "Loja", Telefone = "" });
-
-        var branch = await _db.Branches
-            .AsNoTracking()
-            .Where(b => b.TenantId == tid && b.IsMatriz)
-            .Select(b => new { b.Name, b.Telefone })
-            .FirstOrDefaultAsync();
-
-        return Ok(new
-        {
-            NomeFantasia = branch?.Name ?? "Loja",
-            Telefone     = branch?.Telefone ?? ""
-        });
+        var (nomeFantasia, telefone) = await _config.GetPublicAsync(tenantId, ct);
+        return Ok(new { NomeFantasia = nomeFantasia, Telefone = telefone });
     }
 
     /// <summary>Retorna as configurações completas da loja (filial matriz).</summary>
     [HttpGet]
     [Authorize]
-    public async Task<IActionResult> Get()
-    {
-        var branch = await _db.Branches
-            .AsNoTracking()
-            .Where(b => b.IsMatriz)
-            .FirstOrDefaultAsync();
-
-        if (branch is null)
-            return Ok(new ConfigLojaDto());
-
-        return Ok(new ConfigLojaDto
-        {
-            Id       = branch.Id,
-            Nome     = branch.Name,
-            CNPJ     = branch.CNPJ ?? "",
-            Endereco = branch.Endereco ?? "",
-            Telefone = branch.Telefone ?? ""
-        });
-    }
+    public async Task<IActionResult> Get(CancellationToken ct = default)
+        => Ok(await _config.GetAsync(ct));
 
     /// <summary>Atualiza as configurações da loja.</summary>
     [HasPermission(Permissions.ConfigView)]
     [HttpPut]
     [Authorize]
-    public async Task<IActionResult> Put([FromBody] ConfigLojaDto dto)
+    public async Task<IActionResult> Put([FromBody] ConfigLojaDto dto, CancellationToken ct = default)
     {
-        var branch = await _db.Branches
-            .Where(b => b.IsMatriz)
-            .FirstOrDefaultAsync();
-
-        if (branch is null)
-        {
-            // Cria a filial matriz se não existir
-            branch = new Branch
-            {
-                Id       = Guid.NewGuid(),
-                IsMatriz = true,
-                IsActive = true
-            };
-            _db.Branches.Add(branch);
-        }
-
-        branch.Name     = dto.Nome;
-        branch.CNPJ     = dto.CNPJ;
-        branch.Endereco = dto.Endereco;
-        branch.Telefone = dto.Telefone;
-
-        await _db.SaveChangesAsync();
+        await _config.PutAsync(dto, ct);
         return Ok(new { mensagem = "Configurações salvas." });
     }
-}
-
-public class ConfigLojaDto
-{
-    public Guid   Id       { get; set; }
-    public string Nome     { get; set; } = "";
-    public string CNPJ     { get; set; } = "";
-    public string Endereco { get; set; } = "";
-    public string Telefone { get; set; } = "";
 }

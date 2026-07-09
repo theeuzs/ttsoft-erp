@@ -51,6 +51,7 @@
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Assets\**\*" />
+    <Resource Include="Themes\LoginStyles.xaml" />
   </ItemGroup>
   <ItemGroup>
     <None Update="appsettings.json">

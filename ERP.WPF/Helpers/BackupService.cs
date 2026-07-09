@@ -37,12 +37,19 @@ public static class BackupService
     }
 
     // ── Sanitiza string para uso seguro em comandos SQL de backup ─────
-    // BACKUP DATABASE não suporta parâmetros (@p0) no SQL Server.
-    // Sanitizamos permitindo apenas caracteres seguros.
+    // BACKUP DATABASE não suporta parâmetros (@p0) no SQL Server — sanitização
+    // por allow-list é a proteção correta e usual para esse comando específico.
+    // Nenhum dos dois valores chamadores (nome do banco: vem da connection string,
+    // não de input do usuário; caminho: gerado por código a partir de constante +
+    // timestamp) é controlável por usuário final — mas a validação fica aqui como
+    // defesa em profundidade, não como a única barreira.
     private static string SanitizarParaBackup(string valor, string descricao)
     {
-        // Permite: letras, números, espaços, hífens, underscores, pontos, barras e dois-pontos (para path)
-        if (!Regex.IsMatch(valor, @"^[\w\s\-\.:\\\/]+$"))
+        // Permite: letras, números, espaços, hífen simples, underscores, pontos,
+        // barras e dois-pontos (para path). Bloqueia explicitamente aspas, ponto e
+        // vírgula, colchetes — e "--" (comentário SQL), que hífen simples sozinho
+        // não cobria.
+        if (!Regex.IsMatch(valor, @"^[\w\s\-\.:\\\/]+$") || valor.Contains("--"))
             throw new InvalidOperationException(
                 $"Valor inválido para {descricao}: caracteres não permitidos detectados.");
         return valor;
@@ -93,8 +100,14 @@ public static class BackupService
             dbContext.Database.SetCommandTimeout(BackupCommandTimeoutSeconds);
             try
             {
+                // EF1002 suprimido intencionalmente: BACKUP DATABASE não aceita parâmetros
+                // no SQL Server. dbNameSeguro e caminhoSeguro já passaram por
+                // SanitizarParaBackup() (allow-list + bloqueio de "--") logo acima, e
+                // nenhum dos dois vem de input do usuário final (ver comentário do método).
+#pragma warning disable EF1002
                 await dbContext.Database.ExecuteSqlRawAsync(
                     $"BACKUP DATABASE [{dbNameSeguro}] TO DISK = N'{caminhoSeguro}' WITH INIT");
+#pragma warning restore EF1002
             }
             finally
             {

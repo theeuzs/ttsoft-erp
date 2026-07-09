@@ -117,6 +117,32 @@ builder.Services.AddScoped<ERP.Infrastructure.Services.IStorageService, ERP.Infr
 // S2.6 — AuditSqlService: trilha de auditoria para ExecuteSqlRawAsync
 builder.Services.AddScoped<ERP.Infrastructure.Services.AuditSqlService>();
 
+// S15 FIX: relatório de comissão por vendedor (ComissaoController) — não
+// confundir com IComissaoService (WPF, percentual manual único).
+builder.Services.AddScoped<ERP.Application.Interfaces.IComissaoRelatorioService,
+                            ERP.Infrastructure.Services.ComissaoRelatorioService>();
+
+// S15 FIX: config da loja (ConfigController) — também corrige bug real: o
+// endpoint público (AllowAnonymous) sempre caía no fallback "Loja" porque o
+// HasQueryFilter de Branch fica travado em Guid.Empty numa chamada anônima
+// (TenantMiddleware só popula o tenant em requisição autenticada).
+builder.Services.AddScoped<ERP.Application.Interfaces.IConfigLojaService,
+                            ERP.Infrastructure.Services.ConfigLojaService>();
+
+// S15 FIX: conciliação bancária/cartão (ConciliacaoController).
+builder.Services.AddScoped<ERP.Application.Interfaces.IConciliacaoService,
+                            ERP.Infrastructure.Services.ConciliacaoService>();
+
+// S15 FIX: fórmulas tintométricas (TintometricoController).
+builder.Services.AddScoped<ERP.Application.Interfaces.ITintometricoService,
+                            ERP.Infrastructure.Services.TintometricoService>();
+
+// S15 FIX: catálogo público de produtos (ProductsController.GetCatalogo) —
+// lógica de segurança sensível (S10 paginação + S11 opt-in), movida com
+// cuidado extra pra preservar exatamente o comportamento original.
+builder.Services.AddScoped<ERP.Application.Interfaces.ICatalogoPublicoService,
+                            ERP.Infrastructure.Services.CatalogoPublicoService>();
+
 builder.Services.AddMemoryCache();
 
 // ── Rate Limiting (AspNetCoreRateLimit — geral por IP, todas as rotas) ───────
@@ -159,7 +185,12 @@ builder.Services.AddSingleton<ERP.Domain.Services.Fiscal.ICMSSTCalculator>();
 builder.Services.AddSingleton<ERP.Infrastructure.Services.OfflineSyncService>();
 builder.Services.AddSingleton<ERP.Infrastructure.Services.SpedEfdGenerator>();
 builder.Services.AddSingleton<ERP.Infrastructure.Services.SpedContribuicoesGenerator>();
-builder.Services.AddScoped<ERP.Infrastructure.Services.ContaReceberService>();
+// S15 FIX: removido registro duplicado de ContaReceberService sem interface
+// (registrado só pelo tipo concreto, aqui embaixo, sem nenhum consumidor —
+// confirmado por busca no código inteiro na Etapa 2 da refatoração de
+// arquitetura). O registro válido é via IContaReceberService, na seção
+// "Serviços de aplicação" acima. Esse aqui era morto, sobrando de alguma
+// refatoração anterior.
 
 // ── Fase 3 ────────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<ERP.Application.Interfaces.IBIService,

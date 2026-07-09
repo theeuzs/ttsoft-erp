@@ -1,11 +1,9 @@
 using ERP.Api.Security;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
-using ERP.Persistence.Context;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -16,13 +14,14 @@ public class ProductsController : ControllerBase
 {
     private readonly IProductService          _service;
     private readonly IProdutoAgregadoService  _agregados;
-    private readonly AppDbContext             _db;
+    private readonly ICatalogoPublicoService  _catalogo;
 
-    public ProductsController(IProductService service, IProdutoAgregadoService agregados, AppDbContext db)
+    public ProductsController(
+        IProductService service, IProdutoAgregadoService agregados, ICatalogoPublicoService catalogo)
     {
         _service   = service;
         _agregados = agregados;
-        _db        = db;
+        _catalogo  = catalogo;
     }
 
     /// <summary>Lista produtos com paginação e busca opcional.</summary>
@@ -161,74 +160,17 @@ public class ProductsController : ControllerBase
         [FromQuery] int     pageSize  = 24,
         [FromQuery] string? search    = null,
         [FromQuery] string? categoria = null,
-        [FromQuery] Guid?   tenantId  = null)
+        [FromQuery] Guid?   tenantId  = null,
+        CancellationToken   ct        = default)
     {
-        // S10 FIX: filtros aplicados no banco, não em memória após paginação.
-        // Antes: GetPagedAsync(24 itens) → filtrar em memória → TotalItems = count(página) ← errado.
-        // Agora: filtros no IQueryable → Skip/Take → TotalItems = count(antes do skip) ← correto.
+        var resultado = await _catalogo.GetCatalogoAsync(page, pageSize, search, categoria, tenantId, ct);
 
-        var query = _db.Products.AsNoTracking()
-            .Where(p => p.IsActive && !p.IsDeleted);
+        // S11: null = tenant não habilitou o catálogo público (ou não existe) —
+        // mesma resposta pros dois casos, não revela se o tenant existe.
+        if (resultado is null)
+            return NotFound(new { erro = "Catálogo público não disponível para esta loja." });
 
-        // ── S11 FIX: opt-in obrigatório para acesso anônimo a tenant explícito ──
-        // Antes: qualquer tenantId (derivável de CNPJ público via SHA-256) retornava
-        // catálogo completo com preço e estoque — vazamento de inteligência comercial
-        // (concorrente raspa preços/estoque/portfólio de qualquer cliente TTSoft).
-        // Agora: tenant precisa habilitar explicitamente CatalogoPublicoHabilitado
-        // na filial matriz. Sem isso, 404 — não revela se o tenant existe ou não.
-        bool mostrarPreco   = false;
-        bool mostrarEstoque = false;
-
-        if (tenantId.HasValue && tenantId.Value != Guid.Empty)
-        {
-            var matriz = await _db.Branches.AsNoTracking()
-                .IgnoreQueryFilters()
-                .FirstOrDefaultAsync(b => b.TenantId == tenantId.Value && b.IsMatriz);
-
-            if (matriz is null || !matriz.CatalogoPublicoHabilitado)
-                return NotFound(new { erro = "Catálogo público não disponível para esta loja." });
-
-            mostrarPreco   = matriz.CatalogoMostrarPreco;
-            mostrarEstoque = matriz.CatalogoMostrarEstoque;
-
-            query = query.IgnoreQueryFilters()
-                         .Where(p => p.IsActive && !p.IsDeleted && p.TenantId == tenantId.Value);
-        }
-
-        // Filtra com estoque disponível
-        query = query.Where(p => p.Stock > 0);
-
-        // Busca por nome ou código de barras
-        if (!string.IsNullOrWhiteSpace(search))
-            query = query.Where(p => p.Name.Contains(search) || p.Barcode.Contains(search));
-
-        // Filtro por categoria
-        if (!string.IsNullOrWhiteSpace(categoria))
-            query = query.Where(p => p.Category != null && p.Category.Name == categoria);
-
-        var total = await query.CountAsync();
-
-        var items = await query
-            .OrderBy(p => p.Name)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(p => new
-            {
-                p.Id,
-                p.Name,
-                CategoryName = p.Category != null ? p.Category.Name : "",
-                p.Barcode,
-                p.Unit,
-                // S11 FIX: preço e estoque só aparecem se o tenant optou explicitamente
-                // (CatalogoMostrarPreco / CatalogoMostrarEstoque). Tenant autenticado
-                // (sem tenantId explícito — chamada interna) sempre vê tudo.
-                SalePrice = (!tenantId.HasValue || mostrarPreco) ? (decimal?)p.SalePrice : null,
-                Stock     = (!tenantId.HasValue || mostrarEstoque) ? (decimal?)p.Stock : null,
-                ImageUrl  = (string?)null
-            })
-            .ToListAsync();
-
-        return Ok(new { Items = items, TotalItems = total, Page = page, PageSize = pageSize });
+        return Ok(resultado);
     }
 }
 

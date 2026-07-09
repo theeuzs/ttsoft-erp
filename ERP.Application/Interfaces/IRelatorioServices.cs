@@ -50,6 +50,13 @@ public interface IHaverService
 public interface IInventarioService
 {
     Task<IReadOnlyList<InventarioProdutoDto>> ObterProdutosAsync(CancellationToken ct = default);
+
+    // PERFORMANCE FIX: usado pelo relatório de divergências, que só precisa dos
+    // produtos que o usuário contou — não do catálogo inteiro. Ver InventarioService
+    // e InventarioController.RelatorioDivergencias.
+    Task<IReadOnlyList<InventarioProdutoDto>> ObterProdutosPorIdsAsync(
+        IEnumerable<Guid> ids, CancellationToken ct = default);
+
     Task AplicarAjustesAsync(IEnumerable<(Guid ProductId, decimal NovoEstoque)> ajustes);
 }
 

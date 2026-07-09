@@ -1,10 +1,8 @@
 using ERP.Api.Security;
 using ERP.Application.Interfaces;
 using ERP.Infrastructure.Services;
-using ERP.Persistence.Context;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -15,7 +13,6 @@ public class StorageController : ControllerBase
 {
     private readonly IStorageService  _storage;
     private readonly IRequestTenant   _tenant;
-    private readonly AppDbContext     _ctx;
 
     // Pre-check de Content-Type para UX rápido (devolve erro antes de ler o body).
     // NÃO é verificação de segurança — a validação real de formato é feita pelo
@@ -25,11 +22,10 @@ public class StorageController : ControllerBase
 
     private const long MaxBytes = 5 * 1024 * 1024; // 5 MB
 
-    public StorageController(IStorageService storage, IRequestTenant tenant, AppDbContext ctx)
+    public StorageController(IStorageService storage, IRequestTenant tenant)
     {
         _storage = storage;
         _tenant  = tenant;
-        _ctx     = ctx;
     }
 
     // ── Produtos ──────────────────────────────────────────────────────────────
@@ -40,7 +36,7 @@ public class StorageController : ControllerBase
     public async Task<IActionResult> UploadImagemProduto(
         Guid produtoId, IFormFile arquivo, CancellationToken ct)
     {
-        if (!await _ctx.Products.AnyAsync(p => p.Id == produtoId, ct))
+        if (!await _storage.ProdutoExisteAsync(produtoId, ct))
             return NotFound(new { erro = "Produto não encontrado." });
 
         var erro = ValidarArquivo(arquivo);
@@ -64,7 +60,7 @@ public class StorageController : ControllerBase
     [HttpDelete("produto/{produtoId:guid}/imagem")]
     public async Task<IActionResult> DeletarImagemProduto(Guid produtoId, CancellationToken ct)
     {
-        if (!await _ctx.Products.AnyAsync(p => p.Id == produtoId, ct))
+        if (!await _storage.ProdutoExisteAsync(produtoId, ct))
             return NotFound(new { erro = "Produto não encontrado." });
 
         await _storage.DeletarImagemProdutoAsync(_tenant.TenantId, produtoId, ct);
@@ -78,7 +74,7 @@ public class StorageController : ControllerBase
     public async Task<IActionResult> UploadFotoEntrega(
         Guid entregaId, IFormFile arquivo, CancellationToken ct)
     {
-        if (!await _ctx.Entregas.AnyAsync(e => e.Id == entregaId, ct))
+        if (!await _storage.EntregaExisteAsync(entregaId, ct))
             return NotFound(new { erro = "Entrega não encontrada." });
 
         var erro = ValidarArquivo(arquivo);
@@ -106,7 +102,7 @@ public class StorageController : ControllerBase
     [HttpGet("entrega/{entregaId:guid}/fotos")]
     public async Task<IActionResult> ListarFotosEntrega(Guid entregaId, CancellationToken ct)
     {
-        if (!await _ctx.Entregas.AnyAsync(e => e.Id == entregaId, ct))
+        if (!await _storage.EntregaExisteAsync(entregaId, ct))
             return NotFound(new { erro = "Entrega não encontrada." });
 
         var sasUrls = await _storage.ListarFotosEntregaAsync(_tenant.TenantId, entregaId, ct);
@@ -117,7 +113,7 @@ public class StorageController : ControllerBase
     public async Task<IActionResult> GetSasFotoEntrega(
         Guid entregaId, string fileName, CancellationToken ct)
     {
-        if (!await _ctx.Entregas.AnyAsync(e => e.Id == entregaId, ct))
+        if (!await _storage.EntregaExisteAsync(entregaId, ct))
             return NotFound(new { erro = "Entrega não encontrada." });
 
         try

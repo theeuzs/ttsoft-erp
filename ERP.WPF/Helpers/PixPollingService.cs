@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
 
 namespace ERP.WPF.Helpers;
 
@@ -13,15 +14,47 @@ namespace ERP.WPF.Helpers;
 /// </summary>
 public class PixPollingService : IDisposable
 {
-    private readonly HttpClient _http = new();
+    private readonly HttpClient _http;
+    private readonly TimeSpan _intervalo;
+    private readonly Action<Exception, string, string> _onErro;
     private CancellationTokenSource? _cts;
 
     /// <summary>Evento disparado quando o pagamento é confirmado pela API.</summary>
     public event Action? PagamentoConfirmado;
 
+    // S15 FIX (testabilidade): handler, intervalo e callback de erro agora são
+    // injetáveis, todos com default que preservam o comportamento de produção
+    // exatamente como era antes — nenhum caller existente (WPF usa
+    // "new PixPollingService()" sem argumentos) precisa mudar.
+    // Isso permite testar o comportamento do catch (loop continua, log dispara)
+    // sem esperar os 5s reais e sem bater numa API de verdade.
+    public PixPollingService(
+        HttpMessageHandler? handler = null,
+        TimeSpan? intervalo = null,
+        Action<Exception, string, string>? onErro = null)
+    {
+        _http      = handler is null ? new HttpClient() : new HttpClient(handler);
+        _intervalo = intervalo ?? TimeSpan.FromSeconds(5);
+        _onErro    = onErro ?? DefaultOnErro;
+    }
+
+    private static void DefaultOnErro(Exception ex, string txid, string provedor)
+    {
+        // S15 FIX: antes esse catch era mudo (catch { }) — qualquer erro,
+        // esperado (rede instável) ou não (token expirado, mudança de
+        // contrato da API do provedor, bug de parsing), desaparecia sem
+        // deixar rastro. Loga como Warning (não Error) porque falha
+        // pontual de rede É esperada aqui e não deve gerar alerta de
+        // produção — mas fica visível em log pra quem for investigar
+        // "por que essa venda ficou esperando confirmação de Pix".
+        Log.Warning(ex,
+            "PixPollingService: falha ao verificar status do Pix (txid={Txid}, provedor={Provedor}) " +
+            "— tenta de novo no próximo ciclo", txid, provedor);
+    }
+
     /// <summary>
     /// Inicia o polling para verificar o status do Pix.
-    /// Verifica a cada 5 segundos por até 3 minutos.
+    /// Verifica a cada 5 segundos (ou o intervalo configurado) por até 3 minutos.
     /// </summary>
     public void IniciarPolling(string txid, string? apiToken, string? provedor = "openpix")
     {
@@ -37,7 +70,7 @@ public class PixPollingService : IDisposable
         {
             try
             {
-                await Task.Delay(5000, ct);
+                await Task.Delay(_intervalo, ct);
 
                 bool pago = provedor.ToLower() switch
                 {
@@ -53,7 +86,10 @@ public class PixPollingService : IDisposable
                 }
             }
             catch (OperationCanceledException) { return; }
-            catch { /* erro de rede — tenta de novo no próximo ciclo */ }
+            catch (Exception ex)
+            {
+                _onErro(ex, txid, provedor);
+            }
         }
     }
 

@@ -329,6 +329,32 @@ public class InventarioService : IInventarioService
             .ToListAsync();
     }
 
+    // PERFORMANCE FIX: filtra por ID direto na query (WHERE Id IN (...)), em vez
+    // de carregar o catálogo inteiro e filtrar em memória como o antigo uso de
+    // ObterProdutosAsync() fazia no relatório de divergências.
+    public async Task<IReadOnlyList<InventarioProdutoDto>> ObterProdutosPorIdsAsync(
+        IEnumerable<Guid> ids, CancellationToken ct = default)
+    {
+        var idsList = ids as ICollection<Guid> ?? ids.ToList();
+        if (idsList.Count == 0) return Array.Empty<InventarioProdutoDto>();
+
+        using var scope = _sp.CreateScope();
+        var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        return await ctx.Products.AsNoTracking()
+            .Where(p => idsList.Contains(p.Id))
+            .Include(p => p.Category)
+            .OrderBy(p => p.Category != null ? p.Category.Name : "")
+            .ThenBy(p => p.Name)
+            .Select(p => new InventarioProdutoDto(
+                p.Id,
+                p.Name,
+                p.SKU ?? string.Empty,
+                p.Category != null ? p.Category.Name : "Sem categoria",
+                p.Stock))
+            .ToListAsync(ct);
+    }
+
     public async Task AplicarAjustesAsync(IEnumerable<(Guid ProductId, decimal NovoEstoque)> ajustes)
     {
         using var scope = _sp.CreateScope();
