@@ -50,7 +50,14 @@ public class MercadoLivreAuthService : IMercadoLivreAuthService
         // callback [AllowAnonymous] — não existe tenant no contexto ainda pra aplicar o
         // filtro normal (ver comentário na interface do repositório).
         var canal = await _uow.OrderSync.GetCanalPorIdSemFiltroAsync(salesChannelId);
-        if (canal is null) return (false, $"SalesChannel {salesChannelId} não encontrado.");
+        if (canal is null)
+        {
+            // DIAGNÓSTICO TEMPORÁRIO — remover depois de resolver o bug do callback.
+            var diagnostico = await _uow.OrderSync.DiagnosticoConexaoESalesChannelsAsync();
+            Log.Warning("OAuth callback: SalesChannel {Id} não encontrado. Diagnóstico: {Diagnostico}",
+                salesChannelId, diagnostico);
+            return (false, $"SalesChannel {salesChannelId} não encontrado.");
+        }
 
         var body = new Dictionary<string, string>
         {
