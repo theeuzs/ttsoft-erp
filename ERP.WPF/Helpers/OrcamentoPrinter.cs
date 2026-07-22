@@ -73,31 +73,40 @@ public static class OrcamentoPrinter
     private static FlowDocument GerarFlowDocument(OrcamentoParaImprimir orc, double largura)
     {
         var cfg = ConfiguracaoService.Carregar();
+        var pageWidth = Math.Max(largura, 793);
         var doc = new FlowDocument
         {
             FontFamily  = new FontFamily("Segoe UI"),
             FontSize    = 11,
             PagePadding = new Thickness(60, 50, 60, 50),
             ColumnWidth = double.MaxValue,
-            PageWidth   = Math.Max(largura, 793)
+            PageWidth   = pageWidth
         };
 
-        doc.Blocks.Add(Cabecalho(cfg, orc));
+        // S17 FIX: as tabelas usavam GridLength(1, Star) pra coluna flexível —
+        // o cálculo de Star em Table do FlowDocument é conhecido por ser
+        // instável (renderizava com largura quase zero, texto quebrando letra
+        // por letra na vertical). Calculando a largura útil UMA vez aqui e
+        // passando como número fixo pra cada tabela resolve isso de vez.
+        double larguraConteudo = pageWidth - 120; // 60 + 60 de PagePadding
+
+        doc.Blocks.Add(Cabecalho(cfg, orc, larguraConteudo));
         doc.Blocks.Add(Divisoria());
-        doc.Blocks.Add(DadosCliente(orc));
+        doc.Blocks.Add(DadosCliente(orc, larguraConteudo));
         doc.Blocks.Add(new Paragraph { Margin = new Thickness(0, 10, 0, 6) });
-        doc.Blocks.Add(TabelaItens(orc));
-        doc.Blocks.Add(BlocoTotais(orc));
+        doc.Blocks.Add(TabelaItens(orc, larguraConteudo));
+        doc.Blocks.Add(BlocoTotais(orc, larguraConteudo));
         doc.Blocks.Add(CondicoesObs(orc));
-        doc.Blocks.Add(Assinatura(orc));
+        doc.Blocks.Add(Assinatura(orc, larguraConteudo));
         return doc;
     }
 
-    private static Block Cabecalho(ReciboConfig cfg, OrcamentoParaImprimir orc)
+    private static Block Cabecalho(ReciboConfig cfg, OrcamentoParaImprimir orc, double larguraConteudo)
     {
+        const double larguraDireita = 190;
         var table = new Table { CellSpacing = 0 };
-        table.Columns.Add(new TableColumn { Width = new GridLength(1, GridUnitType.Star) });
-        table.Columns.Add(new TableColumn { Width = new GridLength(190) });
+        table.Columns.Add(new TableColumn { Width = new GridLength(Math.Max(200, larguraConteudo - larguraDireita)) });
+        table.Columns.Add(new TableColumn { Width = new GridLength(larguraDireita) });
         var rg = new TableRowGroup();
         var row = new TableRow();
 
@@ -149,11 +158,12 @@ public static class OrcamentoPrinter
         return p;
     }
 
-    private static Block DadosCliente(OrcamentoParaImprimir orc)
+    private static Block DadosCliente(OrcamentoParaImprimir orc, double larguraConteudo)
     {
+        const double larguraDireita = 210;
         var table = new Table { CellSpacing = 0 };
-        table.Columns.Add(new TableColumn { Width = new GridLength(1, GridUnitType.Star) });
-        table.Columns.Add(new TableColumn { Width = new GridLength(210) });
+        table.Columns.Add(new TableColumn { Width = new GridLength(Math.Max(200, larguraConteudo - larguraDireita)) });
+        table.Columns.Add(new TableColumn { Width = new GridLength(larguraDireita) });
         var rg = new TableRowGroup();
         var row = new TableRow();
 
@@ -197,15 +207,16 @@ public static class OrcamentoPrinter
         return table;
     }
 
-    private static Block TabelaItens(OrcamentoParaImprimir orc)
+    private static Block TabelaItens(OrcamentoParaImprimir orc, double larguraConteudo)
     {
+        const double larguraFixas = 55 + 38 + 90 + 55 + 95; // QTD + UN + PREÇO UNIT. + DESC. + TOTAL
         var table = new Table
         {
             CellSpacing    = 0,
             BorderBrush    = new SolidColorBrush(CorBorda),
             BorderThickness = new Thickness(1)
         };
-        table.Columns.Add(new TableColumn { Width = new GridLength(1, GridUnitType.Star) });
+        table.Columns.Add(new TableColumn { Width = new GridLength(Math.Max(180, larguraConteudo - larguraFixas)) });
         table.Columns.Add(new TableColumn { Width = new GridLength(55) });
         table.Columns.Add(new TableColumn { Width = new GridLength(38) });
         table.Columns.Add(new TableColumn { Width = new GridLength(90) });
@@ -268,14 +279,15 @@ public static class OrcamentoPrinter
         return table;
     }
 
-    private static Block BlocoTotais(OrcamentoParaImprimir orc)
+    private static Block BlocoTotais(OrcamentoParaImprimir orc, double larguraConteudo)
     {
+        const double larguraDireita = 290;
         var subtotal = orc.Itens.Sum(i => i.Quantidade * i.PrecoUnitario * (1 - i.DescontoPercent / 100m));
         var total    = subtotal - orc.Desconto;
 
         var outer = new Table { CellSpacing = 0, Margin = new Thickness(0) };
-        outer.Columns.Add(new TableColumn { Width = new GridLength(1, GridUnitType.Star) });
-        outer.Columns.Add(new TableColumn { Width = new GridLength(290) });
+        outer.Columns.Add(new TableColumn { Width = new GridLength(Math.Max(180, larguraConteudo - larguraDireita)) });
+        outer.Columns.Add(new TableColumn { Width = new GridLength(larguraDireita) });
         var rg = new TableRowGroup();
         var row = new TableRow();
         row.Cells.Add(new TableCell { Blocks = { new Paragraph() } });
@@ -328,12 +340,14 @@ public static class OrcamentoPrinter
         return sec;
     }
 
-    private static Block Assinatura(OrcamentoParaImprimir orc)
+    private static Block Assinatura(OrcamentoParaImprimir orc, double larguraConteudo)
     {
+        const double meio = 40;
+        double lado = Math.Max(150, (larguraConteudo - meio) / 2);
         var table = new Table { CellSpacing = 0, Margin = new Thickness(0, 36, 0, 0) };
-        table.Columns.Add(new TableColumn { Width = new GridLength(1, GridUnitType.Star) });
-        table.Columns.Add(new TableColumn { Width = new GridLength(40) });
-        table.Columns.Add(new TableColumn { Width = new GridLength(1, GridUnitType.Star) });
+        table.Columns.Add(new TableColumn { Width = new GridLength(lado) });
+        table.Columns.Add(new TableColumn { Width = new GridLength(meio) });
+        table.Columns.Add(new TableColumn { Width = new GridLength(lado) });
         var rg = new TableRowGroup();
         var row = new TableRow();
 

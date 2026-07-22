@@ -30,4 +30,7 @@ public interface ICaixaRepository
 
     // S8: saldo em dinheiro para validação de sangria (Abertura + Suprimento + VendaDinheiro − Sangria)
     Task<decimal> GetSaldoDinheiroAsync(Guid caixaId);
+
+    /// <summary>Movimentos de TODOS os caixas (qualquer operador) num período — pro Extrato Financeiro.</summary>
+    Task<IEnumerable<ERP.Domain.Entities.CaixaMovimento>> GetMovimentosPorPeriodoAsync(DateTime inicio, DateTime fim);
 }

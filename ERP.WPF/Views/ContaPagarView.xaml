@@ -30,13 +30,17 @@
                     <TextBlock Text="Vencimento" FontWeight="SemiBold"/>
                     <DatePicker SelectedDate="{Binding DataVencimento}" Margin="0,5,0,25" Height="30"/>
 
-                    <Button Content="LANÇAR DESPESA" Command="{Binding AdicionarCommand}" Background="#3B82F6" Foreground="White" FontWeight="Bold" Height="40">
+                    <Button Content="{Binding TextoBotaoSalvar}" Command="{Binding AdicionarCommand}" Background="#3B82F6" Foreground="White" FontWeight="Bold" Height="40">
                         <Button.Resources>
                             <Style TargetType="Border">
                                 <Setter Property="CornerRadius" Value="8"/>
                             </Style>
                         </Button.Resources>
                     </Button>
+                    <Button Content="Cancelar edição" Command="{Binding CancelarEdicaoCommand}"
+                            Background="Transparent" Foreground="{DynamicResource TextMuted}" BorderThickness="0"
+                            Margin="0,8,0,0" Cursor="Hand"
+                            Visibility="{Binding IsEditando, Converter={StaticResource BoolToVisibility}}"/>
                 </StackPanel>
             </Border>
 
@@ -66,6 +70,7 @@
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
+                                    <Button Content="EDITAR" Command="{Binding DataContext.EditarCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" Background="#F59E0B" Foreground="White" Margin="0,0,5,0" Padding="10,5" Cursor="Hand"/>
                                     <Button Content="PAGAR" Command="{Binding DataContext.PagarCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" Background="#22C55E" Foreground="White" Margin="0,0,5,0" Padding="10,5" Cursor="Hand"/>
                                     <Button Content="EXCLUIR" Command="{Binding DataContext.ExcluirCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" Background="#EF4444" Foreground="White" Padding="10,5" Cursor="Hand"/>
                                 </StackPanel>

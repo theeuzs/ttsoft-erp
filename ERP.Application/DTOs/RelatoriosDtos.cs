@@ -51,7 +51,11 @@ public record FluxoLancamentoDto(
 public record FluxoCaixaResultadoDto(
     IReadOnlyList<FluxoLancamentoDto> Lancamentos,
     decimal TotalEntradas,
-    decimal TotalSaidas);
+    decimal TotalSaidas,
+    // S17 FIX: saldo consolidado real (Caixa + Contas Bancárias) no momento da
+    // consulta — sem isso, "saldo projetado" respondia só "quanto vou receber
+    // menos pagar", não "quanto dinheiro vou ter", que é a pergunta de verdade.
+    decimal SaldoInicial);
 
 // ── Haver ─────────────────────────────────────────────────────────────────────
 public record HaverHistoricoDto(

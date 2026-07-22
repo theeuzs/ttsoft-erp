@@ -320,6 +320,55 @@ namespace ERP.Persistence.Migrations
                     b.ToTable("ChatMessages", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.ContaBancaria", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Agencia")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Apelido")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Banco")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("ContaPadrao")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsAtiva")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("NumeroConta")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("SaldoInicial")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ContasBancarias");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.ContaPagar", b =>
                 {
                     b.Property<Guid>("Id")
@@ -647,6 +696,116 @@ namespace ERP.Persistence.Migrations
                     b.ToTable("Entregas");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.ExternalOrder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CorrelationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("DataPedidoExterno")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ExternalOrderId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("ExternalStatus")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("InternalStatus")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("RawPayloadJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("SalesChannelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("ValorTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid?>("VendaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CorrelationId");
+
+                    b.HasIndex("VendaId");
+
+                    b.HasIndex("SalesChannelId", "ExternalOrderId")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("ExternalOrders");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ExternalOrderItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DescricaoItem")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("ExternalOrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid?>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Quantidade")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("SkuExterno")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("ValorUnitario")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExternalOrderId");
+
+                    b.HasIndex("ProductId");
+
+                    b.ToTable("ExternalOrderItems");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.FormulaTintometrica", b =>
                 {
                     b.Property<Guid>("Id")
@@ -740,6 +899,60 @@ namespace ERP.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("MetasVendas");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.MovimentoContaBancaria", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Conciliado")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("ContaBancariaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("DataHora")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Descricao")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("FitId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid?>("OrigemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("OrigemTipo")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("Valor")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContaBancariaId");
+
+                    b.ToTable("MovimentosContaBancaria");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.MovimentoHaver", b =>
@@ -909,6 +1122,68 @@ namespace ERP.Persistence.Migrations
                     b.ToTable("NfseEmitidas");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.OperadoraRecebimento", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("AntecipacaoAutomatica")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid?>("ContaDestinoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsAtiva")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("OperadoraPadrao")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("PrazoCreditoParceladoDias")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PrazoCreditoVistaDias")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PrazoDebitoDias")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("TaxaCreditoParceladoPercentual")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("TaxaCreditoVistaPercentual")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("TaxaDebitoPercentual")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContaDestinoId");
+
+                    b.ToTable("OperadorasRecebimento");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.Orcamento", b =>
                 {
                     b.Property<Guid>("Id")
@@ -947,6 +1222,9 @@ namespace ERP.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("Observacao")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ObservacaoFollowUp")
                         .HasColumnType("nvarchar(max)");
@@ -1009,6 +1287,158 @@ namespace ERP.Persistence.Migrations
                     b.HasIndex("OrcamentoId");
 
                     b.ToTable("OrcamentoItens");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.OrderAction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ConcluidaEm")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("CorrelationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("DataHora")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ErroCodigo")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ErroMensagem")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("ExternalOrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CorrelationId");
+
+                    b.HasIndex("ExternalOrderId");
+
+                    b.ToTable("OrderActions");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.OrderConflict", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CorrelationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Descricao")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("ExternalOrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("Resolvido")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ResolvidoEm")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ResolvidoPor")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("TipoResolucao")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CorrelationId");
+
+                    b.HasIndex("ExternalOrderId");
+
+                    b.ToTable("OrderConflicts");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.OrderEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CorrelationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("DataHora")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Descricao")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("ExternalOrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("PayloadJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Severity")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CorrelationId");
+
+                    b.HasIndex("ExternalOrderId");
+
+                    b.ToTable("OrderEvents");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.PedidoCompra", b =>
@@ -1191,6 +1621,52 @@ namespace ERP.Persistence.Migrations
                     b.HasIndex("SaleId");
 
                     b.ToTable("PontosFidelidade");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ProcessingSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("FinalizadoEm")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("IniciadoEm")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid?>("SalesChannelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("TotalConflitos")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TotalErros")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TotalPedidosProcessados")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SalesChannelId", "IniciadoEm");
+
+                    b.ToTable("ProcessingSessions");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.Product", b =>
@@ -1463,6 +1939,70 @@ namespace ERP.Persistence.Migrations
                     b.ToTable("ProdutosAgregados", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.RecebivelOperadora", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DataLiquidacao")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("DataPrevistaLiquidacao")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("DataVenda")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("FormaRecebimento")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid?>("MovimentoContaBancariaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Nsu")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("OperadoraRecebimentoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("ValorBruto")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("ValorLiquido")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("ValorTaxa")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid?>("VendaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OperadoraRecebimentoId");
+
+                    b.ToTable("RecebiveisOperadora");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.Role", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1547,6 +2087,9 @@ namespace ERP.Persistence.Migrations
 
                     b.Property<string>("Notes")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Origem")
+                        .HasColumnType("int");
 
                     b.Property<DateTime>("SaleDate")
                         .HasColumnType("datetime2");
@@ -1722,6 +2265,190 @@ namespace ERP.Persistence.Migrations
                     b.HasIndex("SaleId");
 
                     b.ToTable("SalePayment");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.SalesChannel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AccessToken")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Capacidades")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("ClienteRepasseId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ExternalAccountId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsAtivo")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("RefreshToken")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("TokenExpiraEm")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("UsuarioIntegracaoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClienteRepasseId");
+
+                    b.ToTable("SalesChannels");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.SalesChannelPricingPolicy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("AplicarAutomaticamente")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("PercentualAjuste")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<Guid>("SalesChannelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SalesChannelId");
+
+                    b.ToTable("SalesChannelPricingPolicies");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ShadowStockReservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CorrelationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("ExternalOrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("LiberadaEm")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Quantidade")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExternalOrderId");
+
+                    b.HasIndex("ProductId", "Status");
+
+                    b.ToTable("ShadowStockReservations");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.SkuMapping", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("BufferSeguranca")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("SalesChannelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("SkuExterno")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("SalesChannelId", "SkuExterno")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("SkuMappings");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.Supplier", b =>
@@ -1947,6 +2674,136 @@ namespace ERP.Persistence.Migrations
                     b.ToTable("Veiculos");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.VendaSuspensa", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ClienteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ClienteNome")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DataInicioEdicao")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("DataSuspensao")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("NomeEmEdicao")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("NomeSuspensor")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("TotalAproximado")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("UsuarioIdEmEdicao")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("UsuarioIdSuspensor")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("VendaFinalizadaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("VendasSuspensas");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.VendaSuspensaItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("FatorConversao")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("LabelUnidadeVenda")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("NormalUnitPrice")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("Observacao")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("UnidadeEstoque")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("VendaSuspensaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("WholesaleMinQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal?>("WholesalePrice")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VendaSuspensaId");
+
+                    b.ToTable("VendaSuspensaItens");
+                });
+
             modelBuilder.Entity("PermissionRole", b =>
                 {
                     b.Property<Guid>("PermissionsId")
@@ -2007,6 +2864,42 @@ namespace ERP.Persistence.Migrations
                     b.Navigation("Veiculo");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.ExternalOrder", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.SalesChannel", "SalesChannel")
+                        .WithMany()
+                        .HasForeignKey("SalesChannelId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Sale", "Venda")
+                        .WithMany()
+                        .HasForeignKey("VendaId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("SalesChannel");
+
+                    b.Navigation("Venda");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ExternalOrderItem", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.ExternalOrder", "ExternalOrder")
+                        .WithMany("Itens")
+                        .HasForeignKey("ExternalOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("ExternalOrder");
+
+                    b.Navigation("Product");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.FormulaTintometrica", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.Product", "Product")
@@ -2016,6 +2909,17 @@ namespace ERP.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.MovimentoContaBancaria", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.ContaBancaria", "ContaBancaria")
+                        .WithMany("Movimentos")
+                        .HasForeignKey("ContaBancariaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ContaBancaria");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.MovimentoHaver", b =>
@@ -2029,6 +2933,15 @@ namespace ERP.Persistence.Migrations
                     b.Navigation("Customer");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.OperadoraRecebimento", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.ContaBancaria", "ContaDestino")
+                        .WithMany()
+                        .HasForeignKey("ContaDestinoId");
+
+                    b.Navigation("ContaDestino");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.OrcamentoItem", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.Orcamento", "Orcamento")
@@ -2038,6 +2951,39 @@ namespace ERP.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Orcamento");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.OrderAction", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.ExternalOrder", "ExternalOrder")
+                        .WithMany()
+                        .HasForeignKey("ExternalOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ExternalOrder");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.OrderConflict", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.ExternalOrder", "ExternalOrder")
+                        .WithMany()
+                        .HasForeignKey("ExternalOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ExternalOrder");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.OrderEvent", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.ExternalOrder", "ExternalOrder")
+                        .WithMany()
+                        .HasForeignKey("ExternalOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ExternalOrder");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.PedidoCompra", b =>
@@ -2083,6 +3029,16 @@ namespace ERP.Persistence.Migrations
                     b.Navigation("Customer");
 
                     b.Navigation("Sale");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ProcessingSession", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.SalesChannel", "SalesChannel")
+                        .WithMany()
+                        .HasForeignKey("SalesChannelId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("SalesChannel");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.Product", b =>
@@ -2154,6 +3110,17 @@ namespace ERP.Persistence.Migrations
                     b.Navigation("ProdutoRelacionado");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.RecebivelOperadora", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.OperadoraRecebimento", "OperadoraRecebimento")
+                        .WithMany()
+                        .HasForeignKey("OperadoraRecebimentoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("OperadoraRecebimento");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.Sale", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.Customer", "Customer")
@@ -2192,6 +3159,65 @@ namespace ERP.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Sale");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.SalesChannel", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Customer", "ClienteRepasse")
+                        .WithMany()
+                        .HasForeignKey("ClienteRepasseId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("ClienteRepasse");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.SalesChannelPricingPolicy", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.SalesChannel", "SalesChannel")
+                        .WithMany("PoliticasDePreco")
+                        .HasForeignKey("SalesChannelId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SalesChannel");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ShadowStockReservation", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.ExternalOrder", "ExternalOrder")
+                        .WithMany()
+                        .HasForeignKey("ExternalOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ExternalOrder");
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.SkuMapping", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.SalesChannel", "SalesChannel")
+                        .WithMany("MapeamentosSku")
+                        .HasForeignKey("SalesChannelId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+
+                    b.Navigation("SalesChannel");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.TransferenciaEstoque", b =>
@@ -2242,6 +3268,17 @@ namespace ERP.Persistence.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.VendaSuspensaItem", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.VendaSuspensa", "VendaSuspensa")
+                        .WithMany("Itens")
+                        .HasForeignKey("VendaSuspensaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("VendaSuspensa");
+                });
+
             modelBuilder.Entity("PermissionRole", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.Permission", null)
@@ -2277,9 +3314,19 @@ namespace ERP.Persistence.Migrations
                     b.Navigation("Products");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.ContaBancaria", b =>
+                {
+                    b.Navigation("Movimentos");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.Customer", b =>
                 {
                     b.Navigation("Sales");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ExternalOrder", b =>
+                {
+                    b.Navigation("Itens");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.Orcamento", b =>
@@ -2313,6 +3360,13 @@ namespace ERP.Persistence.Migrations
                     b.Navigation("Payments");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.SalesChannel", b =>
+                {
+                    b.Navigation("MapeamentosSku");
+
+                    b.Navigation("PoliticasDePreco");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.Supplier", b =>
                 {
                     b.Navigation("Products");
@@ -2326,6 +3380,11 @@ namespace ERP.Persistence.Migrations
             modelBuilder.Entity("ERP.Domain.Entities.Veiculo", b =>
                 {
                     b.Navigation("Entregas");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.VendaSuspensa", b =>
+                {
+                    b.Navigation("Itens");
                 });
 #pragma warning restore 612, 618
         }

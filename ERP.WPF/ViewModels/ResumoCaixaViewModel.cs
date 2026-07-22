@@ -76,7 +76,13 @@ public class ResumoCaixaViewModel : BaseViewModel
     private decimal _sangrias;
     public decimal Sangrias { get => _sangrias; set { SetProperty(ref _sangrias, value); OnPropertyChanged(nameof(TotalEmEspecie)); } }
 
-    public decimal TotalEmEspecie => SaldoInicial + VendasDinheiro + Suprimentos - Sangrias;
+    // S17 FIX: PagamentoDespesa nunca era tratado neste loop — não aparecia no
+    // extrato, e "EM ESPÉCIE" nunca descontava o valor, mostrando dinheiro na
+    // gaveta maior do que o real sempre que uma despesa era paga do caixa.
+    private decimal _despesas;
+    public decimal Despesas { get => _despesas; set { SetProperty(ref _despesas, value); OnPropertyChanged(nameof(TotalEmEspecie)); } }
+
+    public decimal TotalEmEspecie => SaldoInicial + VendasDinheiro + Suprimentos - Sangrias - Despesas;
 
     public ObservableCollection<string> Extrato { get; } = new();
 
@@ -223,6 +229,21 @@ public class ResumoCaixaViewModel : BaseViewModel
                             if (mov.FormaPagamento == PaymentMethod.Dinheiro) Sangrias += mov.Valor;
                             Extrato.Add($"SANGRIA \t\t\t - R$ {mov.Valor:N2}");
                         }
+                    }
+                    else if (mov.Tipo == TipoMovimentoCaixa.PagamentoDespesa)
+                    {
+                        // mov.Valor já vem negativo daqui (RegistrarMovimentoAsync recebe
+                        // -conta.Valor em ContaPagarViewModel) — usa Math.Abs pra exibir e
+                        // somar como valor positivo de saída, igual às outras categorias.
+                        Despesas += Math.Abs(mov.Valor);
+                        Extrato.Add($"{textoDescricao}\t\t - R$ {Math.Abs(mov.Valor):N2}");
+                    }
+                    else if (!string.IsNullOrWhiteSpace(textoDescricao))
+                    {
+                        // Defesa: qualquer TipoMovimentoCaixa futuro que apareça aqui sem
+                        // um branch dedicado ainda aparece no extrato, em vez de sumir
+                        // silenciosamente como acontecia antes com PagamentoDespesa.
+                        Extrato.Add($"{textoDescricao}\t\t {(mov.Valor >= 0 ? "+" : "-")} R$ {Math.Abs(mov.Valor):N2}");
                     }
                 }
             } 

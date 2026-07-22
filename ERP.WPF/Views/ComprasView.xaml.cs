@@ -7,6 +7,5 @@ public partial class ComprasView : UserControl
     public ComprasView()
     {
         InitializeComponent();
-        DataContext = new ViewModels.ComprasViewModel();
     }
 }

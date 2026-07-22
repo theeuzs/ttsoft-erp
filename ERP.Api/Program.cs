@@ -74,6 +74,7 @@ builder.Services.AddScoped<IUnitOfWork,         UnitOfWork>();
 builder.Services.AddScoped<IProductService,      ProductService>();
 builder.Services.AddScoped<ICustomerService,     CustomerService>();
 builder.Services.AddScoped<ISaleService,         SaleService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.ISalePolicyService, ERP.Application.Services.SalePolicyService>();
 builder.Services.AddScoped<IAuthService,         AuthService>();
 builder.Services.AddScoped<IContaReceberService, ContaReceberService>();
 builder.Services.AddScoped<IInventarioService,    InventarioService>();
@@ -81,6 +82,29 @@ builder.Services.AddScoped<IDreService,           DreService>();
 builder.Services.AddScoped<IAbcService,           AbcService>();
 builder.Services.AddScoped<IMargemService,        MargemService>();
 builder.Services.AddScoped<IFluxoCaixaService,    FluxoCaixaService>();
+// S17 FIX: FluxoCaixaService agora depende de IContaBancariaService (saldo
+// consolidado real como base da projeção) — sem registrar aqui, a API quebraria
+// na hora que alguém tentasse resolver IFluxoCaixaService (ex: futuro endpoint
+// de Portal), mesmo funcionando hoje por ninguém ainda chamar.
+builder.Services.AddScoped<ERP.Application.Interfaces.IContaBancariaService,
+                            ERP.Application.Services.ContaBancariaService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IOperadoraRecebimentoService,
+                            ERP.Application.Services.OperadoraRecebimentoService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IRecebivelOperadoraService,
+                            ERP.Application.Services.RecebivelOperadoraService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IMotorFinanceiroService,
+                            ERP.Application.Services.MotorFinanceiroService>();
+// Módulo Integrações (Marketplace) — IChannelDispatcher (Mercado Livre/Shopee)
+// ainda não tem implementação concreta (depende do OAuth do roadmap 3.1/3.2),
+// então IEnumerable<IChannelDispatcher> resolve vazio por enquanto — o serviço
+// já lança erro claro ("Nenhum IChannelDispatcher registrado") em vez de
+// falhar silenciosamente quando alguém tentar processar um canal antes disso.
+builder.Services.AddScoped<ERP.Application.Interfaces.IOrderProcessingService,
+                            ERP.Application.Services.OrderProcessingService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IExtratoFinanceiroService,
+                            ERP.Application.Services.ExtratoFinanceiroService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IVendaSuspensaService,
+                            ERP.Application.Services.VendaSuspensaService>();
 builder.Services.AddScoped<IPedidoCompraService,  ERP.Application.Services.PedidoCompraService>();
 builder.Services.AddScoped<IOrcamentoService,      ERP.Infrastructure.Services.OrcamentoService>();
 builder.Services.AddScoped<ICaixaService,          ERP.Application.Services.CaixaService>();
@@ -197,6 +221,14 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IBIService,
                             ERP.Infrastructure.Services.BIService>();
 builder.Services.AddHttpClient<ERP.Infrastructure.Services.MarketplaceService>();
 builder.Services.AddScoped<ERP.Infrastructure.Services.MarketplaceService>();
+
+// Módulo Integrações (Marketplace) — Mercado Livre real (OAuth + dispatcher).
+// IChannelDispatcher registrado como IEnumerable — OrderProcessingService escolhe
+// o certo por SalesChannelType. Shopee entra aqui quando o dispatcher dela existir.
+builder.Services.AddHttpClient<ERP.Application.Interfaces.IMercadoLivreAuthService,
+                                ERP.Infrastructure.Services.MercadoLivreAuthService>();
+builder.Services.AddHttpClient<ERP.Application.Interfaces.IChannelDispatcher,
+                                ERP.Infrastructure.Services.MercadoLivreDispatcher>();
 
 builder.Services.AddHttpClient<IFocusNfeHttpClient, ERP.Infrastructure.HttpClients.FocusNfeHttpClient>(client =>
 {

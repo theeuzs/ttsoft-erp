@@ -4,7 +4,6 @@ using ERP.WPF.Commands;
 using ERP.WPF.Helpers;
 using ERP.WPF.Reports;
 using ERP.WPF.State;
-using Microsoft.Extensions.DependencyInjection;
 using QuestPDF.Infrastructure;
 using System;
 using System.Collections.ObjectModel;
@@ -19,6 +18,15 @@ namespace ERP.WPF.ViewModels;
 
 public class ComprasViewModel : BaseViewModel
 {
+    private readonly IPedidoCompraService _service;
+    private readonly ISupplierService     _supplierService;
+    private readonly IProductService      _productService;
+
+    // Item 1.1 do roadmap: Guid do pedido em edição, ou null se o form é "novo pedido".
+    private Guid? _editandoId;
+    public bool IsEditando => _editandoId.HasValue;
+    public string TextoBotaoSalvar => IsEditando ? "SALVAR EDIÇÃO" : "CRIAR PEDIDO";
+
     // ── Lista principal ───────────────────────────────────────────────────
     public ObservableCollection<PedidoCompraDto> Pedidos { get; } = new();
     public ObservableCollection<string> FornecedoresDisponiveis { get; } = new();
@@ -81,9 +89,15 @@ public class ComprasViewModel : BaseViewModel
     public ICommand CancelarPedidoCommand { get; }
     public ICommand LimparFormCommand     { get; }
     public ICommand ExportarPdfCommand    { get; }
+    public ICommand EditarPedidoCommand   { get; }
 
-    public ComprasViewModel()
+    public ComprasViewModel(
+        IPedidoCompraService service, ISupplierService supplierService, IProductService productService)
     {
+        _service         = service;
+        _supplierService = supplierService;
+        _productService  = productService;
+
         QuestPDF.Settings.License = LicenseType.Community;
 
         CarregarCommand       = new RelayCommand(async _ => await CarregarAsync());
@@ -100,6 +114,8 @@ public class ComprasViewModel : BaseViewModel
                 Domain.Enums.StatusPedidoCompra.Enviado);
         LimparFormCommand     = new RelayCommand(_ => LimparForm());
         ExportarPdfCommand    = new RelayCommand(_ => ExportarPdf(), _ => Pedidos.Any());
+        EditarPedidoCommand   = new RelayCommand(_ => CarregarParaEdicao(),
+            _ => PedidoSelecionado?.Status == Domain.Enums.StatusPedidoCompra.Rascunho);
 
         _ = CarregarAsync();
     }
@@ -122,17 +138,13 @@ public class ComprasViewModel : BaseViewModel
     IsBusy = true;
     try
     {
-        using var scope = App.Services.CreateScope();
-        var service = scope.ServiceProvider.GetRequiredService<IPedidoCompraService>();
-        
         // 1. Carrega os Pedidos
-        var lista = await service.GetAllAsync();
+        var lista = await _service.GetAllAsync();
         Pedidos.Clear();
         foreach (var p in lista) Pedidos.Add(p);
 
         // 2. BUSCA OS FORNECEDORES CADASTRADOS NO BANCO!
-        var supService = scope.ServiceProvider.GetRequiredService<ISupplierService>();
-        var fornDtos = await supService.GetAllAsync();
+        var fornDtos = await _supplierService.GetAllAsync();
         var fornecedores = fornDtos.Select(f => f.Name).ToList();
 
         System.Windows.Application.Current.Dispatcher.Invoke(() =>
@@ -161,12 +173,10 @@ public class ComprasViewModel : BaseViewModel
         }
         try
         {
-            using var scope = App.Services.CreateScope();
-            var productService = scope.ServiceProvider.GetRequiredService<IProductService>();
             // ← Tenta barcode primeiro se parecer um código (só números)
         if (termo.All(char.IsDigit) && termo.Length >= 4)
         {
-            var porBarcode = await productService.GetByBarcodeAsync(termo);
+            var porBarcode = await _productService.GetByBarcodeAsync(termo);
             if (porBarcode != null)
             {
                 ProdutoSelecionado = porBarcode;
@@ -174,7 +184,7 @@ public class ComprasViewModel : BaseViewModel
                 return;
             }
         }
-            var result = await productService.SearchAsync(termo);
+            var result = await _productService.SearchAsync(termo);
             ProdutosSugestao.Clear();
             foreach (var p in result.Take(8)) ProdutosSugestao.Add(p);
         }
@@ -219,12 +229,36 @@ public class ComprasViewModel : BaseViewModel
     AtualizarComandos(); 
 }
 
-    // ── Salvar pedido ─────────────────────────────────────────────────────
+    // ── Salvar pedido (cria OU edita, dependendo de _editandoId) ───────────
     private async Task SalvarPedidoAsync()
     {
         IsBusy = true;
         try
         {
+            if (_editandoId.HasValue)
+            {
+                var dtoEdicao = new AtualizarPedidoCompraDto
+                {
+                    FornecedorNome = FornecedorNome,
+                    DataPrevista   = DataPrevista,
+                    Observacoes    = Observacoes,
+                    Itens          = ItensNovoPedido.Select(i => new CreatePedidoCompraItemDto
+                    {
+                        ProductId     = i.ProductId,
+                        ProductName   = i.ProductName,
+                        Quantidade    = i.Quantidade,
+                        PrecoUnitario = i.PrecoUnitario,
+                    }).ToList()
+                };
+
+                await _service.AtualizarAsync(_editandoId.Value, dtoEdicao);
+                LimparForm();
+                await CarregarAsync();
+                MessageBox.Show("✅ Pedido de compra atualizado com sucesso!", "Sucesso",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
             var dto = new CreatePedidoCompraDto
             {
                 FornecedorNome = FornecedorNome,
@@ -240,9 +274,7 @@ public class ComprasViewModel : BaseViewModel
                 }).ToList()
             };
 
-            using var scope = App.Services.CreateScope();
-            var service = scope.ServiceProvider.GetRequiredService<IPedidoCompraService>();
-            await service.CriarAsync(dto);
+            await _service.CriarAsync(dto);
             LimparForm();
             await CarregarAsync();
             MessageBox.Show("✅ Pedido de compra criado com sucesso!", "Sucesso",
@@ -256,16 +288,40 @@ public class ComprasViewModel : BaseViewModel
         finally { IsBusy = false; }
     }
 
+    /// <summary>Item 1.1 do roadmap: carrega o pedido selecionado no formulário para edição.</summary>
+    private void CarregarParaEdicao()
+    {
+        if (PedidoSelecionado is null) return;
+
+        _editandoId    = PedidoSelecionado.Id;
+        FornecedorNome = PedidoSelecionado.FornecedorNome;
+        DataPrevista   = PedidoSelecionado.DataPrevista;
+        Observacoes    = PedidoSelecionado.Observacoes ?? string.Empty;
+
+        ItensNovoPedido.Clear();
+        foreach (var item in PedidoSelecionado.Itens)
+            ItensNovoPedido.Add(new PedidoCompraItemDto
+            {
+                ProductId     = item.ProductId,
+                ProductName   = item.ProductName,
+                Quantidade    = item.Quantidade,
+                PrecoUnitario = item.PrecoUnitario,
+            });
+
+        OnPropertyChanged(nameof(TotalNovoPedido));
+        OnPropertyChanged(nameof(IsEditando));
+        OnPropertyChanged(nameof(TextoBotaoSalvar));
+        AtualizarComandos();
+    }
+
     // ── Ações de status ───────────────────────────────────────────────────
     private async Task EnviarAsync()
     {
         if (PedidoSelecionado == null) return;
         try
         {
-            using var scope = App.Services.CreateScope();
-            var service = scope.ServiceProvider.GetRequiredService<IPedidoCompraService>();
             var idAtual = PedidoSelecionado.Id;
-            await service.EnviarAsync(idAtual);
+            await _service.EnviarAsync(idAtual);
             await CarregarAsync();
             // Re-seleciona o pedido para atualizar os botões com o novo status
             PedidoSelecionado = Pedidos.FirstOrDefault(p => p.Id == idAtual);
@@ -287,10 +343,8 @@ public class ComprasViewModel : BaseViewModel
         try
         {
             IsBusy = true;
-            using var scope = App.Services.CreateScope();
-            var service = scope.ServiceProvider.GetRequiredService<IPedidoCompraService>();
             var idAtual = PedidoSelecionado.Id;
-            await service.ReceberAsync(idAtual);
+            await _service.ReceberAsync(idAtual);
             await CarregarAsync();
             PedidoSelecionado = Pedidos.FirstOrDefault(p => p.Id == idAtual);
             MessageBox.Show("✅ Mercadoria recebida! Estoque atualizado.", "Recebimento",
@@ -308,9 +362,7 @@ public class ComprasViewModel : BaseViewModel
         if (confirm != MessageBoxResult.Yes) return;
         try
         {
-            using var scope = App.Services.CreateScope();
-            var service = scope.ServiceProvider.GetRequiredService<IPedidoCompraService>();
-            await service.CancelarAsync(PedidoSelecionado.Id);
+            await _service.CancelarAsync(PedidoSelecionado.Id);
             await CarregarAsync();
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Erro", MessageBoxButton.OK, MessageBoxImage.Error); }
@@ -325,11 +377,14 @@ public class ComprasViewModel : BaseViewModel
 
     private void LimparForm()
     {
+        _editandoId    = null;
         FornecedorNome = string.Empty;
         DataPrevista   = null;
         Observacoes    = string.Empty;
         ItensNovoPedido.Clear();
         OnPropertyChanged(nameof(TotalNovoPedido));
+        OnPropertyChanged(nameof(IsEditando));
+        OnPropertyChanged(nameof(TextoBotaoSalvar));
     }
 
     private void AtualizarComandos() =>

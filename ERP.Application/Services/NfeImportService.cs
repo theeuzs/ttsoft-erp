@@ -96,6 +96,7 @@ namespace ERP.Application.Services
                 var total = infNFe.Elements().FirstOrDefault(x => x.Name.LocalName == "total");
                 
                 var vNF = total?.Descendants().FirstOrDefault(x => x.Name.LocalName == "vNF")?.Value;
+                var vProd = total?.Descendants().FirstOrDefault(x => x.Name.LocalName == "vProd")?.Value;
 
                 var nfeDto = new NfeImportDto
                 {
@@ -108,6 +109,7 @@ namespace ERP.Application.Services
                         ? data : DateTime.Now,
                         
                     ValorTotal = decimal.TryParse(vNF, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal v) ? v : 0,
+                    TotalProdutosXml = decimal.TryParse(vProd, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal vp) ? vp : 0,
                     Itens = new List<NfeItemImportDto>(),
                     Duplicatas = new List<NfeDuplicataDto>()
                 };
@@ -158,6 +160,8 @@ namespace ERP.Application.Services
 
             foreach (var itemXml in dto.Itens)
             {
+                itemXml.InicializarConferenciaComXml();
+
                 if (string.IsNullOrWhiteSpace(itemXml.CodigoBarrasFornecedor) || itemXml.CodigoBarrasFornecedor == "SEM GTIN")
                     continue;
 
@@ -329,9 +333,11 @@ namespace ERP.Application.Services
                     var produtoExistente = await _uow.Products.GetByIdAsync(item.ProdutoIdNoNossoSistema.Value);
                     if (produtoExistente != null)
                     {
-                        produtoExistente.Stock       += item.QuantidadeComprada;
-                        produtoExistente.OriginalCost = item.ValorCustoUnitario;
-                        produtoExistente.CostPrice    = item.ValorCustoUnitario;
+                        // S17: usa o valor CONFERIDO (o que realmente chegou), não o
+                        // valor cru do XML — é o recebimento físico, não o documento fiscal.
+                        produtoExistente.Stock       += item.QuantidadeConferida;
+                        produtoExistente.OriginalCost = item.CustoConferido;
+                        produtoExistente.CostPrice    = item.CustoConferido;
                         _uow.Products.Update(produtoExistente);
                         produtosAtualizados++;
 
@@ -339,8 +345,8 @@ namespace ERP.Application.Services
                         {
                             ProductId      = produtoExistente.Id,
                             ProductName    = produtoExistente.Name,
-                            Quantidade     = item.QuantidadeComprada,
-                            PrecoUnitario  = item.ValorCustoUnitario
+                            Quantidade     = item.QuantidadeConferida,
+                            PrecoUnitario  = item.CustoConferido
                         });
                     }
                 }
@@ -353,11 +359,11 @@ namespace ERP.Application.Services
                         Unit                = item.UnidadeMedida,
                         IsActive            = true,
                         SupplierId          = fornecedor.Id,
-                        OriginalCost        = item.ValorCustoUnitario,
-                        CostPrice           = item.ValorCustoUnitario,
-                        SalePrice           = item.ValorCustoUnitario * 1.50m,
+                        OriginalCost        = item.CustoConferido,
+                        CostPrice           = item.CustoConferido,
+                        SalePrice           = item.CustoConferido * 1.50m,
                         DesiredMarginPercent = 50,
-                        Stock               = item.QuantidadeComprada
+                        Stock               = item.QuantidadeConferida
                     };
                     await _uow.Products.AddAsync(novoProduto);
                     novosCadastrados++;
@@ -366,8 +372,8 @@ namespace ERP.Application.Services
                     {
                         ProductId     = novoProduto.Id,
                         ProductName   = novoProduto.Name,
-                        Quantidade    = item.QuantidadeComprada,
-                        PrecoUnitario = item.ValorCustoUnitario
+                        Quantidade    = item.QuantidadeConferida,
+                        PrecoUnitario = item.CustoConferido
                     });
                 }
             }

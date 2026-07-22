@@ -3,6 +3,8 @@ using ERP.Application.Interfaces;
 using ERP.WPF.Commands;
 using Microsoft.Extensions.DependencyInjection;
 using System.Collections.ObjectModel;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 
@@ -47,12 +49,31 @@ public class DevolucaoItemVm : BaseViewModel
 public class DevolucaoViewModel : BaseViewModel
 {
     private readonly SaleDto  _venda;
-    private readonly Guid?    _customerId;
-    private readonly string   _customerName;
+    private readonly ICustomerService _customerService;
+    private Guid?   _customerId;
+    private string  _customerName;
 
     public string NumeroVenda   => _venda.SaleNumber ?? _venda.Id.ToString()[..8].ToUpper();
     public string NomeCliente   => _customerName;
     public string DataVenda     => _venda.SaleDate.ToString("dd/MM/yyyy HH:mm");
+
+    /// <summary>S17: devolução agora sempre exige cliente vinculado (mesmo que a
+    /// venda original tenha sido sem cadastro) — sem isso, o crédito de devolução
+    /// não tinha pra onde ir e simplesmente não era gerado.</summary>
+    public bool TemCliente => _customerId.HasValue;
+    public bool SemCliente => !_customerId.HasValue;
+
+    private string _textoBuscaCliente = string.Empty;
+    public string TextoBuscaCliente
+    {
+        get => _textoBuscaCliente;
+        set { SetProperty(ref _textoBuscaCliente, value); _ = BuscarClientesAsync(); }
+    }
+
+    public ObservableCollection<CustomerDto> ResultadosBuscaCliente { get; } = new();
+
+    public ICommand SelecionarClienteCommand { get; }
+    public ICommand TrocarClienteCommand     { get; }
 
     public ObservableCollection<DevolucaoItemVm> Itens { get; } = new();
 
@@ -65,7 +86,7 @@ public class DevolucaoViewModel : BaseViewModel
 
     public decimal TotalDevolver => Itens.Sum(i => i.ValorDevolver);
 
-    public bool PodeConfirmar => Itens.Any(i => i.QuantidadeDevolver > 0);
+    public bool PodeConfirmar => TemCliente && Itens.Any(i => i.QuantidadeDevolver > 0);
 
     public ICommand ConfirmarCommand { get; }
     public ICommand CancelarCommand  { get; }
@@ -74,11 +95,12 @@ public class DevolucaoViewModel : BaseViewModel
     public event Action?                     OnFechar;
 
     public DevolucaoViewModel(SaleDto venda, SaleDetailDto detalhe, Guid? customerId, string customerName,
-        Dictionary<Guid, decimal>? jaDevolvidos = null)
+        ICustomerService customerService, Dictionary<Guid, decimal>? jaDevolvidos = null)
     {
-        _venda        = venda;
-        _customerId   = customerId;
-        _customerName = customerName;
+        _venda            = venda;
+        _customerId       = customerId;
+        _customerName     = customerName;
+        _customerService  = customerService;
 
         foreach (var item in detalhe.Items)
         {
@@ -101,15 +123,66 @@ public class DevolucaoViewModel : BaseViewModel
             Itens.Add(vm);
         }
 
+        SelecionarClienteCommand = new RelayCommand(p =>
+        {
+            if (p is CustomerDto cliente)
+            {
+                _customerId   = cliente.Id;
+                _customerName = cliente.Name;
+                OnPropertyChanged(nameof(NomeCliente));
+                OnPropertyChanged(nameof(TemCliente));
+                OnPropertyChanged(nameof(SemCliente));
+                OnPropertyChanged(nameof(PodeConfirmar));
+                CommandManager.InvalidateRequerySuggested();
+                TextoBuscaCliente = string.Empty;
+                ResultadosBuscaCliente.Clear();
+            }
+        });
+
+        TrocarClienteCommand = new RelayCommand(_ =>
+        {
+            _customerId = null;
+            OnPropertyChanged(nameof(TemCliente));
+            OnPropertyChanged(nameof(SemCliente));
+            OnPropertyChanged(nameof(PodeConfirmar));
+            CommandManager.InvalidateRequerySuggested();
+        });
+
         ConfirmarCommand = new AsyncRelayCommand(async _ => await ConfirmarAsync(),
             _ => PodeConfirmar);
         CancelarCommand  = new RelayCommand(_ => OnFechar?.Invoke());
+    }
+
+    private async Task BuscarClientesAsync()
+    {
+        var termo = TextoBuscaCliente?.Trim() ?? string.Empty;
+        if (termo.Length < 2)
+        {
+            ResultadosBuscaCliente.Clear();
+            return;
+        }
+
+        try
+        {
+            var resultados = await _customerService.SearchAsync(termo);
+            ResultadosBuscaCliente.Clear();
+            foreach (var c in resultados.Take(10)) ResultadosBuscaCliente.Add(c);
+        }
+        catch { /* busca falhar não trava a tela — usuário tenta de novo */ }
     }
 
     private async Task ConfirmarAsync()
     {
         var itens = Itens.Where(i => i.QuantidadeDevolver > 0).ToList();
         if (!itens.Any()) return;
+
+        // S17: defesa extra — o comando já bloqueia sem TemCliente, mas não custa checar de novo.
+        if (!_customerId.HasValue)
+        {
+            MessageBox.Show("Selecione um cliente antes de confirmar a devolução.", "Cliente obrigatório",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
 
         // Devolução exige permissão de gerente
         if (!ERP.WPF.State.PermissionChecker.Has(ERP.WPF.State.PermissionChecker.SaleReturn))
@@ -124,12 +197,9 @@ public class DevolucaoViewModel : BaseViewModel
             }
         }
 
-        string credito = _customerId.HasValue
-            ? $"\n\nR$ {TotalDevolver:N2} serão creditados em HAVER para {_customerName}."
-            : "\n\nSem cliente vinculado — nenhum crédito será gerado.";
-
         var confirm = MessageBox.Show(
-            $"Confirmar devolução de {itens.Count} item(ns) da venda {NumeroVenda}?{credito}",
+            $"Confirmar devolução de {itens.Count} item(ns) da venda {NumeroVenda}?\n\n" +
+            $"R$ {TotalDevolver:N2} serão creditados em HAVER para {_customerName}.",
             "Confirmar Devolução", MessageBoxButton.YesNo, MessageBoxImage.Question);
 
         if (confirm != MessageBoxResult.Yes) return;

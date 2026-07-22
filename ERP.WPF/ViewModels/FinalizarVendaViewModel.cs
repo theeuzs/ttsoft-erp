@@ -748,50 +748,23 @@ public class FinalizarVendaViewModel : BaseViewModel
     {
         using (var scope = ERP.WPF.App.Services.CreateScope())
         {
-            var caixaService        = scope.ServiceProvider.GetRequiredService<ICaixaService>();
-            var contaReceberService = scope.ServiceProvider.GetRequiredService<IContaReceberService>();
+            // S17 FIX: essa lógica inteira (Dinheiro→Caixa, PIX→Conta Bancária,
+            // Cartão→só Caixa por enquanto, A Prazo→Conta a Receber, Haver→saldo
+            // do cliente) morava toda aqui dentro do PDV. Movida pro
+            // IMotorFinanceiroService — o PDV não decide mais essa regra sozinho,
+            // só entrega os dados da venda. Quando "Recebíveis de Operadora"
+            // existir, essa mudança acontece só no Motor Financeiro, o PDV nunca
+            // mais precisa ser tocado por causa disso.
+            var motorFinanceiro = scope.ServiceProvider.GetRequiredService<IMotorFinanceiroService>();
 
             Guid usuarioId = ERP.WPF.State.AppSession.UserId;
+            var nomeCliente  = SelectedCustomer?.Name ?? "Consumidor final";
+            var nomeVendedor = SelectedVendedor?.Name ?? "Balcão";
+            var nomeOperador = ERP.WPF.State.AppSession.UserName ?? "PDV";
 
-            if (usuarioId == Guid.Empty)
-                throw new Exception("Sessão de usuário perdida! Por favor, faça login novamente.");
-
-            foreach (var p in Pagamentos)
-            {
-                if (p.Forma == PaymentMethod.APrazo)
-                {
-                    await contaReceberService.GerarContaAPrazoAsync(
-                        SelectedCustomer.Id, vendaId, p.Valor,
-                        $"Venda A Prazo - {(SelectedVendedor?.Name ?? "Balcão")}");
-                }
-                else if (p.Forma == PaymentMethod.Dinheiro)
-                {
-                    decimal valorParaCaixa = Troco > 0 ? p.Valor - Troco : p.Valor;
-                    await caixaService.RegistrarMovimentoAsync(
-                        usuarioId, valorParaCaixa, "VENDA - DINHEIRO",
-                        p.Forma, TipoMovimentoCaixa.Venda);
-                }
-                else if (p.Forma == PaymentMethod.Haver)
-                {
-                    if (SelectedCustomer != null)
-                    {
-                        var haverService = scope.ServiceProvider.GetRequiredService<IHaverService>();
-                        await haverService.RegistrarMovimentoVendaAsync(
-                            SelectedCustomer.Id, p.Valor, "Saida",
-                            "Uso em venda", ERP.WPF.State.AppSession.UserName ?? "PDV");
-
-                        await caixaService.RegistrarMovimentoAsync(
-                            usuarioId, p.Valor, "VENDA (Haver)", 
-                            p.Forma, TipoMovimentoCaixa.Venda);
-                    }
-                }
-                else
-                {
-                    await caixaService.RegistrarMovimentoAsync(
-                        usuarioId, p.Valor, $"VENDA DIGITAL - {p.Forma}",
-                        p.Forma, TipoMovimentoCaixa.Venda);
-                }
-            }
+            await motorFinanceiro.ProcessarRecebimentoVendaAsync(
+                vendaId, usuarioId, SelectedCustomer?.Id, nomeCliente, nomeVendedor, nomeOperador, Troco,
+                Pagamentos.Select(p => (p.Forma, p.Valor)));
         }
     }
 

@@ -41,6 +41,10 @@ public interface IUnitOfWork : IDisposable
     ISaleRepository     Sales        { get; }
     ICategoryRepository Categories   { get; }
     ICaixaRepository    Caixas       { get; }
+    IContaBancariaRepository ContasBancarias { get; }
+    IOperadoraRecebimentoRepository OperadorasRecebimento { get; }
+    IRecebivelOperadoraRepository RecebiveisOperadora { get; }
+    IVendaSuspensaRepository VendasSuspensas { get; }
     IOrcamentoRepository Orcamentos  { get; }
     IContaReceberRepository ContasReceber { get; }
     IContaPagarRepository   ContasPagar  { get; }
@@ -52,6 +56,7 @@ public interface IUnitOfWork : IDisposable
     IAuditLogRepository     AuditLogs     { get; }
     IDevolucaoRepository    Devolucoes    { get; }
     IRoleRepository         Roles         { get; }
+    IOrderSyncRepository    OrderSync     { get; }
     Task<int> CommitAsync();
     /// <summary>
     /// Inicia uma transação explícita no banco de dados.

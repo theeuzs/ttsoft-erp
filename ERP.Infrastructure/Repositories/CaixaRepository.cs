@@ -27,10 +27,18 @@ public class CaixaRepository : ICaixaRepository
 
     public async Task<Caixa?> GetCaixaAbertoByUsuarioAsync(Guid usuarioId)
     {
+        // S17 FIX: sem ORDER BY, se por algum motivo existir mais de um caixa
+        // "Aberto" pro mesmo usuário (não deveria — mas aconteceu aqui: um caixa
+        // ficou aberto desde abril, esquecido, meses antes do de hoje), a busca
+        // pegava uma linha arbitrária, não necessariamente a sessão atual.
+        // Ordena pelo mais recente como defesa — não resolve a causa raiz (que
+        // pode ser sessão não fechada direito), mas evita o sintoma de pagamento
+        // indo pro caixa errado.
         return await _context.Caixas
             .Include(c => c.Movimentos)
-            .FirstOrDefaultAsync(c => c.Status == StatusCaixa.Aberto 
-                                   && c.UsuarioId == usuarioId);
+            .Where(c => c.Status == StatusCaixa.Aberto && c.UsuarioId == usuarioId)
+            .OrderByDescending(c => c.DataAbertura)
+            .FirstOrDefaultAsync();
     }
 
     public async Task<Caixa?> GetByIdAsync(Guid id)
@@ -79,4 +87,11 @@ public class CaixaRepository : ICaixaRepository
                 (m.FormaPagamento == ERP.Domain.Enums.PaymentMethod.Dinheiro
                  || m.FormaPagamento == null)            ?  m.Valor : 0m);
     }
+
+    public async Task<IEnumerable<CaixaMovimento>> GetMovimentosPorPeriodoAsync(DateTime inicio, DateTime fim)
+        => await _context.CaixaMovimentos
+            .AsNoTracking()
+            .Where(m => m.DataHora >= inicio && m.DataHora <= fim)
+            .OrderByDescending(m => m.DataHora)
+            .ToListAsync();
 }

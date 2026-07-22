@@ -48,6 +48,21 @@ public class PedidoCompra : BaseEntity
     }
 
     /// <summary>
+    /// Edita os dados do pedido. Só permitido em Rascunho — depois de enviado ao
+    /// fornecedor ou recebido, o registro precisa refletir o que realmente aconteceu,
+    /// não pode ser reescrito.
+    /// </summary>
+    public void Editar(string fornecedorNome, DateTime? dataPrevista, string? observacoes)
+    {
+        if (Status != StatusPedidoCompra.Rascunho)
+            throw new InvalidOperationException("Apenas pedidos em Rascunho podem ser editados.");
+
+        FornecedorNome = fornecedorNome;
+        DataPrevista   = dataPrevista;
+        Observacoes    = observacoes;
+    }
+
+    /// <summary>
     /// Marca como recebido. Retorna os itens para que o serviço atualize o estoque.
     /// </summary>
     public IEnumerable<PedidoCompraItem> Receber()

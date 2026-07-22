@@ -82,12 +82,20 @@
                 <TextBlock Margin="20,0,0,0" VerticalAlignment="Center"
                            Foreground="{DynamicResource TextMuted}" FontSize="12"
                            Text="(Mude as datas e clique em Filtrar para ver outros períodos)"/>
+
+                <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                         Width="200" Height="32" Margin="24,0,0,0" VerticalContentAlignment="Center"
+                         Padding="8,0" FontSize="13" Tag="Buscar cliente ou número..."/>
+
+                <CheckBox Content="Só Follow-up pendente" IsChecked="{Binding SomenteFollowUpPendente}"
+                          Margin="16,0,0,0" VerticalAlignment="Center" FontSize="13"
+                          Foreground="{StaticResource TtBlue}" FontWeight="SemiBold"/>
             </StackPanel>
         </Border>
 
         <Border Grid.Row="3" Background="{DynamicResource CardBg}" CornerRadius="12" Effect="{DynamicResource CardShadow}">
             <DataGrid ItemsSource="{Binding ListaOrcamentos}" AutoGenerateColumns="False" IsReadOnly="True" 
-                      Background="Transparent" BorderThickness="0" RowHeight="52" Margin="12"
+                      Background="Transparent" BorderThickness="0" RowHeight="58" Margin="12"
                       GridLinesVisibility="None" RowBackground="Transparent" AlternatingRowBackground="{DynamicResource CardBgAlt}">
                 
                 <DataGrid.ColumnHeaderStyle>
@@ -132,6 +140,49 @@
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
+                    <DataGridTemplateColumn Header="FOLLOW-UP" Width="140">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <!-- S17 FIX: StatusFollowUp = Pendente é o valor PADRÃO de
+                                         todo orçamento, mesmo sem follow-up nenhum agendado —
+                                         mostrar isso sempre confundia com "tem follow-up marcado".
+                                         Só mostra algo quando existe data de verdade. -->
+                                    <StackPanel Visibility="{Binding TemFollowUpAgendado, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="{Binding DataFollowUp, StringFormat=dd/MM/yyyy}" FontSize="12"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding StatusFollowUp}" FontSize="11" FontWeight="Bold">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding StatusFollowUp}" Value="Pendente">
+                                                                <Setter Property="Foreground" Value="#F59E0B"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding StatusFollowUp}" Value="Contatado">
+                                                                <Setter Property="Foreground" Value="#3B82F6"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding StatusFollowUp}" Value="Perdido">
+                                                                <Setter Property="Foreground" Value="#EF4444"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding StatusFollowUp}" Value="Convertido">
+                                                                <Setter Property="Foreground" Value="#10B981"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBlock Text=" 📝" FontSize="11" ToolTip="{Binding TextoObservacoesFollowUp}"
+                                                       Visibility="{Binding TemObservacaoOuMotivo, Converter={StaticResource BoolToVisibility}}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <TextBlock Text="—" Foreground="{DynamicResource TextMuted}" FontSize="12"
+                                               Visibility="{Binding SemFollowUpAgendado, Converter={StaticResource BoolToVisibility}}"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
                     <DataGridTextColumn Header="TOTAL" Binding="{Binding ValorTotal, StringFormat='R$ {0:N2}'}" Width="120">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
@@ -140,7 +191,7 @@
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
-                    <DataGridTemplateColumn Header="AÇÕES" Width="380">
+                    <DataGridTemplateColumn Header="AÇÕES" Width="480">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center">
@@ -168,7 +219,21 @@
                                     <Button Content="🛒 Pro PDV" 
                                             Command="{Binding DataContext.MandarParaCaixaCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                             CommandParameter="{Binding}"
-                                            Background="#0284C7" Foreground="White" FontWeight="Bold" Padding="8,5" Margin="2,2,0,2" BorderThickness="0" Cursor="Hand">
+                                            Background="#0284C7" Foreground="White" FontWeight="Bold" Padding="8,5" Margin="2,2,3,2" BorderThickness="0" Cursor="Hand">
+                                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></Button.Resources>
+                                    </Button>
+
+                                    <Button Content="📅" ToolTip="Agendar Follow-up"
+                                            Command="{Binding DataContext.AgendarFollowUpCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}"
+                                            Background="#8B5CF6" Foreground="White" FontWeight="Bold" Padding="8,5" Margin="2,2,3,2" BorderThickness="0" Cursor="Hand">
+                                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></Button.Resources>
+                                    </Button>
+
+                                    <Button Content="☎️" ToolTip="Registrar Contato (resultado da ligação)"
+                                            Command="{Binding DataContext.RegistrarContatoCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}"
+                                            Background="#0EA5E9" Foreground="White" FontWeight="Bold" Padding="8,5" Margin="2,2,0,2" BorderThickness="0" Cursor="Hand">
                                         <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></Button.Resources>
                                     </Button>
                                 </WrapPanel>

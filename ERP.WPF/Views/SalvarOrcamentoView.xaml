@@ -1,0 +1,299 @@
+<Window x:Class="ERP.WPF.Views.SalvarOrcamentoView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Finalizar Orçamento" Height="780" Width="1160"
+        WindowStartupLocation="CenterScreen" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize">
+
+    <Window.Resources>
+        <!-- Cores Padrão da Venda -->
+        <SolidColorBrush x:Key="TtBlue" Color="#1E62A6"/>
+        <SolidColorBrush x:Key="TtSilver" Color="#8A939C"/>
+
+        <!-- Estilos de Botão -->
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource TtBlue}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="0.9"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="OutlineButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextDark}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BordaInput}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource CardBgAlt}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Cabecalho do DataGrid Limpo -->
+        <Style x:Key="CabecalhoGridLimpo" TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TextMuted}"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="Padding" Value="4,6"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
+        </Style>
+
+        <!-- Cartão de Seleção (Radio) -->
+        <Style x:Key="CartaoFormato" TargetType="Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource BordaInput}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="12"/>
+            <Setter Property="Background" Value="{DynamicResource FundoInput}"/>
+        </Style>
+    </Window.Resources>
+
+    <!-- Janela Flutuante com Sombra -->
+    <Border Background="{DynamicResource CardBg}" CornerRadius="20" Margin="15">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="15" Opacity="0.2" ShadowDepth="2"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="520"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- COLUNA ESQUERDA: BARRA LATERAL (Resumo e Itens) -->
+            <Border Grid.Column="0" Background="{DynamicResource FundoRodape}" CornerRadius="20,0,0,20" Padding="24">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="📋 Resumo do Orçamento" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TtBlue}" Margin="0,0,0,15"/>
+
+                    <!-- Grid de Itens (Fundo Transparente) -->
+                    <DataGrid x:Name="GridItens" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
+                              Background="Transparent" GridLinesVisibility="Horizontal" RowHeight="34"
+                              HeadersVisibility="Column" FontSize="12" BorderThickness="0"
+                              ColumnHeaderStyle="{StaticResource CabecalhoGridLimpo}"
+                              HorizontalScrollBarVisibility="Disabled">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Produto" Binding="{Binding ProductName}" Width="2.4*"/>
+                            <DataGridTextColumn Header="UN" Binding="{Binding LabelUnidadeVenda}" Width="0.6*"/>
+                            <DataGridTextColumn Header="Qtd" Binding="{Binding Quantity, StringFormat=N2}" Width="0.8*"/>
+                            <DataGridTextColumn Header="Unitário" Binding="{Binding UnitPrice, StringFormat=C2}" Width="1.1*"/>
+                            <DataGridTextColumn Header="Total" Binding="{Binding Total, StringFormat=C2}" Width="1.1*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <Separator Grid.Row="2" Margin="0,20" Background="{DynamicResource BordaCard}"/>
+
+                    <!-- Totais -->
+                    <StackPanel Grid.Row="3" VerticalAlignment="Bottom">
+                        <StackPanel Margin="0,0,0,10">
+                            
+                            <StackPanel Margin="0,0,0,4" Orientation="Horizontal">
+                                <TextBlock Text="Quantidade de Itens:" Foreground="{DynamicResource TextMuted}" FontSize="13" Margin="0,0,6,0"/>
+                                <TextBlock x:Name="TxtQtdItens" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextDark}"/>
+                            </StackPanel>
+                            
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Tributos aproximados:" Foreground="{DynamicResource TextMuted}" FontSize="13" Margin="0,0,6,0"/>
+                                <TextBlock x:Name="TxtTributos" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextDark}"/>
+                            </StackPanel>
+                            
+                        </StackPanel>
+                        
+                        <TextBlock Text="Total do Orçamento:" FontSize="14" Foreground="{DynamicResource TextMuted}" Margin="0,5,0,0"/>
+                        <TextBlock x:Name="TxtValorTotal" FontSize="36" FontWeight="Black" Foreground="{StaticResource TtBlue}" Margin="0,0,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- COLUNA DIREITA: FORMULÁRIOS E DECISÕES -->
+            <Grid Grid.Column="1" Margin="35,25,35,25">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Título Superior -->
+                <StackPanel Grid.Row="0" Margin="0,0,0,15">
+                    <TextBlock Text="FINALIZAR ORÇAMENTO" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource TextDark}"/>
+                    <TextBlock Text="Revise os dados comerciais antes de salvar ou gerar a impressão." FontSize="13" Foreground="{DynamicResource TextMuted}" Margin="0,2,0,0"/>
+                </StackPanel>
+
+                <!-- Área Central Sem Barra de Rolagem -->
+                <StackPanel Grid.Row="1" VerticalAlignment="Center">
+                    
+                    <!-- Bloco: Cliente -->
+                    <StackPanel Margin="0,0,0,15">
+                        <TextBlock Text="👤 Cliente" FontWeight="Bold" Foreground="{StaticResource TtBlue}" Margin="0,0,0,8"/>
+                        
+                        <!-- Cliente Selecionado -->
+                        <StackPanel x:Name="PainelClienteSelecionado">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Background="#F0FDF4" CornerRadius="8" Padding="12" BorderBrush="#BBF7D0" BorderThickness="1" Margin="0,0,10,0">
+                                    <StackPanel>
+                                        <TextBlock x:Name="TxtNomeClienteCard" FontWeight="Bold" FontSize="14" Foreground="#166534"/>
+                                        <TextBlock x:Name="TxtDocumentoClienteCard" FontSize="12" Foreground="#15803D" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                                <Button Grid.Column="1" Content="Trocar" Click="AlterarCliente_Click" Width="80" Style="{StaticResource OutlineButton}"/>
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- Sem Cliente -->
+                        <StackPanel x:Name="PainelSemCliente" Visibility="Collapsed">
+                            <Button Content="+ Selecionar Cliente Obrigatório" Click="AlterarCliente_Click" Height="42" Style="{StaticResource PrimaryButton}"/>
+                        </StackPanel>
+
+                        <!-- Busca de Cliente -->
+                        <StackPanel x:Name="PainelBuscaCliente" Visibility="Collapsed">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="50"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="TxtBuscarCliente" Grid.Column="0" Height="42" VerticalContentAlignment="Center" Padding="10,0"
+                                         TextChanged="TxtBuscarCliente_TextChanged" FontSize="14" Background="{DynamicResource FundoInput}" BorderBrush="{DynamicResource BordaInput}" BorderThickness="1"/>
+                                <Button Grid.Column="1" Content="🔍" Click="BuscarCliente_Click" Height="42" Margin="5,0,0,0" Style="{StaticResource PrimaryButton}" FontSize="16"/>
+                            </Grid>
+                            <ListBox x:Name="ListaClientesEncontrados" MaxHeight="130" Margin="0,5,0,0"
+                                     SelectionChanged="ListaClientesEncontrados_SelectionChanged" DisplayMemberPath="Name" BorderBrush="{DynamicResource BordaInput}"/>
+                            <Button Content="Cancelar Busca" Click="CancelarBuscaCliente_Click" Height="26" Margin="0,5,0,0"
+                                    Background="Transparent" Foreground="{DynamicResource TextMuted}" BorderThickness="0" FontSize="12" Cursor="Hand" HorizontalContentAlignment="Left"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Bloco: Observação -->
+                    <StackPanel Margin="0,0,0,15">
+                        <TextBlock Text="📝 Observação (Opcional)" FontWeight="Bold" Foreground="{StaticResource TtBlue}" Margin="0,0,0,8"/>
+                        <TextBox x:Name="TxtObservacao" Height="45" TextWrapping="Wrap" Padding="8" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
+                                 Background="{DynamicResource FundoInput}" BorderBrush="{DynamicResource BordaInput}" BorderThickness="1"/>
+                    </StackPanel>
+
+                    <!-- Bloco: Configurações Comerciais (Validade e Follow-Up) -->
+                    <StackPanel Margin="0,0,0,15">
+                        <TextBlock Text="⚙️ Configurações da Cotação" FontWeight="Bold" Foreground="{StaticResource TtBlue}" Margin="0,0,0,8"/>
+                        <Border Background="{DynamicResource FundoInput}" CornerRadius="8" Padding="15" BorderBrush="{DynamicResource BordaInput}" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="Validade:" FontSize="12" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,6"/>
+                                <WrapPanel Margin="0,0,0,12">
+                                    <RadioButton x:Name="Rb3Dias"  Content="3 dias"  GroupName="Validade" Margin="0,0,15,6" FontWeight="SemiBold"/>
+                                    <RadioButton x:Name="Rb7Dias"  Content="7 dias"  GroupName="Validade" Margin="0,0,15,6" FontWeight="SemiBold"/>
+                                    <RadioButton x:Name="Rb15Dias" Content="15 dias" GroupName="Validade" Margin="0,0,15,6" FontWeight="SemiBold"/>
+                                    <RadioButton x:Name="Rb30Dias" Content="30 dias" GroupName="Validade" Margin="0,0,0,6" FontWeight="SemiBold"/>
+                                </WrapPanel>
+                                
+                                <Separator Background="{DynamicResource BordaCard}" Margin="0,5,0,12"/>
+                                
+                                <CheckBox x:Name="ChkFollowUp" Content="Lembrar vendedor de entrar em contato" Checked="ChkFollowUp_Changed" Unchecked="ChkFollowUp_Changed" FontWeight="SemiBold"/>
+                                <StackPanel x:Name="PainelDataFollowUp" Margin="0,10,0,0" Visibility="Collapsed">
+                                    <TextBlock Text="Agendar retorno para:" FontSize="12" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,4"/>
+                                    <DatePicker x:Name="DpDataFollowUp" Height="36" BorderBrush="{DynamicResource BordaInput}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Bloco: Formato de Impressão -->
+                    <StackPanel Margin="0,0,0,0">
+                        <TextBlock Text="🖨️ Formato de Saída" FontWeight="Bold" Foreground="{StaticResource TtBlue}" Margin="0,0,0,8"/>
+                        
+                        <RadioButton x:Name="RbRecibo" GroupName="Formato" Margin="0,0,0,10">
+                            <Border>
+                                <Border.Style>
+                                    <Style TargetType="Border" BasedOn="{StaticResource CartaoFormato}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=RadioButton}}" Value="True">
+                                                <Setter Property="BorderBrush" Value="{StaticResource TtBlue}"/>
+                                                <Setter Property="Background" Value="#EFF6FF"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <StackPanel>
+                                    <TextBlock Text="🧾 Recibo Térmico" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextDark}"/>
+                                    <TextBlock Text="Impressão rápida direto na impressora de balcão" FontSize="11" Foreground="{DynamicResource TextMuted}" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </RadioButton>
+
+                        <RadioButton x:Name="RbPdfPaisagem" GroupName="Formato" Margin="0,0,0,15">
+                            <Border>
+                                <Border.Style>
+                                    <Style TargetType="Border" BasedOn="{StaticResource CartaoFormato}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=RadioButton}}" Value="True">
+                                                <Setter Property="BorderBrush" Value="{StaticResource TtBlue}"/>
+                                                <Setter Property="Background" Value="#EFF6FF"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <StackPanel>
+                                    <TextBlock Text="📄 PDF A4 Paisagem" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextDark}"/>
+                                    <TextBlock Text="Ideal para orçamentos grandes ou para enviar por WhatsApp" FontSize="11" Foreground="{DynamicResource TextMuted}" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </RadioButton>
+
+                        <Button Content="👁 VISUALIZAR PRÉVIA" Click="Visualizar_Click" Height="40" Style="{StaticResource OutlineButton}"/>
+                    </StackPanel>
+
+                </StackPanel>
+
+                <!-- Rodapé: Botões de Ação -->
+                <Grid Grid.Row="2" Margin="0,15,0,0" VerticalAlignment="Bottom">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <Button Grid.Column="0" Content="CANCELAR" Click="Cancelar_Click" IsCancel="True" Height="45" Width="120"
+                            Background="Transparent" Foreground="{DynamicResource TextMuted}" FontWeight="Bold" FontSize="13" Cursor="Hand" BorderThickness="0"/>
+                    
+                    <Button Grid.Column="2" Content="SALVAR ORÇAMENTO" Click="Salvar_Click" Height="45" Width="220"
+                            Style="{StaticResource PrimaryButton}" FontSize="14"/>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

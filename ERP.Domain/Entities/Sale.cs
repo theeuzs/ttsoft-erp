@@ -6,6 +6,7 @@ namespace ERP.Domain.Entities;
 public class Sale : BaseEntity
 {
     public string SaleNumber { get; set; } = string.Empty;
+    public SaleOrigin Origem { get; set; } = SaleOrigin.PDV;
     public Guid? CustomerId { get; set; }
     public Customer? Customer { get; set; }
     public string? SellerId { get; set; }

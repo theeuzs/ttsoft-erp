@@ -121,7 +121,7 @@
                     </Grid.ColumnDefinitions>
                     <Button Content="Limpar" Command="{Binding LimparFormCommand}"
                             Height="38" Background="{DynamicResource CardBgAlt}" Foreground="{DynamicResource TextMuted}" BorderBrush="{DynamicResource BordaInput}" Cursor="Hand"/>
-                    <Button Grid.Column="2" Content="💾  Salvar Pedido" Command="{Binding SalvarPedidoCommand}"
+                    <Button Grid.Column="2" Content="{Binding TextoBotaoSalvar}" Command="{Binding SalvarPedidoCommand}"
                             Height="38" Background="#16A34A" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
                 </Grid>
             </StackPanel>
@@ -188,6 +188,9 @@
                 <StackPanel>
                     <TextBlock Text="AÇÕES DO PEDIDO SELECIONADO" FontSize="11" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,10"/>
                     <StackPanel Orientation="Horizontal">
+                        <Button Content="✏️  Editar Pedido" Command="{Binding EditarPedidoCommand}"
+                                Height="38" Background="#F59E0B" Foreground="White" FontWeight="Bold"
+                                BorderThickness="0" Padding="16,0" Margin="0,0,8,0" Cursor="Hand"/>
                         <Button Content="📤  Marcar como Enviado" Command="{Binding EnviarCommand}"
                                 Height="38" Background="#2563EB" Foreground="White" FontWeight="Bold"
                                 BorderThickness="0" Padding="16,0" Margin="0,0,8,0" Cursor="Hand"/>

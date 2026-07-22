@@ -11,6 +11,12 @@ public class CreateOrcamentoDto
     public string? SellerName { get; set; }
     public decimal ValorTotal { get; set; }
     public List<OrcamentoItemDto> Itens { get; set; } = new();
+
+    // S17: campos novos — tela de salvar orçamento
+    public string? Observacao { get; set; }
+    public int      ValidadeDias    { get; set; } = 7;
+    public bool     AgendarFollowUp { get; set; }
+    public DateTime? DataFollowUp   { get; set; }
 }
 
 public class OrcamentoItemDto

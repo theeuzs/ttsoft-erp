@@ -17,6 +17,19 @@ public enum PaymentMethod
     Haver = 5
 }
 
+/// <summary>
+/// De onde a venda nasceu — decide se exige caixa físico aberto (ver
+/// ISalePolicyService) e se gera Conta a Receber de repasse em vez de
+/// movimento de Caixa/Conta Bancária direto.
+/// Deliberadamente só 2 valores por enquanto — API própria, representante
+/// etc. entram quando existirem de verdade (Roadmap, Parte 4).
+/// </summary>
+public enum SaleOrigin
+{
+    PDV         = 0, // balcão físico, exige caixa aberto
+    Marketplace = 1  // Mercado Livre/Shopee — nunca passa pelo caixa
+}
+
 public enum MercadoriaOrigem
 {
     Nacional = 0,

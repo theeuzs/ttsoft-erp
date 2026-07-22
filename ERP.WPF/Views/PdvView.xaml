@@ -420,6 +420,26 @@
                                             </ControlTemplate>
                                         </Button.Template>
                                     </Button>
+                                    <Grid Margin="0,0,12,0">
+                                        <Button Content="📋" Cursor="Hand"
+                                                Command="{Binding AbrirVendasSuspensasCommand}"
+                                                ToolTip="Ver vendas suspensas (de todos os operadores)">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <TextBlock Text="{TemplateBinding Content}" Foreground="#BBDEFB"
+                                                               FontWeight="SemiBold" VerticalAlignment="Center" x:Name="BtnLista"/>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="BtnLista" Property="Foreground" Value="White"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
+                                        <Ellipse Width="10" Height="10" Fill="#F59E0B" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                 Margin="0,-4,-4,0" IsHitTestVisible="False"
+                                                 Visibility="{Binding TemVendasSuspensas, Converter={StaticResource BoolToVisibility}}"/>
+                                    </Grid>
                                     <Button Content="Limpar Tudo" Cursor="Hand" Command="{Binding ClearCartCommand}">
                                     <Button.Template>
                                         <ControlTemplate TargetType="Button">

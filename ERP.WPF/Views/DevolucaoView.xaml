@@ -2,183 +2,226 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Devolução Parcial de Itens"
-        Width="680" Height="520"
-        WindowStartupLocation="CenterOwner"
-        ResizeMode="NoResize"
-        Background="White">
-    <Grid Margin="24">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+        Width="760" Height="680"
+        WindowStartupLocation="CenterOwner" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize">
 
-        <StackPanel Grid.Row="0" Margin="0,0,0,16">
-            <TextBlock Text="↩ Devolução Parcial" FontSize="22" FontWeight="Bold"
-                       Foreground="#1E293B"/> <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                <TextBlock Text="Venda: " Foreground="#64748B" FontSize="13"/>
-                <TextBlock Text="{Binding NumeroVenda}" Foreground="#334155"
-                           FontSize="13" FontWeight="SemiBold" Margin="4,0,16,0"/>
-                <TextBlock Text="Cliente: " Foreground="#64748B" FontSize="13"/>
-                <TextBlock Text="{Binding NomeCliente}" Foreground="#334155"
-                           FontSize="13" FontWeight="SemiBold" Margin="4,0,16,0"/>
-                <TextBlock Text="Data: " Foreground="#64748B" FontSize="13"/>
-                <TextBlock Text="{Binding DataVenda}" Foreground="#334155"
-                           FontSize="13" Margin="4,0,0,0"/>
-            </StackPanel>
-        </StackPanel>
+    <Window.Resources>
+        <SolidColorBrush x:Key="TtBlue" Color="#1E62A6"/>
 
-        <Border Grid.Row="1" Background="#FFFbeb" BorderBrush="#FCD34D" BorderThickness="1" CornerRadius="6" Padding="12,8" Margin="0,0,0,12">
-            <TextBlock Text="Informe a quantidade a devolver em cada item. Deixe 0 para não devolver."
-                       Foreground="#B45309" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
-        </Border>
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="#16A34A"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="0.9"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.5"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
 
-        <Border Grid.Row="2" Background="White" CornerRadius="8"
-                BorderBrush="#E2E8F0" BorderThickness="1">
-            <DataGrid ItemsSource="{Binding Itens}" AutoGenerateColumns="False"
-                      CanUserAddRows="False" CanUserDeleteRows="False"
-                      CanUserSortColumns="False" HeadersVisibility="Column"
-                      Background="Transparent" BorderThickness="0"
-                      RowBackground="Transparent" AlternatingRowBackground="#F8FAFC" GridLinesVisibility="Horizontal"
-                      HorizontalGridLinesBrush="#E2E8F0"
-                      RowHeight="40">
-                <DataGrid.ColumnHeaderStyle>
-                    <Style TargetType="DataGridColumnHeader">
-                        <Setter Property="Background" Value="#F1F5F9"/>
-                        <Setter Property="Foreground" Value="#475569"/>
-                        <Setter Property="FontSize" Value="12"/>
-                        <Setter Property="FontWeight" Value="Bold"/>
-                        <Setter Property="Padding" Value="12,8"/>
-                        <Setter Property="BorderThickness" Value="0,0,0,1"/>
-                        <Setter Property="BorderBrush" Value="#E2E8F0"/>
-                    </Style>
-                </DataGrid.ColumnHeaderStyle>
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="PRODUTO" Binding="{Binding ProductName}" Width="*">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Margin" Value="12,0"/>
-                                <Setter Property="VerticalAlignment" Value="Center"/>
-                                <Setter Property="Foreground" Value="#1E293B"/>
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-                    <DataGridTextColumn Header="VENDIDO" Binding="{Binding QuantidadeVendida, StringFormat='N2'}" Width="80">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Center"/>
-                                <Setter Property="VerticalAlignment" Value="Center"/>
-                                <Setter Property="Foreground" Value="#475569"/>
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-                    <DataGridTextColumn Header="PREÇO" Binding="{Binding UnitPrice, StringFormat='R$ {0:N2}'}" Width="90">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Right"/>
-                                <Setter Property="Margin" Value="0,0,12,0"/>
-                                <Setter Property="VerticalAlignment" Value="Center"/>
-                                <Setter Property="Foreground" Value="#475569"/>
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-                    <DataGridTemplateColumn Header="DEVOLVER" Width="100">
-                        <DataGridTemplateColumn.HeaderStyle>
-                            <Style TargetType="DataGridColumnHeader">
-                                <Setter Property="HorizontalContentAlignment" Value="Center"/>
-                                <Setter Property="Background" Value="#F1F5F9"/>
-                                <Setter Property="Foreground" Value="#475569"/>
-                                <Setter Property="FontSize" Value="12"/>
-                                <Setter Property="FontWeight" Value="Bold"/>
-                                <Setter Property="Padding" Value="0,8"/>
-                                <Setter Property="BorderThickness" Value="0,0,0,1"/>
-                                <Setter Property="BorderBrush" Value="#E2E8F0"/>
-                            </Style>
-                        </DataGridTemplateColumn.HeaderStyle>
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <TextBox Text="{Binding QuantidadeDevolver, UpdateSourceTrigger=LostFocus, StringFormat='N2'}"
-                                         Width="70" Height="28" TextAlignment="Center"
-                                         VerticalContentAlignment="Center" HorizontalAlignment="Center"
-                                         Background="White"
-                                         Foreground="#1E293B"
-                                         BorderBrush="#CBD5E1"
-                                         FontWeight="Bold">
-                                    <TextBox.Resources>
-                                        <Style TargetType="Border">
-                                            <Setter Property="CornerRadius" Value="4"/>
-                                        </Style>
-                                    </TextBox.Resources>
-                                </TextBox>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-                    <DataGridTextColumn Header="CRÉDITO" Binding="{Binding ValorDevolver, StringFormat='R$ {0:N2}'}" Width="100">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="HorizontalAlignment" Value="Right"/>
-                                <Setter Property="Margin" Value="0,0,12,0"/>
-                                <Setter Property="VerticalAlignment" Value="Center"/>
-                                <Setter Property="FontWeight" Value="Bold"/>
-                                <Setter Property="Foreground" Value="#16A34A"/>
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-                </DataGrid.Columns>
-            </DataGrid>
-        </Border>
+        <Style x:Key="OutlineButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextDark}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BordaInput}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource CardBgAlt}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
 
-        <Grid Grid.Row="3" Margin="0,16,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="200"/>
-            </Grid.ColumnDefinitions>
-            <StackPanel Grid.Column="0" Margin="0,0,16,0">
-                <TextBlock Text="Motivo da devolução (opcional):" FontSize="12"
-                           Foreground="#64748B" Margin="0,0,0,4"/>
-                <TextBox Text="{Binding Motivo, UpdateSourceTrigger=PropertyChanged}"
-                         Height="60" Padding="8,4" TextWrapping="Wrap"
-                         Background="#F8FAFC"
-                         Foreground="#1E293B"
-                         BorderBrush="#CBD5E1">
-                    <TextBox.Resources>
-                        <Style TargetType="Border">
-                            <Setter Property="CornerRadius" Value="6"/>
-                        </Style>
-                    </TextBox.Resources>
-                </TextBox>
-            </StackPanel>
-            <Border Grid.Column="1" Background="#F0FDF4"
-                    CornerRadius="8" BorderBrush="#BBF7D0"
-                    BorderThickness="1" Padding="16,8">
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="TOTAL A CREDITAR" FontSize="11"
-                               Foreground="#15803D" HorizontalAlignment="Center" FontWeight="Bold"/>
-                    <TextBlock Text="{Binding TotalDevolver, StringFormat='R$ {0:N2}'}"
-                               FontSize="22" FontWeight="Black" Foreground="#16A34A"
-                               HorizontalAlignment="Center" Margin="0,4"/>
-                    <TextBlock Text="em Haver para o cliente" FontSize="11"
-                               Foreground="#15803D" HorizontalAlignment="Center"/>
+        <Style x:Key="CabecalhoGridLimpo" TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TextMuted}"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="Padding" Value="8,8"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource CardBg}" CornerRadius="20" Margin="15">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="15" Opacity="0.2" ShadowDepth="2"/>
+        </Border.Effect>
+
+        <Grid Margin="28">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Cabeçalho -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,14">
+                <TextBlock Text="↩ DEVOLUÇÃO PARCIAL" FontSize="20" FontWeight="Bold" Foreground="{StaticResource TtBlue}"/>
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <TextBlock Text="Venda: " Foreground="{DynamicResource TextMuted}" FontSize="13"/>
+                    <TextBlock Text="{Binding NumeroVenda}" Foreground="{DynamicResource TextDark}" FontSize="13" FontWeight="SemiBold" Margin="4,0,16,0"/>
+                    <TextBlock Text="Data: " Foreground="{DynamicResource TextMuted}" FontSize="13"/>
+                    <TextBlock Text="{Binding DataVenda}" Foreground="{DynamicResource TextDark}" FontSize="13" Margin="4,0,0,0"/>
                 </StackPanel>
-            </Border>
-        </Grid>
+            </StackPanel>
 
-        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
-            <Button Content="Cancelar" Command="{Binding CancelarCommand}"
-                    Width="110" Height="38" Margin="0,0,12,0"
-                    Background="White"
-                    Foreground="#475569"
-                    BorderBrush="#CBD5E1" BorderThickness="1" Cursor="Hand" FontWeight="SemiBold">
-                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
-            </Button>
-            <Button Content="✅ Confirmar Devolução" Command="{Binding ConfirmarCommand}"
-                    Width="180" Height="38"
-                    Background="#16A34A" Foreground="White"
-                    BorderThickness="0" FontWeight="Bold" Cursor="Hand">
-                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
-            </Button>
-        </StackPanel>
-    </Grid>
+            <!-- Cliente — obrigatório -->
+            <StackPanel Grid.Row="1" Margin="0,0,0,14">
+                <TextBlock Text="👤 CLIENTE (OBRIGATÓRIO PRA GERAR O CRÉDITO)" FontWeight="Bold" FontSize="11" Foreground="{StaticResource TtBlue}" Margin="0,0,0,8"/>
+
+                <Grid>
+                    <!-- Cliente selecionado -->
+                    <Grid Visibility="{Binding TemCliente, Converter={StaticResource BoolToVisibility}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Background="#F0FDF4" CornerRadius="8" Padding="10" BorderBrush="#BBF7D0" BorderThickness="1" Margin="0,0,10,0">
+                            <TextBlock Text="{Binding NomeCliente}" FontWeight="Bold" FontSize="13" Foreground="#166534"/>
+                        </Border>
+                        <Button Grid.Column="1" Content="Trocar" Command="{Binding TrocarClienteCommand}" Width="80" Style="{StaticResource OutlineButton}"/>
+                    </Grid>
+
+                    <!-- Sem cliente — busca obrigatória -->
+                    <StackPanel Visibility="{Binding SemCliente, Converter={StaticResource BoolToVisibility}}">
+                        <TextBox Text="{Binding TextoBuscaCliente, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="38" VerticalContentAlignment="Center" Padding="10,0" FontSize="13"
+                                 Background="{DynamicResource FundoInput}" BorderBrush="{DynamicResource BordaInput}" BorderThickness="1"
+                                 Tag="Busque o cliente pelo nome ou CPF/CNPJ..."/>
+                        <ListBox x:Name="ListaClientesEncontrados" ItemsSource="{Binding ResultadosBuscaCliente}" MaxHeight="120" Margin="0,6,0,0"
+                                 DisplayMemberPath="Name" BorderBrush="{DynamicResource BordaInput}"
+                                 SelectionChanged="ListaClientesEncontrados_SelectionChanged"/>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+
+            <!-- Aviso -->
+            <Border Grid.Row="2" Background="#FFFBEB" BorderBrush="#FCD34D" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,14">
+                <TextBlock Text="Informe a quantidade a devolver em cada item. Deixe 0 para não devolver." Foreground="#B45309" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+            </Border>
+
+            <!-- Grid de itens -->
+            <Border Grid.Row="3" Background="{DynamicResource FundoInput}" CornerRadius="12" Padding="8" BorderBrush="{DynamicResource BordaInput}" BorderThickness="1">
+                <DataGrid ItemsSource="{Binding Itens}" AutoGenerateColumns="False"
+                          CanUserAddRows="False" CanUserDeleteRows="False" CanUserSortColumns="False"
+                          Background="Transparent" BorderThickness="0" GridLinesVisibility="Horizontal"
+                          RowBackground="Transparent" AlternatingRowBackground="{DynamicResource CardBgAlt}"
+                          RowHeight="40" ColumnHeaderStyle="{StaticResource CabecalhoGridLimpo}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="PRODUTO" Binding="{Binding ProductName}" Width="2.2*">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Margin" Value="10,0"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource TextDark}"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="VENDIDO" Binding="{Binding QuantidadeVendida, StringFormat=N2}" Width="0.8*">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="HorizontalAlignment" Value="Center"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="PREÇO" Binding="{Binding UnitPrice, StringFormat=C2}" Width="0.9*">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="HorizontalAlignment" Value="Right"/>
+                                    <Setter Property="Margin" Value="0,0,10,0"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTemplateColumn Header="DEVOLVER" Width="1*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding QuantidadeDevolver, UpdateSourceTrigger=LostFocus, StringFormat=N2}"
+                                             Width="70" Height="28" TextAlignment="Center"
+                                             VerticalContentAlignment="Center" HorizontalAlignment="Center"
+                                             Background="{DynamicResource CardBg}" Foreground="{DynamicResource TextDark}"
+                                             BorderBrush="{DynamicResource BordaInput}" FontWeight="Bold">
+                                        <TextBox.Resources>
+                                            <Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style>
+                                        </TextBox.Resources>
+                                    </TextBox>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="CRÉDITO" Binding="{Binding ValorDevolver, StringFormat=C2}" Width="1*">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="HorizontalAlignment" Value="Right"/>
+                                    <Setter Property="Margin" Value="0,0,10,0"/>
+                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                    <Setter Property="Foreground" Value="#16A34A"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
+
+            <!-- Motivo + Total -->
+            <Grid Grid.Row="4" Margin="0,16,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="220"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                    <TextBlock Text="Motivo da devolução (opcional):" FontSize="12" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding Motivo, UpdateSourceTrigger=PropertyChanged}" Height="60" Padding="8,4" TextWrapping="Wrap"
+                             Background="{DynamicResource FundoInput}" BorderBrush="{DynamicResource BordaInput}" BorderThickness="1">
+                        <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></TextBox.Resources>
+                    </TextBox>
+                </StackPanel>
+                <Border Grid.Column="1" Background="#F0FDF4" CornerRadius="8" BorderBrush="#BBF7D0" BorderThickness="1" Padding="16,8">
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="TOTAL A CREDITAR" FontSize="11" Foreground="#15803D" HorizontalAlignment="Center" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding TotalDevolver, StringFormat=C2}" FontSize="22" FontWeight="Black" Foreground="#16A34A" HorizontalAlignment="Center" Margin="0,4"/>
+                        <TextBlock Text="em Haver para o cliente" FontSize="11" Foreground="#15803D" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Botões -->
+            <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <Button Content="CANCELAR" Command="{Binding CancelarCommand}" IsCancel="True" Width="110" Height="42" Margin="0,0,12,0" Style="{StaticResource OutlineButton}"/>
+                <Button Content="✅ CONFIRMAR DEVOLUÇÃO" Command="{Binding ConfirmarCommand}" Width="220" Height="42" Style="{StaticResource PrimaryButton}"/>
+            </StackPanel>
+        </Grid>
+    </Border>
 </Window>

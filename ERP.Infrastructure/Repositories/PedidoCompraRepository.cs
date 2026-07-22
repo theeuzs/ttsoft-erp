@@ -26,6 +26,22 @@ public class PedidoCompraRepository : Repository<PedidoCompra>, IPedidoCompraRep
             .Include(p => p.Supplier)
             .FirstOrDefaultAsync(p => p.Id == id);
 
+    public async Task RemoverItensAsync(Guid pedidoCompraId)
+        => await _ctx.PedidosCompraItens
+            .Where(i => i.PedidoCompraId == pedidoCompraId)
+            .ExecuteDeleteAsync();
+
+    public async Task AdicionarItensAsync(IEnumerable<PedidoCompraItem> itens)
+        => await _ctx.PedidosCompraItens.AddRangeAsync(itens);
+
+    public async Task<IEnumerable<PedidoCompraItem>> GetHistoricoPorProdutoAsync(Guid productId)
+        => await _ctx.PedidosCompraItens
+            .AsNoTracking()
+            .Include(i => i.PedidoCompra)
+            .Where(i => i.ProductId == productId)
+            .OrderByDescending(i => i.PedidoCompra.DataPedido)
+            .ToListAsync();
+
     public async Task<IEnumerable<PedidoCompra>> GetByStatusAsync(StatusPedidoCompra status)
         => await _ctx.PedidosCompra
             .AsNoTracking()

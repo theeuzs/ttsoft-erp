@@ -178,7 +178,7 @@ public partial class MainWindow : Window
         ["filiais"]      = ERP.WPF.State.PermissionChecker.UsersView, // Gerente+
     };
 
-    private void NavigateTo(string page)
+    public void NavigateTo(string page)
     {
         // Bouncer dinâmico: verifica permissão pelo código, não pelo nome do cargo
         if (_pagePermissions.TryGetValue(page, out var requiredPerm))
@@ -201,11 +201,18 @@ public partial class MainWindow : Window
             "bi"          => CreateView<BIView, BIViewModel>(),
             "financeiro"  => CreateView<FinanceiroView, FinanceiroViewModel>(),
             "contaspagar" => CreateView<ContaPagarView, ContaPagarViewModel>(),
+            "contasbancarias" => CreateView<ContaBancariaView, ContaBancariaViewModel>(),
             "importXml"   => CreateView<NfeImportView, NfeImportViewModel>(),
             "sped"        => CreateView<SpedView, SpedViewModel>(),
             "nfce"        => CreateView<NotasFiscaisView, NotasFiscaisViewModel>(),
             "auditoria"   => CreateView<AuditLogView, AuditLogViewModel>(),
             "compras"     => CreateView<ComprasView, ComprasViewModel>(),
+            "historicocompras" => CreateView<HistoricoComprasView, HistoricoComprasViewModel>(),
+            "historicovendas" => CreateView<HistoricoVendasView, HistoricoVendasViewModel>(),
+            "conciliacaobancaria" => CreateView<ConciliacaoBancariaView, ConciliacaoBancariaViewModel>(),
+            "operadorasrecebimento" => CreateView<OperadoraRecebimentoView, OperadoraRecebimentoViewModel>(),
+            "recebiveisoperadora" => CreateView<RecebivelOperadoraView, RecebivelOperadoraViewModel>(),
+            "extratofinanceiro" => CreateView<ExtratoFinanceiroView, ExtratoFinanceiroViewModel>(),
             "fluxocaixa"  => new FluxoCaixaView(),
             "margem"      => new MargemView(),
             "inventario"  => new InventarioView(),

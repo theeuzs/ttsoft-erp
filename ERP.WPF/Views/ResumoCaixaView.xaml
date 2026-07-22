@@ -89,9 +89,13 @@
                                 <TextBlock Text="+ Suprimentos" Foreground="#A16207"/> 
                                 <TextBlock Text="{Binding Suprimentos, StringFormat='R$ {0:N2}'}" HorizontalAlignment="Right" FontWeight="Bold" Foreground="#16A34A"/>
                             </Grid>
-                            <Grid Margin="0,0,0,15"> 
+                            <Grid Margin="0,0,0,5"> 
                                 <TextBlock Text="- Sangrias" Foreground="#A16207"/> 
                                 <TextBlock Text="{Binding Sangrias, StringFormat='R$ {0:N2}'}" HorizontalAlignment="Right" FontWeight="Bold" Foreground="#DC2626"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,15"> 
+                                <TextBlock Text="- Despesas Pagas" Foreground="#A16207"/> 
+                                <TextBlock Text="{Binding Despesas, StringFormat='R$ {0:N2}'}" HorizontalAlignment="Right" FontWeight="Bold" Foreground="#DC2626"/>
                             </Grid>
                             <Separator Margin="0,0,0,10" Background="#FDE047"/>
                             <Grid> 

@@ -40,6 +40,32 @@ public class Orcamento : BaseEntity   // ← era: public class Orcamento (sem he
     /// <summary>Data e hora do último contato registrado.</summary>
     public DateTime? DataUltimoContato { get; set; }
 
+    /// <summary>Observação livre do vendedor no momento de salvar o orçamento — nunca existiu antes.</summary>
+    public string? Observacao { get; set; }
+
+    // S17: StatusFollowUp = Pendente é o valor PADRÃO de todo orçamento, mesmo
+    // sem follow-up nenhum agendado — essas duas propriedades existem só pra
+    // a tela distinguir "tem follow-up de verdade marcado" sem depender de
+    // comparação de nulo direto no XAML (fonte de bug: InverseBoolToVisibility
+    // não existe no projeto, causou crash).
+    public bool TemFollowUpAgendado => DataFollowUp.HasValue;
+    public bool SemFollowUpAgendado => !DataFollowUp.HasValue;
+
+    /// <summary>Combina observação + motivo de perda num texto só, pra tooltip — sem isso, os dois campos eram salvos mas nunca apareciam em tela nenhuma.</summary>
+    public string TextoObservacoesFollowUp
+    {
+        get
+        {
+            var partes = new List<string>();
+            if (!string.IsNullOrWhiteSpace(ObservacaoFollowUp)) partes.Add($"Observação: {ObservacaoFollowUp}");
+            if (!string.IsNullOrWhiteSpace(MotivoPerda)) partes.Add($"Motivo da perda: {MotivoPerda}");
+            return partes.Count > 0 ? string.Join("\n", partes) : "Sem observações registradas.";
+        }
+    }
+
+    public bool TemObservacaoOuMotivo =>
+        !string.IsNullOrWhiteSpace(ObservacaoFollowUp) || !string.IsNullOrWhiteSpace(MotivoPerda);
+
     public ICollection<OrcamentoItem> Itens { get; set; } = new List<OrcamentoItem>();
 
     public void RecalcularTotal()

@@ -68,6 +68,40 @@ public class PedidoCompraService : IPedidoCompraService
         return MapToDto(pedido);
     }
 
+    public async Task AtualizarAsync(Guid id, AtualizarPedidoCompraDto dto)
+    {
+        var pedido = await _uow.PedidosCompra.GetWithItensAsync(id)
+            ?? throw new KeyNotFoundException($"Pedido {id} não encontrado.");
+
+        // Editar() já valida Status == Rascunho e lança se não for.
+        pedido.Editar(dto.FornecedorNome, dto.DataPrevista, dto.Observacoes);
+
+        // S17 FIX: remove os itens antigos do banco via DELETE direto...
+        await _uow.PedidosCompra.RemoverItensAsync(id);
+
+        // ...e da coleção em memória, ANTES de chamar Update(pedido) — se Update()
+        // rodasse com os itens antigos ainda presentes em pedido.Itens, ele varreria
+        // o grafo e marcaria esses itens (já deletados pela linha acima, por fora do
+        // change tracker) como Modified, e o SaveChanges tentaria fazer UPDATE numa
+        // linha que não existe mais ("esperava afetar 1, afetou 0" de novo).
+        pedido.Itens.Clear();
+
+        _uow.PedidosCompra.Update(pedido);
+
+        var novosItens = dto.Itens.Select(item => new PedidoCompraItem
+        {
+            PedidoCompraId = id,
+            ProductId      = item.ProductId,
+            ProductName    = item.ProductName,
+            Quantidade     = item.Quantidade,
+            PrecoUnitario  = item.PrecoUnitario,
+            CreatedAt      = DateTime.UtcNow,
+        }).ToList();
+
+        await _uow.PedidosCompra.AdicionarItensAsync(novosItens);
+        await _uow.CommitAsync();
+    }
+
     public async Task EnviarAsync(Guid id)
     {
         // GetWithItensAsync — obrigatório para que pedido.Itens.Any() funcione
@@ -160,4 +194,18 @@ public class PedidoCompraService : IPedidoCompraService
             PrecoUnitario = i.PrecoUnitario,
         }).ToList()
     };
+
+    public async Task<IReadOnlyList<HistoricoCompraProdutoDto>> GetHistoricoPorProdutoAsync(Guid productId)
+    {
+        var itens = await _uow.PedidosCompra.GetHistoricoPorProdutoAsync(productId);
+        return itens.Select(i => new HistoricoCompraProdutoDto
+        {
+            DataPedido     = i.PedidoCompra.DataPedido,
+            NumeroPedido   = i.PedidoCompra.Numero,
+            FornecedorNome = i.PedidoCompra.FornecedorNome,
+            Quantidade     = i.Quantidade,
+            PrecoUnitario  = i.PrecoUnitario,
+            Status         = i.PedidoCompra.Status.ToString()
+        }).ToList();
+    }
 }

@@ -181,8 +181,6 @@
                 <Grid Grid.Row="4" Margin="20,12,20,24">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="8"/>
-                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -192,11 +190,6 @@
 
                     <Button Grid.Row="0" Grid.Column="0" Content="+ NOVO PRODUTO" Command="{Binding NewCommand}" Style="{StaticResource PrimaryButton}" Padding="0,12" Visibility="{Binding VisEdicao}"/>
                     <Button Grid.Row="0" Grid.Column="2" Content="EXCLUIR" Command="{Binding DeleteCommand}" Style="{StaticResource DangerButton}" Padding="0,12" Visibility="{Binding VisEdicao}"/>
-                    <Button Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Content="📥 IMPORTAR PLANILHA" Command="{Binding ImportCommand}" Background="#10B981" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand" Padding="0,12" Visibility="{Binding VisEdicao}">
-                        <Button.Resources>
-                            <Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style>
-                        </Button.Resources>
-                    </Button>
                 </Grid>
             </Grid>
         </Border>
@@ -244,9 +237,17 @@
                         </TextBlock>
                     </StackPanel>
 
-                    <Button Grid.Column="2" Content="⚖️ Ajuste de Estoque" Command="{Binding AbrirAjusteEstoqueCommand}" 
-                            Padding="15,8" Background="#F39C12" Foreground="White" 
-                            FontWeight="Bold" Cursor="Hand" VerticalAlignment="Center"/>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Content="📥 Importar" Command="{Binding ImportCommand}"
+                                Padding="15,8" Background="#10B981" Foreground="White"
+                                FontWeight="Bold" Cursor="Hand" Margin="0,0,8,0" Visibility="{Binding VisEdicao}"/>
+                        <Button Content="📤 Exportar" Command="{Binding ExportarPlanilhaCommand}"
+                                Padding="15,8" Background="#3B82F6" Foreground="White"
+                                FontWeight="Bold" Cursor="Hand" Margin="0,0,8,0"/>
+                        <Button Content="⚖️ Ajuste de Estoque" Command="{Binding AbrirAjusteEstoqueCommand}" 
+                                Padding="15,8" Background="#F39C12" Foreground="White" 
+                                FontWeight="Bold" Cursor="Hand"/>
+                    </StackPanel>
                 </Grid>
                 
                 <Separator Grid.Row="0" VerticalAlignment="Bottom" Margin="24,0" Background="#E2E8F0"/>

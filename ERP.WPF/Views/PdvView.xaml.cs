@@ -158,12 +158,12 @@ public partial class PdvView : UserControl
             return;
         }
 
-        // F10: Retomar próxima venda suspensa
+        // F10: Abrir lista de vendas suspensas
         if (e.Key == Key.F10)
         {
             e.Handled = true;
-            if (DataContext is PdvViewModel f10Vm && f10Vm.VendasSuspensas.Any())
-                f10Vm.RetormarVendaCommand.Execute(f10Vm.VendasSuspensas.First());
+            if (DataContext is PdvViewModel f10Vm && f10Vm.AbrirVendasSuspensasCommand.CanExecute(null))
+                f10Vm.AbrirVendasSuspensasCommand.Execute(null);
             return;
         }
 

@@ -7,6 +7,7 @@ using ERP.WPF.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -70,6 +71,7 @@ public class ProductViewModel : BaseViewModel
         NewCommand    = new RelayCommand(_ => ResetForm());
         SearchCommand = new AsyncRelayCommand(_ => SearchAsync());
         ImportCommand = new AsyncRelayCommand(_ => ImportarPlanilhaAsync(), _ => !IsBusy);
+        ExportarPlanilhaCommand = new AsyncRelayCommand(_ => ExportarPlanilhaAsync(), _ => !IsBusy);
 
         ProximaPaginaCommand  = new RelayCommand(async _ => { CurrentPage++; await LoadProductsAsync(); }, _ => PodeProxima);
         AnteriorPaginaCommand = new RelayCommand(async _ => { CurrentPage--; await LoadProductsAsync(); }, _ => PodeAnterior);
@@ -273,6 +275,7 @@ public class ProductViewModel : BaseViewModel
     public ICommand NewCommand                { get; }
     public ICommand SearchCommand             { get; }
     public ICommand ImportCommand             { get; }
+    public ICommand ExportarPlanilhaCommand   { get; }
     public ICommand NovaCategoriaCommand      { get; }
     public ICommand NovaMarcaCommand          { get; }
     public ICommand NovoFornecedorCommand     { get; }
@@ -623,6 +626,85 @@ public class ProductViewModel : BaseViewModel
             await LoadProductsAsync();
         }
         catch (Exception ex) { StatusMessage = $"❌ Erro: {ex.Message}"; }
+        finally { IsBusy = false; }
+    }
+
+    // S17: exporta TODOS os produtos (não só a página atual na tela), já que
+    // hoje não existe nenhuma forma de tirar essa lista sem entrar direto no
+    // banco. Mesmo formato CSV (;) da importação já existente — abre no Excel
+    // normalmente, e pode ser reimportado depois de editado.
+    private async Task ExportarPlanilhaAsync()
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter   = "Arquivo CSV (*.csv)|*.csv",
+            FileName = $"Produtos_{DateTime.Now:yyyyMMdd_HHmm}.csv",
+            Title    = "Salvar planilha de produtos"
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        IsBusy = true;
+        StatusMessage = "⏳ Exportando produtos... Aguarde!";
+        try
+        {
+            // S17 FIX: IProductService.GetAllAsync() usa o repositório genérico,
+            // que NÃO inclui Category/Brand (só o SearchAsync tinha Include de
+            // Category, e nem esse tinha Brand) — por isso as duas colunas
+            // vinham sempre vazias. A tela de produtos nunca tinha mostrado
+            // esses dois campos antes, então o bug ficou invisível até agora.
+            // Consulta própria aqui, direto no contexto, com os Includes certos.
+            List<Product> todos;
+            using (var scope = App.Services.CreateScope())
+            {
+                var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                todos = await ctx.Products
+                    .AsNoTracking()
+                    .Include(p => p.Category)
+                    .Include(p => p.Brand)
+                    .OrderBy(p => p.Name)
+                    .ToListAsync();
+            }
+
+            string CampoCsv(string? v)
+            {
+                v ??= string.Empty;
+                return (v.Contains(';') || v.Contains('"') || v.Contains('\n'))
+                    ? "\"" + v.Replace("\"", "\"\"") + "\""
+                    : v;
+            }
+
+            var linhas = new List<string>
+            {
+                "Nome;SKU;CodigoBarras;Categoria;Marca;Unidade;Estoque;EstoqueMinimo;Custo;PrecoVenda;Ativo"
+            };
+
+            foreach (var p in todos)
+            {
+                linhas.Add(string.Join(';', new[]
+                {
+                    CampoCsv(p.Name),
+                    CampoCsv(p.SKU),
+                    CampoCsv(p.Barcode),
+                    CampoCsv(p.Category?.Name),
+                    CampoCsv(p.Brand?.Name),
+                    CampoCsv(p.Unit),
+                    p.Stock.ToString("N2"),
+                    p.MinStock.ToString("N2"),
+                    p.OriginalCost.ToString("N2"),
+                    p.SalePrice.ToString("N2"),
+                    p.IsActive ? "Sim" : "Não"
+                }));
+            }
+
+            System.IO.File.WriteAllLines(dialog.FileName, linhas, System.Text.Encoding.UTF8);
+            StatusMessage = $"✅ {todos.Count} produtos exportados.";
+
+            var abrir = MessageBox.Show("Planilha salva! Deseja abrir agora?", "Exportação concluída",
+                MessageBoxButton.YesNo, MessageBoxImage.Information);
+            if (abrir == MessageBoxResult.Yes)
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dialog.FileName) { UseShellExecute = true });
+        }
+        catch (Exception ex) { StatusMessage = $"❌ Erro ao exportar: {ex.Message}"; }
         finally { IsBusy = false; }
     }
 

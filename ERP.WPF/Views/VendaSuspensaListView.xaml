@@ -1,0 +1,179 @@
+<Window x:Class="ERP.WPF.Views.VendaSuspensaListView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Vendas Suspensas" Height="550" Width="950"
+        WindowStartupLocation="CenterScreen" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="TtBlue" Color="#1E62A6"/>
+
+        <Style x:Key="SuccessButton" TargetType="Button">
+            <Setter Property="Background" Value="#16A34A"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="0.9"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DangerOutlineButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#EF4444"/>
+            <Setter Property="BorderBrush" Value="#FCA5A5"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#FEF2F2"/>
+                    <Setter Property="BorderBrush" Value="#EF4444"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="OutlineButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextDark}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BordaInput}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource CardBgAlt}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="CabecalhoGridLimpo" TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TextMuted}"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="Padding" Value="8,8"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource CardBg}" CornerRadius="20" Margin="15">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="15" Opacity="0.2" ShadowDepth="2"/>
+        </Border.Effect>
+
+        <Grid Margin="30">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="0,0,0,20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="⏸️ VENDAS SUSPENSAS" FontSize="22" FontWeight="Bold" Foreground="{StaticResource TtBlue}"/>
+                    <TextBlock Text="Gerencie os carrinhos aguardando retorno do cliente ou liberação." FontSize="13" Foreground="{DynamicResource TextMuted}" Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <Button Grid.Column="1" Content="🔄 ATUALIZAR" Command="{Binding AtualizarCommand}"
+                        Style="{StaticResource OutlineButton}" Height="42" Width="130" VerticalAlignment="Center"/>
+            </Grid>
+
+            <Border Grid.Row="1" Background="{DynamicResource FundoInput}" CornerRadius="12" Padding="10" BorderBrush="{DynamicResource BordaInput}" BorderThickness="1">
+                <DataGrid ItemsSource="{Binding Pendentes}" AutoGenerateColumns="False"
+                          Background="Transparent" GridLinesVisibility="Horizontal" RowHeight="48"
+                          IsReadOnly="True" BorderThickness="0" ColumnHeaderStyle="{StaticResource CabecalhoGridLimpo}"
+                          HorizontalScrollBarVisibility="Disabled">
+
+                    <DataGrid.InputBindings>
+                        <MouseBinding MouseAction="LeftDoubleClick"
+                                      Command="{Binding DataContext.RetomarCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                      CommandParameter="{Binding}"/>
+                    </DataGrid.InputBindings>
+
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Hora" Binding="{Binding DataSuspensao, StringFormat=HH:mm}" Width="70"/>
+                        <DataGridTextColumn Header="Cliente" Binding="{Binding ClienteNome}" Width="2*"/>
+                        <DataGridTextColumn Header="Itens" Binding="{Binding QuantidadeItens}" Width="0.8*"/>
+
+                        <DataGridTemplateColumn Header="Total" Width="1.2*">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding TotalAproximado, StringFormat=C2}" FontWeight="Bold" Foreground="{DynamicResource TextDark}" VerticalAlignment="Center"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <DataGridTextColumn Header="Operador" Binding="{Binding NomeSuspensor}" Width="1.5*"/>
+
+                        <DataGridTemplateColumn Header="Status" Width="180">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding NomeEmEdicao, StringFormat='Em edição por {0}'}"
+                                               Foreground="#D97706" FontWeight="SemiBold" VerticalAlignment="Center"
+                                               Visibility="{Binding EmEdicao, Converter={StaticResource BoolToVisibility}}"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                        <DataGridTemplateColumn Header="" Width="210">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,10,0">
+                                        <Button Content="RETOMAR" Margin="0,0,8,0" Height="34" Width="90" FontSize="11"
+                                                Command="{Binding DataContext.RetomarCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                CommandParameter="{Binding}" Style="{StaticResource SuccessButton}"/>
+
+                                        <Button Content="DESCARTAR" Height="34" Width="90" FontSize="11"
+                                                Command="{Binding DataContext.DescartarCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                CommandParameter="{Binding}" Style="{StaticResource DangerOutlineButton}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <Button Content="FECHAR" Command="{Binding FecharCommand}" Height="45" Width="120" IsCancel="True"
+                        Background="Transparent" Foreground="{DynamicResource TextMuted}" FontWeight="Bold" FontSize="13" Cursor="Hand" BorderThickness="0"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

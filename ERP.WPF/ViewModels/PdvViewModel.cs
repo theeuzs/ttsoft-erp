@@ -315,9 +315,10 @@ public class PdvViewModel : BaseViewModel
     // ==========================================
     // --- CONSTRUTOR --- 
     // ==========================================
-    public PdvViewModel(IProductService productService, ISaleService saleService, ICustomerService customerService, ICaixaService caixaService, IOrcamentoService orcamentoService, IMotorFiscalService motorFiscal, IProdutoAgregadoService produtoAgregadoService)
+    public PdvViewModel(IProductService productService, ISaleService saleService, ICustomerService customerService, ICaixaService caixaService, IOrcamentoService orcamentoService, IMotorFiscalService motorFiscal, IProdutoAgregadoService produtoAgregadoService, IVendaSuspensaService vendaSuspensaService)
     {
         _productService = productService;
+        _vendaSuspensaService = vendaSuspensaService;
         _saleService = saleService;
         _customerService = customerService; 
         _caixaService = caixaService;
@@ -332,8 +333,9 @@ public class PdvViewModel : BaseViewModel
         FinalizeSaleCommand = new AsyncRelayCommand(async _ => await FinalizeSaleAsync(), _ => CartItems.Any());
         ClearCartCommand      = new RelayCommand(_ => ClearCart(),        _ => CartItems.Any());
         AplicarMarkup5Command    = new RelayCommand(_ => AplicarMarkup5(),      _ => CartItems.Any());
-        SuspenderVendaCommand    = new RelayCommand(_ => SuspenderVenda(),      _ => CartItems.Any());
-        RetormarVendaCommand     = new RelayCommand(p  => RetormarVenda(p as VendaSuspensa), _ => VendasSuspensas.Any());
+        SuspenderVendaCommand    = new AsyncRelayCommand(async _ => await SuspenderVendaAsync(), _ => CartItems.Any());
+        AbrirVendasSuspensasCommand = new AsyncRelayCommand(async _ => await AbrirVendasSuspensasAsync());
+        _ = AtualizarIndicadorVendasSuspensasAsync();
         SearchCustomerCommand = new AsyncRelayCommand(_ => SearchCustomerAsync());
         SalvarOrcamentoCommand = new AsyncRelayCommand(async _ => await SalvarOrcamentoAsync(), _ => CartItems.Any());
         ToggleViewCommand = new RelayCommand(_ => IsGridView = !IsGridView);
@@ -364,7 +366,7 @@ public class PdvViewModel : BaseViewModel
         
         RestaurarEstadoCarrinho();
         
-        VerificarOrcamentoPendente();
+        _ = VerificarOrcamentoPendenteAsync();
         _ = IniciarRadarSefazAsync();
 
         // Sprint 5: carrega meta do dia e vendas em background
@@ -399,6 +401,10 @@ public class PdvViewModel : BaseViewModel
 
     private Guid? _selectedCustomerId;
     private Guid? _orcamentoCarregadoId = null;
+    private readonly IVendaSuspensaService _vendaSuspensaService;
+    // S17: mesmo padrão do _orcamentoCarregadoId — rastreia se o carrinho atual
+    // veio de uma venda suspensa retomada, pra saber se finaliza/re-suspende/libera.
+    private Guid? _vendaSuspensaEmEdicaoId = null;
 
     private string _searchTerm = string.Empty;
     public string SearchTerm
@@ -426,15 +432,18 @@ public class PdvViewModel : BaseViewModel
 
     public ObservableCollection<CartItem>   CartItems       { get; } = new();
     public ObservableCollection<ProductDto>    ProdutosCampanha  { get; } = new();
-    // Static: persiste entre navegações mesmo se o ViewModel for recriado
-    private static readonly ObservableCollection<VendaSuspensa> _vendasSuspensasGlobal = new();
-    public ObservableCollection<VendaSuspensa> VendasSuspensas => _vendasSuspensasGlobal;
 
     private bool _temVendasSuspensas;
     public bool TemVendasSuspensas
     {
-        get => _vendasSuspensasGlobal.Any();
+        get => _temVendasSuspensas;
         set => SetProperty(ref _temVendasSuspensas, value);
+    }
+
+    private async Task AtualizarIndicadorVendasSuspensasAsync()
+    {
+        var pendentes = await _vendaSuspensaService.ObterPendentesAsync();
+        TemVendasSuspensas = pendentes.Any();
     }
 
     private decimal _discountAmount;
@@ -629,7 +638,7 @@ public class PdvViewModel : BaseViewModel
     public ICommand ClearCartCommand { get; }
     public ICommand AplicarMarkup5Command  { get; }
     public ICommand SuspenderVendaCommand  { get; }
-    public ICommand RetormarVendaCommand   { get; }
+    public ICommand AbrirVendasSuspensasCommand { get; }
     public ICommand SearchCustomerCommand { get; }
     public ICommand SalvarOrcamentoCommand { get; }
 
@@ -833,67 +842,112 @@ public class PdvViewModel : BaseViewModel
         return Math.Ceiling(valor / 0.50m) * 0.50m;
     }
 
-    private void SuspenderVenda()
+    private async Task SuspenderVendaAsync()
     {
         if (!CartItems.Any()) return;
 
-        var suspensa = new VendaSuspensa
+        var dto = new ERP.Application.DTOs.SuspenderVendaDto
         {
-            Id              = Guid.NewGuid(),
-            HoraSuspensao   = DateTime.Now,
-            ClienteNome     = SelectedCustomerName ?? "Sem cliente",
-            TotalAproximado = CartItems.Sum(i => i.Total),
-            Itens           = CartItems.Select(i => new CartItem
+            ClienteId   = _selectedCustomerId,
+            ClienteNome = SelectedCustomerName ?? "Sem cliente",
+            UsuarioId   = ERP.WPF.State.AppSession.UserId,
+            NomeUsuario = ERP.WPF.State.AppSession.UserName ?? "PDV",
+            Itens = CartItems.Select(i => new ERP.Application.DTOs.VendaSuspensaItemDto
             {
                 ProductId         = i.ProductId,
-                ProductName       = i.ProductName,
+                ProductName       = i.ProductName ?? string.Empty,
                 Quantity          = i.Quantity,
                 NormalUnitPrice   = i.NormalUnitPrice,
                 UnitPrice         = i.UnitPrice,
-                Observacao        = i.Observacao,
+                Observacao        = i.Observacao ?? string.Empty,
                 FatorConversao    = i.FatorConversao,
-                UnidadeEstoque    = i.UnidadeEstoque,
-                LabelUnidadeVenda = i.LabelUnidadeVenda,
+                UnidadeEstoque    = i.UnidadeEstoque ?? string.Empty,
+                LabelUnidadeVenda = i.LabelUnidadeVenda ?? string.Empty,
                 WholesalePrice       = i.WholesalePrice,
                 WholesaleMinQuantity = i.WholesaleMinQuantity
             }).ToList()
         };
 
-        VendasSuspensas.Add(suspensa);
-        TemVendasSuspensas = true;
-        ClearCart();
+        decimal totalAproximado;
+
+        if (_vendaSuspensaEmEdicaoId.HasValue)
+        {
+            // Estava editando uma retomada — re-suspende o MESMO registro, não cria um novo.
+            await _vendaSuspensaService.AtualizarESuspenderAsync(_vendaSuspensaEmEdicaoId.Value, dto);
+            totalAproximado = dto.Itens.Sum(i => i.Quantity * i.NormalUnitPrice);
+            _vendaSuspensaEmEdicaoId = null;
+        }
+        else
+        {
+            await _vendaSuspensaService.SuspenderAsync(dto);
+            totalAproximado = dto.Itens.Sum(i => i.Quantity * i.NormalUnitPrice);
+        }
+
+        ClearCartSemLiberarTrava();
+        await AtualizarIndicadorVendasSuspensasAsync();
 
         MessageBox.Show(
-            $"Venda suspensa!\nTotal: {suspensa.TotalAproximado:C}",
+            $"Venda suspensa!\nTotal: {totalAproximado:C}",
             "Venda em Espera", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
-    private void RetormarVenda(VendaSuspensa? suspensa)
+    private async Task AbrirVendasSuspensasAsync()
     {
-        if (suspensa == null) return;
-
         if (CartItems.Any())
         {
             var resposta = MessageBox.Show(
-                "Há itens no carrinho. Deseja suspender a venda atual antes de retomar?",
+                "Há itens no carrinho. Deseja suspender a venda atual antes de abrir a lista?",
                 "Atenção", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
             if (resposta == MessageBoxResult.Cancel) return;
-            if (resposta == MessageBoxResult.Yes)    SuspenderVenda();
+            if (resposta == MessageBoxResult.Yes)    await SuspenderVendaAsync();
             if (resposta == MessageBoxResult.No)     ClearCart();
         }
 
-        foreach (var item in suspensa.Itens)
+        var vendaSuspensaService = ERP.WPF.App.Services.GetRequiredService<IVendaSuspensaService>();
+        var janela = new Views.VendaSuspensaListView(
+            vendaSuspensaService, ERP.WPF.State.AppSession.UserId, ERP.WPF.State.AppSession.UserName ?? "PDV");
+        janela.ShowDialog();
+
+        if (janela.VendaRetomada is { } detalhe)
         {
-            item.PropertyChanged += (_, e) =>
+            _selectedCustomerId  = detalhe.ClienteId;
+            SelectedCustomerName = detalhe.ClienteNome;
+            _vendaSuspensaEmEdicaoId = detalhe.Id;
+
+            foreach (var i in detalhe.Itens)
             {
-                if (e.PropertyName == nameof(CartItem.Total)) RefreshTotals();
-            };
-            CartItems.Add(item);
+                var item = new CartItem
+                {
+                    ProductId         = i.ProductId,
+                    ProductName       = i.ProductName,
+                    Quantity          = i.Quantity,
+                    NormalUnitPrice   = i.NormalUnitPrice,
+                    UnitPrice         = i.UnitPrice,
+                    Observacao        = i.Observacao,
+                    FatorConversao    = i.FatorConversao,
+                    UnidadeEstoque    = i.UnidadeEstoque,
+                    LabelUnidadeVenda = i.LabelUnidadeVenda,
+                    WholesalePrice       = i.WholesalePrice,
+                    WholesaleMinQuantity = i.WholesaleMinQuantity
+                };
+
+                // S17 FIX: mesmo bug do Orçamento — item retomado nunca tinha
+                // NCM/CFOP/CSOSN/IPI/ICMS, só o snapshot de preço/quantidade.
+                // FatorConversao/Unidade já vieram certos do snapshot acima —
+                // aqui só completa o que faltava (dado fiscal).
+                await AplicarDadosFiscaisAsync(item);
+
+                item.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(CartItem.Total)) RefreshTotals();
+                };
+                CartItems.Add(item);
+            }
+
+            RefreshTotals();
         }
 
-        VendasSuspensas.Remove(suspensa);
-        TemVendasSuspensas = VendasSuspensas.Any();
-        RefreshTotals();
+        await AtualizarIndicadorVendasSuspensasAsync();
     }
 
     private async Task CarregarProdutosCampanhaAsync()
@@ -915,6 +969,21 @@ public class PdvViewModel : BaseViewModel
     }
 
     private void ClearCart()
+    {
+        // S17: se o carrinho veio de uma venda suspensa retomada e está sendo
+        // limpo SEM ter passado por Finalizar nem Suspender de novo, é abandono
+        // — libera a trava pra qualquer operador poder retomar depois.
+        if (_vendaSuspensaEmEdicaoId.HasValue)
+        {
+            var id = _vendaSuspensaEmEdicaoId.Value;
+            _vendaSuspensaEmEdicaoId = null;
+            _vendaSuspensaService.LiberarEdicaoAsync(id).SafeFireAndForgetSilentAsync("PDV-LiberarVendaSuspensa");
+        }
+
+        ClearCartSemLiberarTrava();
+    }
+
+    private void ClearCartSemLiberarTrava()
     {
         CartItems.Clear();
         SearchResults.Clear();
@@ -972,6 +1041,14 @@ public class PdvViewModel : BaseViewModel
                     try { await _orcamentoService.MarcarComoVendidoAsync(_orcamentoCarregadoId.Value); }
                     catch { } 
                 }
+
+                if (_vendaSuspensaEmEdicaoId.HasValue && vendaGeradaId != Guid.Empty)
+                {
+                    try { await _vendaSuspensaService.FinalizarAsync(_vendaSuspensaEmEdicaoId.Value, vendaGeradaId); }
+                    catch { }
+                    _vendaSuspensaEmEdicaoId = null;
+                }
+
                 ClearCart();
                 _ = CarregarMetaEVendasAsync();
             }); 
@@ -1035,15 +1112,31 @@ public class PdvViewModel : BaseViewModel
     {
         if (!CartItems.Any()) return;
 
+        var dialogo = new Views.SalvarOrcamentoView(
+            _selectedCustomerId,
+            SelectedCustomerName ?? "Consumidor Final",
+            CartItems,
+            CartItems.Count,
+            Total,
+            TotalTributos,
+            _customerService);
+        var resultado = dialogo.ShowDialog();
+
+        if (resultado != true || !dialogo.Confirmado) return;
+
         try
         {
             var dto = new ERP.Application.DTOs.CreateOrcamentoDto
             {
-                CustomerId = _selectedCustomerId,
-                CustomerName = SelectedCustomerName,
+                CustomerId = dialogo.ClienteIdEscolhido,
+                CustomerName = dialogo.ClienteNomeEscolhido,
                 SellerName = AppSession.UserName,
                 UsuarioId = AppSession.UserId, 
                 ValorTotal = Total,
+                Observacao      = dialogo.ObservacaoEscolhida,
+                ValidadeDias    = dialogo.ValidadeDiasEscolhida,
+                AgendarFollowUp = dialogo.AgendarFollowUpEscolhido,
+                DataFollowUp    = dialogo.DataFollowUpEscolhida,
                 Itens = CartItems.Select(c => new ERP.Application.DTOs.OrcamentoItemDto
                 {
                     ProductId = c.ProductId,
@@ -1055,7 +1148,34 @@ public class PdvViewModel : BaseViewModel
             };
 
             var orcamentoSalvo = await _orcamentoService.SalvarOrcamentoAsync(dto);
-            
+
+            // S17: reaproveita os dois formatos já construídos e prontos, mas
+            // nunca usados em lugar nenhum — ReciboPrinter (já provado, usado
+            // pelo botão Imprimir da lista de Orçamentos) e OrcamentoPdfReport
+            // (QuestPDF A4, só faltava o .Landscape() e ser chamado por alguém).
+            if (dialogo.FormatoEscolhido == Views.FormatoImpressaoOrcamento.PdfPaisagem)
+            {
+                var cfg = ConfiguracaoService.Carregar();
+                var doc = new ERP.WPF.Reports.OrcamentoPdfReport(orcamentoSalvo, cfg);
+                ERP.WPF.Reports.PdfReportBase.SalvarEAbrir(doc, $"Orcamento_{orcamentoSalvo.Numero}");
+            }
+            else
+            {
+                var itensParaImprimir = orcamentoSalvo.Itens.Select(i => new CartItem
+                {
+                    ProductName = i.ProductName,
+                    Quantity = i.Quantity,
+                    UnitPrice = i.UnitPrice,
+                    NormalUnitPrice = i.UnitPrice,
+                    DiscountPercent = 0
+                }).ToList();
+                var pagamentosVazios = new List<(string, decimal)>();
+                var obs = $"Validade: {dialogo.ValidadeDiasEscolhida} dias (até {orcamentoSalvo.DataValidade:dd/MM/yyyy})\nNão substitui Nota Fiscal.";
+                Helpers.ReciboPrinter.Imprimir(orcamentoSalvo.Id, itensParaImprimir, orcamentoSalvo.ValorTotal, 0,
+                    orcamentoSalvo.CustomerName ?? "Consumidor Final", AppSession.UserName ?? "PDV",
+                    pagamentosVazios, 0, obs, "ORÇAMENTO");
+            }
+
             MessageBox.Show($"✅ Orçamento {orcamentoSalvo.Numero} salvo com sucesso!\n\nVálido até: {orcamentoSalvo.DataValidade:dd/MM/yyyy}", 
                 "TTSoft - Orçamentos", MessageBoxButton.OK, MessageBoxImage.Information);
             
@@ -1063,42 +1183,128 @@ public class PdvViewModel : BaseViewModel
         }
         catch (Exception ex) 
         { 
-            MessageBox.Show($"Erro ao salvar orçamento: {ex.Message}"); 
+            var mensagem = ex.Message;
+            var interna = ex.InnerException;
+            while (interna != null)
+            {
+                mensagem += $"\n\nCausa: {interna.Message}";
+                interna = interna.InnerException;
+            }
+            MessageBox.Show($"Erro ao salvar orçamento: {mensagem}"); 
         }
     }
 
-    private void VerificarOrcamentoPendente()
+    public async Task VerificarOrcamentoPendenteAsync()
     {
         if (OrcamentoPendente != null)
         {
-            ClearCart(); 
-            _orcamentoCarregadoId = OrcamentoPendente.Id;
-            
-            if (OrcamentoPendente.CustomerId.HasValue)
+            var orcamento = OrcamentoPendente;
+            OrcamentoPendente = null; // limpa já, antes de qualquer await, pra não reprocessar por engano
+
+            ClearCart();
+            _orcamentoCarregadoId = orcamento.Id;
+
+            if (orcamento.CustomerId.HasValue)
             {
-                _selectedCustomerId = OrcamentoPendente.CustomerId;
-                SelectedCustomerName = OrcamentoPendente.CustomerName ?? "Consumidor Final";
+                _selectedCustomerId = orcamento.CustomerId;
+                SelectedCustomerName = orcamento.CustomerName ?? "Consumidor Final";
             }
 
-            if (OrcamentoPendente.Itens != null)
+            var orcamentoVencido = orcamento.DataValidade.Date < DateTime.Now.Date;
+            var mudancasDePreco = new List<string>();
+
+            if (orcamento.Itens != null)
             {
-                foreach (var item in OrcamentoPendente.Itens)
+                foreach (var item in orcamento.Itens)
                 {
-                    CartItems.Add(new CartItem 
-                    { 
-                        ProductId = item.ProductId, 
-                        ProductName = item.ProductName, 
-                        NormalUnitPrice = item.UnitPrice, 
-                        Quantity = item.Quantity, 
-                        UnitPrice = item.UnitPrice, 
-                        DiscountPercent = item.DiscountPercent 
-                    });
+                    var cartItem = new CartItem
+                    {
+                        ProductId = item.ProductId,
+                        ProductName = item.ProductName,
+                        NormalUnitPrice = item.UnitPrice,
+                        Quantity = item.Quantity,
+                        UnitPrice = item.UnitPrice,
+                        DiscountPercent = item.DiscountPercent
+                    };
+
+                    // S17 FIX: item vindo de Orçamento não carregava NCM/CFOP/CSOSN/
+                    // IPI/ICMS — o Motor Fiscal calculava tributo errado (zerado) pra
+                    // venda repuxada de orçamento. Busca o produto de verdade e aplica.
+                    var produto = await AplicarDadosFiscaisAsync(cartItem);
+                    if (produto != null)
+                    {
+                        cartItem.FatorConversao    = produto.FatorConversao > 0 ? produto.FatorConversao : 1m;
+                        cartItem.LabelUnidadeVenda = produto.LabelUnidadeVenda;
+                        cartItem.UnidadeEstoque    = produto.UnidadeEstoque ?? produto.Unit;
+
+                        // S17: orçamento vencido pode ter preço desatualizado — se o
+                        // preço de venda do produto mudou desde então, atualiza pro
+                        // preço certo e avisa o operador, em vez de vender no valor antigo.
+                        if (orcamentoVencido && produto.SalePrice != item.UnitPrice)
+                        {
+                            mudancasDePreco.Add(
+                                $"{item.ProductName}: R$ {item.UnitPrice:N2} → R$ {produto.SalePrice:N2}");
+                            cartItem.NormalUnitPrice = produto.SalePrice;
+                            cartItem.UnitPrice = produto.SalePrice;
+                        }
+                    }
+
+                    cartItem.PropertyChanged += (_, e) =>
+                    {
+                        if (e.PropertyName == nameof(CartItem.Total)) RefreshTotals();
+                    };
+                    CartItems.Add(cartItem);
                 }
             }
-            
+
             RefreshTotals();
-            OrcamentoPendente = null; 
+
+            if (mudancasDePreco.Any())
+            {
+                MessageBox.Show(
+                    "Este orçamento venceu e o preço de alguns itens mudou desde então — os valores foram atualizados:\n\n"
+                    + string.Join("\n", mudancasDePreco),
+                    "Preços atualizados", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
+    }
+
+    /// <summary>
+    /// Busca o produto de verdade e preenche os campos estritamente fiscais do
+    /// item (NCM/CEST/CFOP/CSOSN/origem ICMS/IPI) — usado sempre que um CartItem
+    /// nasce fora do fluxo normal de AddToCart (Orçamento retomado, Venda
+    /// Suspensa retomada), porque só o AddToCart populava isso. Retorna o
+    /// produto buscado pra quem precisar de mais campos (ex: FatorConversao),
+    /// sem forçar isso aqui — Venda Suspensa já traz esses campos no snapshot,
+    /// só Orçamento realmente precisa deles vindos do produto.
+    /// Se o produto não existir mais (excluído), o item fica sem dado fiscal em
+    /// vez de travar o carregamento — o operador ainda consegue vender.
+    /// </summary>
+    private async Task<ProductDto?> AplicarDadosFiscaisAsync(CartItem item)
+    {
+        var product = await _productService.GetByIdAsync(item.ProductId);
+
+        // TEMPORÁRIO — diagnóstico do bug "tributo zerado em venda repuxada". Remover depois.
+        if (product == null)
+        {
+            Serilog.Log.Warning("DIAGNÓSTICO fiscal: produto {ProductId} NÃO encontrado por GetByIdAsync", item.ProductId);
+            return null;
+        }
+        Serilog.Log.Warning(
+            "DIAGNÓSTICO fiscal: produto {ProductId} encontrado — IPI={Ipi} ICMS={Icms} NCM={Ncm} CFOP={Cfop}",
+            item.ProductId, product.IpiPercent, product.IcmsPercent, product.NCM, product.CFOPPadrao);
+
+        item.Ncm             = product.NCM ?? "00000000";
+        item.Cest            = product.CEST ?? string.Empty;
+        item.Cfop            = product.CFOPPadrao ?? "5102";
+        item.Csosn           = string.IsNullOrWhiteSpace(product.CSOSN) ? "102" : product.CSOSN;
+        item.IcmsOrigem      = "0";
+        item.ProdutoOriginal = new ERP.Domain.Entities.Product
+        {
+            IpiPercent  = product.IpiPercent,
+            IcmsPercent = product.IcmsPercent
+        };
+        return product;
     }
 
     private async Task SearchCustomerListAsync()

@@ -43,6 +43,11 @@ public enum GerarBoletoStatus
     ClienteSemDocumento,
     FalhaAoRegistrarClienteAsaas,
     FalhaAoGerarBoleto,
+    // S17 FIX: AsaasService virou opcional no construtor de ContaReceberService
+    // (o WPF nunca registrou esse serviço no próprio DI — boleto via Asaas
+    // sempre foi feature só de API/Portal). Esse status cobre o caso de alguém
+    // tentar gerar boleto num ambiente onde o Asaas não está disponível.
+    AsaasIndisponivel,
     Sucesso
 }
 

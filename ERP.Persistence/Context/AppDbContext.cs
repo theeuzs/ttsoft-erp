@@ -152,6 +152,12 @@ public class AppDbContext : DbContext
     public DbSet<PedidoCompra>         PedidosCompra       { get; set; }
     public DbSet<PedidoCompraItem>     PedidosCompraItens  { get; set; }
     public DbSet<CaixaMovimento>       CaixaMovimentos     { get; set; }
+    public DbSet<ContaBancaria>          ContasBancarias         { get; set; }
+    public DbSet<MovimentoContaBancaria> MovimentosContaBancaria { get; set; }
+    public DbSet<OperadoraRecebimento>   OperadorasRecebimento   { get; set; }
+    public DbSet<RecebivelOperadora>     RecebiveisOperadora     { get; set; }
+    public DbSet<VendaSuspensa>          VendasSuspensas         { get; set; }
+    public DbSet<VendaSuspensaItem>      VendaSuspensaItens      { get; set; }
     public DbSet<ContaReceber>         ContasReceber       { get; set; }
     public DbSet<ContaPagar>           ContasPagar         { get; set; }
     public DbSet<MovimentoHaver>       MovimentosHaver     { get; set; }
@@ -169,6 +175,18 @@ public class AppDbContext : DbContext
     public DbSet<Entrega>              Entregas            { get; set; }
     public DbSet<Veiculo>              Veiculos            { get; set; }
     public DbSet<FormulaTintometrica>  FormulasTintometricas { get; set; }
+
+    // ── Módulo Integrações (Marketplace) ──────────────────────────────────
+    public DbSet<SalesChannel>              SalesChannels              { get; set; }
+    public DbSet<SalesChannelPricingPolicy> SalesChannelPricingPolicies { get; set; }
+    public DbSet<ExternalOrder>             ExternalOrders             { get; set; }
+    public DbSet<ExternalOrderItem>         ExternalOrderItems         { get; set; }
+    public DbSet<SkuMapping>                SkuMappings                { get; set; }
+    public DbSet<ShadowStockReservation>    ShadowStockReservations    { get; set; }
+    public DbSet<OrderEvent>                OrderEvents                { get; set; }
+    public DbSet<OrderAction>               OrderActions               { get; set; }
+    public DbSet<OrderConflict>             OrderConflicts             { get; set; }
+    public DbSet<ProcessingSession>         ProcessingSessions         { get; set; }
 
     // ── TenantFilterHelper: cascata AsyncLocal → _globalTenantId ──────────────
     // Usado pelo HasQueryFilter em vez de _asyncTenantId diretamente.
@@ -218,6 +236,41 @@ public class AppDbContext : DbContext
             s => !s.IsDeleted && s.TenantId == tenantFilter.Value);
         modelBuilder.Entity<Caixa>().HasQueryFilter(
             c => !c.IsDeleted && c.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<ContaBancaria>().HasQueryFilter(
+            c => !c.IsDeleted && c.TenantId == tenantFilter.Value);
+        // S17: MovimentoContaBancaria ganha filtro próprio (defesa em profundidade) —
+        // diferente de CaixaMovimento, que hoje só é seguro porque sempre é consultado
+        // a partir de um CaixaId já filtrado por tenant a montante.
+        modelBuilder.Entity<MovimentoContaBancaria>().HasQueryFilter(
+            m => !m.IsDeleted && m.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<OperadoraRecebimento>().HasQueryFilter(
+            o => !o.IsDeleted && o.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<RecebivelOperadora>().HasQueryFilter(
+            r => !r.IsDeleted && r.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<VendaSuspensa>().HasQueryFilter(
+            v => !v.IsDeleted && v.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<VendaSuspensaItem>().HasQueryFilter(
+            i => !i.IsDeleted && i.TenantId == tenantFilter.Value);
+
+        // S17 FIX: precisão decimal explícita — sem isso, EF usa um default que pode
+        // truncar valor monetário silenciosamente. Aviso apareceu na migration (o mesmo
+        // gap já existe em várias entidades antigas do projeto, mas essas duas são novas
+        // e financeiras — não faz sentido introduzir o mesmo problema de novo).
+        modelBuilder.Entity<ContaBancaria>().Property(c => c.SaldoInicial).HasPrecision(18, 2);
+        modelBuilder.Entity<MovimentoContaBancaria>().Property(m => m.Valor).HasPrecision(18, 2);
+        modelBuilder.Entity<OperadoraRecebimento>().Property(o => o.TaxaDebitoPercentual).HasPrecision(5, 2);
+        modelBuilder.Entity<OperadoraRecebimento>().Property(o => o.TaxaCreditoVistaPercentual).HasPrecision(5, 2);
+        modelBuilder.Entity<OperadoraRecebimento>().Property(o => o.TaxaCreditoParceladoPercentual).HasPrecision(5, 2);
+        modelBuilder.Entity<RecebivelOperadora>().Property(r => r.ValorBruto).HasPrecision(18, 2);
+        modelBuilder.Entity<RecebivelOperadora>().Property(r => r.ValorTaxa).HasPrecision(18, 2);
+        modelBuilder.Entity<RecebivelOperadora>().Property(r => r.ValorLiquido).HasPrecision(18, 2);
+        modelBuilder.Entity<VendaSuspensa>().Property(v => v.TotalAproximado).HasPrecision(18, 2);
+        modelBuilder.Entity<VendaSuspensaItem>().Property(i => i.NormalUnitPrice).HasPrecision(18, 4);
+        modelBuilder.Entity<VendaSuspensaItem>().Property(i => i.UnitPrice).HasPrecision(18, 4);
+        modelBuilder.Entity<VendaSuspensaItem>().Property(i => i.Quantity).HasPrecision(18, 4);
+        modelBuilder.Entity<VendaSuspensaItem>().Property(i => i.FatorConversao).HasPrecision(18, 4);
+        modelBuilder.Entity<VendaSuspensaItem>().Property(i => i.WholesalePrice).HasPrecision(18, 4);
+        modelBuilder.Entity<VendaSuspensaItem>().Property(i => i.WholesaleMinQuantity).HasPrecision(18, 4);
         modelBuilder.Entity<PedidoCompra>().HasQueryFilter(
             p => !p.IsDeleted && p.TenantId == tenantFilter.Value);
         modelBuilder.Entity<Orcamento>().HasQueryFilter(
@@ -289,6 +342,167 @@ public class AppDbContext : DbContext
             e.HasIndex(pa => new { pa.ProdutoPrincipalId, pa.ProdutoRelacionadoId })
                 .IsUnique();
         });
+
+        // ══════════════════════════════════════════════════════════════
+        //  Módulo Integrações (Marketplace) — SalesChannel/ExternalOrder
+        //
+        //  Todas as 10 entidades herdam BaseEntity (TenantId + IsDeleted),
+        //  então todas recebem HasQueryFilter — defesa em profundidade,
+        //  mesmo princípio já aplicado em MovimentoContaBancaria/VendaSuspensaItem:
+        //  não confiar só no filtro do pai pra isolar tenant num filho.
+        // ══════════════════════════════════════════════════════════════
+        modelBuilder.Entity<SalesChannel>().HasQueryFilter(
+            s => !s.IsDeleted && s.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<SalesChannelPricingPolicy>().HasQueryFilter(
+            p => !p.IsDeleted && p.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<ExternalOrder>().HasQueryFilter(
+            o => !o.IsDeleted && o.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<ExternalOrderItem>().HasQueryFilter(
+            i => !i.IsDeleted && i.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<SkuMapping>().HasQueryFilter(
+            m => !m.IsDeleted && m.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<ShadowStockReservation>().HasQueryFilter(
+            r => !r.IsDeleted && r.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<OrderEvent>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<OrderAction>().HasQueryFilter(
+            a => !a.IsDeleted && a.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<OrderConflict>().HasQueryFilter(
+            c => !c.IsDeleted && c.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<ProcessingSession>().HasQueryFilter(
+            p => !p.IsDeleted && p.TenantId == tenantFilter.Value);
+
+        // ── Precisão decimal explícita (mesmo motivo do S17 FIX acima) ──
+        modelBuilder.Entity<SalesChannelPricingPolicy>().Property(p => p.PercentualAjuste).HasPrecision(5, 2);
+        modelBuilder.Entity<ExternalOrder>().Property(o => o.ValorTotal).HasPrecision(18, 2);
+        modelBuilder.Entity<ExternalOrderItem>().Property(i => i.Quantidade).HasPrecision(18, 4);
+        modelBuilder.Entity<ExternalOrderItem>().Property(i => i.ValorUnitario).HasPrecision(18, 4);
+        modelBuilder.Entity<SkuMapping>().Property(m => m.BufferSeguranca).HasPrecision(18, 4);
+        modelBuilder.Entity<ShadowStockReservation>().Property(r => r.Quantidade).HasPrecision(18, 4);
+
+        // ── SalesChannel: filhos diretos ────────────────────────────────
+        // Restrict, não Cascade — apagar um canal não deve arrastar o histórico de
+        // pedidos/mapeamentos junto (o soft-delete via IsDeleted é o caminho normal;
+        // isso só protege contra um hard-delete acidental em manutenção/teste).
+        modelBuilder.Entity<SalesChannelPricingPolicy>()
+            .HasOne(p => p.SalesChannel)
+            .WithMany(s => s.PoliticasDePreco)
+            .HasForeignKey(p => p.SalesChannelId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<SalesChannel>()
+            .HasOne(s => s.ClienteRepasse)
+            .WithMany()
+            .HasForeignKey(s => s.ClienteRepasseId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<SkuMapping>(e =>
+        {
+            e.HasOne(m => m.SalesChannel)
+                .WithMany(s => s.MapeamentosSku)
+                .HasForeignKey(m => m.SalesChannelId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(m => m.Product)
+                .WithMany()
+                .HasForeignKey(m => m.ProductId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Um SKU externo só pode apontar pra um Product por canal.
+            // Índice FILTRADO — sem isso, um SkuMapping soft-deleted continua
+            // ocupando a chave única e bloqueia reinserção do mesmo (canal, SKU).
+            e.HasIndex(m => new { m.SalesChannelId, m.SkuExterno })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+        });
+
+        modelBuilder.Entity<ExternalOrder>(e =>
+        {
+            e.HasOne(o => o.SalesChannel)
+                .WithMany()
+                .HasForeignKey(o => o.SalesChannelId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(o => o.Venda)
+                .WithMany()
+                .HasForeignKey(o => o.VendaId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Não processar o mesmo pedido do canal duas vezes. Filtrado pelo mesmo
+            // motivo do SkuMapping acima — um pedido soft-deleted não pode travar
+            // a chave se o mesmo ExternalOrderId for reprocessado depois.
+            e.HasIndex(o => new { o.SalesChannelId, o.ExternalOrderId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            // CorrelationId é a chave de rastreio ("um SELECT, vê a vida inteira do
+            // pedido") — sem índice, essa consulta faz table scan em produção.
+            e.HasIndex(o => o.CorrelationId);
+        });
+
+        // ── ExternalOrder: filhos que não fazem sentido sem o pai ───────
+        // Cascade aqui — Item/Event/Action/Conflict/Reservation não têm valor
+        // sozinhos se o ExternalOrder em si for removido.
+        modelBuilder.Entity<ExternalOrderItem>()
+            .HasOne(i => i.ExternalOrder)
+            .WithMany(o => o.Itens)
+            .HasForeignKey(i => i.ExternalOrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ExternalOrderItem>()
+            .HasOne(i => i.Product)
+            .WithMany()
+            .HasForeignKey(i => i.ProductId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<OrderEvent>()
+            .HasOne(e => e.ExternalOrder)
+            .WithMany()
+            .HasForeignKey(e => e.ExternalOrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<OrderAction>()
+            .HasOne(a => a.ExternalOrder)
+            .WithMany()
+            .HasForeignKey(a => a.ExternalOrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<OrderConflict>()
+            .HasOne(c => c.ExternalOrder)
+            .WithMany()
+            .HasForeignKey(c => c.ExternalOrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ShadowStockReservation>(e =>
+        {
+            e.HasOne(r => r.ExternalOrder)
+                .WithMany()
+                .HasForeignKey(r => r.ExternalOrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(r => r.Product)
+                .WithMany()
+                .HasForeignKey(r => r.ProductId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Consulta mais comum do módulo: "quanto está reservado agora, por produto".
+            e.HasIndex(r => new { r.ProductId, r.Status });
+        });
+
+        modelBuilder.Entity<OrderEvent>().HasIndex(e => e.CorrelationId);
+        modelBuilder.Entity<OrderAction>().HasIndex(a => a.CorrelationId);
+        modelBuilder.Entity<OrderConflict>().HasIndex(c => c.CorrelationId);
+
+        // ── ProcessingSession: opcional por canal, então SetNull ────────
+        modelBuilder.Entity<ProcessingSession>()
+            .HasOne(p => p.SalesChannel)
+            .WithMany()
+            .HasForeignKey(p => p.SalesChannelId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Dashboards futuros vão consultar sessões por canal + período.
+        modelBuilder.Entity<ProcessingSession>()
+            .HasIndex(p => new { p.SalesChannelId, p.IniciadoEm });
     }
 
     // ── Auditoria automática ──────────────────────────────────────────

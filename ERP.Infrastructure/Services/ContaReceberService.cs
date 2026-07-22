@@ -17,10 +17,10 @@ public class ContaReceberService : IContaReceberService
     private readonly IUnitOfWork    _uow;
     private readonly AppDbContext   _ctx;
     private readonly IRequestTenant _tenant;
-    private readonly AsaasService   _asaas;
+    private readonly AsaasService?  _asaas;
 
     public ContaReceberService(
-        IUnitOfWork uow, AppDbContext ctx, IRequestTenant tenant, AsaasService asaas)
+        IUnitOfWork uow, AppDbContext ctx, IRequestTenant tenant, AsaasService? asaas = null)
     {
         _uow    = uow;
         _ctx    = ctx;
@@ -184,6 +184,15 @@ public class ContaReceberService : IContaReceberService
     // só trocando IActionResult por um resultado tipado que o controller mapeia.
     public async Task<GerarBoletoResultado> GerarBoletoAsync(Guid contaId)
     {
+        // S17 FIX: _asaas é opcional (o WPF nunca registrou AsaasService no
+        // próprio DI, já que gerar boleto sempre foi feature de API/Portal).
+        // Checagem explícita aqui em vez de deixar estourar NullReferenceException
+        // lá embaixo, no meio da lógica.
+        if (_asaas is null)
+            return new GerarBoletoResultado(
+                GerarBoletoStatus.AsaasIndisponivel,
+                Erro: "Geração de boleto não está disponível neste ambiente.");
+
         var conta = await _ctx.ContasReceber
             .Include(c => c.Customer)
             .Where(c => c.Id == contaId)

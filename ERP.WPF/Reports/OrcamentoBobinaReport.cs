@@ -1,5 +1,6 @@
 using System;
 using ERP.Domain.Entities;
+using ERP.WPF.Helpers;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -9,9 +10,9 @@ namespace ERP.WPF.Reports;
 public class OrcamentoBobinaReport : IDocument
 {
     private readonly Orcamento _orcamento;
-    private readonly DadosEmpresaDto _empresa;
+    private readonly ReciboConfig _empresa;
 
-    public OrcamentoBobinaReport(Orcamento orcamento, DadosEmpresaDto empresa)
+    public OrcamentoBobinaReport(Orcamento orcamento, ReciboConfig empresa)
     {
         _orcamento = orcamento;
         _empresa = empresa;
@@ -43,7 +44,7 @@ public class OrcamentoBobinaReport : IDocument
             // --- CABEÇALHO DA EMPRESA ---
             column.Item().PaddingBottom(5).Column(c => {
                 c.Item().AlignCenter().Text(_empresa.NomeFantasia).FontSize(16).Black(); // Fonte bem grande e pesada
-                c.Item().AlignCenter().Text(_empresa.Contato).FontSize(10);
+                c.Item().AlignCenter().Text(_empresa.Telefone).FontSize(10);
             });
 
             // Efeito visual de linha dupla

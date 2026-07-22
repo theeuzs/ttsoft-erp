@@ -30,31 +30,65 @@
         </StackPanel>
 
         <Border Grid.Row="1" Background="{DynamicResource CardBgAlt}" BorderBrush="#E9ECEF" BorderThickness="1" CornerRadius="8" Padding="15" Margin="0,0,0,20">
-            <WrapPanel>
-                <StackPanel Margin="0,0,40,0">
-                    <TextBlock Text="FORNECEDOR" Foreground="Gray" FontSize="11" FontWeight="Bold"/>
-                    <TextBlock Text="{Binding NotaFiscal.FornecedorNome, FallbackValue='---'}" FontSize="16" FontWeight="SemiBold" Foreground="#34495E"/>
+            <StackPanel>
+                <WrapPanel>
+                    <StackPanel Margin="0,0,40,0">
+                        <TextBlock Text="FORNECEDOR" Foreground="Gray" FontSize="11" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding NotaFiscal.FornecedorNome, FallbackValue='---'}" FontSize="16" FontWeight="SemiBold" Foreground="#34495E"/>
+                    </StackPanel>
+                    
+                    <StackPanel Margin="0,0,40,0">
+                        <TextBlock Text="CNPJ" Foreground="Gray" FontSize="11" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding NotaFiscal.FornecedorCnpj, FallbackValue='---'}" FontSize="16" FontWeight="SemiBold" Foreground="#34495E"/>
+                    </StackPanel>
+                    
+                    <StackPanel Margin="0,0,40,0">
+                        <TextBlock Text="Nº DA NOTA" Foreground="Gray" FontSize="11" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding NotaFiscal.NumeroNota, FallbackValue='---'}" FontSize="16" FontWeight="SemiBold" Foreground="#34495E"/>
+                    </StackPanel>
+                    
+                    <StackPanel Margin="0,0,40,0">
+                        <TextBlock Text="TOTAL DOS PRODUTOS (XML)" Foreground="Gray" FontSize="11" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding TotalProdutosXml, StringFormat=c, FallbackValue='R$ 0,00'}" FontSize="18" FontWeight="Bold" Foreground="#34495E"/>
+                    </StackPanel>
+
+                    <StackPanel Margin="0,0,40,0">
+                        <TextBlock Text="RECEBIMENTO CONFERIDO" Foreground="Gray" FontSize="11" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding TotalRecebimentoConferido, StringFormat=c, FallbackValue='R$ 0,00'}" FontSize="18" FontWeight="Bold">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="#27AE60"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding TemDiferencaTotais}" Value="True">
+                                            <Setter Property="Foreground" Value="#D97706"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+
+                    <StackPanel>
+                        <TextBlock Text="DOCUMENTO FISCAL (C/ IMPOSTOS)" Foreground="Gray" FontSize="10"/>
+                        <TextBlock Text="{Binding TotalDocumentoFiscal, StringFormat=c, FallbackValue='R$ 0,00'}" FontSize="13" Foreground="{DynamicResource TextMuted}"/>
+                    </StackPanel>
+                </WrapPanel>
+
+                <Border Margin="0,12,0,0" Background="#FFFBEB" BorderBrush="#FCD34D" BorderThickness="1" CornerRadius="6" Padding="10"
+                        Visibility="{Binding TemDiferencaTotais, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="⚠ Existem divergências entre a mercadoria conferida e o XML do fornecedor. Isso afeta estoque e o registro de recebimento, mas não altera o documento fiscal nem o valor a pagar."
+                               Foreground="#92400E" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                </Border>
+
+                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                    <CheckBox Content="Mercadoria confere com o XML" IsChecked="{Binding ConferenciaIdenticaAoXml}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding ResumoDivergencias}" Margin="20,0,0,0" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource TextMuted}"/>
                 </StackPanel>
-                
-                <StackPanel Margin="0,0,40,0">
-                    <TextBlock Text="CNPJ" Foreground="Gray" FontSize="11" FontWeight="Bold"/>
-                    <TextBlock Text="{Binding NotaFiscal.FornecedorCnpj, FallbackValue='---'}" FontSize="16" FontWeight="SemiBold" Foreground="#34495E"/>
-                </StackPanel>
-                
-                <StackPanel Margin="0,0,40,0">
-                    <TextBlock Text="Nº DA NOTA" Foreground="Gray" FontSize="11" FontWeight="Bold"/>
-                    <TextBlock Text="{Binding NotaFiscal.NumeroNota, FallbackValue='---'}" FontSize="16" FontWeight="SemiBold" Foreground="#34495E"/>
-                </StackPanel>
-                
-                <StackPanel>
-                    <TextBlock Text="TOTAL DA NOTA" Foreground="Gray" FontSize="11" FontWeight="Bold"/>
-                    <TextBlock Text="{Binding NotaFiscal.ValorTotal, StringFormat=c, FallbackValue='R$ 0,00'}" FontSize="18" FontWeight="Bold" Foreground="#27AE60"/>
-                </StackPanel>
-            </WrapPanel>
+            </StackPanel>
         </Border>
 
         <DataGrid Grid.Row="2" ItemsSource="{Binding Itens}" AutoGenerateColumns="False" 
-                  CanUserAddRows="False" IsReadOnly="True" HeadersVisibility="Column"
+                  CanUserAddRows="False" HeadersVisibility="Column"
                   GridLinesVisibility="Horizontal" RowHeight="35" BorderBrush="#E9ECEF">
             
             <DataGrid.RowStyle>
@@ -76,14 +110,45 @@
             </DataGrid.RowStyle>
 
             <DataGrid.Columns>
-                <DataGridCheckBoxColumn Header="Já Tem?" Binding="{Binding ProdutoJaCadastrado}" Width="70"/>
+                <DataGridCheckBoxColumn Header="Já Tem?" Binding="{Binding ProdutoJaCadastrado}" Width="60" IsReadOnly="True"/>
                 
-                <DataGridTextColumn Header="Cód. Barras (EAN)" Binding="{Binding CodigoBarrasFornecedor}" Width="150"/>
-                <DataGridTextColumn Header="Descrição do Produto" Binding="{Binding NomeProdutoFornecedor}" Width="*"/>
-                <DataGridTextColumn Header="UN" Binding="{Binding UnidadeMedida}" Width="60"/>
-                <DataGridTextColumn Header="Qtd" Binding="{Binding QuantidadeComprada}" Width="80"/>
-                <DataGridTextColumn Header="Custo Un." Binding="{Binding ValorCustoUnitario, StringFormat=c}" Width="100"/>
-                <DataGridTemplateColumn Header="Ação" Width="100">
+                <DataGridTextColumn Header="Cód. Barras (EAN)" Binding="{Binding CodigoBarrasFornecedor}" Width="130" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Descrição do Produto" Binding="{Binding NomeProdutoFornecedor}" Width="*" IsReadOnly="True"/>
+                <DataGridTextColumn Header="UN" Binding="{Binding UnidadeMedida}" Width="45" IsReadOnly="True"/>
+
+                <DataGridTextColumn Header="Qtd XML" Binding="{Binding QuantidadeComprada}" Width="70" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Qtd Conferida" Binding="{Binding QuantidadeConferida, UpdateSourceTrigger=LostFocus}" Width="90"
+                                    IsReadOnly="{Binding DataContext.ConferenciaIdenticaAoXml, RelativeSource={RelativeSource AncestorType=DataGrid}}">
+                    <DataGridTextColumn.CellStyle>
+                        <Style TargetType="DataGridCell">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding DiferencaQuantidade}" Value="0">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGridTextColumn.CellStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="Dif. Qtd" Binding="{Binding DiferencaQuantidade, StringFormat=+0.##;-0.##;0}" Width="65" IsReadOnly="True">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="#DC2626"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+
+                <DataGridTextColumn Header="Custo XML" Binding="{Binding ValorCustoUnitario, StringFormat=c}" Width="90" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Custo Conferido" Binding="{Binding CustoConferido, StringFormat=c, UpdateSourceTrigger=LostFocus}" Width="100"
+                                    IsReadOnly="{Binding DataContext.ConferenciaIdenticaAoXml, RelativeSource={RelativeSource AncestorType=DataGrid}}"/>
+                <DataGridTextColumn Header="Dif. Custo" Binding="{Binding DiferencaCusto, StringFormat=c}" Width="80" IsReadOnly="True">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="#DC2626"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+
+                <DataGridTemplateColumn Header="Ação" Width="90">
     <DataGridTemplateColumn.CellTemplate>
         <DataTemplate>
             <Button Content="🔗 Vincular" 

@@ -18,11 +18,13 @@ public class SaleService : ISaleService
     private readonly IValidator<CreateSaleDto> _validator;
     private readonly IHaverService _haverService;
     private readonly IFidelidadeService? _fidelidade;
+    private readonly ISalePolicyService? _salePolicy;
     private readonly IRequestTenant _tenant;
 
     public SaleService(IUnitOfWork uow, IMapper mapper, IValidator<CreateSaleDto> validator,
                        IHaverService haverService, IRequestTenant tenant,
-                       IFidelidadeService? fidelidade = null)
+                       IFidelidadeService? fidelidade = null,
+                       ISalePolicyService? salePolicy = null)
     {
         _uow          = uow;
         _mapper       = mapper;
@@ -30,6 +32,7 @@ public class SaleService : ISaleService
         _haverService = haverService;
         _tenant       = tenant;
         _fidelidade   = fidelidade;
+        _salePolicy   = salePolicy;
     }
 
     public async Task<IEnumerable<SaleDto>> GetAllAsync(DateTime? from = null, DateTime? to = null, string? sellerId = null)
@@ -56,10 +59,17 @@ public class SaleService : ISaleService
     {
         await _validator.ValidateAndThrowAsync(dto);
 
-        // 1. Bloqueia se o caixa estiver fechado
-        var caixaAberto = await _uow.Caixas.GetCaixaAbertoByUsuarioAsync(dto.UsuarioId);
-        if (caixaAberto == null)
-            throw new InvalidOperationException("Não é possível realizar vendas: O CAIXA ESTÁ FECHADO.");
+        // Regra de caixa é por SaleOrigin agora (ver ISalePolicyService) — PDV continua
+        // exigindo, Marketplace nunca passa pelo caixa físico. _salePolicy null (DI
+        // não configurado em algum caller antigo) cai no default seguro: exige caixa,
+        // igual o comportamento de sempre.
+        var exigeCaixa = _salePolicy?.RequerCaixaAberto(dto.Origem) ?? true;
+        if (exigeCaixa)
+        {
+            var caixaAberto = await _uow.Caixas.GetCaixaAbertoByUsuarioAsync(dto.UsuarioId);
+            if (caixaAberto == null)
+                throw new InvalidOperationException("Não é possível realizar vendas: O CAIXA ESTÁ FECHADO.");
+        }
 
         var novaVendaId = Guid.NewGuid();
 
@@ -67,6 +77,7 @@ public class SaleService : ISaleService
         {
             Id = novaVendaId, 
             SaleNumber = GenerateSaleNumber(),
+            Origem = dto.Origem,
             CustomerId = dto.CustomerId,
             SellerName = dto.SellerName,
             DiscountAmount = dto.DiscountAmount,

@@ -105,6 +105,7 @@ public class ContasReceberController : ControllerBase
             GerarBoletoStatus.ClienteSemDocumento          => BadRequest(new { erro = r.Erro }),
             GerarBoletoStatus.FalhaAoRegistrarClienteAsaas => StatusCode(502, new { erro = r.Erro }),
             GerarBoletoStatus.FalhaAoGerarBoleto           => StatusCode(502, new { erro = r.Erro }),
+            GerarBoletoStatus.AsaasIndisponivel            => StatusCode(503, new { erro = r.Erro }),
             _ => Ok(new { r.BoletoUrl, r.InvoiceUrl, r.BoletoBarCode, r.AsaasStatus })
         };
     }

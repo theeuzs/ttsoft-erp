@@ -9,6 +9,8 @@
             <RowDefinition Height="16"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
             <RowDefinition Height="220"/>
             <RowDefinition Height="16"/>
             <RowDefinition Height="*"/>
@@ -35,8 +37,22 @@
             </StackPanel>
         </Grid>
 
+        <!-- S17 FIX: alerta de saldo negativo — Categoria A, extensão do fix
+             de ligar o fluxo ao saldo real. -->
+        <Border Grid.Row="2" Background="#FEF2F2" BorderBrush="#FECACA" BorderThickness="1" CornerRadius="8" Padding="14,10"
+                Visibility="{Binding TemAlertaSaldoNegativo, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="⚠️" FontSize="18" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                <TextBlock VerticalAlignment="Center" Foreground="#991B1B" FontWeight="SemiBold">
+                    <Run Text="Seu saldo projetado fica negativo em "/>
+                    <Run Text="{Binding PrimeiroDiaNegativo, StringFormat=dd/MM/yyyy}"/>
+                    <Run Text=" — considere antecipar recebimento ou renegociar algum pagamento."/>
+                </TextBlock>
+            </StackPanel>
+        </Border>
+
         <!-- Cards de resumo -->
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="4">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="16"/>
@@ -95,7 +111,7 @@
         </Grid>
 
         <!-- Gráfico de barras -->
-        <Border Grid.Row="4" Background="{DynamicResource CardBg}" CornerRadius="12">
+        <Border Grid.Row="6" Background="{DynamicResource CardBg}" CornerRadius="12">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -119,7 +135,7 @@
         </Border>
 
         <!-- Grade principal: tabela por dia + lançamentos -->
-        <Grid Grid.Row="6">
+        <Grid Grid.Row="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="280"/>
                 <ColumnDefinition Width="16"/>

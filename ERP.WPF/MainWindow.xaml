@@ -132,14 +132,21 @@
                         <Button Content="📦  Produtos (F3)"   Style="{StaticResource NavButton}" Tag="products"     Click="NavButton_Click"/>
                         <Button Content="👤  Clientes (F4)"   Style="{StaticResource NavButton}" Tag="customers"    Click="NavButton_Click"/>
                         <Button Content="🧾  Vendas (F5)"     Style="{StaticResource NavButton}" Tag="sales"        Click="NavButton_Click"/>
+                        <Button Content="🔎 Histórico Vendas" Style="{StaticResource NavButton}" Tag="historicovendas" Click="NavButton_Click"/>
                         <Button Content="📑  Orçamentos (F6)" Style="{StaticResource NavButton}" Tag="orcamentos"   Click="NavButton_Click"/>
                         
                         <Button Content="👤 Usuários (F7)"    Style="{StaticResource NavButton}" Tag="users"        Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=users.view}"/>
                         
                         <Button Content="💰 Financeiro (F8)"  Style="{StaticResource NavButton}" Tag="financeiro"   Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=financeiro.view}"/>
                         <Button Content="💸 Despesas (F9)"    Style="{StaticResource NavButton}" Tag="contaspagar"  Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=despesas.view}"/>
+                        <Button Content="🏦 Contas Bancárias" Style="{StaticResource NavButton}" Tag="contasbancarias" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=financeiro.view}"/>
+                        <Button Content="🔄 Conciliação Bancária" Style="{StaticResource NavButton}" Tag="conciliacaobancaria" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=financeiro.view}"/>
+                        <Button Content="💳 Operadoras de Recebimento" Style="{StaticResource NavButton}" Tag="operadorasrecebimento" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=financeiro.view}"/>
+                        <Button Content="⏳ Recebíveis de Operadora" Style="{StaticResource NavButton}" Tag="recebiveisoperadora" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=financeiro.view}"/>
+                        <Button Content="📜 Extrato Financeiro" Style="{StaticResource NavButton}" Tag="extratofinanceiro" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=financeiro.view}"/>
                         <Button Content="👁️ Auditoria (F10)"  Style="{StaticResource NavButton}" Tag="auditoria"    Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=audit.view}"/>
                         <Button Content="🛒 Compras"          Style="{StaticResource NavButton}" Tag="compras"      Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=compras.view}"/>
+                        <Button Content="📜 Histórico Compras" Style="{StaticResource NavButton}" Tag="historicocompras" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=compras.view}"/>
                         <Button Content="📊 Margem"           Style="{StaticResource NavButton}" Tag="margem"       Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=margem.view}"/>
                         <Button Content="🗂️ Inventário"       Style="{StaticResource NavButton}" Tag="inventario"   Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=inventario.view}"/>
                         <Button Content="📈 Fluxo de Caixa"   Style="{StaticResource NavButton}" Tag="fluxocaixa"   Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=fluxocaixa.view}"/>

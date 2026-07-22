@@ -62,6 +62,13 @@ public class FluxoCaixaViewModel : BaseViewModel
     private decimal _saldoProjetado;
     public decimal SaldoProjetado { get => _saldoProjetado; set => SetProperty(ref _saldoProjetado, value); }
 
+    // S17 FIX: alerta de saldo negativo — extensão barata do fix de ligar o
+    // fluxo ao saldo real (Categoria A, sem construir "simulação" nem nada
+    // especulativo, só checar o que já estamos calculando).
+    private DateTime? _primeiroDiaNegativo;
+    public DateTime? PrimeiroDiaNegativo { get => _primeiroDiaNegativo; set => SetProperty(ref _primeiroDiaNegativo, value); }
+    public bool TemAlertaSaldoNegativo => PrimeiroDiaNegativo.HasValue;
+
     public ObservableCollection<FluxoItem> Lancamentos { get; } = new();
     public ObservableCollection<FluxoDia>  Dias        { get; } = new();
 
@@ -98,11 +105,14 @@ public class FluxoCaixaViewModel : BaseViewModel
 
             TotalEntradas  = resultado.TotalEntradas;
             TotalSaidas    = resultado.TotalSaidas;
-            SaldoProjetado = TotalEntradas - TotalSaidas;
+            // S17 FIX: antes era só TotalEntradas - TotalSaidas — respondia "quanto
+            // vou receber menos pagar", não "quanto dinheiro vou ter". Agora parte
+            // do saldo consolidado real (Caixa + Contas Bancárias).
+            SaldoProjetado = resultado.SaldoInicial + TotalEntradas - TotalSaidas;
 
             // Consolida por dia
             Dias.Clear();
-            decimal saldoAcumulado = 0;
+            decimal saldoAcumulado = resultado.SaldoInicial;
             foreach (var grupo in Lancamentos.GroupBy(l => l.Data.Date).OrderBy(g => g.Key))
             {
                 decimal entDia = grupo.Where(l => l.Tipo == FluxoTipo.Entrada).Sum(l => l.Valor);
@@ -119,6 +129,11 @@ public class FluxoCaixaViewModel : BaseViewModel
                     QuantidadeItens  = grupo.Count(),
                 });
             }
+
+            // S17 FIX: alerta de saldo negativo — primeiro dia, dentro do período
+            // consultado, em que o saldo acumulado projetado fica negativo.
+            PrimeiroDiaNegativo = Dias.FirstOrDefault(d => d.SaldoAcumulado < 0)?.Data;
+            OnPropertyChanged(nameof(TemAlertaSaldoNegativo));
 
             AtualizarGrafico();
         }

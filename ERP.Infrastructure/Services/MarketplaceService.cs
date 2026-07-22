@@ -8,10 +8,21 @@ using System.Text.Json;
 
 namespace ERP.Infrastructure.Services;
 
+/// <summary>
+/// ⚠️ ML: a lógica antiga daqui (ProcessarWebhookMLAsync, ProcessarPedidoMLAsync,
+/// SincronizarEstoqueMLAsync) foi REMOVIDA — nunca chegou a rodar em produção
+/// (auditado e confirmado), e o Mercado Livre agora é atendido pelo módulo novo
+/// (SalesChannel multi-tenant + OAuth real + MercadoLivreDispatcher +
+/// OrderProcessingService, com Sale/ContaReceber/auditoria completos em vez de
+/// UPDATE direto no Stock). Ver MarketplaceController para os endpoints atuais de ML.
+///
+/// Shopee continua aqui por enquanto — dispatcher próprio ainda não foi construído
+/// (está pausado no roadmap), então esse caminho permanece intocado por ora.
+/// </summary>
 public class MarketplaceService
 {
     private readonly IServiceProvider  _sp;
-    private readonly IProductService   _products;
+    private readonly IProductService   _products; // não usado agora — Shopee ainda não sincroniza estoque; mantido pra quando isso for construído
     private readonly HttpClient        _http;
 
     public MarketplaceService(IServiceProvider sp, IProductService products, HttpClient http)
@@ -19,88 +30,6 @@ public class MarketplaceService
         _sp       = sp;
         _products = products;
         _http     = http;
-    }
-
-    // ── Mercado Livre ─────────────────────────────────────────────────────────
-
-    public async Task<bool> ProcessarWebhookMLAsync(string topico, string recurso, string accessToken, Guid tenantId)
-    {
-        try
-        {
-            _http.DefaultRequestHeaders.Clear();
-            _http.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
-
-            var response = await _http.GetStringAsync($"https://api.mercadolibre.com{recurso}");
-            using var doc = JsonDocument.Parse(response);
-            var root = doc.RootElement;
-
-            if (topico == "orders")
-            {
-                await ProcessarPedidoMLAsync(root, tenantId);
-                return true;
-            }
-
-            if (topico == "items")
-            {
-                var sku = root.TryGetProperty("seller_custom_field", out var s) ? s.GetString() : null;
-                if (sku != null)
-                {
-                    var produto = await _products.GetBySkuAsync(sku);
-                    if (produto != null)
-                        await SincronizarEstoqueMLAsync(root.GetProperty("id").GetString()!, (int)produto.Stock, accessToken);
-                }
-                return true;
-            }
-
-            return false;
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Erro ao processar webhook ML. Tópico: {Topico}", topico);
-            return false;
-        }
-    }
-
-    // Fase 1.5 Fix: tenantId vem da URL do webhook (configurada por loja no ML).
-    // O scope é necessário porque webhooks são [AllowAnonymous] — não há JWT.
-    // Injetamos o tenant no IRequestTenant do scope para que HasQueryFilter funcione.
-    private async Task ProcessarPedidoMLAsync(JsonElement pedido, Guid tenantId)
-    {
-        var status = pedido.TryGetProperty("status", out var s) ? s.GetString() : "";
-        if (status != "paid") return;
-
-        using var scope = _sp.CreateScope();
-        var ctx    = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var tenant = scope.ServiceProvider.GetRequiredService<ERP.Application.Interfaces.IRequestTenant>();
-        tenant.TenantId = tenantId; // Seta o tenant no scope para HasQueryFilter funcionar
-
-        if (!pedido.TryGetProperty("order_items", out var itens)) return;
-
-        foreach (var item in itens.EnumerateArray())
-        {
-            var sku = item.TryGetProperty("item", out var i) &&
-                      i.TryGetProperty("seller_custom_field", out var scf)
-                ? scf.GetString() : null;
-
-            if (sku == null) continue;
-
-            var qtd = item.TryGetProperty("quantity", out var q) ? q.GetDecimal() : 0;
-
-            // AND TenantId= impede baixa de estoque de outro tenant com mesmo SKU (EAN colidente).
-            await ctx.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE Products SET Stock = Stock - {qtd} WHERE SKU = {sku} AND TenantId = {tenantId} AND Stock > 0");
-
-            Log.Information("ML Pedido [{TenantId}]: baixou {Qtd} do SKU {SKU}", tenantId, qtd, sku);
-        }
-    }
-
-    private async Task SincronizarEstoqueMLAsync(string itemId, int novoEstoque, string token)
-    {
-        var payload = JsonSerializer.Serialize(new { available_quantity = novoEstoque });
-        var content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json");
-        _http.DefaultRequestHeaders.Clear();
-        _http.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
-        await _http.PutAsync($"https://api.mercadolibre.com/items/{itemId}", content);
     }
 
     // ── Shopee ────────────────────────────────────────────────────────────────
@@ -171,44 +100,13 @@ public class MarketplaceService
     }
 
     // ── Sincronização em lote ─────────────────────────────────────────────────
+    // Removida junto com o resto da lógica de ML — SincronizarEstoqueAsync do
+    // IChannelDispatcher (MercadoLivreDispatcher) é o caminho novo, ainda não
+    // implementado de propósito (ver comentário no dispatcher).
 
-    public async Task<SyncResultDto> SincronizarEstoqueAsync(string marketplace, string accessToken)
-    {
-        var produtos = await _products.GetAllAsync();
-        int sucesso = 0, falha = 0;
-
-        foreach (var p in produtos.Where(x => !string.IsNullOrEmpty(x.SKU)))
-        {
-            try
-            {
-                if (marketplace == "mercadolivre")
-                {
-                    _http.DefaultRequestHeaders.Clear();
-                    _http.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
-                    var r = await _http.GetStringAsync(
-                        $"https://api.mercadolibre.com/items?seller_sku={p.SKU}");
-                    using var doc = JsonDocument.Parse(r);
-                    if (doc.RootElement.TryGetProperty("results", out var results))
-                    {
-                        foreach (var itemId in results.EnumerateArray()
-                            .Select(x => x.GetString()).Where(x => x != null))
-                        {
-                            await SincronizarEstoqueMLAsync(itemId!, (int)p.Stock, accessToken);
-                            sucesso++;
-                        }
-                    }
-                }
-            }
-            catch { falha++; }
-        }
-
-        return new SyncResultDto(sucesso, falha, DateTime.Now);
-    }
 }
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────
-
-public record SyncResultDto(int Sucesso, int Falha, DateTime Executado);
 
 public class ShopeeWebhookDto
 {

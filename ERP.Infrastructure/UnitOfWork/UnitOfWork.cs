@@ -14,6 +14,10 @@ public class UnitOfWork : IUnitOfWork
     public ISaleRepository          Sales         { get; }
     public ICategoryRepository      Categories    { get; }
     public ICaixaRepository         Caixas        { get; }
+    public IContaBancariaRepository ContasBancarias { get; }
+    public IOperadoraRecebimentoRepository OperadorasRecebimento { get; }
+    public IRecebivelOperadoraRepository RecebiveisOperadora { get; }
+    public IVendaSuspensaRepository VendasSuspensas { get; }
     public IContaReceberRepository  ContasReceber { get; }
     public IContaPagarRepository    ContasPagar   { get; }
     public IOrcamentoRepository     Orcamentos    { get; }
@@ -25,6 +29,7 @@ public class UnitOfWork : IUnitOfWork
     public IAuditLogRepository      AuditLogs     { get; }    // ← NOVO
     public IDevolucaoRepository     Devolucoes    { get; }
     public IRoleRepository          Roles         { get; }
+    public IOrderSyncRepository     OrderSync     { get; }
 
     public UnitOfWork(
         AppDbContext ctx,
@@ -43,6 +48,10 @@ public class UnitOfWork : IUnitOfWork
         Users      = users;
 
         Caixas        = new CaixaRepository(_ctx);
+        ContasBancarias = new ContaBancariaRepository(_ctx);
+        OperadorasRecebimento = new OperadoraRecebimentoRepository(_ctx);
+        RecebiveisOperadora = new RecebivelOperadoraRepository(_ctx);
+        VendasSuspensas = new VendaSuspensaRepository(_ctx);
         Orcamentos    = new OrcamentoRepository(_ctx);
         ContasReceber = new ContaReceberRepository(_ctx);
         ContasPagar   = new ContaPagarRepository(_ctx);
@@ -52,7 +61,9 @@ public class UnitOfWork : IUnitOfWork
         Brands        = new BrandRepository(_ctx);
         AuditLogs     = new AuditLogRepository(_ctx);
         Devolucoes    = new DevolucaoRepository(_ctx, requestTenant);
+        // TENANT FIX: RoleRepository agora recebe IRequestTenant (ver RoleRepository.cs)
         Roles         = new RoleRepository(_ctx, requestTenant);
+        OrderSync     = new OrderSyncRepository(_ctx);
     }
 
     public async Task<int> CommitAsync() => await _ctx.SaveChangesAsync();

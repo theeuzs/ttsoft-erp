@@ -1,5 +1,6 @@
 using ERP.WPF.Commands;
 using System;
+using System.Collections.Generic;
 using System.Linq; // 👈 Adicionado para o .Any() funcionar
 using System.Windows;
 using System.Windows.Input;
@@ -23,11 +24,81 @@ public class NfeImportViewModel : BaseViewModel
             _notaFiscal = value;
             OnPropertyChanged(nameof(NotaFiscal));
             OnPropertyChanged(nameof(Itens)); // Atualiza a lista de produtos na tela
+            OnPropertyChanged(nameof(TotalDocumentoFiscal)); // S17 FIX: faltava — tela ficava presa em R$ 0,00
+            OnPropertyChanged(nameof(TotalProdutosXml));
+
+            // S17: escuta cada item pra recalcular totais/divergência ao vivo
+            // conforme o operador ajusta quantidade/custo conferido.
+            if (_notaFiscal != null)
+            {
+                foreach (var item in _notaFiscal.Itens)
+                    item.PropertyChanged += (_, __) => AtualizarResumoConferencia();
+            }
+            AtualizarResumoConferencia();
         }
     }
 
     // Atalho para o DataGrid ler os itens facilmente
     public System.Collections.IEnumerable? Itens => NotaFiscal?.Itens;
+
+    // S17: por padrão a conferência é idêntica ao XML — editar é exceção,
+    // não a regra. Desmarcado, libera Qtd/Custo Conferido pra edição.
+    private bool _conferenciaIdenticaAoXml = true;
+    public bool ConferenciaIdenticaAoXml
+    {
+        get => _conferenciaIdenticaAoXml;
+        set
+        {
+            _conferenciaIdenticaAoXml = value;
+            OnPropertyChanged(nameof(ConferenciaIdenticaAoXml));
+            OnPropertyChanged(nameof(PodeEditarConferencia));
+
+            // Se voltar a marcar "idêntica ao XML", resincroniza tudo com o XML de novo.
+            if (value && NotaFiscal != null)
+                foreach (var item in NotaFiscal.Itens) item.InicializarConferenciaComXml();
+        }
+    }
+    public bool PodeEditarConferencia => !ConferenciaIdenticaAoXml;
+
+    public decimal TotalDocumentoFiscal      => NotaFiscal?.ValorTotal ?? 0;
+    /// <summary>S17: total dos produtos sem imposto (vProd do XML) — é essa a base de
+    /// comparação correta com o Recebimento Conferido, não o Documento Fiscal (que
+    /// inclui IPI/frete e nunca vai bater exatamente, mesmo sem divergência real).</summary>
+    public decimal TotalProdutosXml           => NotaFiscal?.TotalProdutosXml ?? 0;
+    public decimal TotalRecebimentoConferido => NotaFiscal?.Itens.Sum(i => i.QuantidadeConferida * i.CustoConferido) ?? 0;
+
+    // S17 FIX: TotalDocumentoFiscal (vNF) inclui IPI/frete/outros impostos que não
+    // aparecem em nenhum item individual — comparar ele contra a soma dos itens
+    // conferidos dava "divergência" mesmo com TODOS os itens idênticos ao XML
+    // (a diferença era só o imposto embutido). O aviso agora reflete só se
+    // algum ITEM de verdade foi alterado na conferência — critério real de
+    // "mercadoria diferente do XML", não de "documento fiscal tem imposto".
+    public bool TemDiferencaTotais => NotaFiscal?.Itens.Any(i => i.TemDivergencia) ?? false;
+
+    private string _resumoDivergencias = "Nenhuma divergência encontrada.";
+    public string ResumoDivergencias { get => _resumoDivergencias; private set => SetProperty(ref _resumoDivergencias, value); }
+
+    private void AtualizarResumoConferencia()
+    {
+        OnPropertyChanged(nameof(TotalRecebimentoConferido));
+        OnPropertyChanged(nameof(TemDiferencaTotais));
+
+        var itens = NotaFiscal?.Itens ?? new List<NfeItemImportDto>();
+        int qtdDivergente   = itens.Count(i => i.DiferencaQuantidade != 0);
+        int custoDivergente = itens.Count(i => i.DiferencaCusto != 0);
+
+        if (qtdDivergente == 0 && custoDivergente == 0)
+        {
+            ResumoDivergencias = "Nenhuma divergência encontrada.";
+        }
+        else
+        {
+            var partes = new List<string>();
+            if (qtdDivergente > 0)   partes.Add($"{qtdDivergente} item(ns) com quantidade alterada");
+            if (custoDivergente > 0) partes.Add($"{custoDivergente} item(ns) com custo alterado");
+            ResumoDivergencias = string.Join(" · ", partes);
+        }
+    }
 
     // ID do PedidoCompra gerado na última importação
     private Guid? _pedidoCompraId;

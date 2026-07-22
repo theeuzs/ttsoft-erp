@@ -158,6 +158,7 @@ public class CreateSaleDto
     public Guid UsuarioId { get; set; }
     public string? Notes { get; set; }
     public decimal DiscountAmount { get; set; }
+    public SaleOrigin Origem { get; set; } = SaleOrigin.PDV;
     public List<CreateSalePaymentDto> Payments { get; set; } = new();
     public List<CreateSaleItemDto> Items { get; set; } = new();
 }

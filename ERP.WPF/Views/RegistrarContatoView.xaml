@@ -1,0 +1,56 @@
+<Window x:Class="ERP.WPF.Views.RegistrarContatoView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Registrar Contato" Height="460" Width="420"
+        WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
+        Background="{DynamicResource CardBgAlt}">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="☎️ REGISTRAR CONTATO" FontSize="16" FontWeight="Bold"
+                   Foreground="{DynamicResource TextDark}" Margin="0,0,0,4"/>
+        <TextBlock x:Name="TxtOrcamentoInfo" Grid.Row="0" VerticalAlignment="Bottom" HorizontalAlignment="Right"
+                   FontSize="12" Foreground="{DynamicResource TextMuted}"/>
+
+        <StackPanel Grid.Row="1" Margin="0,16,0,0">
+            <TextBlock Text="O que aconteceu?" FontWeight="SemiBold" Margin="0,0,0,8"/>
+            <RadioButton x:Name="RbContatado" Content="Só contatei — vou continuar acompanhando" GroupName="Resultado"
+                         Checked="AtualizarCamposVisiveis" Margin="0,0,0,8"/>
+            <RadioButton x:Name="RbConvertido" Content="✅ Convertido — virou venda" GroupName="Resultado"
+                         Checked="AtualizarCamposVisiveis" Margin="0,0,0,8"/>
+            <RadioButton x:Name="RbPerdido" Content="❌ Perdido — cliente desistiu" GroupName="Resultado"
+                         Checked="AtualizarCamposVisiveis"/>
+        </StackPanel>
+
+        <StackPanel x:Name="PainelReagendar" Grid.Row="2" Margin="0,16,0,0">
+            <TextBlock Text="Reagendar novo follow-up em quantos dias? (deixe 0 pra não reagendar)" FontWeight="SemiBold" TextWrapping="Wrap"/>
+            <TextBox x:Name="TxtProximoFollowUpDias" Text="7" Height="32" Margin="0,6,0,0" VerticalContentAlignment="Center"/>
+        </StackPanel>
+
+        <StackPanel x:Name="PainelMotivoPerda" Grid.Row="3" Margin="0,16,0,0" Visibility="Collapsed">
+            <TextBlock Text="Motivo da perda" FontWeight="SemiBold"/>
+            <TextBox x:Name="TxtMotivoPerda" Height="32" Margin="0,6,0,0" VerticalContentAlignment="Center"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="4" Margin="0,16,0,0">
+            <TextBlock Text="Observação (opcional)" FontWeight="SemiBold"/>
+            <TextBox x:Name="TxtObservacao" Height="70" Margin="0,6,0,0" TextWrapping="Wrap"
+                     AcceptsReturn="True" VerticalScrollBarVisibility="Auto"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="CANCELAR" Click="Cancelar_Click" Height="36" Width="100" Margin="0,0,10,0"
+                    Background="{DynamicResource CardBg}" Foreground="{DynamicResource TextDark}" Cursor="Hand"/>
+            <Button Content="CONFIRMAR" Click="Confirmar_Click" Height="36" Width="120"
+                    Background="#3B82F6" Foreground="White" FontWeight="Bold" Cursor="Hand"/>
+        </StackPanel>
+    </Grid>
+</Window>

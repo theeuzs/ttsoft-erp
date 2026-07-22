@@ -142,6 +142,16 @@ public class SaleRepository : Repository<Sale>, ISaleRepository
             .ToListAsync();
     }
 
+    public async Task<IEnumerable<SaleItem>> GetHistoricoVendasPorProdutoAsync(Guid productId)
+    {
+        return await _ctx.SaleItems
+            .AsNoTracking()
+            .Include(i => i.Sale).ThenInclude(s => s.Customer)
+            .Where(i => i.ProductId == productId)
+            .OrderByDescending(i => i.Sale.SaleDate)
+            .ToListAsync();
+    }
+
     public async Task<IEnumerable<Sale>> GetByDateRangeAsync(DateTime from, DateTime to)
     {
         return await _ctx.Sales

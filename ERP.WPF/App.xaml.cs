@@ -44,6 +44,12 @@ public partial class App : System.Windows.Application
 
     public App()
     {
+        // S17 FIX: QuestPDF exige a licença setada ANTES de gerar qualquer PDF.
+        // Antes só existia setado localmente em 5 telas diferentes — cada
+        // relatório novo (como o de Orçamento) esquecia e quebrava na primeira
+        // vez que rodava de verdade. Setando aqui uma vez só, pra sempre.
+        QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
         string pastaLog = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
 
         Log.Logger = new LoggerConfiguration()
@@ -242,9 +248,19 @@ public partial class App : System.Windows.Application
         // Garante que o log é gravado no disco AGORA (não espera o buffer)
         Log.CloseAndFlush();
 
+        // S17 FIX: mesma causa do RelayCommand — sem percorrer InnerException,
+        // o usuário nunca vê o motivo real de erros do EF Core e afins.
+        var mensagem = e.Exception.Message;
+        var interna = e.Exception.InnerException;
+        while (interna != null)
+        {
+            mensagem += $"\n\nCausa: {interna.Message}";
+            interna = interna.InnerException;
+        }
+
         // Mostra mensagem amigável para o operador
         MessageBox.Show(
-            $"Ocorreu um erro inesperado:\n\n{e.Exception.Message}\n\n" +
+            $"Ocorreu um erro inesperado:\n\n{mensagem}\n\n" +
             "Um log de diagnóstico foi gerado na pasta Logs.\n" +
             "O sistema continuará funcionando.",
             "Erro no Sistema", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -330,12 +346,14 @@ public partial class App : System.Windows.Application
         services.AddScoped<IAuditLogService,  AuditLogService>();
         services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<ISaleService, SaleService>();
+        services.AddScoped<ERP.Application.Interfaces.ISalePolicyService, ERP.Application.Services.SalePolicyService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IDevolucaoService, DevolucaoService>(); 
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<ICaixaService, CaixaService>();
+        services.AddScoped<IContaBancariaService, ContaBancariaService>();
         services.AddScoped<IOrcamentoService, OrcamentoService>();
         services.AddScoped<IContaPagarService, ContaPagarService>();
         services.AddScoped<IContaReceberService, ContaReceberService>();
@@ -392,6 +410,11 @@ public partial class App : System.Windows.Application
         // em vez de usar IServiceProvider/CreateScope (que criava scope sem tenant).
         services.AddScoped<IRequestTenant, ERP.WPF.Services.WpfRequestTenant>();
         services.AddScoped<IHaverService, HaverService>();
+        services.AddScoped<IOperadoraRecebimentoService, OperadoraRecebimentoService>();
+        services.AddScoped<IRecebivelOperadoraService, RecebivelOperadoraService>();
+        services.AddScoped<IMotorFinanceiroService, MotorFinanceiroService>();
+        services.AddScoped<IExtratoFinanceiroService, ExtratoFinanceiroService>();
+        services.AddScoped<IVendaSuspensaService, VendaSuspensaService>();
         services.AddScoped<ERP.Application.Interfaces.IFidelidadeService,
                    ERP.Infrastructure.Services.FidelidadeService>();
 
@@ -439,6 +462,7 @@ public partial class App : System.Windows.Application
         services.AddTransient<OrcamentosViewModel>();
         services.AddTransient<FinanceiroViewModel>();
         services.AddTransient<ContaPagarViewModel>();
+        services.AddTransient<ContaBancariaViewModel>();
         services.AddTransient<NfeImportViewModel>();
         services.AddTransient<SpedViewModel>();
         services.AddTransient<NotasFiscaisViewModel>();
@@ -446,6 +470,12 @@ public partial class App : System.Windows.Application
         services.AddTransient<AjusteEstoqueViewModel>();
         services.AddTransient<ResumoCaixaViewModel>();
         services.AddTransient<ComprasViewModel>();
+        services.AddTransient<HistoricoComprasViewModel>();
+        services.AddTransient<HistoricoVendasViewModel>();
+        services.AddTransient<ConciliacaoBancariaViewModel>();
+        services.AddTransient<OperadoraRecebimentoViewModel>();
+        services.AddTransient<RecebivelOperadoraViewModel>();
+        services.AddTransient<ExtratoFinanceiroViewModel>();
 
         // ── Windows ───────────────────────────────────────────────────────
         services.AddTransient<MainWindow>();

@@ -31,6 +31,24 @@ public class OrcamentosViewModel : BaseViewModel
     // ─── Lista de Orçamentos ───────────────────────────────────────────
     public ObservableCollection<Orcamento> ListaOrcamentos { get; } = new();
 
+    // S17: cache do último fetch completo — filtros (busca, follow-up) são
+    // aplicados em memória sobre isso, sem reconsultar o banco a cada tecla.
+    private List<Orcamento> _todosCarregados = new();
+
+    private string _searchText = string.Empty;
+    public string SearchText
+    {
+        get => _searchText;
+        set { _searchText = value; OnPropertyChanged(nameof(SearchText)); AplicarFiltros(); }
+    }
+
+    private bool _somenteFollowUpPendente;
+    public bool SomenteFollowUpPendente
+    {
+        get => _somenteFollowUpPendente;
+        set { _somenteFollowUpPendente = value; OnPropertyChanged(nameof(SomenteFollowUpPendente)); AplicarFiltros(); }
+    }
+
     // ─── Filtro de Período (padrão: últimos 7 dias) ────────────────────
     private DateTime _dataInicial = DateTime.Today.AddDays(-7);
     public DateTime DataInicial
@@ -52,6 +70,8 @@ public class OrcamentosViewModel : BaseViewModel
     public ICommand ImprimirOrcamentoCommand { get; }
     public ICommand VisualizarOrcamentoCommand { get; }
     public ICommand EnviarWhatsAppOrcamentoCommand { get; }
+    public ICommand AgendarFollowUpCommand { get; }
+    public ICommand RegistrarContatoCommand { get; }
 
     // ─── Construtor ────────────────────────────────────────────────────
     public OrcamentosViewModel(IOrcamentoService orcamentoService, ICustomerService customerService)
@@ -60,21 +80,109 @@ public class OrcamentosViewModel : BaseViewModel
         _customerService = customerService; // Salva o serviço
         
         CarregarOrcamentosCommand = new AsyncRelayCommand(_ => CarregarListaAsync());
-        MandarParaCaixaCommand = new RelayCommand(param => CarregarNoPdv(param as Orcamento));
+        MandarParaCaixaCommand = new AsyncRelayCommand(param => CarregarNoPdv(param as Orcamento));
         ImprimirOrcamentoCommand = new RelayCommand(param => Imprimir(param as Orcamento));
         VisualizarOrcamentoCommand = new RelayCommand(param => Visualizar(param as Orcamento));
         
         // 👇 Agora é um Comando Assíncrono para dar tempo de ir no banco buscar o telefone
         EnviarWhatsAppOrcamentoCommand = new AsyncRelayCommand(param => MandarWhatsAppOrcamento(param as Orcamento));
+        AgendarFollowUpCommand = new AsyncRelayCommand(param => AgendarFollowUpAsync(param as Orcamento));
+        RegistrarContatoCommand = new AsyncRelayCommand(param => RegistrarContatoAsync(param as Orcamento));
         
         _ = CarregarListaAsync();
     }
 
-    private void CarregarNoPdv(Orcamento? orcamento)
+    private async Task CarregarNoPdv(Orcamento? orcamento)
     {
         if (orcamento == null) return;
+
+        // S17 FIX: PdvViewModel é Singleton (preserva carrinho ao trocar de
+        // tela) — seu construtor só roda UMA vez na vida do app. Setar
+        // OrcamentoPendente sozinho não bastava; ninguém verificava de novo.
+        // Agora resolve a MESMA instância singleton e chama a verificação
+        // direto, na hora.
+        var pdvViewModel = ERP.WPF.App.Services.GetRequiredService<PdvViewModel>();
         PdvViewModel.OrcamentoPendente = orcamento;
-        MessageBox.Show($"Orçamento {orcamento.Numero} carregado com sucesso!\n\nVá para a aba 'Caixa (PDV)' no menu lateral para finalizar esta venda.", "Vila Verde - Orçamentos", MessageBoxButton.OK, MessageBoxImage.Information);
+        await pdvViewModel.VerificarOrcamentoPendenteAsync();
+
+        if (System.Windows.Application.Current.MainWindow is ERP.WPF.MainWindow mw)
+            mw.NavigateTo("pdv");
+    }
+
+    private async Task AgendarFollowUpAsync(Orcamento? orcamento)
+    {
+        if (orcamento == null) return;
+
+        var dialogo = new Views.AgendarFollowUpView(orcamento.Numero, orcamento.CustomerName ?? "Consumidor Final");
+        var resultado = dialogo.ShowDialog();
+
+        if (resultado != true || !dialogo.Confirmado)
+        {
+            Serilog.Log.Information("AgendarFollowUp cancelado pelo usuário pra orçamento {Numero}", orcamento.Numero);
+            return;
+        }
+
+        try
+        {
+            using var scope = App.Services.CreateScope();
+            var service = scope.ServiceProvider.GetRequiredService<IOrcamentoService>();
+            await service.AgendarFollowUpAsync(orcamento.Id, new ERP.Application.DTOs.AgendarFollowUpDto
+            {
+                DataFollowUp = dialogo.DataFollowUpEscolhida,
+                Observacao   = dialogo.ObservacaoEscolhida
+            });
+
+            Serilog.Log.Information(
+                "Follow-up agendado com sucesso: Orçamento={Numero} Data={Data}",
+                orcamento.Numero, dialogo.DataFollowUpEscolhida);
+
+            await CarregarListaAsync();
+
+            MessageBox.Show(
+                $"Follow-up agendado para {dialogo.DataFollowUpEscolhida:dd/MM/yyyy}!",
+                "Agendado", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Error(ex, "Erro ao agendar follow-up pra orçamento {Numero}", orcamento.Numero);
+            MessageBox.Show($"Erro ao agendar follow-up: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async Task RegistrarContatoAsync(Orcamento? orcamento)
+    {
+        if (orcamento == null) return;
+
+        var dialogo = new Views.RegistrarContatoView(orcamento.Numero, orcamento.CustomerName ?? "Consumidor Final");
+        var resultado = dialogo.ShowDialog();
+
+        if (resultado != true || !dialogo.Confirmado) return;
+
+        try
+        {
+            using var scope = App.Services.CreateScope();
+            var service = scope.ServiceProvider.GetRequiredService<IOrcamentoService>();
+            await service.RegistrarContatoAsync(orcamento.Id, new ERP.Application.DTOs.RegistrarContatoDto
+            {
+                StatusFollowUp        = dialogo.StatusEscolhido,
+                ObservacaoFollowUp    = dialogo.ObservacaoEscolhida,
+                MotivoPerda           = dialogo.MotivoPerdaEscolhido,
+                ProximoFollowUpEmDias = dialogo.ProximoFollowUpEmDiasEscolhido
+            });
+
+            Serilog.Log.Information(
+                "Contato registrado: Orçamento={Numero} Resultado={Status}",
+                orcamento.Numero, dialogo.StatusEscolhido);
+
+            await CarregarListaAsync();
+
+            MessageBox.Show("Contato registrado com sucesso!", "Registrado", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Error(ex, "Erro ao registrar contato pra orçamento {Numero}", orcamento.Numero);
+            MessageBox.Show($"Erro ao registrar contato: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private async Task CarregarListaAsync()
@@ -89,20 +197,51 @@ public class OrcamentosViewModel : BaseViewModel
             todos = await service.ObterTodosAsync();
         }
 
-        var filtrados = todos
-            .Where(o => o.DataEmissao.Date >= DataInicial.Date
-                     && o.DataEmissao.Date <= DataFinal.Date)
-            .OrderByDescending(o => o.DataEmissao)
-            .ToList();
-
-        ListaOrcamentos.Clear();
-        foreach (var o in filtrados) ListaOrcamentos.Add(o);
-
-        AtualizarCartoes(filtrados);
+        _todosCarregados = todos.ToList();
+        AplicarFiltros();
     }
     catch (Exception ex) { MessageBox.Show("Erro ao buscar: " + ex.Message); }
     finally { IsBusy = false; }
 }
+
+    // S17: aplica busca + follow-up + período em memória sobre o cache já
+    // carregado — chamado toda vez que SearchText ou SomenteFollowUpPendente
+    // mudam, sem precisar ir no banco de novo.
+    private void AplicarFiltros()
+    {
+        IEnumerable<Orcamento> filtrados = _todosCarregados;
+
+        if (SomenteFollowUpPendente)
+        {
+            // Follow-up pendente pode ser de um orçamento BEM mais antigo que o
+            // período selecionado (é exatamente esses que o André quer ver) —
+            // por isso ignora DataInicial/DataFinal nesse modo.
+            filtrados = filtrados
+                .Where(o => o.StatusFollowUp == ERP.Domain.Enums.StatusFollowUp.Pendente && o.DataFollowUp.HasValue)
+                .OrderBy(o => o.DataFollowUp);
+        }
+        else
+        {
+            filtrados = filtrados
+                .Where(o => o.DataEmissao.Date >= DataInicial.Date && o.DataEmissao.Date <= DataFinal.Date)
+                .OrderByDescending(o => o.DataEmissao);
+        }
+
+        if (!string.IsNullOrWhiteSpace(SearchText))
+        {
+            var termo = SearchText.Trim();
+            filtrados = filtrados.Where(o =>
+                (o.CustomerName?.Contains(termo, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (o.Numero?.Contains(termo, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        var lista = filtrados.ToList();
+
+        ListaOrcamentos.Clear();
+        foreach (var o in lista) ListaOrcamentos.Add(o);
+
+        AtualizarCartoes(lista);
+    }
 
     private void AtualizarCartoes(IEnumerable<Orcamento> orcamentos)
     {

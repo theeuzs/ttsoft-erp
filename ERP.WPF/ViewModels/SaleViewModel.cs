@@ -20,7 +20,18 @@ public class SaleViewModel : BaseViewModel
     private readonly ICaixaService _caixaServiceFallback; 
 
     private decimal _totalRevenue;
-    public decimal TotalRevenue { get => _totalRevenue; set { _totalRevenue = value; OnPropertyChanged(nameof(TotalRevenue)); } }
+    public decimal TotalRevenue { get => _totalRevenue; set { _totalRevenue = value; OnPropertyChanged(nameof(TotalRevenue)); OnPropertyChanged(nameof(FaturamentoExibicao)); } }
+
+    // S17: faturamento escondido por padrão — tela fica visível no balcão,
+    // cliente não precisa ver o total faturado. Clique no olho pra revelar.
+    private bool _faturamentoVisivel = false;
+    public bool FaturamentoVisivel
+    {
+        get => _faturamentoVisivel;
+        set { _faturamentoVisivel = value; OnPropertyChanged(nameof(FaturamentoVisivel)); OnPropertyChanged(nameof(FaturamentoExibicao)); }
+    }
+
+    public string FaturamentoExibicao => FaturamentoVisivel ? TotalRevenue.ToString("C2") : "R$ ***";
 
     private int _totalSalesCount;
     public int TotalSalesCount { get => _totalSalesCount; set { _totalSalesCount = value; OnPropertyChanged(nameof(TotalSalesCount)); } }
@@ -48,6 +59,7 @@ public class SaleViewModel : BaseViewModel
     public ICommand CancelarVendaCommand   { get; }
     public ICommand DevolverItensCommand   { get; }
     public ICommand EnviarWhatsAppCommand  { get; }
+    public ICommand AlternarFaturamentoCommand { get; }
 
     public SaleViewModel(ISaleService saleService, ICaixaService caixaService)
     {
@@ -63,6 +75,7 @@ public class SaleViewModel : BaseViewModel
         CancelarVendaCommand    = new AsyncRelayCommand(async v => await CancelarVendaAsync(v as SaleDto));
         DevolverItensCommand    = new AsyncRelayCommand(async v => await AbrirDevolucaoAsync(v as SaleDto));
         EnviarWhatsAppCommand   = new AsyncRelayCommand(async v => await MandarWhatsApp(v as SaleDto));
+        AlternarFaturamentoCommand = new RelayCommand(_ => FaturamentoVisivel = !FaturamentoVisivel);
 
         _ = LoadSalesAsync();
     }
@@ -139,6 +152,12 @@ public class SaleViewModel : BaseViewModel
 
         try
         {
+            // S17 FIX cancelamento: trava de segurança PRIMEIRO, antes de tocar em
+            // qualquer coisa (estoque, status, financeiro). Se a venda tiver um
+            // recebível de cartão já liquidado, aborta aqui — nada foi alterado.
+            var motorFinanceiro = ERP.WPF.App.Services.GetRequiredService<IMotorFinanceiroService>();
+            await motorFinanceiro.VerificarPodeCancelarVendaAsync(venda.Id);
+
             var detalhes = await ExecuteWithFreshSaleServiceAsync(s => s.GetDetailAsync(venda.Id));
             await ExecuteWithFreshSaleServiceAsync(s => s.CancelAsync(venda.Id, "Cancelado pelo usuário no Histórico"));
 
@@ -163,27 +182,19 @@ public class SaleViewModel : BaseViewModel
 
                 Guid usuarioId = ERP.WPF.State.AppSession.UserId;
 
-                foreach (var pag in pagamentos)
-                {
-                    if (pag.Amount > 0 && Enum.TryParse<PaymentMethod>(pag.PaymentMethod.ToString(), out var formaPag))
-                    {
-                        if (formaPag == PaymentMethod.APrazo) continue;
+                // S17 FIX: antes, esse loop tratava toda forma de pagamento como
+                // Sangria de Caixa (inclusive PIX e Cartão) — nunca revertia o que
+                // o Motor Financeiro tinha criado em Conta Bancária/Recebível, e
+                // ainda quebrava com erro de saldo insuficiente pra formas que
+                // nunca deveriam ter sido tratadas como dinheiro físico. Agora o
+                // Motor Financeiro decide o que fazer com cada forma, igual já
+                // faz na hora de criar.
+                var pagamentosTuple = pagamentos
+                    .Where(p => p.Amount > 0 && Enum.TryParse<PaymentMethod>(p.PaymentMethod.ToString(), out _))
+                    .Select(p => (Enum.Parse<PaymentMethod>(p.PaymentMethod.ToString()), p.Amount));
 
-                        decimal valorEstornar = pag.Amount;
-                        if (formaPag == PaymentMethod.Dinheiro && troco > 0)
-                        {
-                            valorEstornar -= troco;
-                            troco = 0;
-                        }
-
-                        if (valorEstornar > 0)
-                        {
-                            await ExecuteWithFreshCaixaServiceAsync(c => c.RegistrarMovimentoAsync(
-                                usuarioId, valorEstornar, $"ESTORNO VENDA {venda.SaleNumber}",
-                                formaPag, TipoMovimentoCaixa.Sangria));
-                        }
-                    }
-                }
+                await motorFinanceiro.EstornarVendaAsync(
+                    venda.Id, usuarioId, $"ESTORNO VENDA {venda.SaleNumber}", troco, pagamentosTuple);
             }
 
             MessageBox.Show("Venda cancelada com sucesso! O estoque foi restaurado e o caixa atualizado.", "Sucesso", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -401,7 +412,8 @@ public class SaleViewModel : BaseViewModel
             }
 
             string nomeCliente = detalhe.CustomerName ?? "Consumidor Final";
-            var vm   = new DevolucaoViewModel(venda, detalhe, detalhe.CustomerId, nomeCliente, jaDevolvidos);
+            var customerService = scope.ServiceProvider.GetRequiredService<ICustomerService>();
+            var vm   = new DevolucaoViewModel(venda, detalhe, detalhe.CustomerId, nomeCliente, customerService, jaDevolvidos);
             var view = new Views.DevolucaoView(vm);
 
             vm.OnDevolucaoConcluida += resultado =>

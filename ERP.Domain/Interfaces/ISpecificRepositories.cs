@@ -33,6 +33,12 @@ public interface ISaleRepository : IRepository<Sale>
     Task<IEnumerable<(Guid ProductId, string Name, decimal Quantity)>> GetTopProductsAsync(int count, DateTime from, DateTime to);
     // Uma busca otimizada só para relatórios
     Task<IEnumerable<Sale>> GetSalesByPeriodAsync(DateTime startDate, DateTime endDate);
+
+    /// <summary>
+    /// Todo item de venda já lançado para um produto específico, com a venda
+    /// (cliente, data, número) incluída — histórico de vendas por produto.
+    /// </summary>
+    Task<IEnumerable<SaleItem>> GetHistoricoVendasPorProdutoAsync(Guid productId);
 }
 
 public interface ICategoryRepository : IRepository<Category>

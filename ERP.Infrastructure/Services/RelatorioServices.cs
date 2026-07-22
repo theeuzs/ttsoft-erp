@@ -166,30 +166,36 @@ public class MargemService : IMargemService
 // ═══════════════════════════════════════════════════════════════════════════════
 public class FluxoCaixaService : IFluxoCaixaService
 {
-    private readonly IServiceProvider _sp;
-    public FluxoCaixaService(IServiceProvider sp) => _sp = sp;
+    private readonly AppDbContext            _ctx;
+    private readonly IContaBancariaService   _contaBancariaService;
+
+    // S17 FIX: migrado de IServiceProvider + CreateScope() (Service Locator a
+    // nível de service) pra injeção via construtor — Parte 0 do roadmap,
+    // aproveitando que já estou tocando este arquivo pra outra coisa.
+    public FluxoCaixaService(AppDbContext ctx, IContaBancariaService contaBancariaService)
+    {
+        _ctx                  = ctx;
+        _contaBancariaService = contaBancariaService;
+    }
 
     public async Task<FluxoCaixaResultadoDto> ObterAsync(DateTime dataInicio, DateTime dataFim, CancellationToken ct = default)
     {
-        using var scope = _sp.CreateScope();
-        var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
         var dataFimAjustada = dataFim.Date.AddDays(1).AddTicks(-1);
 
-        var entradas = await ctx.ContasReceber.AsNoTracking()
+        var entradas = await _ctx.ContasReceber.AsNoTracking()
             .Include(c => c.Customer)
             .Where(c => c.DataVencimento >= dataInicio.Date
                      && c.DataVencimento <= dataFimAjustada
                      && c.Status == "Pendente")
             .OrderBy(c => c.DataVencimento)
-            .ToListAsync();
+            .ToListAsync(ct);
 
-        var saidas = await ctx.ContasPagar.AsNoTracking()
+        var saidas = await _ctx.ContasPagar.AsNoTracking()
             .Where(c => c.DataVencimento >= dataInicio.Date
                      && c.DataVencimento <= dataFimAjustada
                      && c.Status == "Pendente")
             .OrderBy(c => c.DataVencimento)
-            .ToListAsync();
+            .ToListAsync(ct);
 
         var lancamentos = new List<FluxoLancamentoDto>();
 
@@ -206,7 +212,16 @@ public class FluxoCaixaService : IFluxoCaixaService
 
         lancamentos.Sort((a, b) => a.Data.CompareTo(b.Data));
 
-        return new FluxoCaixaResultadoDto(lancamentos, entradas.Sum(e => e.ValorTotal - e.ValorRecebido), saidas.Sum(s => s.Valor));
+        // S17 FIX: saldo consolidado real (Caixa + Contas Bancárias) como ponto de
+        // partida — sem isso, o "saldo projetado" era só entradas-menos-saídas do
+        // período, não "quanto dinheiro eu vou ter", que é a pergunta de verdade.
+        var posicao = await _contaBancariaService.ObterPosicaoFinanceiraAsync();
+
+        return new FluxoCaixaResultadoDto(
+            lancamentos,
+            entradas.Sum(e => e.ValorTotal - e.ValorRecebido),
+            saidas.Sum(s => s.Valor),
+            posicao.SaldoConsolidado);
     }
 }
 

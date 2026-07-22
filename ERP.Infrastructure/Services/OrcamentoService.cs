@@ -34,10 +34,19 @@ public class OrcamentoService : IOrcamentoService
             SellerName = dto.SellerName, 
             
             // 👇 1. Vinculando o Orçamento ao ID do usuário logado!
-            UsuarioId = dto.UsuarioId 
+            UsuarioId = dto.UsuarioId,
+
+            // S17: campos novos — antes não existiam na tela nenhuma
+            Observacao = dto.Observacao
             
             // ❌ Tiramos o ValorTotal daqui! O backend vai calcular sozinho.
         };
+
+        if (dto.AgendarFollowUp && dto.DataFollowUp.HasValue)
+        {
+            orcamento.DataFollowUp = dto.DataFollowUp;
+            orcamento.StatusFollowUp = StatusFollowUp.Pendente;
+        }
 
         foreach (var item in dto.Itens)
         {
@@ -55,6 +64,11 @@ public class OrcamentoService : IOrcamentoService
 
         // 👇 2. O BACKEND NO CONTROLE: Calcula o total blindado contra erros da tela!
         orcamento.RecalcularTotal();
+
+        // S17: RecalcularTotal() sempre setava 7 dias fixo — sobrescreve se o
+        // usuário escolheu outra validade na tela.
+        if (dto.ValidadeDias > 0)
+            orcamento.DataValidade = DateTime.Now.AddDays(dto.ValidadeDias);
 
         await _uow.Orcamentos.AddAsync(orcamento);
         await _uow.CommitAsync();
@@ -116,6 +130,12 @@ public class OrcamentoService : IOrcamentoService
         orc.ObservacaoFollowUp = dto.Observacao;
         orc.UpdatedAt          = DateTime.UtcNow;
 
+        // S17 FIX: AppDbContext está configurado com QueryTrackingBehavior.NoTracking
+        // GLOBAL (App.xaml.cs) — toda consulta vem "solta", sem rastreio. Sem chamar
+        // Update() explicitamente, SaveChangesAsync não tinha NADA marcado como
+        // modificado e rodava "com sucesso" sem gravar nada no banco — exatamente o
+        // bug real: agendar follow-up mostrava sucesso mas nunca persistia.
+        _ctx.Orcamentos.Update(orc);
         await _ctx.SaveChangesAsync();
     }
 
@@ -145,6 +165,9 @@ public class OrcamentoService : IOrcamentoService
             orc.StatusFollowUp = StatusFollowUp.Pendente;
         }
 
+        // S17 FIX: mesmo bug do AgendarFollowUpAsync — sem esse Update() explícito,
+        // nada era realmente persistido (tracking global desligado no projeto).
+        _ctx.Orcamentos.Update(orc);
         await _ctx.SaveChangesAsync();
     }
 

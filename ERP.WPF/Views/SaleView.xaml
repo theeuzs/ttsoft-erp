@@ -110,7 +110,16 @@
                     Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=report.financial}">
                 <StackPanel>
                     <TextBlock Text="Faturamento Válido do Período" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}"/>
-                    <TextBlock Text="{Binding TotalRevenue, StringFormat='R$ {0:N2}'}" FontSize="28" FontWeight="Black" Foreground="{StaticResource SuccessGreen}" Margin="0,8,0,0"/>
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding FaturamentoExibicao}" FontSize="28" FontWeight="Black" Foreground="{StaticResource SuccessGreen}"/>
+                        <Button Grid.Column="1" Content="👁" Command="{Binding AlternarFaturamentoCommand}"
+                                Background="Transparent" BorderThickness="0" FontSize="18" Cursor="Hand"
+                                VerticalAlignment="Center" ToolTip="Mostrar/ocultar faturamento"/>
+                    </Grid>
                 </StackPanel>
             </Border>
 
@@ -198,7 +207,7 @@
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
-                    <DataGridTemplateColumn Header="AÇÕES" Width="Auto" MinWidth="480">
+                    <DataGridTemplateColumn Header="AÇÕES" Width="Auto" MinWidth="330">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
@@ -216,26 +225,42 @@
                                         <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></Button.Resources>
                                     </Button>
 
-                                    <Button Content="💬 WhatsApp" 
-                                            Command="{Binding DataContext.EnviarWhatsAppCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                            CommandParameter="{Binding}"
-                                            Background="#25D366" Foreground="White" FontWeight="Bold" BorderThickness="0" Padding="8,4" Margin="0,0,5,0" Cursor="Hand">
-                                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></Button.Resources>
-                                    </Button>
-
-                                    <Button Content="↩ Devolver" 
-                                            Command="{Binding DataContext.DevolverItensCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                            CommandParameter="{Binding}"
-                                            Background="#F59E0B" Foreground="White" BorderThickness="0" Padding="8,4" Margin="0,0,5,0" Cursor="Hand">
-                                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></Button.Resources>
-                                    </Button>
-
                                     <Button Content="❌ Cancelar" 
                                             Command="{Binding DataContext.CancelarVendaCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                             CommandParameter="{Binding}"
-                                            Background="#EF4444" Foreground="White" BorderThickness="0" Padding="8,4" Cursor="Hand">
+                                            Background="#EF4444" Foreground="White" BorderThickness="0" Padding="8,4" Margin="0,0,5,0" Cursor="Hand">
                                         <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></Button.Resources>
                                     </Button>
+
+                                    <!-- S17: WhatsApp e Devolver mudaram pra cá, dentro do menu de
+                                         "mais ações" — com o botão de NFC-e/NF-e que vem depois,
+                                         a linha ficaria grande demais em monitor pequeno. -->
+                                    <ToggleButton x:Name="BtnMaisAcoes" Content="•••" Width="36"
+                                                  Background="{DynamicResource CardBgAlt}" Foreground="{DynamicResource TextDark}"
+                                                  BorderThickness="1" BorderBrush="{DynamicResource BordaInput}" Cursor="Hand">
+                                        <ToggleButton.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></ToggleButton.Resources>
+                                    </ToggleButton>
+
+                                    <Popup PlacementTarget="{Binding ElementName=BtnMaisAcoes}"
+                                           IsOpen="{Binding IsChecked, ElementName=BtnMaisAcoes}"
+                                           StaysOpen="False" Placement="Bottom" AllowsTransparency="True">
+                                        <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BordaInput}" BorderThickness="1"
+                                                CornerRadius="6" Padding="6">
+                                            <Border.Effect>
+                                                <DropShadowEffect BlurRadius="10" Opacity="0.15" ShadowDepth="2"/>
+                                            </Border.Effect>
+                                            <StackPanel Width="160">
+                                                <Button Content="💬 WhatsApp" HorizontalContentAlignment="Left"
+                                                        Command="{Binding DataContext.EnviarWhatsAppCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        Background="Transparent" Foreground="{DynamicResource TextDark}" BorderThickness="0" Padding="8,6" Cursor="Hand"/>
+                                                <Button Content="↩ Devolver Itens" HorizontalContentAlignment="Left"
+                                                        Command="{Binding DataContext.DevolverItensCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        Background="Transparent" Foreground="{DynamicResource TextDark}" BorderThickness="0" Padding="8,6" Cursor="Hand"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Popup>
                                 </StackPanel>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>

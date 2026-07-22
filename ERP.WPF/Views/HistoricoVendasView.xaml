@@ -1,0 +1,129 @@
+<UserControl x:Class="ERP.WPF.Views.HistoricoVendasView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource CardBgAlt}">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="HISTÓRICO DE VENDAS POR PRODUTO" FontSize="24" FontWeight="Bold"
+                   Foreground="{DynamicResource TextDark}" Margin="0,0,0,20"/>
+
+        <!-- Busca de produto -->
+        <Grid Grid.Row="1" Margin="0,0,0,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="400"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="120"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
+                <TextBox Text="{Binding BuscaProduto, UpdateSourceTrigger=PropertyChanged}"
+                         Height="38" Padding="10,0" VerticalContentAlignment="Center"
+                         BorderBrush="{DynamicResource BordaInput}"/>
+                <TextBlock IsHitTestVisible="False" Text="Buscar produto por nome ou código de barras..."
+                           Foreground="{DynamicResource TextMuted}" FontSize="12"
+                           Margin="12,0" VerticalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding BuscaProduto}" Value="">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <ListBox ItemsSource="{Binding ProdutosSugestao}" SelectedItem="{Binding ProdutoSelecionado}"
+                         MaxHeight="200" Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BordaInput}"
+                         Margin="0,38,0,0" Panel.ZIndex="99" VerticalAlignment="Top" DisplayMemberPath="Name">
+                    <ListBox.Style>
+                        <Style TargetType="ListBox">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ProdutosSugestao.Count}" Value="0">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListBox.Style>
+                </ListBox>
+            </Grid>
+
+            <Button Grid.Column="2" Content="LIMPAR" Command="{Binding LimparBuscaCommand}"
+                    Background="{DynamicResource CardBgAlt}" Foreground="{DynamicResource TextMuted}"
+                    BorderBrush="{DynamicResource BordaInput}" Height="38" Cursor="Hand"/>
+        </Grid>
+
+        <!-- Resumo do produto selecionado -->
+        <Grid Grid.Row="2" Margin="0,0,0,10"
+              Visibility="{Binding TemProdutoSelecionado, Converter={StaticResource BoolToVisibility}}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="20"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="20"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Background="{DynamicResource CardBg}" Padding="15" CornerRadius="8">
+                <StackPanel>
+                    <TextBlock Text="{Binding ProdutoSelecionado.Name}" FontSize="13" FontWeight="Bold" TextWrapping="Wrap"/>
+                    <TextBlock Text="PRODUTO SELECIONADO" FontSize="10" Opacity="0.6" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2" Background="{DynamicResource CardBg}" Padding="15" CornerRadius="8">
+                <StackPanel>
+                    <TextBlock Text="QUANTIDADE JÁ VENDIDA" FontSize="11" FontWeight="SemiBold" Opacity="0.7"/>
+                    <TextBlock Text="{Binding QuantidadeTotalVendida}" FontSize="20" FontWeight="Bold" Foreground="#3B82F6"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="4" Background="{DynamicResource CardBg}" Padding="15" CornerRadius="8">
+                <StackPanel>
+                    <TextBlock Text="FATURAMENTO GERADO" FontSize="11" FontWeight="SemiBold" Opacity="0.7"/>
+                    <TextBlock Text="{Binding TotalVendido, StringFormat=C2}" FontSize="20" FontWeight="Bold" Foreground="#22C55E"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <TextBlock Grid.Row="3" Text="Os totais acima não contam vendas Canceladas — elas aparecem na tabela, mas não entram na conta."
+                   Foreground="{DynamicResource TextMuted}" FontSize="11" FontStyle="Italic" Margin="0,0,0,14"
+                   Visibility="{Binding TemProdutoSelecionado, Converter={StaticResource BoolToVisibility}}"/>
+
+        <!-- Histórico -->
+        <DataGrid Grid.Row="4" ItemsSource="{Binding Historico}" AutoGenerateColumns="False" IsReadOnly="True"
+                  Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BordaCard}"
+                  GridLinesVisibility="Horizontal" RowHeight="38">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Data" Binding="{Binding DataVenda, StringFormat='dd/MM/yyyy HH:mm'}" Width="140"/>
+                <DataGridTextColumn Header="Venda" Binding="{Binding NumeroVenda}" Width="110"/>
+                <DataGridTextColumn Header="Cliente" Binding="{Binding ClienteNome}" Width="*"/>
+                <DataGridTextColumn Header="Quantidade" Binding="{Binding Quantidade}" Width="100"/>
+                <DataGridTextColumn Header="Preço Unit." Binding="{Binding PrecoUnitario, StringFormat=C2}" Width="110"/>
+                <DataGridTextColumn Header="Total" Binding="{Binding Total, StringFormat=C2}" Width="110"/>
+                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="110">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="VerticalAlignment" Value="Center"/>
+                            <Setter Property="FontWeight" Value="Bold"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Status}" Value="Cancelada">
+                                    <Setter Property="Foreground" Value="#DC2626"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</UserControl>
