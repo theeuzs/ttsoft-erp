@@ -17,6 +17,16 @@ public interface IOrderSyncRepository
     // ── SalesChannel ────────────────────────────────────────────────
     Task<IReadOnlyList<SalesChannel>> GetCanaisAtivosAsync();
     Task<SalesChannel?> GetCanalByIdAsync(Guid id);
+
+    /// <summary>
+    /// Mesma busca por Id, mas ignorando o filtro de tenant — uso restrito ao
+    /// callback do OAuth (/ml/callback), que é [AllowAnonymous] de propósito
+    /// (o Mercado Livre não devolve nosso JWT). Não existe tenant nesse momento
+    /// pra aplicar o filtro normal. NUNCA usar isso num contexto autenticado —
+    /// lá o GetCanalByIdAsync comum é o certo, senão um admin de um tenant
+    /// poderia manipular o SalesChannel de outro só sabendo o Guid.
+    /// </summary>
+    Task<SalesChannel?> GetCanalPorIdSemFiltroAsync(Guid id);
     /// <summary>Resolve o canal pelo user_id/shop_id do marketplace — é assim que o
     /// tenant é identificado a partir do payload do webhook, não pela URL.</summary>
     Task<SalesChannel?> GetCanalPorContaExternaAsync(SalesChannelType tipo, string externalAccountId);

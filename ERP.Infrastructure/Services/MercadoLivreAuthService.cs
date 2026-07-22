@@ -46,7 +46,10 @@ public class MercadoLivreAuthService : IMercadoLivreAuthService
 
     public async Task<(bool Sucesso, string Mensagem)> TrocarCodigoPorTokenAsync(string code, Guid salesChannelId)
     {
-        var canal = await _uow.OrderSync.GetCanalByIdAsync(salesChannelId);
+        // GetCanalPorIdSemFiltroAsync, não GetCanalByIdAsync: este método roda a partir do
+        // callback [AllowAnonymous] — não existe tenant no contexto ainda pra aplicar o
+        // filtro normal (ver comentário na interface do repositório).
+        var canal = await _uow.OrderSync.GetCanalPorIdSemFiltroAsync(salesChannelId);
         if (canal is null) return (false, $"SalesChannel {salesChannelId} não encontrado.");
 
         var body = new Dictionary<string, string>
