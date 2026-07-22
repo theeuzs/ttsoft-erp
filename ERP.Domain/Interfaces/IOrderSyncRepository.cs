@@ -27,9 +27,6 @@ public interface IOrderSyncRepository
     /// poderia manipular o SalesChannel de outro só sabendo o Guid.
     /// </summary>
     Task<SalesChannel?> GetCanalPorIdSemFiltroAsync(Guid id);
-
-    /// <summary>DIAGNÓSTICO TEMPORÁRIO — remover depois de resolver o bug do callback OAuth.</summary>
-    Task<string> DiagnosticoConexaoESalesChannelsAsync();
     /// <summary>Resolve o canal pelo user_id/shop_id do marketplace — é assim que o
     /// tenant é identificado a partir do payload do webhook, não pela URL.</summary>
     Task<SalesChannel?> GetCanalPorContaExternaAsync(SalesChannelType tipo, string externalAccountId);

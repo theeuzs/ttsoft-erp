@@ -21,18 +21,6 @@ public class OrderSyncRepository : IOrderSyncRepository
     public async Task<SalesChannel?> GetCanalPorIdSemFiltroAsync(Guid id)
         => await _ctx.SalesChannels.IgnoreQueryFilters().AsTracking().FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted);
 
-    public async Task<string> DiagnosticoConexaoESalesChannelsAsync()
-    {
-        var conn = _ctx.Database.GetDbConnection();
-        var todos = await _ctx.SalesChannels.IgnoreQueryFilters().AsNoTracking()
-            .Select(c => new { c.Id, c.TenantId, c.IsDeleted, c.Nome })
-            .ToListAsync();
-
-        var linhas = todos.Select(c => $"[{c.Id} / Tenant={c.TenantId} / IsDeleted={c.IsDeleted} / {c.Nome}]");
-        return $"Server={conn.DataSource} Database={conn.Database} " +
-               $"TotalSalesChannels={todos.Count} Linhas=({string.Join(" | ", linhas)})";
-    }
-
     // ⚠️ ÚNICA exceção ao isolamento de tenant em todo o módulo de marketplace.
     // No momento do webhook não existe JWT/tenant ainda — é isso que estamos
     // descobrindo. Só é seguro porque quem chama este método (MarketplaceController)
