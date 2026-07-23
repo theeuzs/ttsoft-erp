@@ -77,29 +77,13 @@ public class MarketplaceController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> WebhookML()
     {
-        // ── 1. Ler body raw para validação de assinatura ──────────────────────
+        // ── 1. Ler body raw ────────────────────────────────────────────────────
         Request.EnableBuffering();
         using var reader = new StreamReader(Request.Body, leaveOpen: true);
         var rawBody      = await reader.ReadToEndAsync();
         Request.Body.Position = 0;
 
-        // ── 2. Validar assinatura + replay protection ─────────────────────────
-        var xSignature   = Request.Headers["x-signature"].FirstOrDefault();
-        var clientSecret = _config["Marketplace:ML:ClientSecret"] ?? "";
-
-        if (!WebhookSignatureValidator.ValidateML(xSignature, rawBody, clientSecret))
-        {
-            // DIAGNÓSTICO TEMPORÁRIO — remover depois de confirmar o formato real do ML.
-            var todosHeaders = string.Join(" | ", Request.Headers.Select(h => $"{h.Key}={h.Value}"));
-            Log.Warning(
-                "ML webhook: assinatura inválida, ausente ou replay detectado. " +
-                "x-signature={XSig} BodyLen={Len} BodyPreview={Preview} TodosHeaders=({Headers})",
-                xSignature ?? "(ausente)", rawBody.Length,
-                rawBody.Length > 200 ? rawBody[..200] : rawBody, todosHeaders);
-            return Ok(); // Retorna 200 para ML não retentar — mas não processa
-        }
-
-        // ── 3. Deserializar (só depois da assinatura validada) ────────────────
+        // ── 2. Deserializar ────────────────────────────────────────────────────
         MLWebhookDto? dto;
         try
         {
@@ -112,9 +96,28 @@ public class MarketplaceController : ControllerBase
             return BadRequest("Payload ML inválido.");
         }
 
-        if (dto is null || dto.Topic != "orders") return Ok(); // outros tópicos: ignorados por enquanto
+        if (dto is null) return BadRequest();
 
-        // ── 4. Resolver a loja pelo user_id — SÓ APÓS a assinatura validada ────
+        // ── 3. Checagem estrutural — Mercado Livre NÃO assina esse tipo de webhook ──
+        // Confirmado empiricamente (log de diagnóstico): nenhum x-signature/HMAC chega
+        // aqui, diferente do webhook de pagamento da Mercado Pago (produto diferente,
+        // documentação diferente). WebhookSignatureValidator.ValidateML foi construído
+        // pro esquema errado — não se aplica a este endpoint. A autenticidade de
+        // verdade vem de outro lugar: application_id bate com o nosso app, e o
+        // conteúdo do pedido só é confiado depois de buscá-lo de novo via API
+        // autenticada (BuscarPedidoPorIdAsync, com nosso próprio access_token) —
+        // nunca confiamos direto no corpo deste POST pra dado sensível.
+        var meuClientId = _config["Marketplace:ML:ClientId"] ?? "";
+        if (!string.IsNullOrEmpty(meuClientId) && dto.ApplicationId?.ToString() != meuClientId)
+        {
+            Log.Warning("ML webhook: application_id {AppId} não bate com o app configurado.", dto.ApplicationId);
+            return Ok();
+        }
+
+        // "orders_v2" é o nome real do tópico — "orders" (sem sufixo) nunca existiu no payload.
+        if (dto.Topic != "orders_v2") return Ok(); // outros tópicos: ignorados por enquanto
+
+        // ── 4. Resolver a loja pelo user_id ──────────────────────────────────────
         var canal = await _uow.OrderSync.GetCanalPorContaExternaAsync(SalesChannelType.MercadoLivre, dto.UserId.ToString());
         if (canal is null)
         {
@@ -243,5 +246,5 @@ public record MLWebhookDto(
     string Resource,
     long Sent,
     long Received,
-    [property: System.Text.Json.Serialization.JsonPropertyName("application_id")] string? ApplicationId,
+    [property: System.Text.Json.Serialization.JsonPropertyName("application_id")] long? ApplicationId,
     [property: System.Text.Json.Serialization.JsonPropertyName("user_id")] long UserId);
