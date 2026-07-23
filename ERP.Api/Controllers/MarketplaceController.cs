@@ -89,7 +89,13 @@ public class MarketplaceController : ControllerBase
 
         if (!WebhookSignatureValidator.ValidateML(xSignature, rawBody, clientSecret))
         {
-            Log.Warning("ML webhook: assinatura inválida, ausente ou replay detectado.");
+            // DIAGNÓSTICO TEMPORÁRIO — remover depois de confirmar o formato real do ML.
+            var todosHeaders = string.Join(" | ", Request.Headers.Select(h => $"{h.Key}={h.Value}"));
+            Log.Warning(
+                "ML webhook: assinatura inválida, ausente ou replay detectado. " +
+                "x-signature={XSig} BodyLen={Len} BodyPreview={Preview} TodosHeaders=({Headers})",
+                xSignature ?? "(ausente)", rawBody.Length,
+                rawBody.Length > 200 ? rawBody[..200] : rawBody, todosHeaders);
             return Ok(); // Retorna 200 para ML não retentar — mas não processa
         }
 
