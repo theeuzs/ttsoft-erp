@@ -5,6 +5,7 @@ using ERP.Domain.Interfaces;
 using ERP.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ERP.Persistence.Context;
 using Serilog;
 
 namespace ERP.Api.Controllers;
@@ -125,7 +126,7 @@ public class MarketplaceController : ControllerBase
             return Ok(); // 200 pro ML não retentar — não é erro dele, é loja não conectada aqui
         }
 
-        _tenant.TenantId = canal.TenantId; // necessário pro HasQueryFilter funcionar no resto do request
+        AppDbContext.SetQueryTenantId(canal.TenantId);
 
         // dto.Resource vem como "/orders/2195828494" — o id é o último segmento.
         var externalOrderId = dto.Resource.TrimEnd('/').Split('/').LastOrDefault();
