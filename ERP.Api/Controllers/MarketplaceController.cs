@@ -244,7 +244,7 @@ public class MarketplaceController : ControllerBase
 public record MLWebhookDto(
     string Topic,
     string Resource,
-    long Sent,
-    long Received,
+    string? Sent,
+    string? Received,
     [property: System.Text.Json.Serialization.JsonPropertyName("application_id")] long? ApplicationId,
     [property: System.Text.Json.Serialization.JsonPropertyName("user_id")] long UserId);
