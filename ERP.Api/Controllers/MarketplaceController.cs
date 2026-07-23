@@ -211,6 +211,8 @@ public class MarketplaceController : ControllerBase
         var canaisML = await _uow.OrderSync.GetCanaisAtivosAsync();
         return Ok(new
         {
+            // DIAGNÓSTICO TEMPORÁRIO — remover depois de resolver a oscilação de connection string.
+            BancoConectadoAgora = _uow.OrderSync.NomeDoBancoConectado(),
             MercadoLivre = new
             {
                 // "Configurado" aqui é só o client_id/secret do app (parceiro) — não é
