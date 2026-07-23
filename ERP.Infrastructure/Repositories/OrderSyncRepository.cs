@@ -40,6 +40,7 @@ public class OrderSyncRepository : IOrderSyncRepository
     public async Task<ExternalOrder?> GetExternalOrderAsync(Guid salesChannelId, string externalOrderId)
         => await _ctx.ExternalOrders
             .Include(o => o.Itens)
+            .AsTracking()
             .FirstOrDefaultAsync(o => o.SalesChannelId == salesChannelId && o.ExternalOrderId == externalOrderId);
 
     public async Task AddExternalOrderAsync(ExternalOrder pedido)

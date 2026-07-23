@@ -96,7 +96,22 @@ public class OrderProcessingService : IOrderProcessingService
     private async Task ProcessarPedidoAsync(SalesChannel canal, ExternalOrderDto pedidoDto, ProcessingSession? sessao)
     {
         var existente = await _uow.OrderSync.GetExternalOrderAsync(canal.Id, pedidoDto.ExternalOrderId);
-        if (existente != null) return; // já ingerido — o índice único protege contra duplicata mesmo se essa checagem falhar
+        if (existente != null)
+        {
+            // Já ingerido — só há trabalho a fazer se ele ficou preso num estado
+            // não-terminal (ex: SkuMapping foi cadastrado depois do conflito, e um
+            // novo webhook/retry chegou pro mesmo pedido). Pedido já concluído com
+            // sucesso ou cancelado não deve ser retocado.
+            if (existente.InternalStatus is ExternalOrderStatus.VendaGerada or ExternalOrderStatus.Cancelado)
+                return;
+
+            await RegistrarEventoAsync(existente, OrderEventType.PedidoRecebido,
+                "Novo webhook pro mesmo pedido — retomando processamento pendente.");
+            if (!await ResolverSkuAsync(existente, canal.Id)) return;
+            if (!await ReservarEstoqueAsync(existente)) return;
+            await GerarVendaInternaAsync(existente, canal);
+            return;
+        }
 
         var pedido = new ExternalOrder
         {
