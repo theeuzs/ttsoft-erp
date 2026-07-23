@@ -92,10 +92,12 @@ public class OrderSyncRepository : IOrderSyncRepository
     /// </summary>
     public async Task<Customer> CriarClienteRepasseAsync(SalesChannel canal)
     {
+        // Document precisa caber em nvarchar(18) — usa o valor numérico do enum
+        // (1 ou 2 dígitos), não o nome por extenso ("MERCADOLIVRE" já estoura sozinho).
         var cliente = new Customer
         {
             Name     = $"{canal.Tipo} — Repasse ({canal.Nome})",
-            Document = $"MKT-{canal.Tipo.ToString().ToUpperInvariant()}-{canal.Id.ToString()[..8]}",
+            Document = $"MKT{(int)canal.Tipo}-{canal.Id.ToString()[..8]}",
         };
         await _ctx.Customers.AddAsync(cliente);
         await _ctx.SaveChangesAsync(); // precisa do Id gerado antes de linkar no SalesChannel

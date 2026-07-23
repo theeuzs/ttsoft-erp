@@ -216,47 +216,63 @@ public class OrderProcessingService : IOrderProcessingService
     // ── Passo 4: gerar Sale interna + Conta a Receber de repasse ────
     private async Task GerarVendaInternaAsync(ExternalOrder pedido, SalesChannel canal)
     {
-        if (canal.UsuarioIntegracaoId is null)
-            throw new InvalidOperationException(
-                $"SalesChannel '{canal.Nome}' não tem UsuarioIntegracaoId configurado — " +
-                "não dá pra gerar venda automática sem um usuário responsável.");
+        Guid vendaId;
+        string? saleNumber = null;
 
-        var dto = new CreateSaleDto
+        if (pedido.VendaId is not null)
         {
-            UsuarioId  = canal.UsuarioIntegracaoId.Value,
-            Origem     = SaleOrigin.Marketplace,
-            Notes      = $"Pedido {canal.Tipo} #{pedido.ExternalOrderId}",
-            Items      = pedido.Itens.Select(i => new CreateSaleItemDto
-            {
-                ProductId = i.ProductId!.Value,
-                Quantity  = i.Quantidade,
-                UnitPrice = i.ValorUnitario // best-effort — SaleService recalcula pelo preço local (ver nota abaixo)
-            }).ToList(),
-            // PaymentMethod aqui é só rótulo informativo do Sale/SalePayment (relatórios) —
-            // não dispara nenhum movimento financeiro por si só. O financeiro real do
-            // repasse é o ContaReceber logo abaixo, não isso.
-            Payments = new List<CreateSalePaymentDto>
-            {
-                new() { PaymentMethod = PaymentMethod.APrazo, Amount = pedido.ValorTotal }
-            }
-        };
-
-        var saleDto = await _saleService.CreateAsync(dto);
-
-        pedido.VendaId = saleDto.Id;
-        pedido.InternalStatus = ExternalOrderStatus.VendaGerada;
-        await _uow.OrderSync.SalvarAsync();
-
-        // Confirma as reservas sombra desse pedido — a baixa real já aconteceu
-        // dentro de CreateAsync, então a reserva sai de "comprometido, ainda
-        // não vendido" pra "já virou venda de verdade".
-        var reservas = await _uow.OrderSync.GetReservasAtivasPorPedidoAsync(pedido.Id);
-        foreach (var reserva in reservas)
-        {
-            reserva.Status     = StatusReservaEstoque.Confirmada;
-            reserva.LiberadaEm = DateTime.UtcNow;
+            // Venda já foi criada numa tentativa anterior — só a etapa de repasse
+            // falhou depois (ex: o bug de tamanho do Document que corrigimos).
+            // NÃO recria a venda: CreateAsync tem efeito colateral real (baixa de
+            // estoque de verdade) — rodar de novo geraria uma segunda baixa.
+            vendaId = pedido.VendaId.Value;
         }
-        await _uow.OrderSync.SalvarAsync();
+        else
+        {
+            if (canal.UsuarioIntegracaoId is null)
+                throw new InvalidOperationException(
+                    $"SalesChannel '{canal.Nome}' não tem UsuarioIntegracaoId configurado — " +
+                    "não dá pra gerar venda automática sem um usuário responsável.");
+
+            var dto = new CreateSaleDto
+            {
+                UsuarioId  = canal.UsuarioIntegracaoId.Value,
+                Origem     = SaleOrigin.Marketplace,
+                Notes      = $"Pedido {canal.Tipo} #{pedido.ExternalOrderId}",
+                Items      = pedido.Itens.Select(i => new CreateSaleItemDto
+                {
+                    ProductId = i.ProductId!.Value,
+                    Quantity  = i.Quantidade,
+                    UnitPrice = i.ValorUnitario // best-effort — SaleService recalcula pelo preço local (ver nota abaixo)
+                }).ToList(),
+                // PaymentMethod aqui é só rótulo informativo do Sale/SalePayment (relatórios) —
+                // não dispara nenhum movimento financeiro por si só. O financeiro real do
+                // repasse é o ContaReceber logo abaixo, não isso.
+                Payments = new List<CreateSalePaymentDto>
+                {
+                    new() { PaymentMethod = PaymentMethod.APrazo, Amount = pedido.ValorTotal }
+                }
+            };
+
+            var saleDto = await _saleService.CreateAsync(dto);
+            saleNumber  = saleDto.SaleNumber;
+            vendaId     = saleDto.Id;
+
+            pedido.VendaId = saleDto.Id;
+            pedido.InternalStatus = ExternalOrderStatus.VendaGerada;
+            await _uow.OrderSync.SalvarAsync();
+
+            // Confirma as reservas sombra desse pedido — a baixa real já aconteceu
+            // dentro de CreateAsync, então a reserva sai de "comprometido, ainda
+            // não vendido" pra "já virou venda de verdade".
+            var reservas = await _uow.OrderSync.GetReservasAtivasPorPedidoAsync(pedido.Id);
+            foreach (var reserva in reservas)
+            {
+                reserva.Status     = StatusReservaEstoque.Confirmada;
+                reserva.LiberadaEm = DateTime.UtcNow;
+            }
+            await _uow.OrderSync.SalvarAsync();
+        }
 
         // Cliente de repasse: cria uma vez por canal, reaproveita depois.
         var clienteRepasse = await _uow.OrderSync.GetClienteRepasseAsync(canal.Id)
@@ -266,13 +282,21 @@ public class OrderProcessingService : IOrderProcessingService
         // IMPORTANTE: usa pedido.ValorTotal (o que o marketplace cobrou de verdade),
         // não saleDto.Total — CreateAsync recalcula preço pela tabela local (grupo
         // de preço do cliente), que pode divergir do valor anunciado no canal.
+        //
+        // GAP CONHECIDO: se o crash acontecer DEPOIS daqui (ex: nessa própria
+        // chamada) e alguém reprocessar o mesmo pedido, isso pode gerar um
+        // segundo Contas a Receber pro mesmo VendaId — não tem proteção de
+        // idempotência nessa etapa ainda. Janela estreita, baixo risco pra
+        // um piloto — registrar se algum dia isso realmente acontecer.
         await _contaReceberService.GerarContaAPrazoAsync(
-            clienteRepasse.Id, saleDto.Id, pedido.ValorTotal,
+            clienteRepasse.Id, vendaId, pedido.ValorTotal,
             $"Repasse {canal.Tipo} — Pedido #{pedido.ExternalOrderId} (aguardando liquidação)");
 
         await RegistrarAcaoAsync(pedido, OrderActionType.GerarVendaInterna, OrderActionStatus.Concluida);
         await RegistrarEventoAsync(pedido, OrderEventType.VendaGerada,
-            $"Venda {saleDto.SaleNumber} gerada; Conta a Receber de repasse criada.");
+            saleNumber is not null
+                ? $"Venda {saleNumber} gerada; Conta a Receber de repasse criada."
+                : "Conta a Receber de repasse criada (venda já existia de uma tentativa anterior).");
     }
 
     // ── Helpers de rastro ────────────────────────────────────────────
