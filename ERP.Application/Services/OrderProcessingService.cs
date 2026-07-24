@@ -4,6 +4,7 @@ using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Domain.Interfaces;
+using Serilog;
 
 namespace ERP.Application.Services;
 
@@ -131,8 +132,22 @@ public class OrderProcessingService : IOrderProcessingService
             }).ToList()
         };
 
-        await _uow.OrderSync.AddExternalOrderAsync(pedido);
-        await _uow.OrderSync.SalvarAsync(); // precisa do Id antes de gerar Event/Action com FK
+        var inserido = await _uow.OrderSync.TentarInserirExternalOrderAsync(pedido);
+        if (!inserido)
+        {
+            // Corrida: o Mercado Livre manda o mesmo webhook várias vezes quase ao
+            // mesmo tempo (o próprio payload tem um campo "attempts" avisando disso).
+            // Outra requisição concorrente inseriu esse pedido um instante antes —
+            // não é erro de verdade. NÃO continua o processamento a partir daqui:
+            // a outra tentativa já está seguindo o pipeline sozinha, e continuar
+            // nas duas ao mesmo tempo arriscaria reservar estoque/gerar venda em
+            // duplicidade. Um retry futuro (novo webhook) passa pelo caminho normal
+            // de "pedido já existe" acima, que é sequencial e seguro.
+            Log.Information(
+                "Pedido {ExternalOrderId} já estava sendo inserido por outra requisição concorrente — ignorando esta.",
+                pedidoDto.ExternalOrderId);
+            return;
+        }
         if (sessao is not null) sessao.TotalPedidosProcessados++;
 
         await RegistrarEventoAsync(pedido, OrderEventType.PedidoRecebido, "Pedido recebido do canal.");

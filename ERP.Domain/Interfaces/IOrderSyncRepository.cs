@@ -36,7 +36,13 @@ public interface IOrderSyncRepository
 
     // ── ExternalOrder / Itens ─────────────────────────────────────────
     Task<ExternalOrder?> GetExternalOrderAsync(Guid salesChannelId, string externalOrderId);
-    Task AddExternalOrderAsync(ExternalOrder pedido);
+    /// <summary>
+    /// Tenta inserir o pedido. Devolve false (sem lançar) se outra requisição
+    /// concorrente já inseriu o mesmo (SalesChannelId, ExternalOrderId) um
+    /// instante antes — o Mercado Livre manda o mesmo webhook várias vezes
+    /// quase ao mesmo tempo, então essa corrida é esperada, não um erro real.
+    /// </summary>
+    Task<bool> TentarInserirExternalOrderAsync(ExternalOrder pedido);
 
     // ── SkuMapping ─────────────────────────────────────────────────────
     Task<SkuMapping?> GetSkuMappingAsync(Guid salesChannelId, string skuExterno);

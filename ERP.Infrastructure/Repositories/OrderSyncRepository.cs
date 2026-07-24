@@ -3,6 +3,7 @@ using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Domain.Interfaces;
 using ERP.Persistence.Context;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Infrastructure.Repositories;
@@ -43,8 +44,26 @@ public class OrderSyncRepository : IOrderSyncRepository
             .AsTracking()
             .FirstOrDefaultAsync(o => o.SalesChannelId == salesChannelId && o.ExternalOrderId == externalOrderId);
 
-    public async Task AddExternalOrderAsync(ExternalOrder pedido)
-        => await _ctx.ExternalOrders.AddAsync(pedido);
+    public async Task<bool> TentarInserirExternalOrderAsync(ExternalOrder pedido)
+    {
+        await _ctx.ExternalOrders.AddAsync(pedido);
+        try
+        {
+            await _ctx.SaveChangesAsync();
+            return true;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is SqlException sql && (sql.Number == 2601 || sql.Number == 2627))
+        {
+            // Corrida: outra requisição concorrente (mesmo webhook, entrega duplicada
+            // quase simultânea) já inseriu esse (SalesChannelId, ExternalOrderId).
+            // Destrava o rastreamento dessa tentativa perdida antes de devolver false —
+            // senão essas entidades "Added" ficam penduradas no ChangeTracker.
+            _ctx.Entry(pedido).State = EntityState.Detached;
+            foreach (var item in pedido.Itens)
+                _ctx.Entry(item).State = EntityState.Detached;
+            return false;
+        }
+    }
 
     public async Task<SkuMapping?> GetSkuMappingAsync(Guid salesChannelId, string skuExterno)
         => await _ctx.SkuMappings
@@ -94,13 +113,32 @@ public class OrderSyncRepository : IOrderSyncRepository
     {
         // Document precisa caber em nvarchar(18) — usa o valor numérico do enum
         // (1 ou 2 dígitos), não o nome por extenso ("MERCADOLIVRE" já estoura sozinho).
+        var document = $"MKT{(int)canal.Tipo}-{canal.Id.ToString()[..8]}";
         var cliente = new Customer
         {
             Name     = $"{canal.Tipo} — Repasse ({canal.Nome})",
-            Document = $"MKT{(int)canal.Tipo}-{canal.Id.ToString()[..8]}",
+            Document = document,
         };
         await _ctx.Customers.AddAsync(cliente);
-        await _ctx.SaveChangesAsync(); // precisa do Id gerado antes de linkar no SalesChannel
+
+        try
+        {
+            await _ctx.SaveChangesAsync(); // precisa do Id gerado antes de linkar no SalesChannel
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is SqlException sql && (sql.Number == 2601 || sql.Number == 2627))
+        {
+            // Corrida: dois pedidos do mesmo canal chegando quase juntos, ambos
+            // tentando criar o cliente de repasse pela primeira vez. Diferente da
+            // corrida no ExternalOrder, aqui é seguro reaproveitar — é o mesmo
+            // cliente sintético compartilhado por todos os pedidos do canal,
+            // não importa qual pedido disparou a criação dele.
+            _ctx.Entry(cliente).State = EntityState.Detached;
+            var jaExiste = await _ctx.Customers.AsTracking().FirstOrDefaultAsync(c => c.Document == document)
+                ?? throw new InvalidOperationException(
+                    $"Violação de chave única em Customers.Document='{document}', mas não achei a linha ao reconsultar.");
+            canal.ClienteRepasseId = jaExiste.Id;
+            return jaExiste;
+        }
 
         canal.ClienteRepasseId = cliente.Id;
         return cliente;
