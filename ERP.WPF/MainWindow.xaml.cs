@@ -197,6 +197,7 @@ public partial class MainWindow : Window
             "customers"   => CreateView<CustomerView, CustomerViewModel>(),
             "users"       => CreateView<UserView, UserViewModel>(),
             "config"      => CreateView<ConfiguracoesView, ConfiguracoesViewModel>(),
+            "integracoes" => CreateView<IntegracoesView, IntegracoesViewModel>(),
             "filiais"     => CreateView<FilialView, FilialViewModel>(),
             "bi"          => CreateView<BIView, BIViewModel>(),
             "financeiro"  => CreateView<FinanceiroView, FinanceiroViewModel>(),

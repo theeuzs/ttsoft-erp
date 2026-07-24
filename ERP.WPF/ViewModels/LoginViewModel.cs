@@ -209,7 +209,7 @@ public class LoginViewModel : BaseViewModel
             if (resp.IsSuccessStatusCode)
             {
                 var json = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
-                var jwt  = json.GetProperty("token").GetString();
+                var jwt  = json.GetProperty("accessToken").GetString();
                 if (!string.IsNullOrEmpty(jwt))
                     AppSession.JwtToken = jwt;
             }

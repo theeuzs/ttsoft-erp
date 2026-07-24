@@ -441,6 +441,7 @@ public partial class App : System.Windows.Application
                 sp.GetRequiredService<IMemoryCache>()));
 
         // ── ViewModels ────────────────────────────────────────────────────
+        ERP.WPF.State.AppSession.ApiBaseUrl = "https://erp-ttsoft-api-g8bde4f6aqcwb9aw.brazilsouth-01.azurewebsites.net";
         services.AddTransient<ProductViewModel>();
         services.AddSingleton<PdvViewModel>(); // Singleton: preserva carrinho e vendas suspensas ao trocar de tela
         services.AddTransient<DashboardViewModel>();
@@ -449,6 +450,7 @@ public partial class App : System.Windows.Application
         services.AddTransient<LoginViewModel>();
         services.AddTransient<UserViewModel>();
         services.AddTransient<ConfiguracoesViewModel>();
+        services.AddTransient<IntegracoesViewModel>();
         services.AddTransient<CargosViewModel>();
         services.AddTransient<FilialViewModel>();
         services.AddTransient<BIViewModel>();

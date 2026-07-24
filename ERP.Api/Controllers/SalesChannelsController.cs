@@ -44,18 +44,33 @@ public class SalesChannelsController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto.Nome))
             return BadRequest("Nome do canal é obrigatório.");
 
-        var canal = new SalesChannel
-        {
-            Tipo                = dto.Tipo,
-            Nome                = dto.Nome,
-            IsAtivo             = dto.Ativo,
-            // RecebePedidos é a única capacidade com dispatcher de verdade hoje
-            // (AtualizarStatusPedidoAsync/SincronizarEstoqueAsync ainda são stub).
-            Capacidades         = ChannelCapability.RecebePedidos,
-            UsuarioIntegracaoId = _tenant.UserId == Guid.Empty ? null : _tenant.UserId,
-        };
+        // Reaproveita um canal do mesmo tipo que já existe mas ainda não foi
+        // autorizado, em vez de criar outro — evita acumular canais órfãos se
+        // o lojista clicar "Conectar" mais de uma vez antes de terminar a
+        // autorização (ex: navegador não abriu, tela travou, etc.).
+        var existentes = await _uow.OrderSync.GetCanaisAtivosAsync();
+        var pendente = existentes.FirstOrDefault(c => c.Tipo == dto.Tipo && string.IsNullOrEmpty(c.AccessToken));
 
-        canal = await _uow.OrderSync.AdicionarCanalAsync(canal);
+        SalesChannel canal;
+        if (pendente is not null)
+        {
+            canal = pendente;
+        }
+        else
+        {
+            canal = new SalesChannel
+            {
+                Tipo                = dto.Tipo,
+                Nome                = dto.Nome,
+                IsAtivo             = dto.Ativo,
+                // RecebePedidos é a única capacidade com dispatcher de verdade hoje
+                // (AtualizarStatusPedidoAsync/SincronizarEstoqueAsync ainda são stub).
+                Capacidades         = ChannelCapability.RecebePedidos,
+                UsuarioIntegracaoId = _tenant.UserId == Guid.Empty ? null : _tenant.UserId,
+            };
+
+            canal = await _uow.OrderSync.AdicionarCanalAsync(canal);
+        }
 
         string? authorizationUrl = dto.Tipo switch
         {
