@@ -106,6 +106,19 @@ public class OrderSyncRepository : IOrderSyncRepository
         => await _ctx.SkuMappings
             .FirstOrDefaultAsync(m => m.SalesChannelId == salesChannelId && m.SkuExterno == skuExterno);
 
+    public async Task<SkuMapping> AdicionarMapeamentoAsync(SkuMapping mapeamento)
+    {
+        await _ctx.SkuMappings.AddAsync(mapeamento);
+        await _ctx.SaveChangesAsync();
+        return mapeamento;
+    }
+
+    public async Task<IReadOnlyList<SkuMapping>> GetMapeamentosPorCanalAsync(Guid salesChannelId)
+        => await _ctx.SkuMappings
+            .Include(m => m.Product)
+            .Where(m => m.SalesChannelId == salesChannelId)
+            .ToListAsync();
+
     public async Task<decimal> GetTotalReservadoAsync(Guid productId)
         => await _ctx.ShadowStockReservations
             .Where(r => r.ProductId == productId && r.Status == StatusReservaEstoque.Reservada)

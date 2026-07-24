@@ -36,6 +36,12 @@ public interface IChannelDispatcher
     /// <summary>Envia o estoque sombra (Product.Stock − SkuMapping.BufferSeguranca) ao canal.</summary>
     Task<(bool Sucesso, string Mensagem)> SincronizarEstoqueAsync(
         SalesChannel canal, IReadOnlyList<(string SkuExterno, decimal Quantidade)> estoques);
+
+    /// <summary>Lista os anúncios ativos do vendedor no canal — usado pela tela
+    /// de SkuMapping pra saber o que existe do lado do marketplace, sem
+    /// precisar que o lojista digite o SKU externo manualmente.</summary>
+    Task<(bool Sucesso, string Mensagem, IReadOnlyList<AnuncioExternoDto> Anuncios)> BuscarAnunciosAsync(
+        SalesChannel canal);
 }
 
 /// <summary>Representação normalizada de um pedido externo, já traduzida do formato cru do canal.</summary>
@@ -55,4 +61,13 @@ public class ExternalOrderItemDto
     public string  DescricaoItem { get; set; } = string.Empty;
     public decimal Quantidade    { get; set; }
     public decimal ValorUnitario { get; set; }
+}
+
+/// <summary>Um anúncio ativo do vendedor no marketplace, normalizado — usado
+/// pra tela de SkuMapping mostrar o que existe no canal antes de mapear.</summary>
+public class AnuncioExternoDto
+{
+    public string ItemId     { get; set; } = string.Empty; // ex: MLB4935405945
+    public string SkuExterno { get; set; } = string.Empty; // seller_custom_field — o que bate com SkuMapping
+    public string Titulo     { get; set; } = string.Empty;
 }

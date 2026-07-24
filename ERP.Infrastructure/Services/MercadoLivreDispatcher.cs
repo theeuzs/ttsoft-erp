@@ -127,6 +127,78 @@ public class MercadoLivreDispatcher : IChannelDispatcher
         => throw new NotImplementedException(
             "Falta decidir se SkuMapping.SkuExterno é o item_id do Mercado Livre, ou se precisa de um campo próprio, antes de implementar a sincronização de estoque.");
 
+    /// <summary>
+    /// Busca os anúncios ativos do vendedor. Dois passos, documentados
+    /// separadamente pelo Mercado Livre:
+    ///   1. GET /users/{seller_id}/items/search?status=active — só devolve os IDs.
+    ///   2. GET /items?ids=id1,id2,... (até 20 por chamada) — os detalhes de fato.
+    /// O passo 2 devolve um array de objetos com "code"/"body" (não o item
+    /// direto) — formato de multiget do próprio Mercado Livre, não uma escolha nossa.
+    /// </summary>
+    public async Task<(bool Sucesso, string Mensagem, IReadOnlyList<AnuncioExternoDto> Anuncios)> BuscarAnunciosAsync(
+        SalesChannel canal)
+    {
+        var garantiu = await GarantirTokenValidoAsync(canal);
+        if (!garantiu.Sucesso) return (false, garantiu.Mensagem, Array.Empty<AnuncioExternoDto>());
+
+        try
+        {
+            // ── Passo 1: IDs dos anúncios ativos ────────────────────────────
+            var idsUrl = $"https://api.mercadolibre.com/users/{canal.ExternalAccountId}/items/search?status=active";
+            using var requestIds = NovaRequisicao(HttpMethod.Get, idsUrl, canal.AccessToken!);
+            var responseIds = await _http.SendAsync(requestIds);
+            var rawIds = await responseIds.Content.ReadAsStringAsync();
+
+            if (!responseIds.IsSuccessStatusCode)
+                return (false, $"Mercado Livre retornou {responseIds.StatusCode}: {rawIds}", Array.Empty<AnuncioExternoDto>());
+
+            using var docIds = JsonDocument.Parse(rawIds);
+            var ids = new List<string>();
+            if (docIds.RootElement.TryGetProperty("results", out var results))
+                foreach (var idEl in results.EnumerateArray())
+                    ids.Add(idEl.GetString() ?? "");
+
+            if (ids.Count == 0) return (true, "OK", Array.Empty<AnuncioExternoDto>());
+
+            // ── Passo 2: detalhes, em lotes de 20 (limite documentado do multiget) ──
+            var anuncios = new List<AnuncioExternoDto>();
+            foreach (var lote in ids.Chunk(20))
+            {
+                var itemsUrl = $"https://api.mercadolibre.com/items?ids={string.Join(",", lote)}";
+                using var requestItems = NovaRequisicao(HttpMethod.Get, itemsUrl, canal.AccessToken!);
+                var responseItems = await _http.SendAsync(requestItems);
+                var rawItems = await responseItems.Content.ReadAsStringAsync();
+
+                if (!responseItems.IsSuccessStatusCode)
+                {
+                    Log.Warning("Mercado Livre: falha ao buscar detalhes de um lote de anúncios ({Status}): {Body}",
+                        responseItems.StatusCode, rawItems);
+                    continue; // um lote falhar não deve derrubar os outros
+                }
+
+                using var docItems = JsonDocument.Parse(rawItems);
+                foreach (var wrapper in docItems.RootElement.EnumerateArray())
+                {
+                    if (!wrapper.TryGetProperty("body", out var body)) continue;
+
+                    anuncios.Add(new AnuncioExternoDto
+                    {
+                        ItemId     = body.TryGetProperty("id", out var idProp) ? idProp.GetString() ?? "" : "",
+                        Titulo     = body.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "",
+                        SkuExterno = body.TryGetProperty("seller_custom_field", out var scf) ? scf.GetString() ?? "" : "",
+                    });
+                }
+            }
+
+            return (true, "OK", anuncios);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Erro ao buscar anúncios do Mercado Livre pro canal {CanalId}", canal.Id);
+            return (false, $"Erro inesperado: {ex.Message}", Array.Empty<AnuncioExternoDto>());
+        }
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private async Task<(bool Sucesso, string Mensagem)> GarantirTokenValidoAsync(SalesChannel canal)

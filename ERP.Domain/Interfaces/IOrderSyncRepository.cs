@@ -77,6 +77,13 @@ public interface IOrderSyncRepository
     // ── SkuMapping ─────────────────────────────────────────────────────
     Task<SkuMapping?> GetSkuMappingAsync(Guid salesChannelId, string skuExterno);
 
+    /// <summary>Cria um novo mapeamento SKU externo → Product.</summary>
+    Task<SkuMapping> AdicionarMapeamentoAsync(SkuMapping mapeamento);
+
+    /// <summary>Todos os mapeamentos de um canal, com o Product já incluído
+    /// (pra tela de SkuMapping mostrar o nome do produto sem outra ida ao banco).</summary>
+    Task<IReadOnlyList<SkuMapping>> GetMapeamentosPorCanalAsync(Guid salesChannelId);
+
     // ── Estoque sombra ───────────────────────────────────────────────
     /// <summary>Soma das reservas ativas (Status = Reservada) desse produto, em todos os canais.</summary>
     Task<decimal> GetTotalReservadoAsync(Guid productId);

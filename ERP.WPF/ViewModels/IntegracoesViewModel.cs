@@ -46,8 +46,15 @@ public class IntegracoesViewModel : BaseViewModel
 
     // A API serializa enums como texto (JsonStringEnumConverter em Program.cs) —
     // sem isso aqui, o HttpClient assume número por padrão e quebra na leitura.
+    // PropertyNameCaseInsensitive é igualmente crítico: a API manda camelCase
+    // ("tipo", "conectado") mas os records em C# são PascalCase ("Tipo",
+    // "Conectado") — sem essa opção, System.Text.Json NÃO dá erro nenhum,
+    // só preenche cada propriedade não-casada com o valor padrão (false,
+    // string vazia) silenciosamente. Foi exatamente esse o bug: card sem
+    // crash nenhum, só com todo campo errado.
     private static readonly JsonSerializerOptions _jsonOpcoes = new()
     {
+        PropertyNameCaseInsensitive = true,
         Converters = { new JsonStringEnumConverter() }
     };
 
@@ -78,9 +85,7 @@ public class IntegracoesViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
-            // DIAGNÓSTICO TEMPORÁRIO — volta pra mensagem genérica depois de descobrir a causa.
-            var detalhe = ex.InnerException?.Message ?? ex.Message;
-            StatusMessage = $"[DIAG] {ex.GetType().Name}: {detalhe}";
+            StatusMessage = "Não consegui carregar as integrações — verifique sua conexão.";
             OnPropertyChanged(nameof(HasStatusMessage));
             Log.Error(ex, "Erro ao carregar canais de venda (tela Integrações)");
         }
