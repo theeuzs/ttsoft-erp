@@ -3,9 +3,9 @@ using ERP.Application.Interfaces;
 using ERP.Domain.Enums;
 using ERP.Domain.Interfaces;
 using ERP.Infrastructure.Services;
+using ERP.Persistence.Context;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using ERP.Persistence.Context;
 using Serilog;
 
 namespace ERP.Api.Controllers;
@@ -126,7 +126,7 @@ public class MarketplaceController : ControllerBase
             return Ok(); // 200 pro ML não retentar — não é erro dele, é loja não conectada aqui
         }
 
-        AppDbContext.SetQueryTenantId(canal.TenantId);
+        AppDbContext.SetQueryTenantId(canal.TenantId); // seta o AsyncLocal que o HasQueryFilter de fato lê
 
         // dto.Resource vem como "/orders/2195828494" — o id é o último segmento.
         var externalOrderId = dto.Resource.TrimEnd('/').Split('/').LastOrDefault();
@@ -203,6 +203,29 @@ public class MarketplaceController : ControllerBase
 
         await _service.ProcessarWebhookShopeeAsync(dto, tenantId);
         return Ok();
+    }
+
+    /// <summary>
+    /// Dispara manualmente uma rodada de sincronização por polling pra um canal
+    /// (busca pedidos novos direto na API do marketplace, sem depender de webhook).
+    /// Esse caminho nunca tinha sido exercitado até agora — só o webhook tinha
+    /// rota real (só ele foi testado ponta a ponta até aqui).
+    /// </summary>
+    [HttpPost("ml/sincronizar/{salesChannelId:guid}")]
+    [HasPermission(Permissions.ConfigView)]
+    public async Task<IActionResult> SincronizarML([FromRoute] Guid salesChannelId, [FromQuery] DateTime? desde)
+    {
+        var sessao = await _orderProcessing.ProcessarCanalAsync(salesChannelId, desde ?? DateTime.UtcNow.AddDays(-7));
+        return Ok(new
+        {
+            sessao.Id,
+            sessao.Status,
+            sessao.TotalPedidosProcessados,
+            sessao.TotalConflitos,
+            sessao.TotalErros,
+            sessao.IniciadoEm,
+            sessao.FinalizadoEm
+        });
     }
 
     [HttpGet("status")]
