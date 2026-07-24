@@ -16,6 +16,19 @@ public class OrderSyncRepository : IOrderSyncRepository
     public async Task<IReadOnlyList<SalesChannel>> GetCanaisAtivosAsync()
         => await _ctx.SalesChannels.Where(c => c.IsAtivo).ToListAsync();
 
+    public async Task<SalesChannel> AdicionarCanalAsync(SalesChannel canal)
+    {
+        await _ctx.SalesChannels.AddAsync(canal);
+        await _ctx.SaveChangesAsync(); // precisa do Id gerado pra devolver a URL de autorização
+        return canal;
+    }
+
+    public async Task<ProcessingSession?> GetUltimaSessaoAsync(Guid salesChannelId)
+        => await _ctx.ProcessingSessions
+            .Where(s => s.SalesChannelId == salesChannelId)
+            .OrderByDescending(s => s.IniciadoEm)
+            .FirstOrDefaultAsync();
+
     public async Task<SalesChannel?> GetCanalByIdAsync(Guid id)
         => await _ctx.SalesChannels.AsTracking().FirstOrDefaultAsync(c => c.Id == id);
 

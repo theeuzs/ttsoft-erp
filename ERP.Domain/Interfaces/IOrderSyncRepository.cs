@@ -18,6 +18,15 @@ public interface IOrderSyncRepository
     Task<IReadOnlyList<SalesChannel>> GetCanaisAtivosAsync();
     Task<SalesChannel?> GetCanalByIdAsync(Guid id);
 
+    /// <summary>Cria um novo canal pro tenant atual. TenantId é preenchido
+    /// automaticamente pelo AppDbContext (PreencherTenantIdEUpdatedAt) — não
+    /// precisa setar antes de chamar.</summary>
+    Task<SalesChannel> AdicionarCanalAsync(SalesChannel canal);
+
+    /// <summary>Última sessão de processamento (polling) desse canal, pra
+    /// mostrar "última sincronização" na tela de Integrações.</summary>
+    Task<ProcessingSession?> GetUltimaSessaoAsync(Guid salesChannelId);
+
     /// <summary>
     /// Mesma busca por Id, mas ignorando o filtro de tenant — uso restrito ao
     /// callback do OAuth (/ml/callback), que é [AllowAnonymous] de propósito
