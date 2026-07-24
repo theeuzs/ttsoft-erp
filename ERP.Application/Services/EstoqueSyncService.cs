@@ -21,6 +21,8 @@ public class EstoqueSyncService : IEstoqueSyncService
         try
         {
             var mapeamentos = await _uow.OrderSync.GetMapeamentosPorProdutoAsync(productId);
+            Log.Information("[DIAG] SincronizarProdutoAsync({ProductId}): {Count} mapeamento(s) encontrado(s)",
+                productId, mapeamentos.Count);
             if (mapeamentos.Count == 0) return; // produto não anunciado em nenhum marketplace — nada a fazer
 
             var product = await _uow.Products.GetByIdAsync(productId);
