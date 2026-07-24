@@ -28,6 +28,16 @@ public interface IOrderSyncRepository
     /// </summary>
     Task<SalesChannel?> GetCanalPorIdSemFiltroAsync(Guid id);
 
+    /// <summary>
+    /// Marca o pedido como VendaGerada com uma busca-e-grava dedicada, sempre
+    /// com rastreamento garantido. Necessário porque SaveChangesAsync do
+    /// projeto chama ChangeTracker.Clear() a cada gravação — se a venda
+    /// (_saleService.CreateAsync) salvar no meio do caminho, o "pedido" que
+    /// já estava em mãos perde o rastreamento e uma mutação direta nele vira
+    /// no-op silencioso. Buscar de novo aqui garante que a gravação acontece.
+    /// </summary>
+    Task MarcarVendaGeradaAsync(Guid externalOrderId, Guid vendaId);
+
     /// <summary>DIAGNÓSTICO TEMPORÁRIO — remover depois de resolver a oscilação de connection string.</summary>
     string NomeDoBancoConectado();
     /// <summary>Resolve o canal pelo user_id/shop_id do marketplace — é assim que o

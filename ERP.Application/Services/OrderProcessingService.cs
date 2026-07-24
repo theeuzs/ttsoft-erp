@@ -300,9 +300,14 @@ public class OrderProcessingService : IOrderProcessingService
             saleNumber  = saleDto.SaleNumber;
             vendaId     = saleDto.Id;
 
-            pedido.VendaId = saleDto.Id;
+            // MarcarVendaGeradaAsync, não mutar "pedido" direto e salvar: o
+            // _saleService.CreateAsync acima já chamou SaveChanges (pra criar a
+            // Sale), e o SaveChangesAsync do projeto faz ChangeTracker.Clear()
+            // toda vez — "pedido" (buscado antes) perdeu o rastreamento nesse
+            // meio-tempo. Mutar ele agora e salvar seria no-op silencioso.
+            await _uow.OrderSync.MarcarVendaGeradaAsync(pedido.Id, vendaId);
+            pedido.VendaId = vendaId; // só pro objeto em memória ficar coerente pro resto deste método
             pedido.InternalStatus = ExternalOrderStatus.VendaGerada;
-            await _uow.OrderSync.SalvarAsync();
 
             // Confirma as reservas sombra desse pedido — a baixa real já aconteceu
             // dentro de CreateAsync, então a reserva sai de "comprometido, ainda

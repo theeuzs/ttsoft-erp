@@ -22,6 +22,15 @@ public class OrderSyncRepository : IOrderSyncRepository
     public async Task<SalesChannel?> GetCanalPorIdSemFiltroAsync(Guid id)
         => await _ctx.SalesChannels.IgnoreQueryFilters().AsTracking().FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted);
 
+    public async Task MarcarVendaGeradaAsync(Guid externalOrderId, Guid vendaId)
+    {
+        var pedido = await _ctx.ExternalOrders.AsTracking().FirstOrDefaultAsync(o => o.Id == externalOrderId)
+            ?? throw new InvalidOperationException($"ExternalOrder {externalOrderId} não encontrado ao marcar venda gerada.");
+        pedido.VendaId = vendaId;
+        pedido.InternalStatus = ExternalOrderStatus.VendaGerada;
+        await _ctx.SaveChangesAsync();
+    }
+
     public string NomeDoBancoConectado()
         => _ctx.Database.GetDbConnection().Database;
 
