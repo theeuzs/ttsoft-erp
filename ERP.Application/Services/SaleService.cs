@@ -235,11 +235,6 @@ public class SaleService : ISaleService
         // estão anunciados, pra não vender lá um item que já zerou aqui. Depois
         // do commit (a venda já está garantida) e best-effort (EstoqueSyncService
         // nunca lança — Mercado Livre fora do ar não pode derrubar uma venda no PDV).
-        // DIAGNÓSTICO TEMPORÁRIO — tira depois de confirmar onde está parando.
-        Serilog.Log.Information(
-            "[DIAG] EstoqueSync: _estoqueSync={EhNull}, produtos={Count}",
-            _estoqueSync is null ? "NULL" : "injetado", produtosComEstoqueAlterado.Count);
-
         if (_estoqueSync != null)
             foreach (var productId in produtosComEstoqueAlterado)
                 await _estoqueSync.SincronizarProdutoAsync(productId);

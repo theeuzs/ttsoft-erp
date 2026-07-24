@@ -346,6 +346,12 @@ public partial class App : System.Windows.Application
         services.AddScoped<IAuditLogService,  AuditLogService>();
         services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<ISaleService, SaleService>();
+        // SaleService roda direto aqui no WPF (sem passar pela API) — mas
+        // sincronizar estoque com marketplace precisa da API (token OAuth,
+        // dispatcher). Implementação diferente da usada no lado da API,
+        // mesma interface — ver WpfEstoqueSyncService.
+        services.AddScoped<ERP.Application.Interfaces.IEstoqueSyncService,
+                            ERP.WPF.Services.WpfEstoqueSyncService>();
         services.AddScoped<ERP.Application.Interfaces.ISalePolicyService, ERP.Application.Services.SalePolicyService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IDevolucaoService, DevolucaoService>(); 
@@ -441,7 +447,13 @@ public partial class App : System.Windows.Application
                 sp.GetRequiredService<IMemoryCache>()));
 
         // ── ViewModels ────────────────────────────────────────────────────
+        // ApiBaseUrl setado aqui, direto — antes só acontecia dentro da fábrica
+        // do ChatService (Singleton), que só roda na PRIMEIRA vez que algo pede
+        // ChatService pro container. Se nada tivesse feito isso ainda (ex: usuário
+        // nunca abriu o chat), ApiBaseUrl ficava vazio e qualquer HttpClient que
+        // dependesse dele (login, Integrações) quebrava com "invalid request URI".
         ERP.WPF.State.AppSession.ApiBaseUrl = "https://erp-ttsoft-api-g8bde4f6aqcwb9aw.brazilsouth-01.azurewebsites.net";
+
         services.AddTransient<ProductViewModel>();
         services.AddSingleton<PdvViewModel>(); // Singleton: preserva carrinho e vendas suspensas ao trocar de tela
         services.AddTransient<DashboardViewModel>();

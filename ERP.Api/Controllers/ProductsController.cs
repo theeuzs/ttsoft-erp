@@ -15,13 +15,30 @@ public class ProductsController : ControllerBase
     private readonly IProductService          _service;
     private readonly IProdutoAgregadoService  _agregados;
     private readonly ICatalogoPublicoService  _catalogo;
+    private readonly ERP.Application.Interfaces.IEstoqueSyncService _estoqueSync;
 
     public ProductsController(
-        IProductService service, IProdutoAgregadoService agregados, ICatalogoPublicoService catalogo)
+        IProductService service, IProdutoAgregadoService agregados, ICatalogoPublicoService catalogo,
+        ERP.Application.Interfaces.IEstoqueSyncService estoqueSync)
     {
-        _service   = service;
-        _agregados = agregados;
-        _catalogo  = catalogo;
+        _service     = service;
+        _agregados   = agregados;
+        _catalogo    = catalogo;
+        _estoqueSync = estoqueSync;
+    }
+
+    /// <summary>
+    /// Dispara a sincronização de estoque desse produto pros marketplaces
+    /// onde ele está mapeado. Usado pelo WPF (SaleService de lá roda direto
+    /// contra o banco, sem passar pela API — esse endpoint é o único jeito
+    /// de chegar no Mercado Livre a partir de uma venda feita no PDV local).
+    /// </summary>
+    [HttpPost("{id:guid}/sincronizar-estoque")]
+    [HasPermission(Permissions.StockAdjust)]
+    public async Task<IActionResult> SincronizarEstoque(Guid id)
+    {
+        await _estoqueSync.SincronizarProdutoAsync(id);
+        return Ok();
     }
 
     /// <summary>Lista produtos com paginação e busca opcional.</summary>
