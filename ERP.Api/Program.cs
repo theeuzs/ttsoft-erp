@@ -230,6 +230,10 @@ builder.Services.AddHttpClient<ERP.Application.Interfaces.IMercadoLivreAuthServi
 builder.Services.AddHttpClient<ERP.Application.Interfaces.IChannelDispatcher,
                                 ERP.Infrastructure.Services.MercadoLivreDispatcher>();
 
+// Estoque ERP → marketplace (direção contrária de IOrderProcessingService).
+builder.Services.AddScoped<ERP.Application.Interfaces.IEstoqueSyncService,
+                            ERP.Application.Services.EstoqueSyncService>();
+
 builder.Services.AddHttpClient<IFocusNfeHttpClient, ERP.Infrastructure.HttpClients.FocusNfeHttpClient>(client =>
 {
     client.BaseAddress = new Uri("https://api.focusnfe.com.br/v2/");

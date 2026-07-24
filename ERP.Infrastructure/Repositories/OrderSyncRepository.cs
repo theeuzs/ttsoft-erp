@@ -119,6 +119,12 @@ public class OrderSyncRepository : IOrderSyncRepository
             .Where(m => m.SalesChannelId == salesChannelId)
             .ToListAsync();
 
+    public async Task<IReadOnlyList<SkuMapping>> GetMapeamentosPorProdutoAsync(Guid productId)
+        => await _ctx.SkuMappings
+            .Include(m => m.SalesChannel)
+            .Where(m => m.ProductId == productId)
+            .ToListAsync();
+
     public async Task<decimal> GetTotalReservadoAsync(Guid productId)
         => await _ctx.ShadowStockReservations
             .Where(r => r.ProductId == productId && r.Status == StatusReservaEstoque.Reservada)

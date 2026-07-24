@@ -18,13 +18,15 @@ public class SaleService : ISaleService
     private readonly IValidator<CreateSaleDto> _validator;
     private readonly IHaverService _haverService;
     private readonly IFidelidadeService? _fidelidade;
+    private readonly IEstoqueSyncService? _estoqueSync;
     private readonly ISalePolicyService? _salePolicy;
     private readonly IRequestTenant _tenant;
 
     public SaleService(IUnitOfWork uow, IMapper mapper, IValidator<CreateSaleDto> validator,
                        IHaverService haverService, IRequestTenant tenant,
                        IFidelidadeService? fidelidade = null,
-                       ISalePolicyService? salePolicy = null)
+                       ISalePolicyService? salePolicy = null,
+                       IEstoqueSyncService? estoqueSync = null)
     {
         _uow          = uow;
         _mapper       = mapper;
@@ -33,6 +35,7 @@ public class SaleService : ISaleService
         _tenant       = tenant;
         _fidelidade   = fidelidade;
         _salePolicy   = salePolicy;
+        _estoqueSync  = estoqueSync;
     }
 
     public async Task<IEnumerable<SaleDto>> GetAllAsync(DateTime? from = null, DateTime? to = null, string? sellerId = null)
@@ -107,6 +110,7 @@ public class SaleService : ISaleService
         // Para testes de rollback real, use SQLite in-process (ver SaleServiceTests).
 
         await using var tx = await _uow.BeginTransactionAsync();
+        var produtosComEstoqueAlterado = new HashSet<Guid>();
         try
         {
             // S8 FIX: busca GrupoPreco do cliente para aplicar tabela de preço correta no servidor.
@@ -145,6 +149,9 @@ public class SaleService : ISaleService
 
                 bool baixouOk = await _uow.Products.BaixarEstoqueAtomicoAsync(
                     produtoEstoque.Id, qtdEstoque, produtoEstoque.AllowNegativeStock);
+
+                if (baixouOk)
+                    produtosComEstoqueAlterado.Add(produtoEstoque.Id);
 
                 if (!baixouOk)
                     throw new InvalidOperationException(
@@ -223,6 +230,14 @@ public class SaleService : ISaleService
                 Serilog.Log.Warning(exFid, "Erro ao acumular pontos de fidelidade para cliente {CustomerId}", sale.CustomerId);
             }
         }
+
+        // Estoque → marketplace: avisa qualquer canal onde os produtos vendidos
+        // estão anunciados, pra não vender lá um item que já zerou aqui. Depois
+        // do commit (a venda já está garantida) e best-effort (EstoqueSyncService
+        // nunca lança — Mercado Livre fora do ar não pode derrubar uma venda no PDV).
+        if (_estoqueSync != null)
+            foreach (var productId in produtosComEstoqueAlterado)
+                await _estoqueSync.SincronizarProdutoAsync(productId);
 
         return _mapper.Map<SaleDto>(sale);
     }

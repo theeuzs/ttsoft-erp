@@ -100,6 +100,7 @@ public class SkuMappingsController : ControllerBase
         {
             SalesChannelId  = salesChannelId,
             SkuExterno      = chave,
+            ItemId          = dto.ItemId,
             ProductId       = dto.ProductId,
             BufferSeguranca = dto.BufferSeguranca ?? 0,
         };

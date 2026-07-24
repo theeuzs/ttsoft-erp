@@ -1,0 +1,142 @@
+<UserControl x:Class="ERP.WPF.Views.SkuMappingView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource CardBgAlt}">
+    <UserControl.Resources>
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="#16A34A"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="0.9"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.5"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="OutlineButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextDark}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BordaInput}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource CardBgAlt}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.5"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="SKU MAPPING" FontSize="24" FontWeight="Bold"
+                   Foreground="{DynamicResource TextDark}" Margin="0,0,0,20"/>
+
+        <!-- Seletor de canal + atualizar -->
+        <Grid Grid.Row="1" Margin="0,0,0,15">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <ComboBox Grid.Column="0" HorizontalAlignment="Left" MinWidth="280"
+                      ItemsSource="{Binding Canais}"
+                      SelectedItem="{Binding CanalSelecionado}"
+                      DisplayMemberPath="Nome"/>
+
+            <Button Grid.Column="1" Content="Atualizar" Command="{Binding AtualizarAnunciosCommand}"
+                    Style="{StaticResource OutlineButton}"/>
+        </Grid>
+
+        <TextBlock Grid.Row="2" Text="{Binding StatusMessage}"
+                   Foreground="{DynamicResource TextMuted}" FontStyle="Italic"
+                   Margin="0,0,0,15" TextWrapping="Wrap"
+                   Visibility="{Binding HasStatusMessage, Converter={StaticResource BoolToVisibility}}"/>
+
+        <!-- Lista de anúncios -->
+        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Anuncios}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="{DynamicResource CardBg}"
+                                BorderBrush="{DynamicResource BordaCard}" BorderThickness="1"
+                                CornerRadius="6" Padding="18" Margin="0,0,0,12"
+                                Effect="{DynamicResource CardShadow}">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Titulo, Mode=OneWay}" FontSize="15" FontWeight="Bold"
+                                           Foreground="{DynamicResource TextDark}"/>
+                                <TextBlock Foreground="{DynamicResource TextMuted}" Margin="0,2,0,10" FontSize="12">
+                                    <Run Text="{Binding ItemId, Mode=OneWay}"/>
+                                    <Run Text=" · SKU: "/>
+                                    <Run Text="{Binding SkuExterno, Mode=OneWay}"/>
+                                </TextBlock>
+
+                                <!-- Já mapeado -->
+                                <TextBlock Foreground="#16A34A" FontWeight="SemiBold"
+                                           Visibility="{Binding Mapeado, Converter={StaticResource BoolToVisibility}}">
+                                    <Run Text="✔ Mapeado: "/><Run Text="{Binding ProductNomeAtual, Mode=OneWay}"/>
+                                </TextBlock>
+
+                                <!-- Ainda não mapeado: busca + seleção de produto -->
+                                <StackPanel Orientation="Horizontal"
+                                            Visibility="{Binding NaoMapeado, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBox Width="220" Text="{Binding TextoBusca, UpdateSourceTrigger=PropertyChanged}"
+                                             VerticalContentAlignment="Center" Padding="6"
+                                             BorderBrush="{DynamicResource BordaInput}"/>
+                                    <Button Content="Buscar" Command="{Binding BuscarProdutoCommand}"
+                                            Style="{StaticResource OutlineButton}" Margin="8,0,0,0"/>
+                                    <ComboBox Width="240" Margin="8,0,0,0"
+                                              ItemsSource="{Binding ResultadosBusca}"
+                                              SelectedItem="{Binding ProdutoSelecionado}"
+                                              DisplayMemberPath="Name"/>
+                                    <Button Content="Mapear" Command="{Binding MapearCommand}"
+                                            Style="{StaticResource PrimaryButton}" Margin="8,0,0,0"/>
+                                </StackPanel>
+
+                                <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource TextMuted}"
+                                           FontStyle="Italic" FontSize="12" Margin="0,6,0,0"
+                                           Visibility="{Binding HasStatusMessage, Converter={StaticResource BoolToVisibility}}"/>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

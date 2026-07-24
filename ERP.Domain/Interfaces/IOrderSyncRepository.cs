@@ -84,6 +84,11 @@ public interface IOrderSyncRepository
     /// (pra tela de SkuMapping mostrar o nome do produto sem outra ida ao banco).</summary>
     Task<IReadOnlyList<SkuMapping>> GetMapeamentosPorCanalAsync(Guid salesChannelId);
 
+    /// <summary>Todos os mapeamentos de um produto, em qualquer canal — usado
+    /// pra sincronização de estoque saindo do ERP: um produto pode estar
+    /// anunciado em mais de um marketplace ao mesmo tempo.</summary>
+    Task<IReadOnlyList<SkuMapping>> GetMapeamentosPorProdutoAsync(Guid productId);
+
     // ── Estoque sombra ───────────────────────────────────────────────
     /// <summary>Soma das reservas ativas (Status = Reservada) desse produto, em todos os canais.</summary>
     Task<decimal> GetTotalReservadoAsync(Guid productId);

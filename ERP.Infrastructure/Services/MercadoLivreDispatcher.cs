@@ -1,5 +1,6 @@
 // ── ERP.Infrastructure/Services/MercadoLivreDispatcher.cs ─────────────────────
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
@@ -122,10 +123,47 @@ public class MercadoLivreDispatcher : IChannelDispatcher
     /// SkuExterno ↔ Product, não item_id do ML especificamente. Precisa decidir
     /// se SkuExterno vira o item_id ou se é preciso um campo novo antes de implementar.
     /// </summary>
-    public Task<(bool Sucesso, string Mensagem)> SincronizarEstoqueAsync(
-        SalesChannel canal, IReadOnlyList<(string SkuExterno, decimal Quantidade)> estoques)
-        => throw new NotImplementedException(
-            "Falta decidir se SkuMapping.SkuExterno é o item_id do Mercado Livre, ou se precisa de um campo próprio, antes de implementar a sincronização de estoque.");
+    /// <summary>
+    /// Atualiza o estoque de cada anúncio, um PUT por vez (o Mercado Livre
+    /// não tem um endpoint de lote pra isso). Continua tentando os outros
+    /// mesmo se um item específico falhar — um anúncio pausado/excluído não
+    /// deveria travar a sincronização dos demais.
+    /// </summary>
+    public async Task<(bool Sucesso, string Mensagem)> SincronizarEstoqueAsync(
+        SalesChannel canal, IReadOnlyList<(string ItemId, decimal Quantidade)> estoques)
+    {
+        var garantiu = await GarantirTokenValidoAsync(canal);
+        if (!garantiu.Sucesso) return (false, garantiu.Mensagem);
+
+        var falhas = new List<string>();
+
+        foreach (var (itemId, quantidade) in estoques)
+        {
+            try
+            {
+                var corpo = JsonSerializer.Serialize(new { available_quantity = (int)quantidade });
+                using var request = NovaRequisicao(HttpMethod.Put, $"https://api.mercadolibre.com/items/{itemId}", canal.AccessToken!);
+                request.Content = new StringContent(corpo, Encoding.UTF8, "application/json");
+
+                var response = await _http.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var raw = await response.Content.ReadAsStringAsync();
+                    falhas.Add($"{itemId}: {response.StatusCode} — {raw}");
+                    Log.Warning("Falha ao sincronizar estoque do anúncio {ItemId} no Mercado Livre: {Status} {Body}",
+                        itemId, response.StatusCode, raw);
+                }
+            }
+            catch (Exception ex)
+            {
+                falhas.Add($"{itemId}: {ex.Message}");
+                Log.Error(ex, "Erro ao sincronizar estoque do anúncio {ItemId} no Mercado Livre", itemId);
+            }
+        }
+
+        if (falhas.Count == 0) return (true, $"{estoques.Count} anúncio(s) sincronizado(s).");
+        return (false, $"{falhas.Count}/{estoques.Count} falharam: {string.Join(" | ", falhas)}");
+    }
 
     /// <summary>
     /// Busca os anúncios ativos do vendedor. Dois passos, documentados

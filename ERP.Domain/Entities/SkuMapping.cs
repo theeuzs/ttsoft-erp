@@ -23,6 +23,13 @@ public class SkuMapping : BaseEntity
 
     public string  SkuExterno { get; set; } = string.Empty;
 
+    /// <summary>ID do anúncio no canal (ex: MLB4935405945). Sempre existe,
+    /// independente de qual chave (SkuExterno real ou o próprio ItemId) foi
+    /// usada pra criar o mapeamento — é isso que SincronizarEstoqueAsync usa
+    /// pra saber pra qual anúncio mandar o PUT de estoque, já que SkuExterno
+    /// sozinho não é suficiente quando ele É o ItemId (fallback).</summary>
+    public string? ItemId { get; set; }
+
     public Guid     ProductId { get; set; }
     public Product?  Product  { get; set; }
 

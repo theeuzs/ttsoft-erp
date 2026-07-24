@@ -33,9 +33,14 @@ public interface IChannelDispatcher
     Task<(bool Sucesso, string Mensagem)> AtualizarStatusPedidoAsync(
         SalesChannel canal, string externalOrderId, string novoStatusExterno);
 
-    /// <summary>Envia o estoque sombra (Product.Stock − SkuMapping.BufferSeguranca) ao canal.</summary>
+    /// <summary>
+    /// Envia o estoque real (já com BufferSeguranca aplicado pelo chamador)
+    /// pro canal. Chaveado por ItemId, não SkuExterno — SkuMapping.SkuExterno
+    /// às vezes É o ItemId (fallback pra anúncios sem seller_custom_field),
+    /// então ItemId é o único identificador garantido de existir sempre.
+    /// </summary>
     Task<(bool Sucesso, string Mensagem)> SincronizarEstoqueAsync(
-        SalesChannel canal, IReadOnlyList<(string SkuExterno, decimal Quantidade)> estoques);
+        SalesChannel canal, IReadOnlyList<(string ItemId, decimal Quantidade)> estoques);
 
     /// <summary>Lista os anúncios ativos do vendedor no canal — usado pela tela
     /// de SkuMapping pra saber o que existe do lado do marketplace, sem
