@@ -93,8 +93,35 @@ public class OrderProcessingService : IOrderProcessingService
         return sessao;
     }
 
-    // ── Passo 1: ingestão (idempotente) ─────────────────────────────
+    // ── Lock por pedido — evita que webhooks concorrentes do mesmo pedido rodem
+    // o pipeline (SKU/estoque/venda) em paralelo. A proteção contra corrida no
+    // INSERT (TentarInserirExternalOrderAsync) só cobre o instante da criação;
+    // sem isso aqui, duas entregas quase simultâneas do MESMO webhook (comum no
+    // Mercado Livre) conseguiam as duas passar pelo caminho de "pedido existe,
+    // retoma" ao mesmo tempo — e cada uma gerava sua própria Sale, duplicando
+    // a venda de verdade (visto em produção: duas Sales pro mesmo pedido).
+    // Lock em memória, por processo — suficiente pro tier atual (1 instância);
+    // se um dia escalar pra múltiplas instâncias, precisa virar lock no banco
+    // (ex: sp_getapplock) em vez de SemaphoreSlim.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Threading.SemaphoreSlim> _locksPorPedido = new();
+
     private async Task ProcessarPedidoAsync(SalesChannel canal, ExternalOrderDto pedidoDto, ProcessingSession? sessao)
+    {
+        var chave = $"{canal.Id}:{pedidoDto.ExternalOrderId}";
+        var semaforo = _locksPorPedido.GetOrAdd(chave, _ => new System.Threading.SemaphoreSlim(1, 1));
+
+        await semaforo.WaitAsync();
+        try
+        {
+            await ExecutarProcessamentoPedidoAsync(canal, pedidoDto, sessao);
+        }
+        finally
+        {
+            semaforo.Release();
+        }
+    }
+
+    private async Task ExecutarProcessamentoPedidoAsync(SalesChannel canal, ExternalOrderDto pedidoDto, ProcessingSession? sessao)
     {
         var existente = await _uow.OrderSync.GetExternalOrderAsync(canal.Id, pedidoDto.ExternalOrderId);
         if (existente != null)
