@@ -243,8 +243,12 @@ public class MercadoLivreDispatcher : IChannelDispatcher
                 dto.Itens.Add(new ExternalOrderItemDto
                 {
                     // seller_custom_field é o SKU que o vendedor cadastrou no anúncio —
-                    // é isso que precisa bater com SkuMapping.SkuExterno.
+                    // é isso que precisa bater com SkuMapping.SkuExterno. Nem todo
+                    // anúncio tem esse campo (ex: publicados direto pelo site do ML,
+                    // sem passar pela nossa integração) — ItemId serve de fallback
+                    // nesse caso, ver ResolverSkuAsync.
                     SkuExterno    = itemInfo.TryGetProperty("seller_custom_field", out var scf) ? scf.GetString() ?? "" : "",
+                    ItemId        = itemInfo.TryGetProperty("id", out var iid) ? iid.GetString() : null,
                     DescricaoItem = itemInfo.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "",
                     Quantidade    = item.TryGetProperty("quantity", out var q) ? q.GetDecimal() : 0,
                     ValorUnitario = item.TryGetProperty("unit_price", out var up) ? up.GetDecimal() : 0

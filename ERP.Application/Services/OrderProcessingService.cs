@@ -153,6 +153,7 @@ public class OrderProcessingService : IOrderProcessingService
             Itens = pedidoDto.Itens.Select(i => new ExternalOrderItem
             {
                 SkuExterno    = i.SkuExterno,
+                ItemId        = i.ItemId,
                 DescricaoItem = i.DescricaoItem,
                 Quantidade    = i.Quantidade,
                 ValorUnitario = i.ValorUnitario
@@ -185,18 +186,30 @@ public class OrderProcessingService : IOrderProcessingService
     }
 
     // ── Passo 2: resolver SKU externo → Product interno ─────────────
+    // Tenta pelo SkuExterno (seller_custom_field) primeiro — é o caminho
+    // "correto", presente em anúncios criados via nossa integração. Cai pro
+    // ItemId (sempre existe, qualquer que seja a origem do anúncio) quando
+    // o primeiro não encontra nada — cobre anúncios publicados direto pelo
+    // site do marketplace, sem seller_custom_field preenchido.
     private async Task<bool> ResolverSkuAsync(ExternalOrder pedido, Guid salesChannelId)
     {
         foreach (var item in pedido.Itens)
         {
-            var mapping = await _uow.OrderSync.GetSkuMappingAsync(salesChannelId, item.SkuExterno);
+            var mapping = !string.IsNullOrEmpty(item.SkuExterno)
+                ? await _uow.OrderSync.GetSkuMappingAsync(salesChannelId, item.SkuExterno)
+                : null;
+
+            if (mapping is null && !string.IsNullOrEmpty(item.ItemId))
+                mapping = await _uow.OrderSync.GetSkuMappingAsync(salesChannelId, item.ItemId);
+
             if (mapping is null)
             {
+                var chaveDescricao = !string.IsNullOrEmpty(item.SkuExterno) ? item.SkuExterno : item.ItemId ?? "(sem identificador)";
                 pedido.InternalStatus = ExternalOrderStatus.AguardandoSku;
                 await RegistrarConflitoAsync(pedido, OrderConflictType.SkuNaoMapeado,
-                    $"SKU '{item.SkuExterno}' sem mapeamento pra este canal.");
+                    $"SKU '{chaveDescricao}' sem mapeamento pra este canal.");
                 await RegistrarAcaoAsync(pedido, OrderActionType.ResolverSku, OrderActionStatus.Falhou,
-                    ProcessingErrorCode.SkuNaoMapeado, item.SkuExterno);
+                    ProcessingErrorCode.SkuNaoMapeado, chaveDescricao);
                 return false;
             }
             item.ProductId = mapping.ProductId;

@@ -45,11 +45,16 @@ public class SkuMappingsController : ControllerBase
         if (!sucesso) return StatusCode(502, new { mensagem });
 
         var mapeamentos = await _uow.OrderSync.GetMapeamentosPorCanalAsync(salesChannelId);
-        var porSku = mapeamentos.ToDictionary(m => m.SkuExterno, m => m);
+        var porChave = mapeamentos.ToDictionary(m => m.SkuExterno, m => m);
 
         var resultado = anuncios.Select(a =>
         {
-            porSku.TryGetValue(a.SkuExterno, out var mapeamento);
+            // Mesmo critério do ResolverSkuAsync: tenta pelo SkuExterno, cai pro
+            // ItemId quando o anúncio não tem seller_custom_field preenchido.
+            SkuMapping? mapeamento = null;
+            if (!string.IsNullOrEmpty(a.SkuExterno)) porChave.TryGetValue(a.SkuExterno, out mapeamento);
+            if (mapeamento is null && !string.IsNullOrEmpty(a.ItemId)) porChave.TryGetValue(a.ItemId, out mapeamento);
+
             return new AnuncioComMapeamentoDto(
                 a.ItemId, a.SkuExterno, a.Titulo,
                 Mapeado: mapeamento is not null,
@@ -71,25 +76,30 @@ public class SkuMappingsController : ControllerBase
         return Ok(resultado);
     }
 
-    /// <summary>Cria um novo mapeamento SKU externo → Product.</summary>
+    /// <summary>Cria um novo mapeamento — identificador → Product. Aceita
+    /// SkuExterno e/ou ItemId; guarda SkuExterno quando o anúncio tem, ou
+    /// ItemId quando não tem (ex: anúncio publicado direto pelo site do
+    /// marketplace, sem seller_custom_field) — o mesmo critério que
+    /// ResolverSkuAsync usa pra procurar de volta.</summary>
     [HttpPost("mapeamentos")]
     [HasPermission(Permissions.ConfigView)]
     public async Task<IActionResult> Mapear(Guid salesChannelId, [FromBody] CriarSkuMappingDto dto)
     {
-        if (string.IsNullOrWhiteSpace(dto.SkuExterno))
-            return BadRequest("SkuExterno é obrigatório.");
+        var chave = !string.IsNullOrWhiteSpace(dto.SkuExterno) ? dto.SkuExterno : dto.ItemId;
+        if (string.IsNullOrWhiteSpace(chave))
+            return BadRequest("Informe SkuExterno ou ItemId — pelo menos um dos dois é obrigatório.");
 
         var canal = await _uow.OrderSync.GetCanalByIdAsync(salesChannelId);
         if (canal is null) return NotFound("Canal não encontrado.");
 
-        var jaExiste = await _uow.OrderSync.GetSkuMappingAsync(salesChannelId, dto.SkuExterno);
+        var jaExiste = await _uow.OrderSync.GetSkuMappingAsync(salesChannelId, chave);
         if (jaExiste is not null)
-            return Conflict($"O SKU '{dto.SkuExterno}' já está mapeado nesse canal.");
+            return Conflict($"'{chave}' já está mapeado nesse canal.");
 
         var mapeamento = new SkuMapping
         {
             SalesChannelId  = salesChannelId,
-            SkuExterno      = dto.SkuExterno,
+            SkuExterno      = chave,
             ProductId       = dto.ProductId,
             BufferSeguranca = dto.BufferSeguranca ?? 0,
         };

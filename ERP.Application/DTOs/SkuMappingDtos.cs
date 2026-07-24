@@ -10,5 +10,7 @@ public record AnuncioComMapeamentoDto(
 /// <summary>Um mapeamento já existente, com o nome do produto pronto pra exibir.</summary>
 public record SkuMappingDto(Guid Id, string SkuExterno, Guid ProductId, string ProductNome);
 
-/// <summary>Corpo do POST de criação de mapeamento.</summary>
-public record CriarSkuMappingDto(string SkuExterno, Guid ProductId, decimal? BufferSeguranca = null);
+/// <summary>Corpo do POST de criação de mapeamento. Manda SkuExterno E/OU
+/// ItemId — o backend decide qual guardar (prefere SkuExterno quando o
+/// anúncio tem; usa ItemId como identificador quando não tem).</summary>
+public record CriarSkuMappingDto(string? SkuExterno, string? ItemId, Guid ProductId, decimal? BufferSeguranca = null);

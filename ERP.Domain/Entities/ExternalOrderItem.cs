@@ -14,6 +14,7 @@ public class ExternalOrderItem : BaseEntity
     public ExternalOrder?  ExternalOrder   { get; set; }
 
     public string  SkuExterno    { get; set; } = string.Empty;
+    public string? ItemId        { get; set; } // ex: MLB4935405945 — fallback quando o anúncio não tem SkuExterno
     public string  DescricaoItem { get; set; } = string.Empty; // texto do canal, só exibição
 
     public Guid?    ProductId { get; set; }

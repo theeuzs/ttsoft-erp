@@ -58,6 +58,7 @@ public class ExternalOrderDto
 public class ExternalOrderItemDto
 {
     public string  SkuExterno    { get; set; } = string.Empty;
+    public string? ItemId        { get; set; } // ex: MLB4935405945 — fallback quando o anúncio não tem SkuExterno
     public string  DescricaoItem { get; set; } = string.Empty;
     public decimal Quantidade    { get; set; }
     public decimal ValorUnitario { get; set; }
