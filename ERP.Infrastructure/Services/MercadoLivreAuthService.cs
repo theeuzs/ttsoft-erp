@@ -102,16 +102,23 @@ public class MercadoLivreAuthService : IMercadoLivreAuthService
             using var doc = JsonDocument.Parse(raw);
             var root = doc.RootElement;
 
-            canal.AccessToken      = root.GetProperty("access_token").GetString();
-            canal.RefreshToken     = root.TryGetProperty("refresh_token", out var rt) ? rt.GetString() : canal.RefreshToken;
-            var expiresInSegundos  = root.TryGetProperty("expires_in", out var exp) ? exp.GetInt32() : 21600; // 6h é o padrão documentado
-            canal.TokenExpiraEm    = DateTime.UtcNow.AddSeconds(expiresInSegundos);
+            var accessToken       = root.GetProperty("access_token").GetString();
+            var refreshToken      = root.TryGetProperty("refresh_token", out var rt) ? rt.GetString() : canal.RefreshToken;
+            var expiresInSegundos = root.TryGetProperty("expires_in", out var exp) ? exp.GetInt32() : 21600; // 6h é o padrão documentado
+            var tokenExpiraEm     = DateTime.UtcNow.AddSeconds(expiresInSegundos);
 
-            // user_id só vem na troca inicial (authorization_code) — no refresh não muda, não sobrescreve.
-            if (root.TryGetProperty("user_id", out var userId))
-                canal.ExternalAccountId = userId.ToString();
+            // user_id só vem na troca inicial (authorization_code) — no refresh não muda.
+            var externalAccountId = root.TryGetProperty("user_id", out var userId) ? userId.ToString() : null;
 
-            await _uow.OrderSync.SalvarAsync();
+            await _uow.OrderSync.AtualizarTokensAsync(canal.Id, accessToken, refreshToken, tokenExpiraEm, externalAccountId);
+
+            // Mantém o objeto em memória coerente pro resto desta chamada (ex: GarantirTokenValidoAsync
+            // volta a usar "canal" logo em seguida, no mesmo request, pra montar a próxima requisição HTTP).
+            canal.AccessToken   = accessToken;
+            canal.RefreshToken  = refreshToken;
+            canal.TokenExpiraEm = tokenExpiraEm;
+            if (externalAccountId is not null) canal.ExternalAccountId = externalAccountId;
+
             return (true, $"Token do Mercado Livre atualizado com sucesso ({contexto}).");
         }
         catch (Exception ex)

@@ -29,6 +29,17 @@ public interface IOrderSyncRepository
     Task<SalesChannel?> GetCanalPorIdSemFiltroAsync(Guid id);
 
     /// <summary>
+    /// Salva os tokens OAuth com busca-e-grava dedicada (mesmo motivo do
+    /// MarcarVendaGeradaAsync): o "canal" que o chamador já tem em mãos pode
+    /// ter perdido o rastreamento por causa de um SaveChanges anterior no
+    /// mesmo request (ex: ProcessarCanalAsync salva a ProcessingSession antes
+    /// de chegar aqui). IgnoreQueryFilters porque esse método também é usado
+    /// no callback anônimo do OAuth, onde ainda não existe tenant no contexto.
+    /// </summary>
+    Task AtualizarTokensAsync(Guid salesChannelId, string? accessToken, string? refreshToken,
+        DateTime tokenExpiraEm, string? externalAccountId);
+
+    /// <summary>
     /// Marca o pedido como VendaGerada com uma busca-e-grava dedicada, sempre
     /// com rastreamento garantido. Necessário porque SaveChangesAsync do
     /// projeto chama ChangeTracker.Clear() a cada gravação — se a venda
