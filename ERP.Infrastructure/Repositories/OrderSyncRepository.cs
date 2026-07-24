@@ -23,26 +23,15 @@ public class OrderSyncRepository : IOrderSyncRepository
         => await _ctx.SalesChannels.IgnoreQueryFilters().AsTracking().FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted);
 
     public async Task MarcarVendaGeradaAsync(Guid externalOrderId, Guid vendaId)
-{
-    var pedido = await _ctx.ExternalOrders.AsTracking().FirstOrDefaultAsync(o => o.Id == externalOrderId)
-        ?? throw new InvalidOperationException($"ExternalOrder {externalOrderId} não encontrado ao marcar venda gerada.");
-
-    pedido.VendaId = vendaId;
-    pedido.InternalStatus = ExternalOrderStatus.VendaGerada;
-
-    // 1. Estado exato da entidade
-    Serilog.Log.Information(">>> [DIAG] Estado do pedido antes do SaveChanges: {State}", _ctx.Entry(pedido).State);
-
-    // 2. Visão global do ChangeTracker
-    foreach (var e in _ctx.ChangeTracker.Entries())
     {
-        Serilog.Log.Information(">>> [DIAG] ChangeTracker: {Entity} -> {State}", e.Entity.GetType().Name, e.State);
-    }
+        var pedido = await _ctx.ExternalOrders.AsTracking().FirstOrDefaultAsync(o => o.Id == externalOrderId)
+            ?? throw new InvalidOperationException($"ExternalOrder {externalOrderId} não encontrado ao marcar venda gerada.");
 
-    // 3. O veredito do banco de dados
-    var rows = await _ctx.SaveChangesAsync();
-    Serilog.Log.Information(">>> [DIAG] SaveChanges retornou {Rows} linhas afetadas", rows);
-}
+        pedido.VendaId = vendaId;
+        pedido.InternalStatus = ExternalOrderStatus.VendaGerada;
+
+        await _ctx.SaveChangesAsync();
+    }
 
     public string NomeDoBancoConectado()
         => _ctx.Database.GetDbConnection().Database;
