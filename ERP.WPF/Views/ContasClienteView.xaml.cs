@@ -17,6 +17,6 @@ public partial class ContasClienteView : Window
 
         // Preenche as informações na tela
         TxtNomeCliente.Text = $"Contas em Aberto: {Resumo.CustomerName.ToUpper()}";
-        GridContas.ItemsSource = Resumo.Contas;
+        GridContas.ItemsSource = vm.ContasSelecionaveis;
     }
 }

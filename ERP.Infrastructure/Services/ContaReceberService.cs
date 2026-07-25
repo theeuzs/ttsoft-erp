@@ -197,8 +197,8 @@ public class ContaReceberService : IContaReceberService
             .ToListAsync();
 
         return (
-            pendentes.Sum(c => c.ValorTotal - c.ValorRecebido),
-            pendentes.Where(c => c.DataVencimento.Date < DateTime.Today).Sum(c => c.ValorTotal - c.ValorRecebido),
+            pendentes.Sum(c => c.ValorTotal - c.ValorRecebido - c.ValorDesconto),
+            pendentes.Where(c => c.DataVencimento.Date < DateTime.Today).Sum(c => c.ValorTotal - c.ValorRecebido - c.ValorDesconto),
             pendentes.Select(c => c.CustomerId).Distinct().Count()
         );
     }

@@ -4,6 +4,7 @@ using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.WPF.Commands;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.VisualBasic;
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -27,6 +28,32 @@ public class ResumoClienteDevedor : BaseViewModel
 
     // Guarda as contas individuais do cliente para mostrar na janelinha
     public ObservableCollection<ContaReceber> Contas { get; } = new();
+}
+
+/// <summary>
+/// Uma linha da grid "Contas em Aberto do Cliente" com estado de seleção —
+/// wrapper só do WPF, não polui a entidade ContaReceber (compartilhada com
+/// EF Core/backend) com estado de UI. Saldo aqui já considera ValorDesconto
+/// (o bug antigo da tela mostrava ValorTotal-ValorRecebido de uma linha
+/// "global" repetida em toda linha — Saldo por instância corrige os dois
+/// problemas de uma vez).
+/// </summary>
+public class ContaReceberSelecionavel : BaseViewModel
+{
+    public ContaReceber Conta { get; }
+
+    public Guid     Id             => Conta.Id;
+    public DateTime DataEmissao    => Conta.DataEmissao;
+    public string   Descricao      => Conta.Descricao;
+    public DateTime DataVencimento => Conta.DataVencimento;
+    public decimal  ValorTotal     => Conta.ValorTotal;
+    public decimal  ValorRecebido  => Conta.ValorRecebido;
+    public decimal  Saldo          => Conta.ValorTotal - Conta.ValorRecebido - Conta.ValorDesconto;
+
+    private bool _isSelecionada;
+    public bool IsSelecionada { get => _isSelecionada; set => SetProperty(ref _isSelecionada, value); }
+
+    public ContaReceberSelecionavel(ContaReceber conta) => Conta = conta;
 }
 
 public class FinanceiroViewModel : BaseViewModel
@@ -53,27 +80,33 @@ public class FinanceiroViewModel : BaseViewModel
         set => SetProperty(ref _abaSelecionada, value);
     }
 
-    // ── Conta selecionada para baixa (Usada dentro da janelinha) ─────────────
-    private ContaReceber? _selectedConta;
-    public ContaReceber? SelectedConta
+    // ── Contas selecionáveis da janelinha (populadas ao abrir o cliente) ─────
+    public ObservableCollection<ContaReceberSelecionavel> ContasSelecionaveis { get; } = new();
+
+    private bool? _selecionarTodas = false;
+    public bool? SelecionarTodas
     {
-        get => _selectedConta;
+        get => _selecionarTodas;
         set
         {
-            SetProperty(ref _selectedConta, value);
-            if (value != null)
-                ValorRecebido = value.ValorTotal - value.ValorRecebido; // saldo restante
-            
-            OnPropertyChanged(nameof(PainelVisivel));
-            OnPropertyChanged(nameof(SaldoRestante));
-            OnPropertyChanged(nameof(Troco));
+            SetProperty(ref _selecionarTodas, value);
+            if (value.HasValue)
+                foreach (var c in ContasSelecionaveis) c.IsSelecionada = value.Value;
         }
     }
 
-    public Visibility PainelVisivel => SelectedConta != null ? Visibility.Visible : Visibility.Collapsed;
+    private decimal _totalSelecionado;
+    public decimal TotalSelecionado { get => _totalSelecionado; private set => SetProperty(ref _totalSelecionado, value); }
 
-    public decimal SaldoRestante => SelectedConta != null
-        ? SelectedConta.ValorTotal - SelectedConta.ValorRecebido : 0;
+    private decimal _valorDesconto;
+    public decimal ValorDesconto
+    {
+        get => _valorDesconto;
+        set { SetProperty(ref _valorDesconto, value); RecalcularValorAPagar(); }
+    }
+
+    private decimal _valorAPagar;
+    public decimal ValorAPagar { get => _valorAPagar; set => SetProperty(ref _valorAPagar, value); }
 
     public System.Collections.Generic.IEnumerable<PaymentMethod> FormasPagamento =>
         System.Enum.GetValues<PaymentMethod>()
@@ -86,50 +119,54 @@ public class FinanceiroViewModel : BaseViewModel
         set => SetProperty(ref _formaPagamentoSelecionada, value);
     }
 
-    private decimal _valorRecebido;
-    public decimal ValorRecebido
-    {
-        get => _valorRecebido;
-        set { SetProperty(ref _valorRecebido, value); OnPropertyChanged(nameof(Troco)); }
-    }
-
-    public decimal Troco => SelectedConta != null && ValorRecebido > SaldoRestante
-        ? ValorRecebido - SaldoRestante : 0;
-
     // ── Comandos ─────────────────────────────────────────────────────────────
     public ICommand CarregarCommand               { get; }
     public ICommand ImprimirCarneCommand          { get; }  // Sprint N
     public ICommand EnviarCobrancaWhatsAppCommand { get; }  // Sprint P
-    public ICommand PrepararRecebimentoCommand { get; }
-    public ICommand CancelarRecebimentoCommand { get; }
-    public ICommand ConfirmarBaixaCommand      { get; }
-    public ICommand BaixaTotalCommand          { get; }
     public ICommand AbrirDetalhesCommand       { get; } // Novo comando da janelinha
     public ICommand VerReciboVendaCommand      { get; } // Botão de ver a compra original
+    public ICommand ReceberSelecionadasCommand { get; }
+    public ICommand CancelarContaCommand       { get; }
 
     public FinanceiroViewModel()
     {
         CarregarCommand               = new RelayCommand(async _ => await CarregarContasAsync());
         ImprimirCarneCommand          = new AsyncRelayCommand(async p => await ImprimirCarneAsync(p as ResumoClienteDevedor));
         EnviarCobrancaWhatsAppCommand = new AsyncRelayCommand(async p => await EnviarCobrancaWhatsAppAsync(p as ResumoClienteDevedor));
-        PrepararRecebimentoCommand = new RelayCommand(p => { if (p is ContaReceber c) SelectedConta = c; });
-        CancelarRecebimentoCommand = new RelayCommand(_ => SelectedConta = null);
-        ConfirmarBaixaCommand      = new RelayCommand(async _ => await ConfirmarBaixaAsync());
-        BaixaTotalCommand          = new RelayCommand(async _ => await BaixaTotalAsync());
-        
         VerReciboVendaCommand      = new RelayCommand(async c => await AbrirReciboVendaAsync(c as ContaReceber));
-        
+        ReceberSelecionadasCommand = new AsyncRelayCommand(async _ => await ReceberSelecionadasAsync());
+        CancelarContaCommand       = new AsyncRelayCommand(async p => await CancelarContaAsync(p as ContaReceberSelecionavel));
+
         // Abre a janelinha modal de detalhes do cliente
         AbrirDetalhesCommand       = new RelayCommand(c => AbrirDetalhesCliente(c as ResumoClienteDevedor));
 
         _ = CarregarContasAsync();
     }
 
+    private void RecalcularValorAPagar()
+        => ValorAPagar = Math.Max(0, TotalSelecionado - ValorDesconto);
+
+    private void AtualizarTotaisSelecao()
+    {
+        TotalSelecionado = ContasSelecionaveis.Where(c => c.IsSelecionada).Sum(c => c.Saldo);
+        RecalcularValorAPagar();
+    }
+
     // ── Abre o Módulo do Cliente ─────────────────────────────────────────────
     private void AbrirDetalhesCliente(ResumoClienteDevedor? resumo)
     {
         if (resumo == null) return;
-        SelectedConta = null; // Reseta o painel de pagamento
+
+        ContasSelecionaveis.Clear();
+        SelecionarTodas  = false;
+        ValorDesconto    = 0;
+        ValorAPagar      = 0;
+        foreach (var conta in resumo.Contas)
+        {
+            var item = new ContaReceberSelecionavel(conta);
+            item.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ContaReceberSelecionavel.IsSelecionada)) AtualizarTotaisSelecao(); };
+            ContasSelecionaveis.Add(item);
+        }
 
         var view = new ERP.WPF.Views.ContasClienteView(this, resumo)
         {
@@ -157,7 +194,7 @@ public class FinanceiroViewModel : BaseViewModel
                 {
                     CustomerId = g.Key,
                     CustomerName = g.First().Customer?.Name ?? "Cliente Não Identificado",
-                    TotalPendente = g.Sum(x => x.ValorTotal - x.ValorRecebido),
+                    TotalPendente = g.Sum(x => x.ValorTotal - x.ValorRecebido - x.ValorDesconto),
                     QtdContas = g.Count()
                 };
                 foreach (var c in g.OrderBy(x => x.DataVencimento)) r.Contas.Add(c);
@@ -178,120 +215,118 @@ public class FinanceiroViewModel : BaseViewModel
         finally { IsBusy = false; }
     }
 
-    // ── Baixa parcial ────────────────────────────────────────────────────────
-    private async Task ConfirmarBaixaAsync()
+    // ── Recebimento em lote (várias contas selecionadas de uma vez) ──────────
+    private async Task ReceberSelecionadasAsync()
     {
-        if (SelectedConta == null || ValorRecebido <= 0) return;
+        var selecionadas = ContasSelecionaveis.Where(c => c.IsSelecionada).ToList();
+        if (selecionadas.Count == 0)
+        {
+            MessageBox.Show("Selecione ao menos uma conta.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (ValorAPagar <= 0)
+        {
+            MessageBox.Show("Informe um valor a pagar maior que zero.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
 
-        decimal valorAplicar = Math.Min(ValorRecebido, SaldoRestante);
-        var contaPaga = SelectedConta; 
+        var clienteId   = selecionadas.First().Conta.CustomerId;
+        var nomeCliente = selecionadas.First().Conta.Customer?.Name ?? "Cliente";
 
         try
         {
-            // Registra no caixa
             var caixaService = App.Services.GetRequiredService<ICaixaService>();
             await caixaService.RegistrarMovimentoAsync(
                 ERP.WPF.State.AppSession.UserId,
-                valorAplicar,
-                $"RECEBIMENTO FIADO - {contaPaga.Customer?.Name ?? "Cliente"}",
+                ValorAPagar,
+                $"RECEBIMENTO FIADO (lote de {selecionadas.Count}) - {nomeCliente}",
                 FormaPagamentoSelecionada,
                 TipoMovimentoCaixa.RecebimentoConta);
 
-            // Dá baixa no banco de dados
             using var scope = App.Services.CreateScope();
             var service = scope.ServiceProvider.GetRequiredService<IContaReceberService>();
-            await service.DarBaixaParcialAsync(contaPaga.Id, valorAplicar);
+            await service.DarBaixaEmLoteAsync(
+                selecionadas.Select(c => c.Id), ValorAPagar, ValorDesconto, FormaPagamentoSelecionada.ToString());
 
             ERP.WPF.ViewModels.PdvViewModel.NotificacaoCaixaAlterado?.Invoke();
 
-            bool pago = valorAplicar >= SaldoRestante;
             MessageBox.Show(
-                pago
-                    ? $"✅ Pagamento total recebido!\n\nTroco: R$ {Troco:N2}"
-                    : $"✅ Pagamento parcial de R$ {valorAplicar:N2} registrado!\n\nSaldo restante: R$ {SaldoRestante - valorAplicar:N2}",
+                $"✅ {selecionadas.Count} conta(s) processada(s)!\n\nValor pago: R$ {ValorAPagar:N2}" +
+                (ValorDesconto > 0 ? $"\nDesconto: R$ {ValorDesconto:N2}" : ""),
                 "Recebimento", MessageBoxButton.OK, MessageBoxImage.Information);
 
-            // 👇 IMPRIME O COMPROVANTE (DISPARO AUTOMÁTICO) 👇
-            ImprimirComprovantePagamento(contaPaga, valorAplicar, Math.Max(0, SaldoRestante - valorAplicar));
-
-            // 👇 MÁGICA VISUAL ATUALIZADA (Para a Janelinha) 👇
-            var resumoCliente = ClientesDevedores.FirstOrDefault(r => r.CustomerId == contaPaga.CustomerId);
-            
-            if (pago)
-            {
-                if (resumoCliente != null)
-                {
-                    resumoCliente.Contas.Remove(contaPaga);
-                    resumoCliente.TotalPendente -= valorAplicar;
-                    resumoCliente.QtdContas--;
-
-                    if (resumoCliente.Contas.Count == 0) ClientesDevedores.Remove(resumoCliente);
-                }
-            }
-            else
-            {
-                // Se foi parcial, apenas desconta do total do cliente na tela
-                if (resumoCliente != null) resumoCliente.TotalPendente -= valorAplicar;
-                contaPaga.ValorRecebido += valorAplicar; // Atualiza a linha da tela
-            }
-
-            TotalPendente -= valorAplicar;
-            SelectedConta = null;
+            await RecarregarContasDoClienteAsync(clienteId);
+            await CarregarContasAsync(); // atualiza os totais da lista principal também
         }
         catch (Exception ex) { MessageBox.Show($"Erro ao registrar: {ex.Message}"); }
     }
 
-    // ── Baixa total rápida ───────────────────────────────────────────────────
-    private async Task BaixaTotalAsync()
+    // ── Cancelar uma conta específica (inline, sem afetar as outras) ─────────
+    private async Task CancelarContaAsync(ContaReceberSelecionavel? item)
     {
-        if (SelectedConta == null) return;
+        if (item == null) return;
 
-        decimal saldo = SaldoRestante;
+        var motivo = Interaction.InputBox(
+            $"Motivo do cancelamento de '{item.Descricao}' (saldo R$ {item.Saldo:N2}):",
+            "Cancelar Conta", "");
+
+        if (string.IsNullOrWhiteSpace(motivo)) return; // usuário cancelou o próprio diálogo
+
         var confirm = MessageBox.Show(
-            $"Confirmar recebimento total de R$ {saldo:N2} de {SelectedConta.Customer?.Name}?",
-            "Baixa Total", MessageBoxButton.YesNo, MessageBoxImage.Question);
-
+            $"Confirma cancelar essa conta no valor de R$ {item.Saldo:N2}?\n\nMotivo: {motivo}",
+            "Confirmar Cancelamento", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.Yes) return;
-
-        var contaPaga = SelectedConta; 
 
         try
         {
-            var caixaService = App.Services.GetRequiredService<ICaixaService>();
-            await caixaService.RegistrarMovimentoAsync(
-                ERP.WPF.State.AppSession.UserId,
-                saldo,
-                $"RECEBIMENTO FIADO - {contaPaga.Customer?.Name ?? "Cliente"}",
-                FormaPagamentoSelecionada,
-                TipoMovimentoCaixa.RecebimentoConta);
-
             using var scope = App.Services.CreateScope();
             var service = scope.ServiceProvider.GetRequiredService<IContaReceberService>();
-            await service.DarBaixaTotalAsync(contaPaga.Id);
+            await service.CancelarAsync(item.Id, motivo);
 
-            ERP.WPF.ViewModels.PdvViewModel.NotificacaoCaixaAlterado?.Invoke();
+            MessageBox.Show("Conta cancelada.", "Sucesso", MessageBoxButton.OK, MessageBoxImage.Information);
 
-            MessageBox.Show("✅ Conta liquidada com sucesso!", "Sucesso",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-
-            // 👇 IMPRIME O COMPROVANTE (DISPARO AUTOMÁTICO) 👇
-            ImprimirComprovantePagamento(contaPaga, saldo, 0);
-
-            // 👇 MÁGICA VISUAL ATUALIZADA (Para a Janelinha) 👇
-            var resumoCliente = ClientesDevedores.FirstOrDefault(r => r.CustomerId == contaPaga.CustomerId);
-            if (resumoCliente != null)
-            {
-                resumoCliente.Contas.Remove(contaPaga);
-                resumoCliente.TotalPendente -= saldo;
-                resumoCliente.QtdContas--;
-
-                if (resumoCliente.Contas.Count == 0) ClientesDevedores.Remove(resumoCliente);
-            }
-
-            TotalPendente -= saldo;
-            SelectedConta = null;
+            var clienteId = item.Conta.CustomerId;
+            await RecarregarContasDoClienteAsync(clienteId);
+            await CarregarContasAsync();
         }
-        catch (Exception ex) { MessageBox.Show($"Erro: {ex.Message}"); }
+        catch (Exception ex) { MessageBox.Show($"Erro ao cancelar: {ex.Message}"); }
+    }
+
+    // ── Recarrega as contas de um cliente específico (depois de lote/cancelamento) ──
+    private async Task RecarregarContasDoClienteAsync(Guid clienteId)
+    {
+        using var scope = App.Services.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IContaReceberService>();
+        var contasAtualizadas = (await service.GetPorClienteAsync(clienteId))
+            .Where(c => c.Status == "Pendente")
+            .OrderBy(c => c.DataVencimento)
+            .ToList();
+
+        var resumo = ClientesDevedores.FirstOrDefault(r => r.CustomerId == clienteId);
+
+        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            ContasSelecionaveis.Clear();
+            foreach (var conta in contasAtualizadas)
+            {
+                var item = new ContaReceberSelecionavel(conta);
+                item.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ContaReceberSelecionavel.IsSelecionada)) AtualizarTotaisSelecao(); };
+                ContasSelecionaveis.Add(item);
+            }
+            SelecionarTodas = false;
+            ValorDesconto   = 0;
+            AtualizarTotaisSelecao();
+
+            if (resumo != null)
+            {
+                resumo.Contas.Clear();
+                foreach (var c in contasAtualizadas) resumo.Contas.Add(c);
+                resumo.QtdContas = resumo.Contas.Count;
+                resumo.TotalPendente = resumo.Contas.Sum(c => c.ValorTotal - c.ValorRecebido - c.ValorDesconto);
+
+                if (resumo.Contas.Count == 0) ClientesDevedores.Remove(resumo);
+            }
+        });
     }
 
     // ── 1. VISUALIZAR A COMPRA ORIGINAL ──────────────────────────────────────

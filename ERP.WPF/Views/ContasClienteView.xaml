@@ -1,23 +1,23 @@
 <Window x:Class="ERP.WPF.Views.ContasClienteView"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Contas em Aberto do Cliente" Height="600" Width="1000"
+        Title="Contas em Aberto do Cliente" Height="640" Width="1080"
         WindowStartupLocation="CenterOwner" Background="#F1F5F9" FontFamily="Segoe UI">
-    
+
     <Grid Margin="24">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/> 
-            <RowDefinition Height="*"/> 
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <TextBlock x:Name="TxtNomeCliente" FontSize="22" FontWeight="Black" Foreground="#0F172A" Margin="0,0,0,16"/>
 
-        <DataGrid x:Name="GridContas" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
-                  SelectedItem="{Binding SelectedConta}" SelectionMode="Single"
+        <DataGrid x:Name="GridContas" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="False"
+                  SelectionMode="Extended" CanUserAddRows="False"
                   Background="White" RowHeight="45" BorderThickness="1" BorderBrush="#E2E8F0"
                   GridLinesVisibility="None" RowBackground="White" AlternatingRowBackground="#F8FAFC">
-            
+
             <DataGrid.ColumnHeaderStyle>
                 <Style TargetType="DataGridColumnHeader">
                     <Setter Property="Background" Value="White"/>
@@ -42,7 +42,14 @@
             </DataGrid.CellStyle>
 
             <DataGrid.Columns>
-                <DataGridTextColumn Header="EMISSÃO" Binding="{Binding DataEmissao, StringFormat=dd/MM/yyyy}" Width="105">
+                <DataGridCheckBoxColumn Width="40" Binding="{Binding IsSelecionada, UpdateSourceTrigger=PropertyChanged}">
+                    <DataGridCheckBoxColumn.Header>
+                        <CheckBox IsChecked="{Binding DataContext.SelecionarTodas, RelativeSource={RelativeSource AncestorType=Window}}"
+                                  ToolTip="Selecionar todas"/>
+                    </DataGridCheckBoxColumn.Header>
+                </DataGridCheckBoxColumn>
+
+                <DataGridTextColumn Header="EMISSÃO" Binding="{Binding DataEmissao, StringFormat=dd/MM/yyyy}" IsReadOnly="True" Width="105">
                     <DataGridTextColumn.HeaderStyle>
                         <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
                             <Setter Property="HorizontalContentAlignment" Value="Center"/>
@@ -52,10 +59,10 @@
                         <Style TargetType="TextBlock"><Setter Property="HorizontalAlignment" Value="Center"/></Style>
                     </DataGridTextColumn.ElementStyle>
                 </DataGridTextColumn>
-                
-                <DataGridTextColumn Header="DESCRIÇÃO" Binding="{Binding Descricao}" Width="*"/>
-                
-                <DataGridTextColumn Header="VENCIMENTO" Binding="{Binding DataVencimento, StringFormat=dd/MM/yyyy}" Width="125">
+
+                <DataGridTextColumn Header="DESCRIÇÃO" Binding="{Binding Descricao}" IsReadOnly="True" Width="*"/>
+
+                <DataGridTextColumn Header="VENCIMENTO" Binding="{Binding DataVencimento, StringFormat=dd/MM/yyyy}" IsReadOnly="True" Width="115">
                     <DataGridTextColumn.HeaderStyle>
                         <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
                             <Setter Property="HorizontalContentAlignment" Value="Center"/>
@@ -65,20 +72,20 @@
                         <Style TargetType="TextBlock"><Setter Property="HorizontalAlignment" Value="Center"/></Style>
                     </DataGridTextColumn.ElementStyle>
                 </DataGridTextColumn>
-                
-                <DataGridTextColumn Header="TOTAL" Binding="{Binding ValorTotal, StringFormat=C}" Width="110">
+
+                <DataGridTextColumn Header="TOTAL" Binding="{Binding ValorTotal, StringFormat=C}" IsReadOnly="True" Width="100">
                     <DataGridTextColumn.HeaderStyle>
                         <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
                             <Setter Property="HorizontalContentAlignment" Value="Right"/>
-                            <Setter Property="Padding" Value="0,10,12,10"/> 
+                            <Setter Property="Padding" Value="0,10,12,10"/>
                         </Style>
                     </DataGridTextColumn.HeaderStyle>
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock"><Setter Property="HorizontalAlignment" Value="Right"/></Style>
                     </DataGridTextColumn.ElementStyle>
                 </DataGridTextColumn>
-                
-                <DataGridTextColumn Header="RECEBIDO" Binding="{Binding ValorRecebido, StringFormat=C}" Width="110">
+
+                <DataGridTextColumn Header="RECEBIDO" Binding="{Binding ValorRecebido, StringFormat=C}" IsReadOnly="True" Width="100">
                     <DataGridTextColumn.HeaderStyle>
                         <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
                             <Setter Property="HorizontalContentAlignment" Value="Right"/>
@@ -92,8 +99,8 @@
                         </Style>
                     </DataGridTextColumn.ElementStyle>
                 </DataGridTextColumn>
-                
-                <DataGridTextColumn Header="SALDO" Binding="{Binding DataContext.SaldoRestante, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=C}" Width="110">
+
+                <DataGridTextColumn Header="SALDO" Binding="{Binding Saldo, StringFormat=C}" Width="100" IsReadOnly="True">
                     <DataGridTextColumn.HeaderStyle>
                         <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
                             <Setter Property="HorizontalContentAlignment" Value="Right"/>
@@ -109,13 +116,26 @@
                     </DataGridTextColumn.ElementStyle>
                 </DataGridTextColumn>
 
-                <DataGridTemplateColumn Width="115">
+                <DataGridTemplateColumn Width="115" IsReadOnly="True">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <Button Content="👁️ Ver Compra" 
-                                    Command="{Binding DataContext.VerReciboVendaCommand, RelativeSource={RelativeSource AncestorType=Window}}" 
-                                    CommandParameter="{Binding}" 
+                            <Button Content="👁️ Ver Compra"
+                                    Command="{Binding DataContext.VerReciboVendaCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    CommandParameter="{Binding Conta}"
                                     Background="#F1F5F9" Foreground="#475569" FontWeight="SemiBold" Cursor="Hand" BorderThickness="0" Padding="8,4">
+                                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                            </Button>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Width="105" IsReadOnly="True">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button Content="🗑 Cancelar"
+                                    Command="{Binding DataContext.CancelarContaCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    CommandParameter="{Binding}"
+                                    Background="#FEF2F2" Foreground="#DC2626" FontWeight="SemiBold" Cursor="Hand" BorderThickness="0" Padding="8,4">
                                 <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
                             </Button>
                         </DataTemplate>
@@ -124,32 +144,51 @@
             </DataGrid.Columns>
         </DataGrid>
 
-        <Border Grid.Row="2" Background="White" Padding="20" Margin="0,16,0,0" CornerRadius="12" Visibility="{Binding PainelVisivel}">
+        <Border Grid.Row="2" Background="White" Padding="20" Margin="0,16,0,0" CornerRadius="12">
             <Border.Effect><DropShadowEffect BlurRadius="15" Opacity="0.05" ShadowDepth="4"/></Border.Effect>
-            
+
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/> <ColumnDefinition Width="*"/>    <ColumnDefinition Width="Auto"/> </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="🖨️ Carnê PDF" 
+                    <Button Content="🖨️ Carnê PDF"
                             Command="{Binding ImprimirCarneCommand}"
                             CommandParameter="{Binding SelectedResumo}"
-                            Background="#F8FAFC" Foreground="#334155" BorderBrush="#CBD5E1" BorderThickness="1" 
+                            Background="#F8FAFC" Foreground="#334155" BorderBrush="#CBD5E1" BorderThickness="1"
                             FontWeight="SemiBold" Padding="12,10" Margin="0,0,10,0" Cursor="Hand" ToolTip="Gera PDF com todas as parcelas do cliente">
                         <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
                     </Button>
-                    <Button Content="💬 Cobrar WhatsApp" 
+                    <Button Content="💬 Cobrar WhatsApp"
                             Command="{Binding EnviarCobrancaWhatsAppCommand}"
                             CommandParameter="{Binding SelectedResumo}"
-                            Background="#F0FDF4" Foreground="#16A34A" BorderBrush="#86EFAC" BorderThickness="1" 
+                            Background="#F0FDF4" Foreground="#16A34A" BorderBrush="#86EFAC" BorderThickness="1"
                             FontWeight="SemiBold" Padding="12,10" Cursor="Hand" ToolTip="Abre WhatsApp Web com mensagem de cobrança">
                         <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
                     </Button>
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    
+
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock Text="TOTAL SELECIONADO" FontSize="10" FontWeight="Bold" Foreground="#94A3B8" Margin="0,0,0,4"/>
+                        <TextBlock Text="{Binding TotalSelecionado, StringFormat=C}" FontSize="18" FontWeight="Black"
+                                   Foreground="#0F172A" Height="42" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock Text="DESCONTO (R$)" FontSize="10" FontWeight="Bold" Foreground="#94A3B8" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding ValorDesconto, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="100" Height="42" FontSize="16" FontWeight="Bold" Padding="8,0" VerticalContentAlignment="Center"/>
+                    </StackPanel>
+
+                    <StackPanel Margin="0,0,24,0">
+                        <TextBlock Text="VALOR A PAGAR" FontSize="10" FontWeight="Bold" Foreground="#94A3B8" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding ValorAPagar, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="130" Height="42" FontSize="18" FontWeight="Black" Padding="8,0" VerticalContentAlignment="Center"
+                                 ToolTip="Editável — pode pagar menos que o total selecionado (baixa parcial nas contas mais antigas primeiro)"/>
+                    </StackPanel>
+
                     <StackPanel Margin="0,0,16,0">
                         <TextBlock Text="FORMA DE PAGAMENTO" FontSize="10" FontWeight="Bold" Foreground="#94A3B8" Margin="0,0,0,4"/>
                         <ComboBox ItemsSource="{Binding FormasPagamento}"
@@ -157,24 +196,12 @@
                                   Width="150" Height="42" FontSize="14" VerticalContentAlignment="Center"/>
                     </StackPanel>
 
-                    <StackPanel Margin="0,0,24,0">
-                        <TextBlock Text="VALOR (R$)" FontSize="10" FontWeight="Bold" Foreground="#94A3B8" Margin="0,0,0,4"/>
-                        <TextBox Text="{Binding ValorRecebido, UpdateSourceTrigger=PropertyChanged}" 
-                                 Width="130" Height="42" FontSize="18" FontWeight="Black" Padding="8,0" VerticalContentAlignment="Center"/>
-                    </StackPanel>
-                    
-                    <Button Content="Zerar Saldo" Command="{Binding BaixaTotalCommand}" 
-                            Background="Transparent" Foreground="#10B981" BorderBrush="#10B981" BorderThickness="1.5" 
-                            FontWeight="Bold" Padding="16,0" Height="42" Margin="0,0,12,0" Cursor="Hand">
-                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
-                    </Button>
-
-                    <Button Content="✓ RECEBER" Command="{Binding ConfirmarBaixaCommand}" 
-                            Background="#3B82F6" Foreground="White" 
+                    <Button Content="✓ RECEBER" Command="{Binding ReceberSelecionadasCommand}"
+                            Background="#3B82F6" Foreground="White"
                             FontWeight="Black" FontSize="15" Padding="24,0" Height="42" BorderThickness="0" Cursor="Hand">
                         <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
                     </Button>
-                    
+
                 </StackPanel>
             </Grid>
         </Border>
