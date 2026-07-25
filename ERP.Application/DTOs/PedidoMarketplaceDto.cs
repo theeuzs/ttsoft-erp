@@ -18,4 +18,16 @@ public record PedidoMarketplaceDto(
     string? ShippingMode,
     string? ShippingStatus,
     DateTime DataPedidoExterno,
-    DateTime? UltimaSincronizacao);
+    DateTime? UltimaSincronizacao)
+{
+    /// <summary>Já virou venda no ERP.</summary>
+    public bool TemVenda => VendaId.HasValue;
+
+    /// <summary>Tem informação de frete — hoje sempre false pra pedido de
+    /// teste (ver ExternalOrder.ShippingId), fica pronto pro dia que existir.</summary>
+    public bool TemFrete => !string.IsNullOrEmpty(ShippingMode) || !string.IsNullOrEmpty(ShippingStatus);
+
+    /// <summary>Faz sentido oferecer o botão "Reprocessar" — só não faz
+    /// sentido pra pedido cancelado (estado final, reprocessar não muda nada).</summary>
+    public bool PodeReprocessar => InternalStatus != ExternalOrderStatus.Cancelado;
+}
