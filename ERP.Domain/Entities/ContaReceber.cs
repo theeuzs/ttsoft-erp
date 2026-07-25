@@ -15,6 +15,15 @@ public class ContaReceber : BaseEntity
     public decimal ValorTotal { get; set; }
     public decimal ValorRecebido { get; set; }
 
+    /// <summary>Valor perdoado/descontado — separado de ValorRecebido porque
+    /// desconto não é dinheiro que entrou no caixa, é redução do que era devido.
+    /// Saldo real = ValorTotal - ValorRecebido - ValorDesconto.</summary>
+    public decimal ValorDesconto { get; set; } = 0;
+
+    /// <summary>Preenchido só quando Status = "Cancelado" — motivo do cancelamento,
+    /// pra auditoria (o vendedor lançou errado, cliente desistiu, etc.).</summary>
+    public string? MotivoCancelamento { get; set; }
+
     // Datas importantes para cobrança
     public DateTime DataEmissao { get; set; } = DateTime.Now;
     public DateTime DataVencimento { get; set; }

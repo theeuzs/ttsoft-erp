@@ -100,6 +100,96 @@ public class ContaReceberService : IContaReceberService
             $"UPDATE ContasReceber SET ValorRecebido={conta.ValorTotal}, Status={"Pago"}, DataPagamento={DateTime.Now}, UpdatedAt={DateTime.UtcNow} WHERE Id={contaId} AND TenantId={_tenant.TenantId}");
     }
 
+    public async Task CancelarAsync(Guid contaId, string motivo)
+    {
+        _ = await _ctx.ContasReceber.AsNoTracking().FirstOrDefaultAsync(c => c.Id == contaId)
+            ?? throw new KeyNotFoundException("Conta não encontrada.");
+
+        // Diferente de DarBaixaTotalAsync: NÃO mexe em ValorRecebido. Cancelar
+        // não é "cliente pagou", é "essa dívida deixou de existir" — precisam
+        // ficar contabilmente distintos (senão relatório de recebimento mostra
+        // dinheiro que nunca entrou).
+        await _ctx.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE ContasReceber SET Status={"Cancelado"}, MotivoCancelamento={motivo}, UpdatedAt={DateTime.UtcNow} WHERE Id={contaId} AND TenantId={_tenant.TenantId}");
+    }
+
+    public async Task DarDescontoAsync(Guid contaId, decimal valorDesconto, string motivo)
+    {
+        var conta = await _ctx.ContasReceber.AsNoTracking().FirstOrDefaultAsync(c => c.Id == contaId)
+            ?? throw new KeyNotFoundException("Conta não encontrada.");
+
+        var saldoAtual = conta.ValorTotal - conta.ValorRecebido - conta.ValorDesconto;
+        if (valorDesconto > saldoAtual)
+            throw new InvalidOperationException(
+                $"Desconto de {valorDesconto:C} maior que o saldo devido ({saldoAtual:C}).");
+
+        var novoValorDesconto = conta.ValorDesconto + valorDesconto;
+        var quitou             = conta.ValorRecebido + novoValorDesconto >= conta.ValorTotal;
+        var novoStatus         = quitou ? "Pago" : conta.Status;
+        var dataPagamento      = quitou ? DateTime.Now : conta.DataPagamento;
+
+        // Motivo do desconto entra na Descricao (concatenado) — não criei um
+        // campo dedicado pra isso pra não multiplicar migration por um detalhe
+        // de auditoria secundário; dá pra promover pra campo próprio depois se
+        // precisar filtrar/relatar por esse motivo especificamente.
+        var descricaoComMotivo = $"{conta.Descricao} [Desconto de {valorDesconto:C}: {motivo}]";
+
+        await _ctx.Database.ExecuteSqlInterpolatedAsync($@"
+            UPDATE ContasReceber
+            SET ValorDesconto={novoValorDesconto}, Status={novoStatus}, DataPagamento={dataPagamento},
+                Descricao={descricaoComMotivo}, UpdatedAt={DateTime.UtcNow}
+            WHERE Id={contaId} AND TenantId={_tenant.TenantId}");
+    }
+
+    public async Task DarBaixaEmLoteAsync(
+        IEnumerable<Guid> contaIds, decimal valorAPagar, decimal valorDesconto, string formaPagamento)
+    {
+        var ids = contaIds.ToList();
+        if (ids.Count == 0) return;
+
+        var contas = await _ctx.ContasReceber.AsNoTracking()
+            .Where(c => ids.Contains(c.Id) && c.TenantId == _tenant.TenantId)
+            .OrderBy(c => c.DataVencimento) // mais antiga primeiro — cliente escolheu QUAIS contas, não qual ordem
+            .ToListAsync();
+
+        if (contas.Count == 0) return;
+
+        var saldoTotalSelecionado = contas.Sum(c => c.ValorTotal - c.ValorRecebido - c.ValorDesconto);
+        var restanteAPagar    = valorAPagar;
+        var restanteDesconto  = valorDesconto;
+
+        foreach (var conta in contas)
+        {
+            var saldoConta = conta.ValorTotal - conta.ValorRecebido - conta.ValorDesconto;
+            if (saldoConta <= 0) continue;
+
+            // Desconto rateado proporcional ao peso dessa conta no total selecionado.
+            var descontoDaConta = saldoTotalSelecionado > 0
+                ? Math.Round(valorDesconto * (saldoConta / saldoTotalSelecionado), 2)
+                : 0;
+            descontoDaConta = Math.Min(descontoDaConta, restanteDesconto);
+            descontoDaConta = Math.Min(descontoDaConta, saldoConta);
+
+            var pagamentoDaConta = Math.Max(0, Math.Min(restanteAPagar, saldoConta - descontoDaConta));
+
+            var novoValorRecebido = conta.ValorRecebido + pagamentoDaConta;
+            var novoValorDesconto = conta.ValorDesconto + descontoDaConta;
+            var quitou             = novoValorRecebido + novoValorDesconto >= conta.ValorTotal;
+            var novoStatus         = quitou ? "Pago" : "Pendente";
+            var dataPagamento      = quitou ? DateTime.Now : conta.DataPagamento;
+
+            await _ctx.Database.ExecuteSqlInterpolatedAsync($@"
+                UPDATE ContasReceber
+                SET ValorRecebido={novoValorRecebido}, ValorDesconto={novoValorDesconto},
+                    Status={novoStatus}, DataPagamento={dataPagamento}, FormaPagamento={formaPagamento},
+                    UpdatedAt={DateTime.UtcNow}
+                WHERE Id={conta.Id} AND TenantId={_tenant.TenantId}");
+
+            restanteAPagar   -= pagamentoDaConta;
+            restanteDesconto -= descontoDaConta;
+        }
+    }
+
     public async Task<(decimal TotalPendente, decimal TotalVencido, int QtdClientes)> GetResumoAsync()
     {
         var pendentes = await _ctx.ContasReceber.AsNoTracking()

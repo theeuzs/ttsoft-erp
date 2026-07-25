@@ -25,6 +25,23 @@ public interface IContaReceberService
     Task<IEnumerable<ContaReceber>> GetInadimplentesAsync();
     Task DarBaixaParcialAsync(Guid contaId, decimal valorRecebido);
     Task DarBaixaTotalAsync(Guid contaId);
+
+    /// <summary>Cancela a conta sem fingir que foi recebida — Status vira
+    /// "Cancelado", ValorRecebido não muda. Diferente de "Zerar Saldo"
+    /// (que era, na prática, DarBaixaTotalAsync disfarçado).</summary>
+    Task CancelarAsync(Guid contaId, string motivo);
+
+    /// <summary>Dá desconto numa conta específica — reduz o saldo devido sem
+    /// contar como dinheiro recebido (ValorDesconto é campo separado).</summary>
+    Task DarDescontoAsync(Guid contaId, decimal valorDesconto, string motivo);
+
+    /// <summary>
+    /// Baixa várias contas de uma vez (ex: cliente atendido por vendedores
+    /// diferentes, quer quitar tudo junto no caixa). Quita da mais antiga pra
+    /// mais nova (DataVencimento) até o valorAPagar acabar; o desconto é
+    /// rateado proporcionalmente ao saldo de cada conta selecionada.
+    /// </summary>
+    Task DarBaixaEmLoteAsync(IEnumerable<Guid> contaIds, decimal valorAPagar, decimal valorDesconto, string formaPagamento);
     Task<(decimal TotalPendente, decimal TotalVencido, int QtdClientes)> GetResumoAsync();
     Task<int> CountInadimplentesAsync();
 

@@ -464,6 +464,7 @@ public partial class App : System.Windows.Application
         services.AddTransient<ConfiguracoesViewModel>();
         services.AddTransient<IntegracoesViewModel>();
         services.AddTransient<SkuMappingViewModel>();
+        services.AddTransient<PedidosMarketplaceViewModel>();
         services.AddTransient<CargosViewModel>();
         services.AddTransient<FilialViewModel>();
         services.AddTransient<BIViewModel>();

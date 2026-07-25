@@ -1,0 +1,93 @@
+<UserControl x:Class="ERP.WPF.Views.PedidosMarketplaceView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource CardBgAlt}">
+    <UserControl.Resources>
+        <Style x:Key="OutlineButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextDark}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BordaInput}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource CardBgAlt}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.4"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,15">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="PEDIDOS — MARKETPLACE" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource TextDark}"/>
+                <TextBlock Text="Pedidos recebidos de canais de venda externos, com o que o ERP fez com cada um."
+                           FontSize="13" Foreground="{DynamicResource TextMuted}" Margin="0,2,0,0"/>
+            </StackPanel>
+
+            <Button Grid.Column="1" Content="Atualizar" Command="{Binding AtualizarCommand}"
+                    Style="{StaticResource OutlineButton}" VerticalAlignment="Top"/>
+        </Grid>
+
+        <TextBlock Grid.Row="1" Text="{Binding StatusMessage}"
+                   Foreground="{DynamicResource TextMuted}" FontStyle="Italic"
+                   Margin="0,0,0,10" TextWrapping="Wrap"
+                   Visibility="{Binding HasStatusMessage, Converter={StaticResource BoolToVisibility}}"/>
+
+        <Border Grid.Row="2" Background="{DynamicResource CardBg}" CornerRadius="8" Padding="10"
+                Effect="{DynamicResource CardShadow}">
+            <DataGrid ItemsSource="{Binding Pedidos}" AutoGenerateColumns="False" IsReadOnly="True"
+                      GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource BordaCard}"
+                      Background="Transparent" MinRowHeight="42"
+                      RowBackground="{DynamicResource CardBg}" AlternatingRowBackground="{DynamicResource CardBgAlt}">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Pedido" Binding="{Binding ExternalOrderId}" Width="150" FontWeight="SemiBold" Foreground="{DynamicResource TextDark}"/>
+                    <DataGridTextColumn Header="Canal" Binding="{Binding CanalNome}" Width="180" Foreground="{DynamicResource TextMuted}"/>
+                    <DataGridTextColumn Header="Comprador" Binding="{Binding BuyerNickname}" Width="140" Foreground="{DynamicResource TextMuted}"/>
+                    <DataGridTextColumn Header="Status Canal" Binding="{Binding ExternalStatus}" Width="100"/>
+                    <DataGridTextColumn Header="Status ERP" Binding="{Binding InternalStatus}" Width="120" FontWeight="SemiBold"/>
+                    <DataGridTextColumn Header="Venda ERP" Binding="{Binding VendaNumero}" Width="180" Foreground="{DynamicResource TextMuted}"/>
+                    <DataGridTextColumn Header="Valor" Binding="{Binding ValorTotal, StringFormat='R$ {0:N2}'}" Width="90"/>
+                    <DataGridTextColumn Header="Data" Binding="{Binding DataPedidoExterno, StringFormat='dd/MM HH:mm'}" Width="100" Foreground="{DynamicResource TextMuted}"/>
+                    <DataGridTextColumn Header="Última Sinc." Binding="{Binding UltimaSincronizacao, StringFormat='dd/MM HH:mm'}" Width="110" Foreground="{DynamicResource TextMuted}"/>
+
+                    <DataGridTemplateColumn Header="" Width="120">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="Reprocessar" Style="{StaticResource OutlineButton}"
+                                        IsEnabled="{Binding PodeReprocessar}"
+                                        Command="{Binding DataContext.ReprocessarCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                        CommandParameter="{Binding Id}"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+    </Grid>
+</UserControl>

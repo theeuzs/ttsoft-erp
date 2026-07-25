@@ -181,6 +181,7 @@
                         <Button Content="⚙️ Configurações" Style="{StaticResource NavButton}" Tag="config" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=config.view}"/>
                         <Button Content="🔌 Integrações" Style="{StaticResource NavButton}" Tag="integracoes" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=config.view}"/>
                         <Button Content="🔗 SKU Mapping" Style="{StaticResource NavButton}" Tag="skumapping" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=config.view}"/>
+                        <Button Content="📦 Pedidos Marketplace" Style="{StaticResource NavButton}" Tag="pedidosmkt" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=config.view}"/>
                     </StackPanel>
                 </ScrollViewer>
             </DockPanel>

@@ -87,6 +87,56 @@ public class ContasReceberController : ControllerBase
         await _service.DarBaixaParcialAsync(id, dto.Valor);
         return NoContent();
     }
+
+    /// <summary>Cancela uma conta a prazo — diferente de baixa total, não conta
+    /// como dinheiro recebido (útil quando o vendedor lançou errado, ou o
+    /// cliente desistiu da compra a prazo).</summary>
+    [HasPermission(Permissions.FinanceiroView)]
+    [HttpPost("{id:guid}/cancelar")]
+    [ProducesResponseType(204)]
+    [ProducesResponseType(400)]
+    public async Task<IActionResult> Cancelar(Guid id, [FromBody] CancelarContaDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.Motivo))
+            return BadRequest(new { erro = "Motivo é obrigatório pra cancelar uma conta." });
+
+        await _service.CancelarAsync(id, dto.Motivo);
+        return NoContent();
+    }
+
+    /// <summary>Dá desconto numa conta específica.</summary>
+    [HasPermission(Permissions.FinanceiroView)]
+    [HttpPost("{id:guid}/desconto")]
+    [ProducesResponseType(204)]
+    [ProducesResponseType(400)]
+    public async Task<IActionResult> DarDesconto(Guid id, [FromBody] DescontoContaDto dto)
+    {
+        if (dto.ValorDesconto <= 0)
+            return BadRequest(new { erro = "Valor do desconto deve ser maior que zero." });
+
+        await _service.DarDescontoAsync(id, dto.ValorDesconto, dto.Motivo);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Baixa várias contas de uma vez — pra quando o mesmo cliente tem contas
+    /// abertas de vendedores diferentes e quer quitar tudo junto no caixa.
+    /// </summary>
+    [HasPermission(Permissions.FinanceiroView)]
+    [HttpPost("baixa-em-lote")]
+    [ProducesResponseType(204)]
+    [ProducesResponseType(400)]
+    public async Task<IActionResult> DarBaixaEmLote([FromBody] BaixaEmLoteDto dto)
+    {
+        if (dto.ContaIds is null || dto.ContaIds.Count == 0)
+            return BadRequest(new { erro = "Selecione pelo menos uma conta." });
+        if (dto.ValorAPagar <= 0)
+            return BadRequest(new { erro = "Valor a pagar deve ser maior que zero." });
+
+        await _service.DarBaixaEmLoteAsync(dto.ContaIds, dto.ValorAPagar, dto.ValorDesconto, dto.FormaPagamento);
+        return NoContent();
+    }
+
     /// <summary>
     /// Gera boleto bancário via Asaas para uma conta a receber.
     /// Requer Asaas:ApiKey configurado nas variáveis de ambiente.
@@ -113,3 +163,6 @@ public class ContasReceberController : ControllerBase
 }
 
 public record BaixaParcialDto(decimal Valor);
+public record CancelarContaDto(string Motivo);
+public record DescontoContaDto(decimal ValorDesconto, string Motivo);
+public record BaixaEmLoteDto(List<Guid> ContaIds, decimal ValorAPagar, decimal ValorDesconto, string FormaPagamento);

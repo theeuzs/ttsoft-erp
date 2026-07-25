@@ -199,6 +199,7 @@ public partial class MainWindow : Window
             "config"      => CreateView<ConfiguracoesView, ConfiguracoesViewModel>(),
             "integracoes" => CreateView<IntegracoesView, IntegracoesViewModel>(),
             "skumapping"  => CreateView<SkuMappingView, SkuMappingViewModel>(),
+            "pedidosmkt"  => CreateView<PedidosMarketplaceView, PedidosMarketplaceViewModel>(),
             "filiais"     => CreateView<FilialView, FilialViewModel>(),
             "bi"          => CreateView<BIView, BIViewModel>(),
             "financeiro"  => CreateView<FinanceiroView, FinanceiroViewModel>(),
