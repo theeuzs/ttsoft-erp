@@ -81,6 +81,20 @@ public class OrderSyncRepository : IOrderSyncRepository
             .AsTracking()
             .FirstOrDefaultAsync(o => o.SalesChannelId == salesChannelId && o.ExternalOrderId == externalOrderId);
 
+    public async Task<ExternalOrder?> GetExternalOrderPorIdAsync(Guid id)
+        => await _ctx.ExternalOrders
+            .Include(o => o.SalesChannel)
+            .Include(o => o.Itens)
+            .FirstOrDefaultAsync(o => o.Id == id);
+
+    public async Task<IReadOnlyList<ExternalOrder>> ListarPedidosAsync(int limite = 200)
+        => await _ctx.ExternalOrders
+            .Include(o => o.SalesChannel)
+            .Include(o => o.Venda)
+            .OrderByDescending(o => o.DataPedidoExterno)
+            .Take(limite)
+            .ToListAsync();
+
     public async Task<bool> TentarInserirExternalOrderAsync(ExternalOrder pedido)
     {
         await _ctx.ExternalOrders.AddAsync(pedido);

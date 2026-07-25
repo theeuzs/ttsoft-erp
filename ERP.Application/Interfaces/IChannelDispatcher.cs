@@ -56,6 +56,10 @@ public class ExternalOrderDto
     public string   ExternalStatus   { get; set; } = string.Empty;
     public DateTime DataPedidoExterno { get; set; }
     public decimal  ValorTotal        { get; set; }
+    public string?  BuyerNickname     { get; set; }
+    public string?  ShippingId        { get; set; }
+    public string?  ShippingMode      { get; set; }
+    public string?  ShippingStatus    { get; set; }
     public string?  RawPayloadJson    { get; set; }
     public List<ExternalOrderItemDto> Itens { get; set; } = new();
 }

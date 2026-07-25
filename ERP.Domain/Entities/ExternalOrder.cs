@@ -34,6 +34,21 @@ public class ExternalOrder : BaseEntity
     public DateTime DataPedidoExterno { get; set; }
     public decimal  ValorTotal        { get; set; }
 
+    /// <summary>Nickname/nome do comprador no canal — só pra exibição na tela
+    /// de Pedidos, não é um Customer de verdade (o pedido pode nem virar
+    /// Sale com cliente identificado, ver SalesChannel.ClienteRepasseId).</summary>
+    public string? BuyerNickname { get; set; }
+
+    /// <summary>
+    /// Campos de frete — nascem nulos e ficam assim até existir um pedido
+    /// real com envio de verdade (hoje pedidos de teste do ML vêm sempre
+    /// sem shipping.id). Ponto de extensão pronto pra quando a sincronização
+    /// de Shipments for implementada, sem precisar de outra migration.
+    /// </summary>
+    public string? ShippingId     { get; set; }
+    public string? ShippingMode   { get; set; }
+    public string? ShippingStatus { get; set; }
+
     /// <summary>Payload cru recebido do canal — guardado pra debug/auditoria, nunca parseado de novo.</summary>
     public string? RawPayloadJson { get; set; }
 

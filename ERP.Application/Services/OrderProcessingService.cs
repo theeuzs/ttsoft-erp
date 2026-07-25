@@ -149,6 +149,10 @@ public class OrderProcessingService : IOrderProcessingService
             InternalStatus    = ExternalOrderStatus.Recebido,
             DataPedidoExterno = pedidoDto.DataPedidoExterno,
             ValorTotal        = pedidoDto.ValorTotal,
+            BuyerNickname     = pedidoDto.BuyerNickname,
+            ShippingId        = pedidoDto.ShippingId,
+            ShippingMode      = pedidoDto.ShippingMode,
+            ShippingStatus    = pedidoDto.ShippingStatus,
             RawPayloadJson    = pedidoDto.RawPayloadJson,
             Itens = pedidoDto.Itens.Select(i => new ExternalOrderItem
             {

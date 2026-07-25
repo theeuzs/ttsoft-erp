@@ -272,6 +272,25 @@ public class MercadoLivreDispatcher : IChannelDispatcher
             RawPayloadJson    = pedidoJson.GetRawText()
         };
 
+        if (pedidoJson.TryGetProperty("buyer", out var buyer) && buyer.ValueKind == JsonValueKind.Object)
+            dto.BuyerNickname = buyer.TryGetProperty("nickname", out var nick) && nick.ValueKind == JsonValueKind.String
+                ? nick.GetString() : null;
+
+        // ML manda "shipping": { "id": null } quando não tem envio (todo pedido
+        // de usuário de teste até hoje) — precisa checar ValueKind, GetString()
+        // num JSON null literal lança exceção em vez de devolver null.
+        if (pedidoJson.TryGetProperty("shipping", out var shipping) && shipping.ValueKind == JsonValueKind.Object)
+        {
+            if (shipping.TryGetProperty("id", out var shipId) && shipId.ValueKind is JsonValueKind.String or JsonValueKind.Number)
+                dto.ShippingId = shipId.ValueKind == JsonValueKind.Number ? shipId.GetInt64().ToString() : shipId.GetString();
+
+            if (shipping.TryGetProperty("logistic_type", out var mode) && mode.ValueKind == JsonValueKind.String)
+                dto.ShippingMode = mode.GetString();
+
+            if (shipping.TryGetProperty("status", out var shipStatus) && shipStatus.ValueKind == JsonValueKind.String)
+                dto.ShippingStatus = shipStatus.GetString();
+        }
+
         if (pedidoJson.TryGetProperty("order_items", out var itens))
         {
             foreach (var item in itens.EnumerateArray())

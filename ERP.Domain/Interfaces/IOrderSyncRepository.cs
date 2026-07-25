@@ -66,6 +66,14 @@ public interface IOrderSyncRepository
 
     // ── ExternalOrder / Itens ─────────────────────────────────────────
     Task<ExternalOrder?> GetExternalOrderAsync(Guid salesChannelId, string externalOrderId);
+
+    /// <summary>Um pedido pelo Id interno (não o do marketplace) — usado pela
+    /// tela de Pedidos pra abrir detalhe/reprocessar.</summary>
+    Task<ExternalOrder?> GetExternalOrderPorIdAsync(Guid id);
+
+    /// <summary>Lista os pedidos mais recentes, com SalesChannel e Venda
+    /// incluídos — é o que a tela "Marketplace → Pedidos" consome.</summary>
+    Task<IReadOnlyList<ExternalOrder>> ListarPedidosAsync(int limite = 200);
     /// <summary>
     /// Tenta inserir o pedido. Devolve false (sem lançar) se outra requisição
     /// concorrente já inseriu o mesmo (SalesChannelId, ExternalOrderId) um
