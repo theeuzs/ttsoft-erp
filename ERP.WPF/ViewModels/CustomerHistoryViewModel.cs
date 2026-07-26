@@ -12,29 +12,78 @@ using System.Collections.Generic;
 
 namespace ERP.WPF.ViewModels;
 
+/// <summary>
+/// Uma venda + o status da conta a prazo associada (se houver) — resolve o
+/// "no histórico só aparece que foi a prazo, não o que aconteceu depois"
+/// (quitou? quando? teve desconto? foi cancelada?).
+/// </summary>
+public class VendaComFiado
+{
+    public Sale Sale { get; }
+    public Guid     Id         => Sale.Id;
+    public string   SaleNumber => Sale.SaleNumber;
+    public DateTime SaleDate   => Sale.SaleDate;
+    public ERP.Domain.Enums.SaleStatus Status => Sale.Status;
+    public decimal  Total      => Sale.Total;
+
+    /// <summary>"—" se a venda não foi a prazo; senão o status real da
+    /// cobrança (Pendente com saldo, Pago com data, ou Cancelado com motivo).</summary>
+    public string StatusFiado { get; }
+
+    /// <summary>Nulo se a venda nunca foi a prazo — nesse caso não tem
+    /// histórico de cobrança pra abrir.</summary>
+    public Guid? ContaReceberId { get; }
+
+    public VendaComFiado(Sale sale, ContaReceber? conta)
+    {
+        Sale = sale;
+        ContaReceberId = conta?.Id;
+        StatusFiado = conta switch
+        {
+            null => "—",
+            { Status: "Cancelado" } => $"Cancelado ({conta.MotivoCancelamento})",
+            { Status: "Pago" } => $"Pago em {conta.DataPagamento:dd/MM/yyyy}",
+            _ => $"Pendente (saldo R$ {conta.ValorTotal - conta.ValorRecebido - conta.ValorDesconto:N2})"
+        };
+    }
+}
+
 public class CustomerHistoryViewModel : BaseViewModel
 {
     private readonly IUnitOfWork _uow;
 
     public string NomeCliente { get; set; } = string.Empty;
 
-    public ObservableCollection<Sale> ListaVendas { get; } = new();
+    public ObservableCollection<VendaComFiado> ListaVendas { get; } = new();
     public ObservableCollection<Orcamento> ListaOrcamentos { get; } = new();
 
     public decimal TotalComprado => ListaVendas.Sum(v => v.Total);
 
     public ICommand VisualizarVendaCommand { get; }
     public ICommand VisualizarOrcamentoCommand { get; }
+    public ICommand VerHistoricoFiadoCommand { get; }
 
     public CustomerHistoryViewModel(Guid customerId, string nomeCliente)
     {
         _uow = ERP.WPF.App.Services.GetRequiredService<IUnitOfWork>();
         NomeCliente = nomeCliente;
 
-        VisualizarVendaCommand     = new AsyncRelayCommand(async param => await VisualizarVenda(param as Sale));
+        VisualizarVendaCommand     = new AsyncRelayCommand(async param => await VisualizarVenda((param as VendaComFiado)?.Sale));
         VisualizarOrcamentoCommand = new AsyncRelayCommand(async param => await VisualizarOrcamento(param as Orcamento));
+        VerHistoricoFiadoCommand   = new RelayCommand(param => AbrirHistoricoFiado(param as VendaComFiado));
 
         _ = CarregarHistoricoAsync(customerId);
+    }
+
+    private void AbrirHistoricoFiado(VendaComFiado? venda)
+    {
+        if (venda?.ContaReceberId is not Guid contaId) return; // venda não foi a prazo — nada pra mostrar
+
+        var view = new ERP.WPF.Views.ContaHistoricoView(contaId, $"Histórico: Venda {venda.SaleNumber}")
+        {
+            Owner = System.Windows.Application.Current.MainWindow
+        };
+        view.ShowDialog();
     }
 
     private async Task VisualizarVenda(Sale? sale)
@@ -114,11 +163,27 @@ public class CustomerHistoryViewModel : BaseViewModel
 
             // ── Vendas ────────────────────────────────────────────────────
             var todasVendas = await _uow.Sales.GetAllAsync();
-            ListaVendas.Clear();
-            foreach (var v in todasVendas
+            var vendasCliente = todasVendas
                 .Where(v => v.CustomerId == customerId)
-                .OrderByDescending(v => v.SaleDate))
-                ListaVendas.Add(v);
+                .OrderByDescending(v => v.SaleDate)
+                .ToList();
+
+            // Busca as contas a prazo do cliente pra cruzar com cada venda —
+            // uma consulta só, não uma por venda (evita N+1).
+            using var scope = App.Services.CreateScope();
+            var contaReceberService = scope.ServiceProvider.GetRequiredService<ERP.Application.Interfaces.IContaReceberService>();
+            var contasDoCliente = await contaReceberService.GetPorClienteAsync(customerId);
+            var contaPorSaleId = contasDoCliente
+                .Where(c => c.SaleId.HasValue)
+                .GroupBy(c => c.SaleId!.Value)
+                .ToDictionary(g => g.Key, g => g.First()); // uma venda a prazo só gera uma conta
+
+            ListaVendas.Clear();
+            foreach (var v in vendasCliente)
+            {
+                contaPorSaleId.TryGetValue(v.Id, out var conta);
+                ListaVendas.Add(new VendaComFiado(v, conta));
+            }
 
             OnPropertyChanged(nameof(TotalComprado));
         }

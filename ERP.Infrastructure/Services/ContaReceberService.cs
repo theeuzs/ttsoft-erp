@@ -28,9 +28,30 @@ public class ContaReceberService : IContaReceberService
         _asaas  = asaas;
     }
 
+    /// <summary>
+    /// Registra um evento na linha do tempo da conta — Tipo: "Criada",
+    /// "Desconto", "Pagamento" ou "Cancelamento". Simples Add+SaveChanges (a
+    /// entidade é nova, então não sofre do problema de ChangeTracker.Clear()
+    /// detacher entidades já rastreadas — esse é o caso seguro).
+    /// </summary>
+    private async Task RegistrarEventoAsync(Guid contaId, string tipo, decimal? valor, string? observacao)
+    {
+        await _ctx.ContaReceberEventos.AddAsync(new ContaReceberEvento
+        {
+            ContaReceberId = contaId,
+            Tipo           = tipo,
+            UsuarioId      = _tenant.UserId == Guid.Empty ? null : _tenant.UserId,
+            UsuarioNome    = string.IsNullOrEmpty(_tenant.UserName) ? null : _tenant.UserName,
+            Valor          = valor,
+            Observacao     = observacao,
+            DataEvento     = DateTime.UtcNow
+        });
+        await _ctx.SaveChangesAsync();
+    }
+
     public async Task GerarContaAPrazoAsync(Guid clienteId, Guid? vendaId, decimal valor, string descricao)
     {
-        await _uow.ContasReceber.AddAsync(new ContaReceber
+        var conta = new ContaReceber
         {
             CustomerId     = clienteId,
             SaleId         = vendaId,
@@ -40,8 +61,11 @@ public class ContaReceberService : IContaReceberService
             DataVencimento = DateTime.Now.AddDays(30),
             Status         = "Pendente",
             Descricao      = descricao
-        });
+        };
+        await _uow.ContasReceber.AddAsync(conta);
         await _uow.CommitAsync();
+
+        await RegistrarEventoAsync(conta.Id, "Criada", valor, descricao);
     }
 
     public async Task<IEnumerable<ContaReceber>> GetPendentesAsync()
@@ -88,6 +112,8 @@ public class ContaReceberService : IContaReceberService
             await _ctx.Database.ExecuteSqlInterpolatedAsync(
                 $"UPDATE ContasReceber SET ValorRecebido={novoValorRecebido}, Status={novoStatus}, DataPagamento=NULL, UpdatedAt={agora} WHERE Id={contaId} AND TenantId={tenantId}");
         }
+
+        await RegistrarEventoAsync(contaId, "Pagamento", valorRecebido, null);
     }
 
     public async Task DarBaixaTotalAsync(Guid contaId)
@@ -98,6 +124,8 @@ public class ContaReceberService : IContaReceberService
 
         await _ctx.Database.ExecuteSqlInterpolatedAsync(
             $"UPDATE ContasReceber SET ValorRecebido={conta.ValorTotal}, Status={"Pago"}, DataPagamento={DateTime.Now}, UpdatedAt={DateTime.UtcNow} WHERE Id={contaId} AND TenantId={_tenant.TenantId}");
+
+        await RegistrarEventoAsync(contaId, "Pagamento", conta.ValorTotal - conta.ValorRecebido, "Baixa total");
     }
 
     public async Task CancelarAsync(Guid contaId, string motivo)
@@ -111,6 +139,8 @@ public class ContaReceberService : IContaReceberService
         // dinheiro que nunca entrou).
         await _ctx.Database.ExecuteSqlInterpolatedAsync(
             $"UPDATE ContasReceber SET Status={"Cancelado"}, MotivoCancelamento={motivo}, UpdatedAt={DateTime.UtcNow} WHERE Id={contaId} AND TenantId={_tenant.TenantId}");
+
+        await RegistrarEventoAsync(contaId, "Cancelamento", null, motivo);
     }
 
     public async Task DarDescontoAsync(Guid contaId, decimal valorDesconto, string motivo)
@@ -139,6 +169,8 @@ public class ContaReceberService : IContaReceberService
             SET ValorDesconto={novoValorDesconto}, Status={novoStatus}, DataPagamento={dataPagamento},
                 Descricao={descricaoComMotivo}, UpdatedAt={DateTime.UtcNow}
             WHERE Id={contaId} AND TenantId={_tenant.TenantId}");
+
+        await RegistrarEventoAsync(contaId, "Desconto", valorDesconto, motivo);
     }
 
     public async Task DarBaixaEmLoteAsync(
@@ -185,6 +217,11 @@ public class ContaReceberService : IContaReceberService
                     UpdatedAt={DateTime.UtcNow}
                 WHERE Id={conta.Id} AND TenantId={_tenant.TenantId}");
 
+            if (pagamentoDaConta > 0)
+                await RegistrarEventoAsync(conta.Id, "Pagamento", pagamentoDaConta, $"Baixa em lote ({formaPagamento})");
+            if (descontoDaConta > 0)
+                await RegistrarEventoAsync(conta.Id, "Desconto", descontoDaConta, "Rateado na baixa em lote");
+
             restanteAPagar   -= pagamentoDaConta;
             restanteDesconto -= descontoDaConta;
         }
@@ -208,6 +245,12 @@ public class ContaReceberService : IContaReceberService
         var contas = await _uow.ContasReceber.GetAllAsync();
         return contas.Count(c => c.DataVencimento.Date < DateTime.Today && c.Status == "Pendente");
     }
+
+    public async Task<IEnumerable<ContaReceberEvento>> GetEventosAsync(Guid contaId)
+        => await _ctx.ContaReceberEventos.AsNoTracking()
+            .Where(e => e.ContaReceberId == contaId)
+            .OrderBy(e => e.DataEvento)
+            .ToListAsync();
 
     public async Task<IEnumerable<ParcelaDto>> GerarParcelasAsync(GerarParcelasDto dto)
     {
@@ -240,6 +283,9 @@ public class ContaReceberService : IContaReceberService
 
         _ctx.ContasReceber.AddRange(parcelas);
         await _ctx.SaveChangesAsync();
+
+        foreach (var p in parcelas)
+            await RegistrarEventoAsync(p.Id, "Criada", p.ValorTotal, p.Descricao);
 
         return parcelas.Select(MapToParcelaDto);
     }

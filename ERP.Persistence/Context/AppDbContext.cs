@@ -159,6 +159,7 @@ public class AppDbContext : DbContext
     public DbSet<VendaSuspensa>          VendasSuspensas         { get; set; }
     public DbSet<VendaSuspensaItem>      VendaSuspensaItens      { get; set; }
     public DbSet<ContaReceber>         ContasReceber       { get; set; }
+    public DbSet<ContaReceberEvento>   ContaReceberEventos { get; set; }
     public DbSet<ContaPagar>           ContasPagar         { get; set; }
     public DbSet<MovimentoHaver>       MovimentosHaver     { get; set; }
     public DbSet<Orcamento>            Orcamentos          { get; set; }
@@ -365,6 +366,8 @@ public class AppDbContext : DbContext
             r => !r.IsDeleted && r.TenantId == tenantFilter.Value);
         modelBuilder.Entity<OrderEvent>().HasQueryFilter(
             e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<ContaReceberEvento>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
         modelBuilder.Entity<OrderAction>().HasQueryFilter(
             a => !a.IsDeleted && a.TenantId == tenantFilter.Value);
         modelBuilder.Entity<OrderConflict>().HasQueryFilter(
@@ -461,6 +464,12 @@ public class AppDbContext : DbContext
             .HasForeignKey(e => e.ExternalOrderId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        modelBuilder.Entity<ContaReceberEvento>()
+            .HasOne(e => e.ContaReceber)
+            .WithMany()
+            .HasForeignKey(e => e.ContaReceberId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         modelBuilder.Entity<OrderAction>()
             .HasOne(a => a.ExternalOrder)
             .WithMany()
@@ -490,6 +499,7 @@ public class AppDbContext : DbContext
         });
 
         modelBuilder.Entity<OrderEvent>().HasIndex(e => e.CorrelationId);
+        modelBuilder.Entity<ContaReceberEvento>().HasIndex(e => e.ContaReceberId);
         modelBuilder.Entity<OrderAction>().HasIndex(a => a.CorrelationId);
         modelBuilder.Entity<OrderConflict>().HasIndex(c => c.CorrelationId);
 

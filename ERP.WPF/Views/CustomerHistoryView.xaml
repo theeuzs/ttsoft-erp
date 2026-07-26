@@ -109,6 +109,7 @@
                                 <DataGridTextColumn Header="DATA" Binding="{Binding SaleDate, StringFormat=dd/MM/yyyy HH:mm}" Width="150"/>
                                 <DataGridTextColumn Header="FORMA PGTO" Binding="{Binding PaymentMethod}" Width="*"/>
                                 <DataGridTextColumn Header="STATUS" Binding="{Binding Status}" Width="100"/>
+                                <DataGridTextColumn Header="STATUS FIADO" Binding="{Binding StatusFiado}" Width="180"/>
                                 <DataGridTextColumn Header="TOTAL" Binding="{Binding Total, StringFormat='R$ {0:N2}'}" Width="130">
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock">
@@ -118,19 +119,32 @@
                                         </Style>
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
-                                <DataGridTemplateColumn Header="AÇÕES" Width="120">
+                                <DataGridTemplateColumn Header="AÇÕES" Width="220">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
-                                            <Button Content="👁️ Ver"
-                                                    Command="{Binding DataContext.VisualizarVendaCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}"
-                                                    Background="{DynamicResource CorAcento}" Foreground="White"
-                                                    FontWeight="Bold" Padding="12,5"
-                                                    BorderThickness="0" Cursor="Hand">
-                                                <Button.Resources>
-                                                    <Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>
-                                                </Button.Resources>
-                                            </Button>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Button Content="👁️ Ver"
+                                                        Command="{Binding DataContext.VisualizarVendaCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        Background="{DynamicResource CorAcento}" Foreground="White"
+                                                        FontWeight="Bold" Padding="12,5" Margin="0,0,6,0"
+                                                        BorderThickness="0" Cursor="Hand">
+                                                    <Button.Resources>
+                                                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>
+                                                    </Button.Resources>
+                                                </Button>
+                                                <Button Content="🕒 Histórico"
+                                                        Command="{Binding DataContext.VerHistoricoFiadoCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        Visibility="{Binding ContaReceberId, Converter={StaticResource NullToCollapsed}}"
+                                                        Background="#EFF6FF" Foreground="#2563EB"
+                                                        FontWeight="Bold" Padding="10,5"
+                                                        BorderThickness="0" Cursor="Hand">
+                                                    <Button.Resources>
+                                                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>
+                                                    </Button.Resources>
+                                                </Button>
+                                            </StackPanel>
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>

@@ -127,6 +127,7 @@ public class FinanceiroViewModel : BaseViewModel
     public ICommand VerReciboVendaCommand      { get; } // Botão de ver a compra original
     public ICommand ReceberSelecionadasCommand { get; }
     public ICommand CancelarContaCommand       { get; }
+    public ICommand VerHistoricoContaCommand   { get; }
 
     public FinanceiroViewModel()
     {
@@ -136,6 +137,7 @@ public class FinanceiroViewModel : BaseViewModel
         VerReciboVendaCommand      = new RelayCommand(async c => await AbrirReciboVendaAsync(c as ContaReceber));
         ReceberSelecionadasCommand = new AsyncRelayCommand(async _ => await ReceberSelecionadasAsync());
         CancelarContaCommand       = new AsyncRelayCommand(async p => await CancelarContaAsync(p as ContaReceberSelecionavel));
+        VerHistoricoContaCommand   = new RelayCommand(p => AbrirHistoricoConta(p as ContaReceberSelecionavel));
 
         // Abre a janelinha modal de detalhes do cliente
         AbrirDetalhesCommand       = new RelayCommand(c => AbrirDetalhesCliente(c as ResumoClienteDevedor));
@@ -150,6 +152,18 @@ public class FinanceiroViewModel : BaseViewModel
     {
         TotalSelecionado = ContasSelecionaveis.Where(c => c.IsSelecionada).Sum(c => c.Saldo);
         RecalcularValorAPagar();
+    }
+
+    private void AbrirHistoricoConta(ContaReceberSelecionavel? item)
+    {
+        if (item == null) return;
+        var view = new ERP.WPF.Views.ContaHistoricoView(item.Id, $"Histórico: {item.Descricao}")
+        {
+            Owner = System.Windows.Application.Current.Windows
+                .OfType<ERP.WPF.Views.ContasClienteView>().FirstOrDefault()
+                ?? System.Windows.Application.Current.MainWindow
+        };
+        view.ShowDialog();
     }
 
     // ── Abre o Módulo do Cliente ─────────────────────────────────────────────

@@ -137,6 +137,13 @@ public class ContasReceberController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Linha do tempo completa de uma conta — criação, descontos,
+    /// pagamentos, cancelamento, em ordem cronológica.</summary>
+    [HasPermission(Permissions.FinanceiroView)]
+    [HttpGet("{id:guid}/eventos")]
+    public async Task<IActionResult> GetEventos(Guid id)
+        => Ok(await _service.GetEventosAsync(id));
+
     /// <summary>
     /// Gera boleto bancário via Asaas para uma conta a receber.
     /// Requer Asaas:ApiKey configurado nas variáveis de ambiente.

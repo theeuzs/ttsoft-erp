@@ -45,6 +45,10 @@ public interface IContaReceberService
     Task<(decimal TotalPendente, decimal TotalVencido, int QtdClientes)> GetResumoAsync();
     Task<int> CountInadimplentesAsync();
 
+    /// <summary>Linha do tempo completa de uma conta — cada desconto, pagamento,
+    /// cancelamento, e a criação original, em ordem cronológica.</summary>
+    Task<IEnumerable<ContaReceberEvento>> GetEventosAsync(Guid contaId);
+
     // S15 FIX: movido de ContasReceberController.GerarBoleto — controller não
     // deve tocar AppDbContext/AsaasService diretamente.
     /// <summary>Gera (ou retorna existente) boleto bancário via Asaas para uma conta a receber.</summary>
