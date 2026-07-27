@@ -44,7 +44,7 @@ public class ContaReceberService : IContaReceberService
             UsuarioNome    = string.IsNullOrEmpty(_tenant.UserName) ? null : _tenant.UserName,
             Valor          = valor,
             Observacao     = observacao,
-            DataEvento     = DateTime.UtcNow
+            DataEvento     = DateTime.Now
         });
         await _ctx.SaveChangesAsync();
     }
