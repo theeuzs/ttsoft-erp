@@ -64,4 +64,15 @@ public interface IUnitOfWork : IDisposable
     /// O caller é responsável por chamar CommitAsync e DisposeAsync na transação retornada.
     /// </summary>
     Task<ITransaction> BeginTransactionAsync();
+
+    /// <summary>
+    /// Executa o delegate dentro da "execution strategy" de retry do EF Core —
+    /// obrigatório quando EnableRetryOnFailure está ativo e o código faz
+    /// transação manual (BeginTransactionAsync): sem isso, o EF lança
+    /// "does not support user-initiated transactions" na hora de abrir a
+    /// transação. Se uma falha transitória acontecer, o delegate INTEIRO é
+    /// reexecutado do zero — por isso qualquer estado mutável usado dentro
+    /// precisa ser resetado no início do delegate, não só declarado fora.
+    /// </summary>
+    Task ExecuteInTransactionAsync(Func<Task> operacao);
 }

@@ -65,6 +65,15 @@ namespace ERP.Tests.Application.Services
             txMock.Setup(t => t.DisposeAsync()).Returns(ValueTask.CompletedTask);
             _uowMock.Setup(u => u.BeginTransactionAsync()).ReturnsAsync(txMock.Object);
 
+            // FIX (EnableRetryOnFailure): CreateAsync agora roda sua transação
+            // dentro de ExecuteInTransactionAsync (execution strategy do EF, exigida
+            // pra combinar retry automático com transação manual). Sem essa
+            // configuração o mock não invoca o delegate — nada dentro dele
+            // (baixa de estoque, débito de Haver, throw de validação) executa,
+            // e todo teste que dependia desses efeitos falha silenciosamente.
+            _uowMock.Setup(u => u.ExecuteInTransactionAsync(It.IsAny<Func<Task>>()))
+                .Returns((Func<Task> operacao) => operacao());
+
             _saleService = new SaleService(_uowMock.Object, _mapperMock.Object, _validatorMock.Object, _haverServiceMock.Object, _tenantMock.Object);
         }
 

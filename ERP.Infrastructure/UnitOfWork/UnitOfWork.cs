@@ -1,6 +1,8 @@
 using ERP.Domain.Interfaces;
 using ERP.Infrastructure.Repositories;
 using ERP.Persistence.Context;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace ERP.Infrastructure.UnitOfWork;
 
@@ -79,6 +81,12 @@ public class UnitOfWork : IUnitOfWork
     {
         var efTx = await _ctx.Database.BeginTransactionAsync();
         return new EfTransaction(efTx);
+    }
+
+    public async Task ExecuteInTransactionAsync(Func<Task> operacao)
+    {
+        var strategy = _ctx.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(operacao);
     }
 
     public void Dispose()

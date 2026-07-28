@@ -47,7 +47,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 // Resultado: cada requisição HTTP tem seu próprio AppDbContext isolado por tenant.
 builder.Services.AddSingleton(
     new DbContextOptionsBuilder<AppDbContext>()
-        .UseSqlServer(connectionString)
+        .UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure())
         .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
         .Options);
 

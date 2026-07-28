@@ -494,7 +494,29 @@ public class FinalizarVendaViewModel : BaseViewModel
                 Items = ItensCarrinho.Select(i => new CreateSaleItemDto { ProductId = i.ProductId, Quantity = i.Quantity, UnitPrice = i.UnitPrice, DiscountPercent = 0, FatorConversao = i.FatorConversao, TotalItem = i.Total }).ToList()
             };
 
-            var vendaSalva = await _saleService.CreateAsync(dto);
+            SaleDto vendaSalva;
+            try
+            {
+                vendaSalva = await _saleService.CreateAsync(dto);
+            }
+            catch (Exception exVenda) when (exVenda.InnerException is ERP.Application.Exceptions.LimiteCreditoExcedidoException limiteEx)
+            {
+                // Mesmo padrão de override já usado pra desconto acima do permitido
+                // (SenhaGerenteView) — aqui pro limite de crédito do fiado.
+                var telaSenha = new ERP.WPF.Views.SenhaGerenteView { Owner = System.Windows.Application.Current.MainWindow };
+                telaSenha.ShowDialog();
+
+                if (!telaSenha.Autorizado)
+                {
+                    MessageBox.Show(
+                        limiteEx.Message + "\n\nAutorização do gerente não fornecida — venda não realizada.",
+                        "Limite de Crédito Excedido", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                dto.AutorizadoPorGerente = true;
+                vendaSalva = await _saleService.CreateAsync(dto);
+            }
             await SalvarNoCaixaEContasAReceberAsync(vendaSalva.Id);
 
             // Debitar pontos de fidelidade SÓ após venda confirmada

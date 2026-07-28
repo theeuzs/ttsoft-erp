@@ -297,7 +297,7 @@ public partial class App : System.Windows.Application
         services.AddDbContext<AppDbContext>(options =>
             options
                 .UseSqlServer(connectionString,
-                    b => b.MigrationsAssembly("ERP.Persistence"))
+                    b => b.MigrationsAssembly("ERP.Persistence").EnableRetryOnFailure())
                 .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking));
 
         // ── AutoMapper ────────────────────────────────────────────────────

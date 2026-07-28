@@ -109,116 +109,150 @@ public class SaleService : ISaleService
         // (não há rollback real), mas o comportamento de negócio permanece correto.
         // Para testes de rollback real, use SQLite in-process (ver SaleServiceTests).
 
-        await using var tx = await _uow.BeginTransactionAsync();
         var produtosComEstoqueAlterado = new HashSet<Guid>();
-        try
+
+        // FIX (EnableRetryOnFailure): transação manual + retry automático do EF
+        // exigem executar via "execution strategy" — sem isso, BeginTransactionAsync
+        // lança "does not support user-initiated transactions". BeginTransactionAsync
+        // TEM que ficar dentro do delegate: se uma falha transitória acontecer, o EF
+        // reexecuta o delegate inteiro do zero, e cada tentativa precisa da sua
+        // própria transação nova — por isso produtosComEstoqueAlterado.Clear()
+        // também no início, pra não acumular de uma tentativa anterior que falhou.
+        await _uow.ExecuteInTransactionAsync(async () =>
         {
-            // S8 FIX: busca GrupoPreco do cliente para aplicar tabela de preço correta no servidor.
-            // Antes: UnitPrice vinha inteiramente do cliente → subfaturamento arbitrário contornando qualquer política.
-            var grupoPreco = ERP.Domain.Enums.GrupoPreco.A; // default varejo
-            if (dto.CustomerId.HasValue)
+            produtosComEstoqueAlterado.Clear();
+            sale.Items.Clear(); // idem: sale é construído fora do delegate, retry não pode duplicar itens
+            await using var tx = await _uow.BeginTransactionAsync();
+            try
             {
-                var clienteGrupo = await _uow.Customers.GetByIdAsync(dto.CustomerId.Value);
-                if (clienteGrupo != null)
-                    grupoPreco = clienteGrupo.GrupoPreco;
-            }
-
-            // 2. Baixa de Estoque (atômica — segura em multi-terminal)
-            foreach (var itemDto in dto.Items)
-            {
-                var product = await _uow.Products.GetByIdAsync(itemDto.ProductId)
-                    ?? throw new KeyNotFoundException($"Produto {itemDto.ProductId} não encontrado.");
-
-                Product produtoEstoque;
-                decimal qtdEstoque;
-
-                if (product.ParentProductId.HasValue && product.ConversionFactor > 0)
+                // S8 FIX: busca GrupoPreco do cliente para aplicar tabela de preço correta no servidor.
+                // Antes: UnitPrice vinha inteiramente do cliente → subfaturamento arbitrário contornando qualquer política.
+                var grupoPreco = ERP.Domain.Enums.GrupoPreco.A; // default varejo
+                if (dto.CustomerId.HasValue)
                 {
-                    produtoEstoque = await _uow.Products.GetByIdAsync(product.ParentProductId.Value)
-                        ?? throw new KeyNotFoundException(
-                            $"Produto pai de '{product.Name}' não encontrado. " +
-                            $"Verifique o cadastro de produto composto.");
-
-                    qtdEstoque = itemDto.Quantity * product.ConversionFactor;
-                }
-                else
-                {
-                    produtoEstoque = product;
-                    qtdEstoque = itemDto.Quantity;
+                    var clienteGrupo = await _uow.Customers.GetByIdAsync(dto.CustomerId.Value);
+                    if (clienteGrupo != null)
+                        grupoPreco = clienteGrupo.GrupoPreco;
                 }
 
-                bool baixouOk = await _uow.Products.BaixarEstoqueAtomicoAsync(
-                    produtoEstoque.Id, qtdEstoque, produtoEstoque.AllowNegativeStock);
-
-                if (baixouOk)
-                    produtosComEstoqueAlterado.Add(produtoEstoque.Id);
-
-                if (!baixouOk)
-                    throw new InvalidOperationException(
-                        $"Estoque insuficiente para '{produtoEstoque.Name}' " +
-                        $"(necessário: {qtdEstoque:N2}, disponível no estoque). " +
-                        $"Outro terminal pode ter vendido o último item agora mesmo.");
-
-                // S13: validação de desconto via DescontoPolicy (antes inline — S9)
-                var (descontoOk, descontoErro) = ERP.Application.Helpers.DescontoPolicy.Validar(
-                    itemDto.DiscountPercent,
-                    _tenant.MaxDiscountPercentage,
-                    product.Name);
-                if (!descontoOk) throw new InvalidOperationException(descontoErro!);
-
-                // S8 FIX: UnitPrice sempre do servidor (Product.GetPrecoParaGrupo), nunca do cliente.
-                // WholesalePrice se quantidade atinge mínimo definido no cadastro.
-                var unitPrice = product.GetPrecoParaGrupo(grupoPreco);
-                if (product.WholesalePrice.HasValue
-                    && product.WholesaleMinQuantity.HasValue
-                    && itemDto.Quantity >= product.WholesaleMinQuantity.Value)
-                    unitPrice = product.WholesalePrice.Value;
-
-                var totalItem = ERP.Application.Helpers.DescontoPolicy.CalcularTotal(
-                    unitPrice, itemDto.Quantity, itemDto.DiscountPercent);
-
-                sale.Items.Add(new SaleItem
+                // 2. Baixa de Estoque (atômica — segura em multi-terminal)
+                foreach (var itemDto in dto.Items)
                 {
-                    Id              = Guid.NewGuid(),
-                    SaleId          = novaVendaId,
-                    ProductId       = product.Id,
-                    ProductName     = product.Name,
-                    Quantity        = qtdEstoque,
-                    UnitPrice       = unitPrice,            // ← servidor
-                    DiscountPercent = itemDto.DiscountPercent,
-                    TotalItem       = totalItem             // ← recomputado
-                });
-            }
+                    var product = await _uow.Products.GetByIdAsync(itemDto.ProductId)
+                        ?? throw new KeyNotFoundException($"Produto {itemDto.ProductId} não encontrado.");
 
-            sale.RecalculateTotals();
+                    Product produtoEstoque;
+                    decimal qtdEstoque;
 
-            // 3. Saldo em Haver
-            var pagamentoHaver = dto.Payments.FirstOrDefault(p => p.PaymentMethod == Domain.Enums.PaymentMethod.Haver);
-            if (pagamentoHaver != null && dto.CustomerId.HasValue)
-            {
-                var customer = await _uow.Customers.GetByIdAsync(dto.CustomerId.Value);
-                if (customer != null)
-                {
-                    if (customer.HaverBalance < pagamentoHaver.Amount)
-                        throw new InvalidOperationException("Saldo haver insuficiente.");
+                    if (product.ParentProductId.HasValue && product.ConversionFactor > 0)
+                    {
+                        produtoEstoque = await _uow.Products.GetByIdAsync(product.ParentProductId.Value)
+                            ?? throw new KeyNotFoundException(
+                                $"Produto pai de '{product.Name}' não encontrado. " +
+                                $"Verifique o cadastro de produto composto.");
 
-                    customer.HaverBalance -= pagamentoHaver.Amount;
-                    _uow.Customers.Update(customer);
+                        qtdEstoque = itemDto.Quantity * product.ConversionFactor;
+                    }
+                    else
+                    {
+                        produtoEstoque = product;
+                        qtdEstoque = itemDto.Quantity;
+                    }
+
+                    bool baixouOk = await _uow.Products.BaixarEstoqueAtomicoAsync(
+                        produtoEstoque.Id, qtdEstoque, produtoEstoque.AllowNegativeStock);
+
+                    if (baixouOk)
+                        produtosComEstoqueAlterado.Add(produtoEstoque.Id);
+
+                    if (!baixouOk)
+                        throw new InvalidOperationException(
+                            $"Estoque insuficiente para '{produtoEstoque.Name}' " +
+                            $"(necessário: {qtdEstoque:N2}, disponível no estoque). " +
+                            $"Outro terminal pode ter vendido o último item agora mesmo.");
+
+                    // S13: validação de desconto via DescontoPolicy (antes inline — S9)
+                    var (descontoOk, descontoErro) = ERP.Application.Helpers.DescontoPolicy.Validar(
+                        itemDto.DiscountPercent,
+                        _tenant.MaxDiscountPercentage,
+                        product.Name);
+                    if (!descontoOk) throw new InvalidOperationException(descontoErro!);
+
+                    // S8 FIX: UnitPrice sempre do servidor (Product.GetPrecoParaGrupo), nunca do cliente.
+                    // WholesalePrice se quantidade atinge mínimo definido no cadastro.
+                    var unitPrice = product.GetPrecoParaGrupo(grupoPreco);
+                    if (product.WholesalePrice.HasValue
+                        && product.WholesaleMinQuantity.HasValue
+                        && itemDto.Quantity >= product.WholesaleMinQuantity.Value)
+                        unitPrice = product.WholesalePrice.Value;
+
+                    var totalItem = ERP.Application.Helpers.DescontoPolicy.CalcularTotal(
+                        unitPrice, itemDto.Quantity, itemDto.DiscountPercent);
+
+                    sale.Items.Add(new SaleItem
+                    {
+                        Id              = Guid.NewGuid(),
+                        SaleId          = novaVendaId,
+                        ProductId       = product.Id,
+                        ProductName     = product.Name,
+                        Quantity        = qtdEstoque,
+                        UnitPrice       = unitPrice,            // ← servidor
+                        DiscountPercent = itemDto.DiscountPercent,
+                        TotalItem       = totalItem             // ← recomputado
+                    });
                 }
-            }
 
-            // 4. Persiste venda — dentro da mesma transação da baixa de estoque
-            await _uow.Sales.AddAsync(sale);
-            await _uow.CommitAsync();
-            await tx.CommitAsync();
-        }
-        catch (Exception ex)
-        {
-            // RollbackAsync desfaz tanto o CommitAsync do EF quanto o UPDATE SQL
-            // do BaixarEstoqueAtomico — os dois estão na mesma transação.
-            await tx.RollbackAsync();
-            throw new Exception($"ERRO NA VENDA (revertido): {ex.InnerException?.Message ?? ex.Message}", ex);
-        }
+                sale.RecalculateTotals();
+
+                // 5. Limite de crédito (venda A Prazo) — bloqueia de verdade, não só avisa.
+                // Customer.SaldoDevedor nunca é atualizado em lugar nenhum do sistema
+                // (nem aqui, nem na baixa/cancelamento de ContaReceber) — usá-lo pra
+                // decidir qualquer coisa sempre daria "tudo liberado", então a dívida
+                // é somada ao vivo direto das ContasReceber pendentes do cliente.
+                var valorAPrazo = dto.Payments
+                    .Where(p => p.PaymentMethod == Domain.Enums.PaymentMethod.APrazo)
+                    .Sum(p => p.Amount);
+
+                if (valorAPrazo > 0 && dto.CustomerId.HasValue && !dto.AutorizadoPorGerente)
+                {
+                    var clienteCredito = await _uow.Customers.GetByIdAsync(dto.CustomerId.Value);
+                    if (clienteCredito != null && clienteCredito.LimiteCredito > 0)
+                    {
+                        var saldoDevedorAtual = await _uow.ContasReceber.GetSaldoDevedorAtualAsync(dto.CustomerId.Value);
+                        if (saldoDevedorAtual + valorAPrazo > clienteCredito.LimiteCredito)
+                            throw new ERP.Application.Exceptions.LimiteCreditoExcedidoException(
+                                clienteCredito.Name, clienteCredito.LimiteCredito, saldoDevedorAtual, valorAPrazo);
+                    }
+                }
+
+                // 3. Saldo em Haver
+                var pagamentoHaver = dto.Payments.FirstOrDefault(p => p.PaymentMethod == Domain.Enums.PaymentMethod.Haver);
+                if (pagamentoHaver != null && dto.CustomerId.HasValue)
+                {
+                    var customer = await _uow.Customers.GetByIdAsync(dto.CustomerId.Value);
+                    if (customer != null)
+                    {
+                        if (customer.HaverBalance < pagamentoHaver.Amount)
+                            throw new InvalidOperationException("Saldo haver insuficiente.");
+
+                        customer.HaverBalance -= pagamentoHaver.Amount;
+                        _uow.Customers.Update(customer);
+                    }
+                }
+
+                // 4. Persiste venda — dentro da mesma transação da baixa de estoque
+                await _uow.Sales.AddAsync(sale);
+                await _uow.CommitAsync();
+                await tx.CommitAsync();
+            }
+            catch (Exception ex)
+            {
+                // RollbackAsync desfaz tanto o CommitAsync do EF quanto o UPDATE SQL
+                // do BaixarEstoqueAtomico — os dois estão na mesma transação.
+                await tx.RollbackAsync();
+                throw new Exception($"ERRO NA VENDA (revertido): {ex.InnerException?.Message ?? ex.Message}", ex);
+            }
+        });
         
         // Sprint Q: acumular pontos de fidelidade se tiver cliente
         if (sale.CustomerId.HasValue && _fidelidade != null)

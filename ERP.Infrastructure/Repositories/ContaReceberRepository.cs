@@ -39,4 +39,9 @@ public class ContaReceberRepository : IContaReceberRepository
 
     public void Update(ContaReceber entity)
         => _ctx.ContasReceber.Update(entity);
+
+    public async Task<decimal> GetSaldoDevedorAtualAsync(Guid customerId)
+        => await _ctx.ContasReceber.AsNoTracking()
+            .Where(c => c.CustomerId == customerId && c.Status == "Pendente")
+            .SumAsync(c => c.ValorTotal - c.ValorRecebido - c.ValorDesconto);
 }

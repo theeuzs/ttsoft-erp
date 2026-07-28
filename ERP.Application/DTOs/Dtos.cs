@@ -161,6 +161,11 @@ public class CreateSaleDto
     public SaleOrigin Origem { get; set; } = SaleOrigin.PDV;
     public List<CreateSalePaymentDto> Payments { get; set; } = new();
     public List<CreateSaleItemDto> Items { get; set; } = new();
+
+    /// <summary>Gerente autorizou (senha) passar do limite de crédito do
+    /// cliente nessa venda A Prazo específica — mesmo padrão já usado pra
+    /// autorizar desconto acima do permitido (SenhaGerenteView).</summary>
+    public bool AutorizadoPorGerente { get; set; } = false;
 }
 
 public class CreateSaleItemDto
