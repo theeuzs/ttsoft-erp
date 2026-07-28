@@ -14,15 +14,17 @@ public class OrderProcessingService : IOrderProcessingService
     private readonly ISaleService _saleService;
     private readonly IContaReceberService _contaReceberService;
     private readonly IEnumerable<IChannelDispatcher> _dispatchers;
+    private readonly IFiscalService? _fiscalService;
 
     public OrderProcessingService(
         IUnitOfWork uow, ISaleService saleService, IContaReceberService contaReceberService,
-        IEnumerable<IChannelDispatcher> dispatchers)
+        IEnumerable<IChannelDispatcher> dispatchers, IFiscalService? fiscalService = null)
     {
         _uow                 = uow;
         _saleService         = saleService;
         _contaReceberService = contaReceberService;
         _dispatchers         = dispatchers;
+        _fiscalService       = fiscalService;
     }
 
     /// <summary>
@@ -316,6 +318,29 @@ public class OrderProcessingService : IOrderProcessingService
             var saleDto = await _saleService.CreateAsync(dto);
             saleNumber  = saleDto.SaleNumber;
             vendaId     = saleDto.Id;
+
+            // Etapa 4 da refatoração fiscal: emissão automática pra venda de
+            // marketplace — o próprio objetivo original de mexer nisso tudo.
+            // Best-effort de propósito (igual EstoqueSyncService): Focus NFe
+            // fora do ar ou sem configuração ainda (TenantFiscalConfiguration
+            // vazia) NÃO pode travar/reverter um pedido real do marketplace.
+            // NFCE, não NFE — venda de marketplace é consumidor final, igual
+            // balcão, sem endereço completo confiável do "cliente de repasse".
+            if (_fiscalService != null)
+            {
+                try
+                {
+                    var resultadoFiscal = await _fiscalService.EmitirNotaAsync(vendaId, "NFCE");
+                    if (!resultadoFiscal.Sucesso)
+                        Log.Warning("Falha ao emitir NF-e automaticamente para a venda {VendaId} (pedido {ExternalOrderId} do marketplace): {Mensagem}",
+                            vendaId, pedido.ExternalOrderId, resultadoFiscal.Mensagem);
+                }
+                catch (Exception exFiscal)
+                {
+                    Log.Error(exFiscal, "Erro inesperado ao emitir NF-e automaticamente para a venda {VendaId} (pedido {ExternalOrderId} do marketplace)",
+                        vendaId, pedido.ExternalOrderId);
+                }
+            }
 
             // MarcarVendaGeradaAsync, não mutar "pedido" direto e salvar: o
             // _saleService.CreateAsync acima já chamou SaveChanges (pra criar a
