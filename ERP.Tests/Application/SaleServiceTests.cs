@@ -205,12 +205,16 @@ namespace ERP.Tests.Application.Services
             _uowMock.Setup(u => u.Caixas.GetCaixaAbertoByUsuarioAsync(usuarioId)).ReturnsAsync(new Caixa { Id = Guid.NewGuid() });
             _uowMock.Setup(u => u.Products.GetByIdAsync(produtoId)).ReturnsAsync(produtoFake);
             _uowMock.Setup(u => u.Customers.GetByIdAsync(clienteId)).ReturnsAsync(clienteFake);
+            // FIX: débito de Haver agora é atômico (DebitarHaverAtomicoAsync), não
+            // mais um GetByIdAsync + mutação em C# + Update — o teste verifica a
+            // CHAMADA com o valor certo, não mais o objeto clienteFake mutado.
+            _uowMock.Setup(u => u.Customers.DebitarHaverAtomicoAsync(clienteId, 40.00m)).ReturnsAsync(true);
 
             // Act
             await _saleService.CreateAsync(dto);
 
             // Assert
-            clienteFake.HaverBalance.Should().Be(60.00m); // Gastou 40, sobrou 60
+            _uowMock.Verify(u => u.Customers.DebitarHaverAtomicoAsync(clienteId, 40.00m), Times.Once);
             _uowMock.Verify(u => u.CommitAsync(), Times.Once);
         }
         /// <summary>

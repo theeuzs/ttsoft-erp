@@ -225,19 +225,19 @@ public class SaleService : ISaleService
                     }
                 }
 
-                // 3. Saldo em Haver
+                // 3. Saldo em Haver — atômico (mesmo padrão do estoque). Antes: lia
+                // customer.HaverBalance, subtraía em C#, e gravava via _uow.Customers.Update
+                // (SaveChanges absoluto) — lost-update clássico se duas vendas debitassem
+                // o mesmo cliente quase ao mesmo tempo.
                 var pagamentoHaver = dto.Payments.FirstOrDefault(p => p.PaymentMethod == Domain.Enums.PaymentMethod.Haver);
                 if (pagamentoHaver != null && dto.CustomerId.HasValue)
                 {
-                    var customer = await _uow.Customers.GetByIdAsync(dto.CustomerId.Value);
-                    if (customer != null)
-                    {
-                        if (customer.HaverBalance < pagamentoHaver.Amount)
-                            throw new InvalidOperationException("Saldo haver insuficiente.");
+                    bool debitouOk = await _uow.Customers.DebitarHaverAtomicoAsync(
+                        dto.CustomerId.Value, pagamentoHaver.Amount);
 
-                        customer.HaverBalance -= pagamentoHaver.Amount;
-                        _uow.Customers.Update(customer);
-                    }
+                    if (!debitouOk)
+                        throw new InvalidOperationException(
+                            "Saldo haver insuficiente (ou outra operação debitou o saldo agora mesmo).");
                 }
 
                 // 4. Persiste venda — dentro da mesma transação da baixa de estoque

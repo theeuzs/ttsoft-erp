@@ -20,6 +20,15 @@ public interface ICustomerRepository : IRepository<Customer>
 {
     Task<Customer?> GetByDocumentAsync(string document);
     Task<IEnumerable<Customer>> SearchAsync(string term);
+
+    /// <summary>
+    /// Debita o saldo Haver do cliente atomicamente (UPDATE relativo com guarda
+    /// de saldo suficiente) — mesmo padrão do BaixarEstoqueAtomicoAsync. Antes:
+    /// `customer.HaverBalance -= x` lido/escrito em C# a partir de uma leitura
+    /// AsNoTracking tinha o mesmo lost-update que já corrigimos no crediário.
+    /// Retorna false se o saldo não é mais suficiente no momento exato da escrita.
+    /// </summary>
+    Task<bool> DebitarHaverAtomicoAsync(Guid customerId, decimal valor);
 }
 
 public interface ISaleRepository : IRepository<Sale>

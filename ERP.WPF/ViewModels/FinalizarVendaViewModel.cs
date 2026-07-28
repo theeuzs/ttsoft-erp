@@ -612,7 +612,7 @@ public class FinalizarVendaViewModel : BaseViewModel
             {
                 string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
                 await _saleService.AtualizarDadosNfceAsync(vendaId, urlDanfe, "Autorizada", ambienteSefaz, vendaId.ToString());
-            } catch { }
+            } catch (Exception exAtualizar) { Serilog.Log.Warning(exAtualizar, "Falha ao salvar dados locais da NFC-e autorizada para a venda {VendaId} (nota em si ja foi autorizada na SEFAZ)", vendaId); }
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = urlDanfe, UseShellExecute = true });
         }
         else
@@ -712,7 +712,7 @@ public class FinalizarVendaViewModel : BaseViewModel
                 {
                     string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
                     await _saleService.AtualizarDadosNfceAsync(vendaId, urlDanfe, "Autorizada", ambienteSefaz, vendaId.ToString());
-                } catch { }
+                } catch (Exception exAtualizar) { Serilog.Log.Warning(exAtualizar, "Falha ao salvar dados locais da NF-e (A4) autorizada para a venda {VendaId} (nota em si ja foi autorizada na SEFAZ)", vendaId); }
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = urlDanfe, UseShellExecute = true });
             }
             else
@@ -723,7 +723,7 @@ public class FinalizarVendaViewModel : BaseViewModel
                 {
                     string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
                     await _saleService.AtualizarDadosNfceAsync(vendaId, "", "Processando", ambienteSefaz, vendaId.ToString());
-                } catch { }
+                } catch (Exception exAtualizar) { Serilog.Log.Warning(exAtualizar, "Falha ao salvar dados locais da NF-e (A4) em processamento para a venda {VendaId} (nota ja esta na fila da SEFAZ)", vendaId); }
             }
         }
         else
@@ -741,7 +741,19 @@ public class FinalizarVendaViewModel : BaseViewModel
 
                     MessageBox.Show("📡 Venda salva em MODO CONTINGÊNCIA!\n\nA internet está instável. A NF-e será transmitida automaticamente depois.", "Modo Offline", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
-                catch { }
+                catch (Exception exContingencia)
+                {
+                    // FIX (auditoria): antes catch{} vazio — se RegistrarNotaPendenteAsync
+                    // falhasse, a venda ficava sem NENHUM documento fiscal (nem autorizada,
+                    // nem registrada como pendente) e ninguém ficava sabendo.
+                    Serilog.Log.Error(exContingencia,
+                        "Falha ao registrar NF-e em contingência para a venda {VendaId} — venda SEM documento fiscal nenhum.", vendaId);
+                    MessageBox.Show(
+                        $"⚠️ ATENÇÃO: falha ao salvar a nota em contingência!\n\n{exContingencia.Message}\n\n" +
+                        "A venda foi concluída, mas SEM nota fiscal registrada (nem autorizada, nem pendente). " +
+                        "Anote o número da venda e emita a nota manualmente depois.",
+                        "Falha Fiscal Crítica", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
             else
             {

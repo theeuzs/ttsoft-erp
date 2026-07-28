@@ -117,6 +117,17 @@ public class CustomerRepository : Repository<Customer>, ICustomerRepository
             .Take(50)
             .ToListAsync();
     }
+
+    public async Task<bool> DebitarHaverAtomicoAsync(Guid customerId, decimal valor)
+    {
+        var tenantId = AppDbContext.GetQueryTenantId();
+        var v = valor; // referenciado duas vezes — variável local evita avaliar duas vezes
+
+        var rows = await _ctx.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE Customers SET HaverBalance = HaverBalance - {v} WHERE Id = {customerId} AND TenantId = {tenantId} AND HaverBalance >= {v}");
+
+        return rows > 0;
+    }
 }
 
 public class SaleRepository : Repository<Sale>, ISaleRepository
