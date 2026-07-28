@@ -234,6 +234,22 @@ builder.Services.AddHttpClient<ERP.Application.Interfaces.IChannelDispatcher,
 builder.Services.AddScoped<ERP.Application.Interfaces.IEstoqueSyncService,
                             ERP.Application.Services.EstoqueSyncService>();
 
+// Etapa 2 da refatoração fiscal — a API só faz sentido com o provider de
+// banco (não tem arquivo local nenhum pra ler). Ainda não é usado por nada
+// na API (isso é a Etapa 4, quando OrderProcessingService for conectado) —
+// só registrado aqui pra já existir quando chegar a hora.
+builder.Services.AddScoped<ERP.Application.Interfaces.IFiscalConfigurationProvider,
+                            ERP.Infrastructure.Services.DatabaseFiscalConfigurationProvider>();
+// FiscalService também precisa de INfeEmissionService/INfeContingencyService —
+// só INfceEmissionService já estava registrado aqui (a API só emitia NFCe até
+// agora, nunca NF-e A4 nem tinha contingência do lado dela).
+builder.Services.AddScoped<ERP.Application.Interfaces.INfeEmissionService,
+                            ERP.Application.Services.NfeEmissionService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.INfeContingencyService,
+                            ERP.Application.Services.NfeContingencyService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IFiscalService,
+                            ERP.Infrastructure.Services.FiscalService>();
+
 builder.Services.AddHttpClient<IFocusNfeHttpClient, ERP.Infrastructure.HttpClients.FocusNfeHttpClient>(client =>
 {
     client.BaseAddress = new Uri("https://api.focusnfe.com.br/v2/");

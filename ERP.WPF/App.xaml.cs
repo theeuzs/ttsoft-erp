@@ -352,6 +352,15 @@ public partial class App : System.Windows.Application
         // mesma interface — ver WpfEstoqueSyncService.
         services.AddScoped<ERP.Application.Interfaces.IEstoqueSyncService,
                             ERP.WPF.Services.WpfEstoqueSyncService>();
+
+        // Etapa 1 da refatoração fiscal — mesmo comportamento de antes, só
+        // reorganizado: JsonFiscalConfigurationProvider lê o arquivo local de
+        // sempre; FiscalService é o mesmo (Infrastructure), consumido por
+        // WPF e API igualmente.
+        services.AddScoped<ERP.Application.Interfaces.IFiscalConfigurationProvider,
+                            ERP.WPF.Services.JsonFiscalConfigurationProvider>();
+        services.AddScoped<ERP.Application.Interfaces.IFiscalService,
+                            ERP.Infrastructure.Services.FiscalService>();
         services.AddScoped<ERP.Application.Interfaces.ISalePolicyService, ERP.Application.Services.SalePolicyService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IDevolucaoService, DevolucaoService>(); 

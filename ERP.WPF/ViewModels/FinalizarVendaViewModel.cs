@@ -545,13 +545,9 @@ public class FinalizarVendaViewModel : BaseViewModel
                     ImprimirReciboInterno(vendaSalva.Id, observacaoCompleta, vendaSalva.SaleNumber);
                 }
             }
-            else if (tipoEmissao == "NFCE")
+            else if (tipoEmissao == "NFCE" || tipoEmissao == "NFE")
             {
-                await EmitirNfceFocusAsync(vendaSalva.Id);
-            }
-            else if (tipoEmissao == "NFE")
-            {
-                await EmitirNfeA4FocusAsync(vendaSalva.Id);
+                await EmitirNotaViaFiscalServiceAsync(vendaSalva.Id, tipoEmissao);
             }
 
             _onSuccess?.Invoke(vendaSalva.Id); 
@@ -565,215 +561,32 @@ public class FinalizarVendaViewModel : BaseViewModel
     // ==========================================================
     // 7. INTEGRAÇÃO COM A FOCUS NFE (O MOTOR DE DISPARO)
     // ==========================================================
-    private async Task EmitirNfceFocusAsync(Guid vendaId)
+    private async Task EmitirNotaViaFiscalServiceAsync(Guid vendaId, string tipoDocumento)
     {
-        var config = ERP.WPF.Helpers.ConfiguracaoService.Carregar();
-        var nfceService = ERP.WPF.App.Services.GetRequiredService<INfceEmissionService>();
+        // Etapa 1 da refatoracao fiscal: a logica de montar o payload e chamar
+        // o Focus NFe agora mora em IFiscalService (Application/Infrastructure),
+        // sem nenhuma dependencia de UI. Esse metodo so decide o que MOSTRAR
+        // pro operador com base no resultado - a regra de negocio em si nao mudou.
+        var fiscalService = ERP.WPF.App.Services.GetRequiredService<IFiscalService>();
+        var resultado = await fiscalService.EmitirNotaAsync(vendaId, tipoDocumento);
 
-        string? cpfCnpjLimpo = null;
-        if (!string.IsNullOrWhiteSpace(SelectedCustomer?.Document))
-            cpfCnpjLimpo = new string(SelectedCustomer.Document.Where(char.IsDigit).ToArray());
-
-        var nfceRequest = new FocusNfceRequest
+        if (resultado.Sucesso && resultado.EmContingencia)
         {
-            DataEmissao = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:sszzz"), 
-            CpfCnpj = cpfCnpjLimpo,
-            Nome = SelectedCustomer?.Name,
-            Itens = ItensCarrinho.Select((item, index) => new FocusItemRequest
-            {
-                NumeroItem = (index + 1).ToString(),
-                CodigoProduto = item.ProductId.ToString().Substring(0, 6), 
-                Descricao = item.ProductName,
-                QuantidadeComercial = item.Quantity.ToString("F2", CultureInfo.InvariantCulture),
-                ValorUnitarioComercial = item.UnitPrice.ToString("F2", CultureInfo.InvariantCulture),
-                ValorBruto = item.Total.ToString("F2", CultureInfo.InvariantCulture),
-                CodigoNcm = string.IsNullOrWhiteSpace(item.Ncm) ? "00000000" : item.Ncm.Replace(".", "").Replace("-", "").Trim(),
-                IcmsSituacaoTributaria = string.IsNullOrWhiteSpace(item.Csosn) ? "102" : item.Csosn.Split('-')[0].Trim(),
-                IcmsOrigem = string.IsNullOrWhiteSpace(item.IcmsOrigem) ? "0" : item.IcmsOrigem,
-                Cfop = string.IsNullOrWhiteSpace(item.Cfop) ? "5102" : item.Cfop.Replace(".", "").Trim(),
-                PisSituacaoTributaria = "99",
-                CofinsSituacaoTributaria = "99"
-            }).ToList(),
-            Pagamentos = Pagamentos.Select(p => new FocusPagamentoRequest
-            {
-                FormaPagamento = TraduzirFormaPagamentoParaSefaz(p.Forma),
-                ValorPagamento = p.Forma == PaymentMethod.Dinheiro 
-                    ? (p.Valor - Troco).ToString("F2", CultureInfo.InvariantCulture) 
-                    : p.Valor.ToString("F2", CultureInfo.InvariantCulture)
-            }).ToList()
-        };
-
-        var (sucesso, mensagem, urlDanfe) = await nfceService.EmitirNfceAsync(vendaId.ToString(), nfceRequest, config.TokenFocusNfe, config.UsarAmbienteProducao);
-
-        if (sucesso && !string.IsNullOrWhiteSpace(urlDanfe))
+            MessageBox.Show(
+                "\ud83d\udce1 Venda salva em MODO CONTINGENCIA!\n\nA internet parece estar instavel. A nota sera enviada para a SEFAZ automaticamente assim que a conexao voltar.",
+                "Modo Offline", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        else if (resultado.Sucesso && !string.IsNullOrWhiteSpace(resultado.UrlDanfe))
         {
-            MessageBox.Show($"✅ {mensagem}", "Sefaz - Sucesso!", MessageBoxButton.OK, MessageBoxImage.Information);
-            try
-            {
-                string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
-                await _saleService.AtualizarDadosNfceAsync(vendaId, urlDanfe, "Autorizada", ambienteSefaz, vendaId.ToString());
-            } catch (Exception exAtualizar) { Serilog.Log.Warning(exAtualizar, "Falha ao salvar dados locais da NFC-e autorizada para a venda {VendaId} (nota em si ja foi autorizada na SEFAZ)", vendaId); }
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = urlDanfe, UseShellExecute = true });
+            MessageBox.Show($"\u2705 {resultado.Mensagem}", "Sefaz - Sucesso!", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = resultado.UrlDanfe, UseShellExecute = true });
         }
         else
         {
-            if (mensagem.Contains("Erro de Comunicação") && !mensagem.Contains("UnprocessableEntity") && !mensagem.Contains("erro_validacao_schema"))
-            {
-                try
-                {
-                    var contingencyService = ERP.WPF.App.Services.GetRequiredService<INfeContingencyService>();
-                    string jsonPayload = Newtonsoft.Json.JsonConvert.SerializeObject(nfceRequest);
-                    
-                    await contingencyService.RegistrarNotaPendenteAsync(vendaId, "NFCE", jsonPayload);
-
-                    string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
-                    await _saleService.AtualizarDadosNfceAsync(vendaId, "", "Contingência", ambienteSefaz, vendaId.ToString());
-
-                    MessageBox.Show("📡 Venda salva em MODO CONTINGÊNCIA!\n\nA internet parece estar instável. A nota será enviada para a SEFAZ automaticamente assim que a conexão voltar.\n\nImprimindo recibo provisório...", "Modo Offline", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    
-                    var fiscalCalculator = ERP.WPF.App.Services.GetRequiredService<ERP.Domain.Services.Fiscal.IFiscalCalculator>();
-                    decimal impostosAproximados = fiscalCalculator.CalcularTributosAproximados(this.TotalVenda, 13.45m);
-                    string msgFiscal = $"\nTrib. Aprox. R$: {impostosAproximados:N2} (Lei 12.741/12)";
-                    string observacaoCompleta = (this.EntregarNoEndereco && !string.IsNullOrWhiteSpace(this.EnderecoEntrega) ? this.EnderecoEntrega : "") + msgFiscal;
-            // Observação geral é passada separadamente para o recibo (aparece antes dos itens)
-                    
-                    ImprimirReciboInterno(vendaId, observacaoCompleta);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Falha catastrófica ao tentar salvar nota em contingência: {ex.Message}", "Erro Crítico", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-            }
-            else
-            {
-                MessageBox.Show($"❌ Falha na emissão da NFC-e:\n{mensagem}", "Rejeição Sefaz", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            MessageBox.Show($"\u274c Falha na emissao fiscal: {resultado.Mensagem}", "Erro Fiscal", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
-    private async Task EmitirNfeA4FocusAsync(Guid vendaId)
-    {
-        var config = ERP.WPF.Helpers.ConfiguracaoService.Carregar();
-        var nfeService = ERP.WPF.App.Services.GetRequiredService<INfeEmissionService>();
-
-        string? cpfCnpjLimpo = null;
-        if (!string.IsNullOrWhiteSpace(SelectedCustomer?.Document)) cpfCnpjLimpo = new string(SelectedCustomer.Document.Where(char.IsDigit).ToArray());
-        string? cepLimpo = null;
-        if (!string.IsNullOrWhiteSpace(SelectedCustomer?.ZipCode)) cepLimpo = new string(SelectedCustomer.ZipCode.Where(char.IsDigit).ToArray());
-        string? ieLimpa = null;
-        if (!string.IsNullOrWhiteSpace(SelectedCustomer?.Ie)) ieLimpa = new string(SelectedCustomer.Ie.Where(char.IsDigit).ToArray());
-        else if (cpfCnpjLimpo?.Length > 11) ieLimpa = "ISENTO"; 
-
-        var nfeRequest = new FocusNfceRequest
-        {
-            DataEmissao = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:sszzz"), 
-            TipoDocumento = "1", 
-            CpfCnpj = cpfCnpjLimpo,
-            Nome = SelectedCustomer?.Name,
-            LogradouroDestinatario = string.IsNullOrWhiteSpace(SelectedCustomer?.Street) ? "Nao Informado" : SelectedCustomer.Street,
-            NumeroDestinatario = string.IsNullOrWhiteSpace(SelectedCustomer?.Number) ? "S/N" : SelectedCustomer.Number,
-            BairroDestinatario = string.IsNullOrWhiteSpace(SelectedCustomer?.Neighborhood) ? "Centro" : SelectedCustomer.Neighborhood,
-            MunicipioDestinatario = string.IsNullOrWhiteSpace(SelectedCustomer?.City) ? "Curitiba" : SelectedCustomer.City,
-            UfDestinatario = string.IsNullOrWhiteSpace(SelectedCustomer?.State) ? "PR" : SelectedCustomer.State,
-            CepDestinatario = string.IsNullOrWhiteSpace(cepLimpo) ? "00000000" : cepLimpo,
-            IeDestinatario = ieLimpa,
-            Itens = ItensCarrinho.Select((item, index) => new FocusItemRequest
-            {
-                NumeroItem = (index + 1).ToString(),
-                CodigoProduto = item.ProductId.ToString().Substring(0, 6), 
-                Descricao = item.ProductName,
-                QuantidadeComercial = item.Quantity.ToString("F2", CultureInfo.InvariantCulture),
-                ValorUnitarioComercial = item.UnitPrice.ToString("F2", CultureInfo.InvariantCulture),
-                ValorBruto = item.Total.ToString("F2", CultureInfo.InvariantCulture),
-                CodigoNcm = string.IsNullOrWhiteSpace(item.Ncm) ? "00000000" : item.Ncm.Replace(".", ""), 
-                IcmsSituacaoTributaria = string.IsNullOrWhiteSpace(item.Csosn) ? "102" : item.Csosn.Split('-')[0].Trim(),
-                IcmsOrigem = string.IsNullOrWhiteSpace(item.IcmsOrigem) ? "0" : item.IcmsOrigem,
-                Cfop = string.IsNullOrWhiteSpace(item.Cfop) ? "5102" : item.Cfop,
-                PisSituacaoTributaria = "99",
-                CofinsSituacaoTributaria = "99"
-            }).ToList(),
-            Pagamentos = Pagamentos.Select(p => new FocusPagamentoRequest
-            {
-                FormaPagamento = TraduzirFormaPagamentoParaSefaz(p.Forma),
-                ValorPagamento = p.Forma == PaymentMethod.Dinheiro 
-                    ? (p.Valor - Troco).ToString("F2", CultureInfo.InvariantCulture) 
-                    : p.Valor.ToString("F2", CultureInfo.InvariantCulture)
-            }).ToList()
-        };
-
-        var (sucesso, mensagem, urlDanfe) = await nfeService.EmitirNfeA4Async(vendaId.ToString(), nfeRequest, config.TokenFocusNfe, config.UsarAmbienteProducao);
-
-        if (sucesso)
-        {
-            if (!string.IsNullOrWhiteSpace(urlDanfe))
-            {
-                MessageBox.Show($"✅ {mensagem}", "Sefaz - Sucesso!", MessageBoxButton.OK, MessageBoxImage.Information);
-                try
-                {
-                    string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
-                    await _saleService.AtualizarDadosNfceAsync(vendaId, urlDanfe, "Autorizada", ambienteSefaz, vendaId.ToString());
-                } catch (Exception exAtualizar) { Serilog.Log.Warning(exAtualizar, "Falha ao salvar dados locais da NF-e (A4) autorizada para a venda {VendaId} (nota em si ja foi autorizada na SEFAZ)", vendaId); }
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = urlDanfe, UseShellExecute = true });
-            }
-            else
-            {
-                MessageBox.Show($"⏳ {mensagem}\n\nSua NF-e está na fila da SEFAZ para ser aprovada.\nAssim que liberar, o PDF aparecerá na sua tela de 'Notas Fiscais' (F10).", 
-                                "Aguardando Sefaz", MessageBoxButton.OK, MessageBoxImage.Information);
-                try
-                {
-                    string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
-                    await _saleService.AtualizarDadosNfceAsync(vendaId, "", "Processando", ambienteSefaz, vendaId.ToString());
-                } catch (Exception exAtualizar) { Serilog.Log.Warning(exAtualizar, "Falha ao salvar dados locais da NF-e (A4) em processamento para a venda {VendaId} (nota ja esta na fila da SEFAZ)", vendaId); }
-            }
-        }
-        else
-        {
-            if (mensagem.Contains("Erro de Comunicação") && !mensagem.Contains("UnprocessableEntity") && !mensagem.Contains("erro_validacao_schema"))
-            {
-                try
-                {
-                    var contingencyService = ERP.WPF.App.Services.GetRequiredService<INfeContingencyService>();
-                    string jsonPayload = Newtonsoft.Json.JsonConvert.SerializeObject(nfeRequest);
-                    await contingencyService.RegistrarNotaPendenteAsync(vendaId, "NFE", jsonPayload);
-                    
-                    string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
-                    await _saleService.AtualizarDadosNfceAsync(vendaId, "", "Contingência", ambienteSefaz, vendaId.ToString());
-
-                    MessageBox.Show("📡 Venda salva em MODO CONTINGÊNCIA!\n\nA internet está instável. A NF-e será transmitida automaticamente depois.", "Modo Offline", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-                catch (Exception exContingencia)
-                {
-                    // FIX (auditoria): antes catch{} vazio — se RegistrarNotaPendenteAsync
-                    // falhasse, a venda ficava sem NENHUM documento fiscal (nem autorizada,
-                    // nem registrada como pendente) e ninguém ficava sabendo.
-                    Serilog.Log.Error(exContingencia,
-                        "Falha ao registrar NF-e em contingência para a venda {VendaId} — venda SEM documento fiscal nenhum.", vendaId);
-                    MessageBox.Show(
-                        $"⚠️ ATENÇÃO: falha ao salvar a nota em contingência!\n\n{exContingencia.Message}\n\n" +
-                        "A venda foi concluída, mas SEM nota fiscal registrada (nem autorizada, nem pendente). " +
-                        "Anote o número da venda e emita a nota manualmente depois.",
-                        "Falha Fiscal Crítica", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-            }
-            else
-            {
-                MessageBox.Show($"❌ Falha na emissão da NF-e (A4):\n{mensagem}", "Rejeição Sefaz", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-    }
-
-    private string TraduzirFormaPagamentoParaSefaz(PaymentMethod metodo)
-    {
-        return metodo switch
-        {
-            PaymentMethod.Dinheiro => "01",
-            PaymentMethod.CartaoCredito => "03",
-            PaymentMethod.CartaoDebito => "04",
-            PaymentMethod.APrazo => "05", 
-            PaymentMethod.Pix => "17",
-            _ => "99" 
-        };
-    }
 
     // ==========================================================
     // FUNÇÕES AUXILIARES (Para o código ficar limpo)

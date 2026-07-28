@@ -84,8 +84,18 @@ public class HaverViewModel : BaseViewModel
             var historico = await service.ObterHistoricoAsync(_customerId);
             Movimentos.Clear();
 
-            // Calcula saldo acumulado para exibição
-            decimal saldoAcumulado = 0;
+            // Calcula saldo acumulado para exibição — ancorado no SaldoAtual real
+            // (já buscado acima), não em 0. Antes: começava do zero sempre, então
+            // se o cliente já tivesse saldo Haver de antes da primeira movimentação
+            // registrada (ex: saldo migrado, ou lançado antes dessa tabela existir),
+            // a coluna "Saldo após" ficava sistematicamente errada — mesmo com o
+            // valor real (Customer.HaverBalance) correto. Reconstrói o saldo inicial
+            // de trás pra frente: SaldoAtual menos a soma de tudo que está no
+            // histórico é, por definição, o saldo antes da primeira movimentação
+            // listada — a partir daí a acumulação (histórico já vem OrderBy ascendente)
+            // sempre fecha certo com o valor real no fim.
+            var somaMovimentos = historico.Sum(m => m.Tipo == "Entrada" ? m.Valor : -m.Valor);
+            decimal saldoAcumulado = SaldoAtual - somaMovimentos;
             var comSaldo = historico
                 .Select(m =>
                 {

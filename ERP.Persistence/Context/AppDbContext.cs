@@ -160,6 +160,7 @@ public class AppDbContext : DbContext
     public DbSet<VendaSuspensaItem>      VendaSuspensaItens      { get; set; }
     public DbSet<ContaReceber>         ContasReceber       { get; set; }
     public DbSet<ContaReceberEvento>   ContaReceberEventos { get; set; }
+    public DbSet<TenantFiscalConfiguration> TenantFiscalConfigurations { get; set; }
     public DbSet<ContaPagar>           ContasPagar         { get; set; }
     public DbSet<MovimentoHaver>       MovimentosHaver     { get; set; }
     public DbSet<Orcamento>            Orcamentos          { get; set; }
@@ -367,6 +368,8 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<OrderEvent>().HasQueryFilter(
             e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
         modelBuilder.Entity<ContaReceberEvento>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<TenantFiscalConfiguration>().HasQueryFilter(
             e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
         modelBuilder.Entity<OrderAction>().HasQueryFilter(
             a => !a.IsDeleted && a.TenantId == tenantFilter.Value);
