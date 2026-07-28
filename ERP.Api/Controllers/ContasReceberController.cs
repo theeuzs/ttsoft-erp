@@ -84,7 +84,9 @@ public class ContasReceberController : ControllerBase
         if (dto.Valor <= 0)
             return BadRequest(new { erro = "Valor deve ser maior que zero." });
 
-        await _service.DarBaixaParcialAsync(id, dto.Valor);
+        try { await _service.DarBaixaParcialAsync(id, dto.Valor); }
+        catch (KeyNotFoundException ex) { return NotFound(new { erro = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { erro = ex.Message }); }
         return NoContent();
     }
 
@@ -100,7 +102,9 @@ public class ContasReceberController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto.Motivo))
             return BadRequest(new { erro = "Motivo é obrigatório pra cancelar uma conta." });
 
-        await _service.CancelarAsync(id, dto.Motivo);
+        try { await _service.CancelarAsync(id, dto.Motivo); }
+        catch (KeyNotFoundException ex) { return NotFound(new { erro = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { erro = ex.Message }); }
         return NoContent();
     }
 
@@ -114,7 +118,9 @@ public class ContasReceberController : ControllerBase
         if (dto.ValorDesconto <= 0)
             return BadRequest(new { erro = "Valor do desconto deve ser maior que zero." });
 
-        await _service.DarDescontoAsync(id, dto.ValorDesconto, dto.Motivo);
+        try { await _service.DarDescontoAsync(id, dto.ValorDesconto, dto.Motivo); }
+        catch (KeyNotFoundException ex) { return NotFound(new { erro = ex.Message }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { erro = ex.Message }); }
         return NoContent();
     }
 

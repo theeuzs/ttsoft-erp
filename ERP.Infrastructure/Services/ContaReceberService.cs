@@ -91,27 +91,37 @@ public class ContaReceberService : IContaReceberService
 
     public async Task DarBaixaParcialAsync(Guid contaId, decimal valorRecebido)
     {
-        var conta = await _ctx.ContasReceber.AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Id == contaId)
-            ?? throw new KeyNotFoundException("Conta não encontrada.");
+        var tenantId = _tenant.TenantId;
+        var agora    = DateTime.UtcNow;
+        var dataPag  = DateTime.Now;
 
-        var novoValorRecebido = Math.Min(conta.ValorRecebido + valorRecebido, conta.ValorTotal);
-        var novoStatus        = novoValorRecebido >= conta.ValorTotal ? "Pago" : "Pendente";
-        var dataPagamento     = novoStatus == "Pago" ? DateTime.Now : (DateTime?)null;
-        var agora             = DateTime.UtcNow;
-        var tenantId          = _tenant.TenantId;
+        // Atômico: soma relativa (ValorRecebido = ValorRecebido + X) direto no
+        // SQL, não Math.Min(conta.ValorRecebido + X, ...) calculado em C# a
+        // partir de uma leitura AsNoTracking — essa era a versão com
+        // lost-update (duas baixas quase simultâneas perdiam uma). O teto
+        // agora é ValorTotal-ValorDesconto (o antigo usava só ValorTotal,
+        // o que superestimava quanto ainda cabia receber quando já havia
+        // desconto aplicado).
+        var linhas = await _ctx.Database.ExecuteSqlInterpolatedAsync($@"
+            UPDATE ContasReceber
+            SET
+                ValorRecebido = CASE
+                    WHEN ValorRecebido + {valorRecebido} >= ValorTotal - ValorDesconto THEN ValorTotal - ValorDesconto
+                    ELSE ValorRecebido + {valorRecebido}
+                END,
+                Status = CASE
+                    WHEN ValorRecebido + {valorRecebido} + ValorDesconto >= ValorTotal THEN 'Pago'
+                    ELSE 'Pendente'
+                END,
+                DataPagamento = CASE
+                    WHEN ValorRecebido + {valorRecebido} + ValorDesconto >= ValorTotal THEN {dataPag}
+                    ELSE NULL
+                END,
+                UpdatedAt = {agora}
+            WHERE Id = {contaId} AND TenantId = {tenantId} AND Status <> 'Cancelado'");
 
-        if (dataPagamento.HasValue)
-        {
-            var dp = dataPagamento.Value;
-            await _ctx.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE ContasReceber SET ValorRecebido={novoValorRecebido}, Status={novoStatus}, DataPagamento={dp}, UpdatedAt={agora} WHERE Id={contaId} AND TenantId={tenantId}");
-        }
-        else
-        {
-            await _ctx.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE ContasReceber SET ValorRecebido={novoValorRecebido}, Status={novoStatus}, DataPagamento=NULL, UpdatedAt={agora} WHERE Id={contaId} AND TenantId={tenantId}");
-        }
+        if (linhas == 0)
+            throw new InvalidOperationException("Conta não encontrada ou está cancelada — não é possível dar baixa.");
 
         await RegistrarEventoAsync(contaId, "Pagamento", valorRecebido, null);
     }
@@ -130,15 +140,21 @@ public class ContaReceberService : IContaReceberService
 
     public async Task CancelarAsync(Guid contaId, string motivo)
     {
-        _ = await _ctx.ContasReceber.AsNoTracking().FirstOrDefaultAsync(c => c.Id == contaId)
-            ?? throw new KeyNotFoundException("Conta não encontrada.");
+        // Antes: buscava a conta só pra confirmar que existia e descartava
+        // (`_ = await ...`), sem checar o status — dava pra cancelar uma
+        // conta já paga. Agora a própria guarda do UPDATE impede isso.
+        var linhas = await _ctx.Database.ExecuteSqlInterpolatedAsync($@"
+            UPDATE ContasReceber
+            SET Status={"Cancelado"}, MotivoCancelamento={motivo}, UpdatedAt={DateTime.UtcNow}
+            WHERE Id={contaId} AND TenantId={_tenant.TenantId} AND Status <> 'Pago'");
 
-        // Diferente de DarBaixaTotalAsync: NÃO mexe em ValorRecebido. Cancelar
-        // não é "cliente pagou", é "essa dívida deixou de existir" — precisam
-        // ficar contabilmente distintos (senão relatório de recebimento mostra
-        // dinheiro que nunca entrou).
-        await _ctx.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE ContasReceber SET Status={"Cancelado"}, MotivoCancelamento={motivo}, UpdatedAt={DateTime.UtcNow} WHERE Id={contaId} AND TenantId={_tenant.TenantId}");
+        if (linhas == 0)
+        {
+            var existe = await _ctx.ContasReceber.AsNoTracking().AnyAsync(c => c.Id == contaId);
+            throw existe
+                ? new InvalidOperationException("Não é possível cancelar uma conta já paga.")
+                : new KeyNotFoundException("Conta não encontrada.");
+        }
 
         await RegistrarEventoAsync(contaId, "Cancelamento", null, motivo);
     }
@@ -148,27 +164,37 @@ public class ContaReceberService : IContaReceberService
         var conta = await _ctx.ContasReceber.AsNoTracking().FirstOrDefaultAsync(c => c.Id == contaId)
             ?? throw new KeyNotFoundException("Conta não encontrada.");
 
+        // Essa leitura é só pra mensagem de erro amigável e pro texto da
+        // Descricao — a validação de verdade é a guarda do WHERE no UPDATE
+        // atômico abaixo, que reavalia o saldo no momento exato da escrita.
         var saldoAtual = conta.ValorTotal - conta.ValorRecebido - conta.ValorDesconto;
         if (valorDesconto > saldoAtual)
             throw new InvalidOperationException(
                 $"Desconto de {valorDesconto:C} maior que o saldo devido ({saldoAtual:C}).");
 
-        var novoValorDesconto = conta.ValorDesconto + valorDesconto;
-        var quitou             = conta.ValorRecebido + novoValorDesconto >= conta.ValorTotal;
-        var novoStatus         = quitou ? "Pago" : conta.Status;
-        var dataPagamento      = quitou ? DateTime.Now : conta.DataPagamento;
-
-        // Motivo do desconto entra na Descricao (concatenado) — não criei um
-        // campo dedicado pra isso pra não multiplicar migration por um detalhe
-        // de auditoria secundário; dá pra promover pra campo próprio depois se
-        // precisar filtrar/relatar por esse motivo especificamente.
         var descricaoComMotivo = $"{conta.Descricao} [Desconto de {valorDesconto:C}: {motivo}]";
+        var dataPag = DateTime.Now;
+        var agora   = DateTime.UtcNow;
 
-        await _ctx.Database.ExecuteSqlInterpolatedAsync($@"
+        var linhas = await _ctx.Database.ExecuteSqlInterpolatedAsync($@"
             UPDATE ContasReceber
-            SET ValorDesconto={novoValorDesconto}, Status={novoStatus}, DataPagamento={dataPagamento},
-                Descricao={descricaoComMotivo}, UpdatedAt={DateTime.UtcNow}
-            WHERE Id={contaId} AND TenantId={_tenant.TenantId}");
+            SET ValorDesconto = ValorDesconto + {valorDesconto},
+                Status = CASE
+                    WHEN ValorRecebido + ValorDesconto + {valorDesconto} >= ValorTotal THEN 'Pago'
+                    ELSE Status
+                END,
+                DataPagamento = CASE
+                    WHEN ValorRecebido + ValorDesconto + {valorDesconto} >= ValorTotal THEN {dataPag}
+                    ELSE DataPagamento
+                END,
+                Descricao = {descricaoComMotivo}, UpdatedAt = {agora}
+            WHERE Id = {contaId} AND TenantId = {_tenant.TenantId}
+              AND Status <> 'Cancelado'
+              AND ValorTotal - ValorRecebido - ValorDesconto >= {valorDesconto}");
+
+        if (linhas == 0)
+            throw new InvalidOperationException(
+                "Não foi possível aplicar o desconto — a conta pode ter sido cancelada ou paga nesse meio tempo. Confira o saldo atual e tente de novo.");
 
         await RegistrarEventoAsync(contaId, "Desconto", valorDesconto, motivo);
     }
@@ -203,24 +229,37 @@ public class ContaReceberService : IContaReceberService
             descontoDaConta = Math.Min(descontoDaConta, saldoConta);
 
             var pagamentoDaConta = Math.Max(0, Math.Min(restanteAPagar, saldoConta - descontoDaConta));
+            var dataPag = DateTime.Now;
+            var agora   = DateTime.UtcNow;
 
-            var novoValorRecebido = conta.ValorRecebido + pagamentoDaConta;
-            var novoValorDesconto = conta.ValorDesconto + descontoDaConta;
-            var quitou             = novoValorRecebido + novoValorDesconto >= conta.ValorTotal;
-            var novoStatus         = quitou ? "Pago" : "Pendente";
-            var dataPagamento      = quitou ? DateTime.Now : conta.DataPagamento;
-
-            await _ctx.Database.ExecuteSqlInterpolatedAsync($@"
+            // Atômico igual DarBaixaParcialAsync — soma relativa no SQL, não
+            // o valor absoluto computado a partir do snapshot lido no início
+            // do método. O rateio em si (quanto vai pra cada conta) ainda
+            // parte desse snapshot — risco residual menor, aceitável aqui
+            // porque é o operador clicando "Receber" uma vez, não dois
+            // terminais disputando a mesma conta ao mesmo tempo.
+            var linhas = await _ctx.Database.ExecuteSqlInterpolatedAsync($@"
                 UPDATE ContasReceber
-                SET ValorRecebido={novoValorRecebido}, ValorDesconto={novoValorDesconto},
-                    Status={novoStatus}, DataPagamento={dataPagamento}, FormaPagamento={formaPagamento},
-                    UpdatedAt={DateTime.UtcNow}
-                WHERE Id={conta.Id} AND TenantId={_tenant.TenantId}");
+                SET ValorRecebido = ValorRecebido + {pagamentoDaConta},
+                    ValorDesconto = ValorDesconto + {descontoDaConta},
+                    Status = CASE
+                        WHEN ValorRecebido + {pagamentoDaConta} + ValorDesconto + {descontoDaConta} >= ValorTotal THEN 'Pago'
+                        ELSE 'Pendente'
+                    END,
+                    DataPagamento = CASE
+                        WHEN ValorRecebido + {pagamentoDaConta} + ValorDesconto + {descontoDaConta} >= ValorTotal THEN {dataPag}
+                        ELSE DataPagamento
+                    END,
+                    FormaPagamento = {formaPagamento}, UpdatedAt = {agora}
+                WHERE Id = {conta.Id} AND TenantId = {_tenant.TenantId} AND Status <> 'Cancelado'");
 
-            if (pagamentoDaConta > 0)
-                await RegistrarEventoAsync(conta.Id, "Pagamento", pagamentoDaConta, $"Baixa em lote ({formaPagamento})");
-            if (descontoDaConta > 0)
-                await RegistrarEventoAsync(conta.Id, "Desconto", descontoDaConta, "Rateado na baixa em lote");
+            if (linhas > 0)
+            {
+                if (pagamentoDaConta > 0)
+                    await RegistrarEventoAsync(conta.Id, "Pagamento", pagamentoDaConta, $"Baixa em lote ({formaPagamento})");
+                if (descontoDaConta > 0)
+                    await RegistrarEventoAsync(conta.Id, "Desconto", descontoDaConta, "Rateado na baixa em lote");
+            }
 
             restanteAPagar   -= pagamentoDaConta;
             restanteDesconto -= descontoDaConta;
