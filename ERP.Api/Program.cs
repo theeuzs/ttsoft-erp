@@ -81,6 +81,7 @@ builder.Services.AddScoped<IInventarioService,    InventarioService>();
 builder.Services.AddScoped<IDreService,           DreService>();
 builder.Services.AddScoped<IAbcService,           AbcService>();
 builder.Services.AddScoped<IMargemService,        MargemService>();
+builder.Services.AddScoped<IGerenciadorVendasService, GerenciadorVendasService>();
 builder.Services.AddScoped<IFluxoCaixaService,    FluxoCaixaService>();
 // S17 FIX: FluxoCaixaService agora depende de IContaBancariaService (saldo
 // consolidado real como base da projeção) — sem registrar aqui, a API quebraria

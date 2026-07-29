@@ -32,6 +32,16 @@ public interface IMargemService
         CancellationToken ct = default);
 }
 
+/// <summary>Item 2.1 do roadmap Comercial — produto, classe, quantidade
+/// vendida, custo e venda numa visão só, sem precisar escolher um produto
+/// por vez (diferente do HistoricoVendasViewModel, que é drill-down de um
+/// produto específico).</summary>
+public interface IGerenciadorVendasService
+{
+    Task<IReadOnlyList<GerenciadorVendaItemDto>> ObterAsync(
+        DateTime? from = null, DateTime? to = null, CancellationToken ct = default);
+}
+
 public interface IFluxoCaixaService
 {
     Task<FluxoCaixaResultadoDto> ObterAsync(

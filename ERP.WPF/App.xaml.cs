@@ -414,6 +414,7 @@ public partial class App : System.Windows.Application
                 sp.GetRequiredService<IMemoryCache>()));
 
         services.AddScoped<FluxoCaixaService>();
+        services.AddScoped<IGerenciadorVendasService, GerenciadorVendasService>();
         services.AddScoped<IFluxoCaixaService>(sp =>
             new FluxoCaixaServiceCached(
                 sp.GetRequiredService<FluxoCaixaService>(),

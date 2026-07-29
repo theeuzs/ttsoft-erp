@@ -161,6 +161,39 @@ public class MargemService : IMargemService
     }
 }
 
+public class GerenciadorVendasService : IGerenciadorVendasService
+{
+    private readonly AppDbContext _ctx;
+    public GerenciadorVendasService(AppDbContext ctx) => _ctx = ctx;
+
+    public async Task<IReadOnlyList<GerenciadorVendaItemDto>> ObterAsync(
+        DateTime? from = null, DateTime? to = null, CancellationToken ct = default)
+    {
+        var query = _ctx.SaleItems.AsNoTracking()
+            .Include(i => i.Product).ThenInclude(p => p.Category)
+            .Include(i => i.Sale)
+            .Where(i => i.Sale.Status != Domain.Enums.SaleStatus.Cancelada);
+
+        if (from.HasValue) query = query.Where(i => i.Sale.SaleDate >= from.Value);
+        if (to.HasValue)   query = query.Where(i => i.Sale.SaleDate <= to.Value);
+
+        var agrupado = await query
+            .GroupBy(i => new { i.ProductId, i.ProductName, CategoriaNome = i.Product.Category != null ? i.Product.Category.Name : "Sem categoria", i.Product.OriginalCost })
+            .Select(g => new GerenciadorVendaItemDto(
+                g.Key.ProductId,
+                g.Key.ProductName,
+                g.Key.CategoriaNome,
+                g.Sum(i => i.Quantity),
+                g.Key.OriginalCost,
+                g.Sum(i => i.TotalItem),
+                g.Key.OriginalCost * g.Sum(i => i.Quantity)))
+            .OrderByDescending(d => d.ValorVendaTotal)
+            .ToListAsync(ct);
+
+        return agrupado;
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  FLUXO DE CAIXA
 // ═══════════════════════════════════════════════════════════════════════════════

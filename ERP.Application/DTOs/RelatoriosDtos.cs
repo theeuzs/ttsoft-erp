@@ -127,3 +127,16 @@ public record PrevisaoDemandaDto(
     int     DiasEstoque,        // Quantos dias de estoque restam
     bool    AbaixoDoMinimo,
     decimal SugestaoCompra);
+
+// ── Gerenciador de Vendas ──────────────────────────────────────────────────
+public record GerenciadorVendaItemDto(
+    Guid    ProductId,
+    string  ProductName,
+    string  Categoria,
+    decimal QuantidadeVendida,
+    decimal CustoUnitario,
+    decimal ValorVendaTotal,
+    decimal CustoTotal)
+{
+    public decimal LucroTotal => ValorVendaTotal - CustoTotal;
+}
