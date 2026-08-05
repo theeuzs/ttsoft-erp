@@ -30,7 +30,7 @@
                           Height="36" Padding="8,0" VerticalContentAlignment="Center"
                           BorderBrush="{DynamicResource BordaInput}" Margin="0,0,0,12"/>
 
-                <Grid Margin="0,0,0,12">
+                <Grid Margin="0,0,0,12" Visibility="{Binding MostrarCamposBoleto, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="10"/>

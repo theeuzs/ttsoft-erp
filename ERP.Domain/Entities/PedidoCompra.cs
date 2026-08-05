@@ -26,7 +26,7 @@ public class PedidoCompra : BaseEntity
     // ── Item 2.5 do roadmap Comercial: forma de pagamento e boleto de uma
     // nota importada — nome/valor já eram editáveis (item 1.1), isso aqui
     // era a lacuna genuína, não existia em lugar nenhum ainda.
-    public PaymentMethod? FormaPagamento { get; set; }
+    public FormaPagamentoCompra? FormaPagamento { get; set; }
     public string?  NumeroBoleto     { get; set; }
     public DateTime? VencimentoBoleto { get; set; }
 
@@ -60,7 +60,7 @@ public class PedidoCompra : BaseEntity
     /// não pode ser reescrito.
     /// </summary>
     public void Editar(string fornecedorNome, DateTime? dataPrevista, string? observacoes,
-                        PaymentMethod? formaPagamento = null, string? numeroBoleto = null, DateTime? vencimentoBoleto = null)
+                        FormaPagamentoCompra? formaPagamento = null, string? numeroBoleto = null, DateTime? vencimentoBoleto = null)
     {
         if (Status != StatusPedidoCompra.Rascunho)
             throw new InvalidOperationException("Apenas pedidos em Rascunho podem ser editados.");

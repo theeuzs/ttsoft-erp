@@ -51,9 +51,18 @@ public class ComprasViewModel : BaseViewModel
     public DateTime? DataPrevista { get => _dataPrevista; set => SetProperty(ref _dataPrevista, value); }
 
     // ── Item 2.5 do roadmap Comercial: forma de pagamento e boleto ────────
-    private PaymentMethod? _formaPagamentoNota;
-    public PaymentMethod? FormaPagamentoNota { get => _formaPagamentoNota; set => SetProperty(ref _formaPagamentoNota, value); }
-    public IEnumerable<PaymentMethod> FormasPagamentoDisponiveis => Enum.GetValues<PaymentMethod>();
+    private FormaPagamentoCompra? _formaPagamentoNota;
+    public FormaPagamentoCompra? FormaPagamentoNota
+    {
+        get => _formaPagamentoNota;
+        set { SetProperty(ref _formaPagamentoNota, value); OnPropertyChanged(nameof(MostrarCamposBoleto)); }
+    }
+    public IEnumerable<FormaPagamentoCompra> FormasPagamentoDisponiveis => Enum.GetValues<FormaPagamentoCompra>();
+
+    /// <summary>Nº Boleto/Vencimento só fazem sentido quando a forma
+    /// escolhida é, de fato, Boleto — antes apareciam sempre, mesmo
+    /// pra Dinheiro/Pix, o que não fazia sentido nenhum.</summary>
+    public bool MostrarCamposBoleto => FormaPagamentoNota == FormaPagamentoCompra.Boleto;
 
     private string? _numeroBoleto;
     public string? NumeroBoleto { get => _numeroBoleto; set => SetProperty(ref _numeroBoleto, value); }

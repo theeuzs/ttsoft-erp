@@ -25,7 +25,7 @@ public class PedidoCompraDto
     };
     public decimal Total        { get; set; }
     public string? Observacoes  { get; set; }
-    public PaymentMethod? FormaPagamento   { get; set; }
+    public FormaPagamentoCompra? FormaPagamento   { get; set; }
     public string?  NumeroBoleto      { get; set; }
     public DateTime? VencimentoBoleto { get; set; }
     public List<PedidoCompraItemDto> Itens { get; set; } = new();
@@ -58,7 +58,7 @@ public class AtualizarPedidoCompraDto
     public string FornecedorNome { get; set; } = string.Empty;
     public DateTime? DataPrevista { get; set; }
     public string? Observacoes   { get; set; }
-    public PaymentMethod? FormaPagamento   { get; set; }
+    public FormaPagamentoCompra? FormaPagamento   { get; set; }
     public string?  NumeroBoleto      { get; set; }
     public DateTime? VencimentoBoleto { get; set; }
     public List<CreatePedidoCompraItemDto> Itens { get; set; } = new();

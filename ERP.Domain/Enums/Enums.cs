@@ -17,6 +17,19 @@ public enum PaymentMethod
     Haver = 5
 }
 
+/// <summary>Forma de pagamento do lado de COMPRAS (pagar fornecedor) — separado
+/// de PaymentMethod (que é do lado de vendas/PDV) porque são contextos
+/// diferentes: aqui Boleto é a opção mais comum, e não fazia sentido misturar
+/// com Cartão de Crédito/Débito/Haver, que só existem no contexto de venda.</summary>
+public enum FormaPagamentoCompra
+{
+    Dinheiro = 0,
+    Pix = 1,
+    Boleto = 2,
+    TransferenciaBancaria = 3,
+    Cheque = 4
+}
+
 /// <summary>
 /// De onde a venda nasceu — decide se exige caixa físico aberto (ver
 /// ISalePolicyService) e se gera Conta a Receber de repasse em vez de
