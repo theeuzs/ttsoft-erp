@@ -1,5 +1,6 @@
 using ERP.WPF.Commands;
 using ERP.WPF.Helpers;
+using Microsoft.Extensions.DependencyInjection;
 using System.Windows;
 using System.Windows.Input;
 
@@ -75,6 +76,13 @@ public class ConfiguracoesViewModel : BaseViewModel
     public ICommand SalvarCommand { get; }
     public ICommand BackupManualCommand { get; } = new RelayCommand(async _ => await BackupService.RealizarBackupManualAsync());
 
+    /// <summary>Fundação da Etapa 2 fiscal — migra o token que hoje está só
+    /// no arquivo local (config_recibo.json) pra TenantFiscalConfiguration,
+    /// que a API também consegue ler. Usa os providers que já existem
+    /// (JsonFiscalConfigurationProvider e DatabaseFiscalConfigurationProvider),
+    /// só transfere de um pro outro.</summary>
+    public ICommand MigrarParaBancoCommand { get; }
+
     public ConfiguracoesViewModel()
     {
         var config = ConfiguracaoService.Carregar();
@@ -98,7 +106,43 @@ public class ConfiguracoesViewModel : BaseViewModel
         RemoverLogoCommand = new RelayCommand(_ => CaminhoLogo = string.Empty);
         ToggleTokenCommand = new RelayCommand(_ => IsTokenVisivel = !IsTokenVisivel); // Alterna o olhinho
         SalvarCommand = new RelayCommand(_ => Salvar());
+        MigrarParaBancoCommand = new RelayCommand(async _ => await MigrarParaBancoAsync());
         
+    }
+
+    private async Task MigrarParaBancoAsync()
+    {
+        // Salva primeiro no arquivo local (garante que o que está na tela —
+        // possivelmente ainda não salvo — é o que vai pro banco).
+        Salvar();
+
+        var confirmacao = MessageBox.Show(
+            $"Isso vai copiar o token da Focus NFe atual (terminando em ...{(TokenFocusNfe.Length > 4 ? TokenFocusNfe[^4..] : TokenFocusNfe)}) " +
+            $"e o ambiente ({(UsarAmbienteProducao ? "Produção" : "Homologação")}) pro banco de dados, " +
+            "pra que a API (e não só esse computador) consiga emitir nota fiscal.\n\nContinuar?",
+            "Migrar Configuração Fiscal", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+        if (confirmacao != MessageBoxResult.Yes) return;
+
+        try
+        {
+            var ctx    = ERP.WPF.App.Services.GetRequiredService<ERP.Persistence.Context.AppDbContext>();
+            var tenant = ERP.WPF.App.Services.GetRequiredService<ERP.Application.Interfaces.IRequestTenant>();
+            var dbProvider = new ERP.Infrastructure.Services.DatabaseFiscalConfigurationProvider(ctx, tenant);
+
+            await dbProvider.SalvarConfiguracaoAsync(new ERP.Application.Interfaces.FiscalConfiguration
+            {
+                TokenFocusNfe        = TokenFocusNfe,
+                UsarAmbienteProducao = UsarAmbienteProducao
+            });
+
+            MessageBox.Show("✅ Configuração fiscal migrada pro banco com sucesso!", "TTSoft ERP",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"❌ Falha ao migrar: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void Salvar()

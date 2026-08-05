@@ -1,0 +1,91 @@
+<UserControl x:Class="ERP.WPF.Views.OrganizacaoVendasView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource CardBgAlt}">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="12"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Grid>
+            <StackPanel>
+                <TextBlock Text="Organização de Vendas" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource TextDark}"/>
+                <TextBlock Text="Vendas, pré-vendas e orçamentos numa tela só, com filtros"
+                           FontSize="13" Foreground="{DynamicResource TextMuted}" Margin="0,4,0,0"/>
+            </StackPanel>
+            <Button Content="↻ Atualizar" Command="{Binding CarregarCommand}"
+                    HorizontalAlignment="Right" VerticalAlignment="Center"
+                    Background="{DynamicResource CorAcento}" Foreground="White"
+                    FontWeight="Bold" Height="34" Padding="16,0" BorderThickness="0" Cursor="Hand">
+                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+            </Button>
+        </Grid>
+
+        <!-- Filtros -->
+        <Border Grid.Row="2" Background="{DynamicResource CardBg}" CornerRadius="8" Padding="12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="160"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="130"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="130"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBox Grid.Column="0" Text="{Binding FiltroBusca, UpdateSourceTrigger=PropertyChanged}"
+                         Padding="8" FontSize="14" BorderBrush="{DynamicResource BordaInput}"
+                         VerticalContentAlignment="Center"/>
+
+                <ComboBox Grid.Column="2" ItemsSource="{Binding TiposDisponiveis}" SelectedItem="{Binding TipoSelecionado}"
+                          Padding="8" VerticalContentAlignment="Center"/>
+
+                <TextBlock Grid.Column="4" Text="Período:" VerticalAlignment="Center" Foreground="{DynamicResource TextMuted}"/>
+                <DatePicker Grid.Column="6" SelectedDate="{Binding DataInicio}"/>
+                <DatePicker Grid.Column="8" SelectedDate="{Binding DataFim}"/>
+            </Grid>
+        </Border>
+
+        <!-- Tabela -->
+        <Border Grid.Row="4" Background="{DynamicResource CardBg}" CornerRadius="12">
+            <DataGrid ItemsSource="{Binding Registros}"
+                      AutoGenerateColumns="False" IsReadOnly="True"
+                      Background="Transparent" BorderThickness="0"
+                      GridLinesVisibility="Horizontal" RowHeight="42"
+                      AlternatingRowBackground="{DynamicResource CardBgAlt}" CanUserResizeRows="False">
+                <DataGrid.ColumnHeaderStyle>
+                    <Style TargetType="DataGridColumnHeader">
+                        <Setter Property="Background" Value="#F1F5F9"/>
+                        <Setter Property="Foreground" Value="#64748B"/>
+                        <Setter Property="FontWeight" Value="Bold"/>
+                        <Setter Property="Padding" Value="12,8"/>
+                    </Style>
+                </DataGrid.ColumnHeaderStyle>
+                <DataGrid.Columns>
+                    <DataGridTemplateColumn Header="Tipo" Width="130">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding TipoTexto}" FontWeight="Bold"
+                                           Foreground="{Binding CorTipo}" VerticalAlignment="Center"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Número" Binding="{Binding Numero}" Width="130"/>
+                    <DataGridTextColumn Header="Cliente" Binding="{Binding Cliente}" Width="*"/>
+                    <DataGridTextColumn Header="Data" Binding="{Binding Data, StringFormat=dd/MM/yyyy}" Width="100"/>
+                    <DataGridTextColumn Header="Total" Binding="{Binding Total, StringFormat='R$ {0:N2}'}" Width="120"/>
+                    <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="160"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+    </Grid>
+</UserControl>

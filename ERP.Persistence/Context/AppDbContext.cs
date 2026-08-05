@@ -161,6 +161,7 @@ public class AppDbContext : DbContext
     public DbSet<ContaReceber>         ContasReceber       { get; set; }
     public DbSet<ContaReceberEvento>   ContaReceberEventos { get; set; }
     public DbSet<TenantFiscalConfiguration> TenantFiscalConfigurations { get; set; }
+    public DbSet<NotaFiscal> NotasFiscais { get; set; }
     public DbSet<ContaPagar>           ContasPagar         { get; set; }
     public DbSet<MovimentoHaver>       MovimentosHaver     { get; set; }
     public DbSet<Orcamento>            Orcamentos          { get; set; }
@@ -371,6 +372,8 @@ public class AppDbContext : DbContext
             e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
         modelBuilder.Entity<TenantFiscalConfiguration>().HasQueryFilter(
             e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<NotaFiscal>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
         modelBuilder.Entity<OrderAction>().HasQueryFilter(
             a => !a.IsDeleted && a.TenantId == tenantFilter.Value);
         modelBuilder.Entity<OrderConflict>().HasQueryFilter(
@@ -473,6 +476,12 @@ public class AppDbContext : DbContext
             .HasForeignKey(e => e.ContaReceberId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        modelBuilder.Entity<NotaFiscal>()
+            .HasOne(n => n.Venda)
+            .WithMany()
+            .HasForeignKey(n => n.VendaId)
+            .OnDelete(DeleteBehavior.Restrict); // nunca apaga nota fiscal em cascata
+
         modelBuilder.Entity<OrderAction>()
             .HasOne(a => a.ExternalOrder)
             .WithMany()
@@ -503,6 +512,8 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<OrderEvent>().HasIndex(e => e.CorrelationId);
         modelBuilder.Entity<ContaReceberEvento>().HasIndex(e => e.ContaReceberId);
+        modelBuilder.Entity<NotaFiscal>().HasIndex(n => n.VendaId);
+        modelBuilder.Entity<NotaFiscal>().HasIndex(n => n.Chave);
         modelBuilder.Entity<OrderAction>().HasIndex(a => a.CorrelationId);
         modelBuilder.Entity<OrderConflict>().HasIndex(c => c.CorrelationId);
 

@@ -23,8 +23,6 @@ public class JsonFiscalConfigurationProvider : IFiscalConfigurationProvider
 
     public Task SalvarConfiguracaoAsync(FiscalConfiguration config)
     {
-        // Carrega o arquivo inteiro (recibo, logo, PIX, etc.) e só atualiza os
-        // dois campos fiscais — não sobrescreve o resto da configuração.
         var reciboConfig = ERP.WPF.Helpers.ConfiguracaoService.Carregar();
         reciboConfig.TokenFocusNfe        = config.TokenFocusNfe;
         reciboConfig.UsarAmbienteProducao = config.UsarAmbienteProducao;

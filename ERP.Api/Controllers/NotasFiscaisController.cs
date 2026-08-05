@@ -85,13 +85,13 @@ public class NotasFiscaisController : ControllerBase
         };
 
         var referencia = $"venda-{req.VendaId ?? Guid.NewGuid()}";
-        var (sucesso, mensagem, urlDanfe) = await _nfce.EmitirNfceAsync(
+        var (sucesso, mensagem, urlDanfe, urlXml) = await _nfce.EmitirNfceAsync(
             referencia, focusReq, Token, IsProducao);
 
         if (!sucesso)
             return BadRequest(new { erro = mensagem });
 
-        return Ok(new { Sucesso = true, Referencia = referencia, UrlDanfe = urlDanfe });
+        return Ok(new { Sucesso = true, Referencia = referencia, UrlDanfe = urlDanfe, UrlXml = urlXml });
     }
 
     /// <summary>Cancela uma NFC-e ou NF-e emitida.</summary>
@@ -104,7 +104,7 @@ public class NotasFiscaisController : ControllerBase
             return BadRequest(new { erro = "Justificativa deve ter no mínimo 15 caracteres." });
 
         var (sucesso, mensagem) = await _cancel.CancelarNotaAsync(
-            referencia, req.Justificativa, Token, IsProducao);
+            referencia, req.Justificativa, Token, IsProducao, req.TipoDocumento);
 
         return sucesso
             ? Ok(new { Sucesso = true, Mensagem = mensagem })
@@ -147,4 +147,8 @@ public class ItemNfceRequest
 public class CancelarNotaRequest
 {
     public string Justificativa { get; set; } = string.Empty;
+
+    /// <summary>"NFCE" (padrão) ou "NFE" — decide qual endpoint da Focus é
+    /// usado pra cancelar.</summary>
+    public string TipoDocumento { get; set; } = "NFCE";
 }

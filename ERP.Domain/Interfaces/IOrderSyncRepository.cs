@@ -74,6 +74,10 @@ public interface IOrderSyncRepository
     /// <summary>Lista os pedidos mais recentes, com SalesChannel e Venda
     /// incluídos — é o que a tela "Marketplace → Pedidos" consome.</summary>
     Task<IReadOnlyList<ExternalOrder>> ListarPedidosAsync(int limite = 200);
+
+    /// <summary>Quantos pedidos precisam de atenção agora (sem SKU mapeado
+    /// ou em conflito) — alimenta o badge do menu lateral.</summary>
+    Task<int> CountPedidosPendentesAsync();
     /// <summary>
     /// Tenta inserir o pedido. Devolve false (sem lançar) se outra requisição
     /// concorrente já inseriu o mesmo (SalesChannelId, ExternalOrderId) um

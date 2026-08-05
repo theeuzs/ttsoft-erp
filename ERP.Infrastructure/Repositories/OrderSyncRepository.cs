@@ -95,6 +95,11 @@ public class OrderSyncRepository : IOrderSyncRepository
             .Take(limite)
             .ToListAsync();
 
+    public async Task<int> CountPedidosPendentesAsync()
+        => await _ctx.ExternalOrders.CountAsync(o =>
+            o.InternalStatus == ExternalOrderStatus.AguardandoSku ||
+            o.InternalStatus == ExternalOrderStatus.ConflitoAberto);
+
     public async Task<bool> TentarInserirExternalOrderAsync(ExternalOrder pedido)
     {
         await _ctx.ExternalOrders.AddAsync(pedido);

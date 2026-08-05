@@ -60,6 +60,16 @@ public class SaleViewModel : BaseViewModel
     public ICommand DevolverItensCommand   { get; }
     public ICommand EnviarWhatsAppCommand  { get; }
     public ICommand AlternarFaturamentoCommand { get; }
+    public ICommand EmitirNotaCommand { get; }
+
+    private bool _somenteSemNota;
+    /// <summary>Item 3 da análise fiscal — "emitir pelo histórico". Filtra a
+    /// grid pra só mostrar vendas sem nenhum documento fiscal ainda.</summary>
+    public bool SomenteSemNota
+    {
+        get => _somenteSemNota;
+        set { _somenteSemNota = value; OnPropertyChanged(nameof(SomenteSemNota)); }
+    }
 
     public SaleViewModel(ISaleService saleService, ICaixaService caixaService)
     {
@@ -76,6 +86,7 @@ public class SaleViewModel : BaseViewModel
         DevolverItensCommand    = new AsyncRelayCommand(async v => await AbrirDevolucaoAsync(v as SaleDto));
         EnviarWhatsAppCommand   = new AsyncRelayCommand(async v => await MandarWhatsApp(v as SaleDto));
         AlternarFaturamentoCommand = new RelayCommand(_ => FaturamentoVisivel = !FaturamentoVisivel);
+        EmitirNotaCommand = new AsyncRelayCommand(async v => await EmitirNotaAsync(v as SaleDto));
 
         _ = LoadSalesAsync();
     }
@@ -252,6 +263,10 @@ public class SaleViewModel : BaseViewModel
                     (s.SellerName   != null && s.SellerName.ToLower().Contains(busca)));
             }
 
+            if (SomenteSemNota)
+                filteredSales = filteredSales.Where(s => string.IsNullOrWhiteSpace(s.NfceStatusFocus)
+                                                       && s.Status != SaleStatus.Cancelada);
+
             var finalSales = filteredSales.OrderByDescending(s => s.SaleDate).ToList();
 
             SalesList.Clear();
@@ -263,6 +278,54 @@ public class SaleViewModel : BaseViewModel
         catch (Exception ex)
         {
             MessageBox.Show($"Erro ao carregar o histórico:\n{ex.Message}", "Erro no Banco", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async Task EmitirNotaAsync(SaleDto venda)
+    {
+        if (venda == null) return;
+
+        if (!string.IsNullOrWhiteSpace(venda.NfceStatusFocus) && venda.NfceStatusFocus == "Autorizada")
+        {
+            MessageBox.Show("Essa venda já tem nota fiscal autorizada.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (venda.Status == SaleStatus.Cancelada)
+        {
+            MessageBox.Show("Não é possível emitir nota pra uma venda cancelada.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var confirmacao = MessageBox.Show(
+            $"Emitir NFC-e pra venda {venda.SaleNumber} ({venda.CustomerName ?? "Consumidor final"}, R$ {venda.Total:N2})?",
+            "Emitir Nota Fiscal", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirmacao != MessageBoxResult.Yes) return;
+
+        try
+        {
+            var fiscalService = App.Services.GetRequiredService<IFiscalService>();
+            var resultado = await fiscalService.EmitirNotaAsync(venda.Id, "NFCE");
+
+            if (resultado.Sucesso && resultado.EmContingencia)
+            {
+                MessageBox.Show("📡 Sem conexão com a SEFAZ agora — a nota foi registrada em contingência e será transmitida automaticamente depois.",
+                    "Modo Offline", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            else if (resultado.Sucesso)
+            {
+                MessageBox.Show($"✅ Nota emitida com sucesso!\n{resultado.Mensagem}", "Sucesso", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                MessageBox.Show($"❌ Falha ao emitir: {resultado.Mensagem}", "Erro Fiscal", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+
+            await LoadSalesAsync(); // recarrega pra refletir o novo status (some do filtro "sem nota" se deu certo)
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Erro inesperado ao emitir nota:\n{ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 

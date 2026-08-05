@@ -86,6 +86,10 @@
                     </ComboBox>
                 </Border>
 
+                <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BordaInput}" BorderThickness="1" CornerRadius="6" Padding="10,6" Margin="0,0,12,0">
+                    <CheckBox Content="📄 Só sem nota" IsChecked="{Binding SomenteSemNota}" Foreground="{DynamicResource TextDark}" VerticalAlignment="Center"/>
+                </Border>
+
                 <StackPanel Orientation="Horizontal" Background="{DynamicResource CardBg}" Margin="0,0,12,0">
                     <Border BorderBrush="{DynamicResource BordaInput}" BorderThickness="1" CornerRadius="6,0,0,6" Padding="8,4">
                         <DatePicker SelectedDate="{Binding StartDate}" Width="110" BorderThickness="0" Background="Transparent"/>
@@ -250,6 +254,10 @@
                                                 <DropShadowEffect BlurRadius="10" Opacity="0.15" ShadowDepth="2"/>
                                             </Border.Effect>
                                             <StackPanel Width="160">
+                                                <Button Content="📄 Emitir Nota" HorizontalContentAlignment="Left"
+                                                        Command="{Binding DataContext.EmitirNotaCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        Background="Transparent" Foreground="{DynamicResource TextDark}" BorderThickness="0" Padding="8,6" Cursor="Hand"/>
                                                 <Button Content="💬 WhatsApp" HorizontalContentAlignment="Left"
                                                         Command="{Binding DataContext.EnviarWhatsAppCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                         CommandParameter="{Binding}"

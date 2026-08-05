@@ -30,6 +30,7 @@ public partial class MainWindow : Window
         TxtNomeUsuario.Text = ERP.WPF.State.AppSession.UserName?.ToUpper() ?? "USUÁRIO";
 
         this.PreviewKeyDown += MainWindow_PreviewKeyDown;
+        this.Loaded += MainWindow_Loaded;
 
         IniciarMonitorDeLicenca();
         IniciarTimerInatividade();
@@ -37,6 +38,90 @@ public partial class MainWindow : Window
 
         var notifVm = new NotificacoesViewModel();
         _ = notifVm.VerificarNotificacoesAsync();
+    }
+
+    // ── Reorganização do menu lateral em módulos (grupos colapsáveis) ──────
+    private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        EsconderGruposVaziosPorPermissao();
+        _ = CarregarBadgesAsync();
+    }
+
+    /// <summary>Some o cabeçalho do grupo inteiro quando o cargo atual não vê
+    /// nenhum botão lá dentro — reaproveita o mesmo RoleToVisibilityConverter
+    /// que já protege cada botão individualmente, sem lógica de permissão nova.</summary>
+    private void EsconderGruposVaziosPorPermissao()
+    {
+        var grupos = new[] { GrupoComercial, GrupoCompras, GrupoFinanceiro, GrupoFiscal, GrupoMarketplace, GrupoGestao, GrupoAdministracao };
+        foreach (var grupo in grupos)
+        {
+            if (grupo.Content is not StackPanel painel) continue;
+            bool temAlgumVisivel = painel.Children.OfType<Button>().Any(b => b.Visibility == Visibility.Visible);
+            grupo.Visibility = temAlgumVisivel ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private async Task CarregarBadgesAsync()
+    {
+        try
+        {
+            var contaReceberSvc = App.Services.GetRequiredService<ERP.Application.Interfaces.IContaReceberService>();
+            var vencidas = await contaReceberSvc.CountInadimplentesAsync();
+            HeaderFinanceiro.Badge = vencidas > 0 ? vencidas.ToString() : null;
+
+            var uow = App.Services.GetRequiredService<ERP.Domain.Interfaces.IUnitOfWork>();
+            var pendentes = await uow.OrderSync.CountPedidosPendentesAsync();
+            HeaderMarketplace.Badge = pendentes > 0 ? pendentes.ToString() : null;
+        }
+        catch
+        {
+            // Best-effort — badge é só um indicador a mais, nunca pode travar
+            // a tela principal do sistema se algo falhar.
+        }
+    }
+
+    private void TxtBuscaMenu_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        var termo = TxtBuscaMenu.Text?.Trim() ?? "";
+        var grupos = new[] { GrupoComercial, GrupoCompras, GrupoFinanceiro, GrupoFiscal, GrupoMarketplace, GrupoGestao, GrupoAdministracao };
+
+        if (string.IsNullOrEmpty(termo))
+        {
+            // Devolve o controle da Visibility pro binding original
+            // (RoleToVisibilityConverter) — nunca força Visible, senão um
+            // cargo sem permissão passaria a ver botões que não devia.
+            foreach (var grupo in grupos)
+                if (grupo.Content is StackPanel painel)
+                    foreach (var botao in painel.Children.OfType<Button>())
+                        botao.ClearValue(Button.VisibilityProperty);
+
+            EsconderGruposVaziosPorPermissao();
+            return;
+        }
+
+        foreach (var grupo in grupos)
+        {
+            if (grupo.Content is not StackPanel painel) continue;
+            bool algumCombina = false;
+
+            foreach (var botao in painel.Children.OfType<Button>())
+            {
+                // Restaura o binding de permissão ANTES de aplicar o filtro de
+                // busca — sem isso, uma tecla apagada não "reabilitaria" um botão
+                // que a tecla anterior tinha escondido pela busca (ficaria preso
+                // achando que foi a permissão que escondeu, não a busca).
+                botao.ClearValue(Button.VisibilityProperty);
+                if (botao.Visibility == Visibility.Collapsed) continue; // permissão não libera esse
+
+                var texto = botao.Content?.ToString() ?? "";
+                bool combina = texto.Contains(termo, StringComparison.OrdinalIgnoreCase);
+                botao.Visibility = combina ? Visibility.Visible : Visibility.Collapsed;
+                if (combina) algumCombina = true;
+            }
+
+            grupo.Visibility = algumCombina ? Visibility.Visible : Visibility.Collapsed;
+            if (algumCombina) grupo.IsExpanded = true;
+        }
     }
 
     // ── Timer de inatividade ──────────────────────────────────────────────
@@ -170,9 +255,11 @@ public partial class MainWindow : Window
         ["auditoria"]    = ERP.WPF.State.PermissionChecker.AuditView,
         ["compras"]      = ERP.WPF.State.PermissionChecker.ComprasView,
         ["margem"]       = ERP.WPF.State.PermissionChecker.MargemView,
+        ["gerenciadorvendas"] = ERP.WPF.State.PermissionChecker.GerenciadorVendasView,
         ["inventario"]   = ERP.WPF.State.PermissionChecker.InventarioView,
         ["fluxocaixa"]   = ERP.WPF.State.PermissionChecker.FluxoCaixaView,
         ["vendasxcusto"] = ERP.WPF.State.PermissionChecker.VendasXCustoView,
+        ["organizacaovendas"] = ERP.WPF.State.PermissionChecker.OrganizacaoVendasView,
         ["notificacoes"] = ERP.WPF.State.PermissionChecker.InventarioView,
         ["nfce"]         = ERP.WPF.State.PermissionChecker.NotasFiscais,
         ["config"]       = ERP.WPF.State.PermissionChecker.ConfigView,
@@ -219,7 +306,9 @@ public partial class MainWindow : Window
             "extratofinanceiro" => CreateView<ExtratoFinanceiroView, ExtratoFinanceiroViewModel>(),
             "fluxocaixa"  => new FluxoCaixaView(),
             "vendasxcusto" => new VendasXCustoView(),
+            "organizacaovendas" => new OrganizacaoVendasView(),
             "margem"      => new MargemView(),
+            "gerenciadorvendas" => new GerenciadorVendasView(),
             "inventario"  => new InventarioView(),
             "notificacoes" => new Views.NotificacoesView(),
             "catalogo"     => CreateView<CatalogoView, CatalogoViewModel>(),

@@ -1,4 +1,4 @@
-// ── ERP.Application/Services/FiscalService.cs ───────────────────────────────
+// ── ERP.Infrastructure/Services/FiscalService.cs ───────────────────────────
 using ERP.Application.DTOs;
 using ERP.Application.DTOs.FocusNfe;
 using ERP.Application.Interfaces;
@@ -16,9 +16,6 @@ namespace ERP.Infrastructure.Services;
 /// partir da Venda já persistida em vez do carrinho em memória. Isso é o
 /// que permite chamar isso tanto do PDV quanto do processamento de pedido
 /// de marketplace, com resultado idêntico.
-///
-/// ETAPA 1 da refatoração fiscal: só estrutura, nenhuma regra de negócio
-/// mudou (mesmo payload, mesma validação, mesmo tratamento de contingência).
 /// </summary>
 public class FiscalService : IFiscalService
 {
@@ -61,7 +58,7 @@ public class FiscalService : IFiscalService
             ? MontarRequestNfeA4(sale)
             : MontarRequestNfce(sale);
 
-        var (sucesso, mensagem, urlDanfe) = tipoDocumento == "NFE"
+        var (sucesso, mensagem, urlDanfe, urlXml) = tipoDocumento == "NFE"
             ? await _nfeService.EmitirNfeA4Async(vendaId.ToString(), request, config.TokenFocusNfe, config.UsarAmbienteProducao)
             : await _nfceService.EmitirNfceAsync(vendaId.ToString(), request, config.TokenFocusNfe, config.UsarAmbienteProducao);
 
@@ -73,6 +70,8 @@ public class FiscalService : IFiscalService
                 Log.Warning(exAtualizar, "Falha ao salvar dados locais da nota autorizada para a venda {VendaId} (nota em si já foi autorizada na SEFAZ)", vendaId);
             }
 
+            await RegistrarNotaFiscalAsync(vendaId, sale, tipoDocumento, "Autorizada", urlDanfe, ambienteSefaz, urlXml);
+
             return new FiscalEmissionResult
             {
                 Sucesso = true, Mensagem = mensagem, Status = "Autorizada",
@@ -80,8 +79,6 @@ public class FiscalService : IFiscalService
             };
         }
 
-        // Falha de comunicação (não erro de validação/schema) → modo contingência,
-        // mesmo critério exato usado hoje no WPF.
         bool ehFalhaComunicacao = mensagem.Contains("Erro de Comunicação")
             && !mensagem.Contains("UnprocessableEntity")
             && !mensagem.Contains("erro_validacao_schema");
@@ -93,6 +90,7 @@ public class FiscalService : IFiscalService
                 string jsonPayload = JsonConvert.SerializeObject(request);
                 await _contingencyService.RegistrarNotaPendenteAsync(vendaId, tipoDocumento, jsonPayload);
                 await _saleService.AtualizarDadosNfceAsync(vendaId, "", "Contingência", ambienteSefaz, vendaId.ToString());
+                await RegistrarNotaFiscalAsync(vendaId, sale, tipoDocumento, "Contingência", null, ambienteSefaz, null);
 
                 return new FiscalEmissionResult
                 {
@@ -125,6 +123,44 @@ public class FiscalService : IFiscalService
         _                           => "99"
     };
 
+    /// <summary>Fundação do módulo fiscal (entidade NotaFiscal própria) — grava
+    /// em paralelo às colunas da Sale, que continuam existindo por
+    /// compatibilidade com o resto do sistema (F10, cancelamento, status).
+    /// Upsert por (VendaId, Tipo): reemissão atualiza o mesmo registro, não
+    /// acumula duplicata.</summary>
+    private async Task RegistrarNotaFiscalAsync(
+        Guid vendaId, Domain.Entities.Sale sale, string tipoDocumento, string status, string? urlDanfe, string ambiente, string? urlXml)
+    {
+        var existente = await _ctx.NotasFiscais
+            .FirstOrDefaultAsync(n => n.VendaId == vendaId && n.Tipo == tipoDocumento);
+
+        if (existente is null)
+        {
+            _ctx.NotasFiscais.Add(new Domain.Entities.NotaFiscal
+            {
+                Tipo                  = tipoDocumento,
+                VendaId               = vendaId,
+                Status                = status,
+                Finalidade            = "1",
+                UrlDanfe              = urlDanfe,
+                XmlUrl                = string.IsNullOrWhiteSpace(urlXml) ? null : urlXml,
+                Ambiente              = ambiente,
+                DataEmissao           = DateTime.Now,
+                DestinatarioNome      = sale.Customer?.Name,
+                DestinatarioDocumento = sale.Customer?.Document,
+            });
+        }
+        else
+        {
+            existente.Status      = status;
+            existente.UrlDanfe    = urlDanfe ?? existente.UrlDanfe;
+            existente.XmlUrl      = string.IsNullOrWhiteSpace(urlXml) ? existente.XmlUrl : urlXml;
+            existente.Ambiente    = ambiente;
+        }
+
+        await _ctx.SaveChangesAsync();
+    }
+
     private static List<FocusItemRequest> MontarItens(Domain.Entities.Sale sale) =>
         sale.Items.Select((item, index) =>
         {
@@ -152,9 +188,6 @@ public class FiscalService : IFiscalService
         sale.Payments.Select(p => new FocusPagamentoRequest
         {
             FormaPagamento = TraduzirFormaPagamentoParaSefaz(p.PaymentMethod),
-            // SalePayment.Amount já é o valor efetivamente aplicado à venda
-            // (pós-troco) — diferente do carrinho em memória do WPF, que
-            // precisava subtrair o Troco na hora, aqui o dado já vem líquido.
             ValorPagamento = p.Amount.ToString("F2", CultureInfo.InvariantCulture)
         }).ToList();
 

@@ -236,6 +236,17 @@ builder.Services.AddHttpClient<ERP.Application.Interfaces.IChannelDispatcher,
 builder.Services.AddScoped<ERP.Application.Interfaces.IEstoqueSyncService,
                             ERP.Application.Services.EstoqueSyncService>();
 
+// Etapa 2 da refatoração fiscal — a API só faz sentido com o provider de
+// banco (não tem arquivo local nenhum pra ler).
+builder.Services.AddScoped<ERP.Application.Interfaces.IFiscalConfigurationProvider,
+                            ERP.Infrastructure.Services.DatabaseFiscalConfigurationProvider>();
+builder.Services.AddScoped<ERP.Application.Interfaces.INfeEmissionService,
+                            ERP.Application.Services.NfeEmissionService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.INfeContingencyService,
+                            ERP.Application.Services.NfeContingencyService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IFiscalService,
+                            ERP.Infrastructure.Services.FiscalService>();
+
 builder.Services.AddHttpClient<IFocusNfeHttpClient, ERP.Infrastructure.HttpClients.FocusNfeHttpClient>(client =>
 {
     client.BaseAddress = new Uri("https://api.focusnfe.com.br/v2/");

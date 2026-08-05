@@ -10,13 +10,15 @@ public class NfeCancellationService : INfeCancellationService
     
     public NfeCancellationService(IFocusNfeHttpClient httpClient) => _httpClient = httpClient;
 
-    public async Task<(bool Sucesso, string Mensagem)> CancelarNotaAsync(string referencia, string justificativa, string token, bool isProducao)
+    public async Task<(bool Sucesso, string Mensagem)> CancelarNotaAsync(string referencia, string justificativa, string token, bool isProducao, string tipoDocumento = "NFCE")
     {
         if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(justificativa) || justificativa.Length < 15)
             return (false, "Token inválido ou justificativa menor que 15 caracteres.");
 
         _httpClient.SetApiToken(token);
-        string endpoint = isProducao ? $"https://api.focusnfe.com.br/v2/nfce/{referencia}" : $"https://homologacao.focusnfe.com.br/v2/nfce/{referencia}";
+        string baseServidor = isProducao ? "https://api.focusnfe.com.br" : "https://homologacao.focusnfe.com.br";
+        string caminho = tipoDocumento == "NFE" ? "nfe" : "nfce";
+        string endpoint = $"{baseServidor}/v2/{caminho}/{referencia}";
 
         // 🟢 CORREÇÃO: Chama o método Delete com Body passando a justificativa
         var responseResult = await _httpClient.DeleteWithBodyAsync(endpoint, new { justificativa = justificativa });

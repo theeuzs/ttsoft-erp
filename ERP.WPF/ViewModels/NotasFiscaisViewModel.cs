@@ -1,5 +1,6 @@
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.ObjectModel;
@@ -15,26 +16,51 @@ namespace ERP.WPF.ViewModels;
 public class NotaFiscalExibicao : BaseViewModel
 {
     public string NumeroRef { get; set; } = string.Empty;
+    public string Numero { get; set; } = string.Empty;
+    public string Chave { get; set; } = string.Empty;
+    /// <summary>"NFCE" ou "NFE" — decide qual endpoint de cancelamento usar.
+    /// Vem da tabela NotaFiscal quando existe (emissões pós-fundação); pra
+    /// notas mais antigas, assume NFCE (era o único tipo que o PDV emitia).</summary>
+    public string Tipo { get; set; } = "NFCE";
     public string Data { get; set; } = string.Empty;
     public string Cliente { get; set; } = string.Empty;
     public decimal Valor { get; set; }
     public string Status { get; set; } = string.Empty; 
     public string Ambiente { get; set; } = string.Empty;
     public string UrlDanfe { get; set; } = string.Empty;
+    public string UrlXml { get; set; } = string.Empty;
 }
 
 public class NotasFiscaisViewModel : BaseViewModel
 {
     private readonly ISaleService _saleServiceFallback;
-    private ObservableCollection<NotaFiscalExibicao> _notas = new();
+    private ObservableCollection<NotaFiscalExibicao> _todasNotas = new();
 
+    private ObservableCollection<NotaFiscalExibicao> _notas = new();
     public ObservableCollection<NotaFiscalExibicao> Notas 
     { 
         get => _notas; 
         set => SetProperty(ref _notas, value); 
     }
 
+    // Item 4 do roadmap fiscal: filtros de período, status e busca —
+    // a tela antes listava tudo sem filtro nenhum.
+    private DateTime _dataInicio = DateTime.Today.AddDays(-30);
+    public DateTime DataInicio { get => _dataInicio; set { SetProperty(ref _dataInicio, value); _ = CarregarNotasReaisAsync(); } }
+
+    private DateTime _dataFim = DateTime.Today;
+    public DateTime DataFim { get => _dataFim; set { SetProperty(ref _dataFim, value); _ = CarregarNotasReaisAsync(); } }
+
+    private string _filtroBusca = string.Empty;
+    public string FiltroBusca { get => _filtroBusca; set { SetProperty(ref _filtroBusca, value); AplicarFiltro(); } }
+
+    public string[] StatusDisponiveis { get; } = { "Todos", "Autorizada", "Cancelada", "Rejeitada", "Processando", "Contingência" };
+
+    private string _statusSelecionado = "Todos";
+    public string StatusSelecionado { get => _statusSelecionado; set { SetProperty(ref _statusSelecionado, value); AplicarFiltro(); } }
+
     public ICommand AbrirPdfCommand { get; }
+    public ICommand AbrirXmlCommand { get; }
     public ICommand CancelarNotaCommand { get; }
     public ICommand VerMotivoCommand { get; }
     public ICommand AtualizarListaCommand { get; }
@@ -45,6 +71,7 @@ public class NotasFiscaisViewModel : BaseViewModel
         _saleServiceFallback = saleService;
         
         AbrirPdfCommand = new ERP.WPF.Commands.RelayCommand(AbrirPdf);
+        AbrirXmlCommand = new ERP.WPF.Commands.RelayCommand(AbrirXml);
         CancelarNotaCommand = new ERP.WPF.Commands.AsyncRelayCommand(CancelarNota);
         AtualizarListaCommand = new ERP.WPF.Commands.RelayCommand(async (_) => await CarregarNotasReaisAsync());
         VerMotivoCommand = new ERP.WPF.Commands.AsyncRelayCommand(VerMotivo);
@@ -68,7 +95,7 @@ public class NotasFiscaisViewModel : BaseViewModel
     {
         try
         {
-            var todasVendas = await ExecuteWithFreshSaleServiceAsync(s => s.GetAllAsync());
+            var todasVendas = await ExecuteWithFreshSaleServiceAsync(s => s.GetAllAsync(DataInicio.Date, DataFim.Date.AddDays(1).AddTicks(-1)));
             if (todasVendas == null) return;
 
             var vendasComNota = todasVendas
@@ -106,23 +133,46 @@ public class NotasFiscaisViewModel : BaseViewModel
                 }
             }
 
+            // Item 4/5 do roadmap fiscal: XmlUrl e Tipo só existem na NotaFiscal
+            // (a Sale nunca guardou isso) — busca direto no banco, por VendaId.
+            // O Tipo é o que decide, no cancelamento, se o endpoint é /nfce/ ou
+            // /nfe/ (item 5 — antes hardcoded só pra nfce).
+            var dadosPorVenda = new System.Collections.Generic.Dictionary<Guid, (string Tipo, string XmlUrl)>();
+            try
+            {
+                var ctx = ERP.WPF.App.Services.GetRequiredService<ERP.Persistence.Context.AppDbContext>();
+                var idsVendas = vendasComNota.Select(v => v.Id).ToList();
+                var notasComDados = await ctx.NotasFiscais
+                    .Where(n => n.VendaId.HasValue && idsVendas.Contains(n.VendaId.Value))
+                    .ToListAsync();
+                foreach (var n in notasComDados)
+                    if (n.VendaId.HasValue) dadosPorVenda[n.VendaId.Value] = (n.Tipo, n.XmlUrl ?? "");
+            }
+            catch { /* best-effort — sem esse dado extra, a tela ainda funciona (assume NFCE) */ }
+
             // 2. PROTEÇÃO DE THREAD: O WPF exige que alterações visuais sejam feitas na Thread principal
             System.Windows.Application.Current.Dispatcher.Invoke(() => 
             {
-                Notas.Clear();
+                _todasNotas.Clear();
                 foreach (var v in vendasComNota)
                 {
-                    Notas.Add(new NotaFiscalExibicao 
+                    dadosPorVenda.TryGetValue(v.Id, out var dados);
+                    _todasNotas.Add(new NotaFiscalExibicao 
                     { 
                         NumeroRef = v.NfceReferencia ?? v.SaleNumber ?? "", 
+                        Numero = v.NfceNumero ?? "",
+                        Chave = v.NfceChave ?? "",
+                        Tipo = string.IsNullOrWhiteSpace(dados.Tipo) ? "NFCE" : dados.Tipo,
                         Data = v.SaleDate.ToString("dd/MM/yyyy HH:mm"), 
                         Cliente = string.IsNullOrWhiteSpace(v.CustomerName) ? "Consumidor Final" : v.CustomerName, 
                         Valor = v.Total, 
                         Status = v.NfceStatusFocus ?? "Autorizada", 
                         Ambiente = v.NfceAmbiente ?? "Homologação", 
-                        UrlDanfe = v.NfceUrlDanfe ?? "" 
+                        UrlDanfe = v.NfceUrlDanfe ?? "",
+                        UrlXml = dados.XmlUrl ?? "",
                     });
                 }
+                AplicarFiltro();
             });
         }
         catch (Exception ex)
@@ -132,6 +182,27 @@ public class NotasFiscaisViewModel : BaseViewModel
                 MessageBox.Show($"Erro ao carregar o histórico de notas:\n{ex.Message}", "Erro no Banco", MessageBoxButton.OK, MessageBoxImage.Error);
             });
         }
+    }
+
+    private void AplicarFiltro()
+    {
+        var filtradas = _todasNotas.AsEnumerable();
+
+        if (StatusSelecionado != "Todos")
+            filtradas = filtradas.Where(n => n.Status == StatusSelecionado);
+
+        if (!string.IsNullOrWhiteSpace(FiltroBusca))
+        {
+            var busca = FiltroBusca.Trim();
+            filtradas = filtradas.Where(n =>
+                n.Cliente.Contains(busca, StringComparison.OrdinalIgnoreCase) ||
+                n.Numero.Contains(busca, StringComparison.OrdinalIgnoreCase) ||
+                n.Chave.Contains(busca, StringComparison.OrdinalIgnoreCase) ||
+                n.NumeroRef.Contains(busca, StringComparison.OrdinalIgnoreCase));
+        }
+
+        Notas.Clear();
+        foreach (var n in filtradas) Notas.Add(n);
     }
 
     private void AbrirPdf(object? obj)
@@ -146,6 +217,26 @@ public class NotasFiscaisViewModel : BaseViewModel
             {
                 MessageBox.Show("Não foi possível abrir o navegador para exibir a nota.", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+    }
+
+    private void AbrirXml(object? obj)
+    {
+        if (obj is string url && !string.IsNullOrWhiteSpace(url))
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+            }
+            catch
+            {
+                MessageBox.Show("Não foi possível baixar o XML.", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        else
+        {
+            MessageBox.Show("XML não disponível pra essa nota (só fica registrado a partir da migração da configuração fiscal pro banco).",
+                "Aviso", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 
@@ -190,7 +281,7 @@ public class NotasFiscaisViewModel : BaseViewModel
             // 👇 Pega o Exterminador (Cancelamento Service)
             var cancelService = ERP.WPF.App.Services.GetRequiredService<INfeCancellationService>();
 
-            var (sucesso, mensagem) = await cancelService.CancelarNotaAsync(refNota, justificativa, config.TokenFocusNfe, config.UsarAmbienteProducao);
+            var (sucesso, mensagem) = await cancelService.CancelarNotaAsync(refNota, justificativa, config.TokenFocusNfe, config.UsarAmbienteProducao, notaSelecionada.Tipo);
 
             if (sucesso)
             {

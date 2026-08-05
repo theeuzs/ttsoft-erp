@@ -6,15 +6,52 @@
     <Grid Margin="30">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+        <StackPanel Grid.Row="0" Margin="0,0,0,16">
             <TextBlock Text="🧾 Gerenciador de Notas Fiscais" FontSize="28" FontWeight="Bold" Foreground="#1E62A6"/>
             <TextBlock Text="Visualize os PDFs, consulte status e faça cancelamentos na SEFAZ." FontSize="14" Foreground="{DynamicResource TextMuted}" Margin="0,5,0,0"/>
         </StackPanel>
 
-        <Border Grid.Row="1" Background="{DynamicResource CardBg}" CornerRadius="12" Padding="20">
+        <!-- Item 4 do roadmap fiscal: busca, período e status — antes a tela listava tudo sem filtro nenhum -->
+        <Border Grid.Row="1" Background="{DynamicResource CardBg}" CornerRadius="10" Padding="14" Margin="0,0,0,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="170"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="130"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="130"/>
+                    <ColumnDefinition Width="12"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBox Grid.Column="0" Text="{Binding FiltroBusca, UpdateSourceTrigger=PropertyChanged}"
+                         Padding="8" FontSize="13" BorderBrush="{DynamicResource BordaInput}" Background="{DynamicResource CardBgAlt}"
+                         VerticalContentAlignment="Center" ToolTip="Buscar por cliente, número ou chave"/>
+
+                <ComboBox Grid.Column="2" ItemsSource="{Binding StatusDisponiveis}" SelectedItem="{Binding StatusSelecionado}"
+                          Padding="8" VerticalContentAlignment="Center"/>
+
+                <TextBlock Grid.Column="4" Text="Período:" VerticalAlignment="Center" Foreground="{DynamicResource TextMuted}"/>
+                <DatePicker Grid.Column="6" SelectedDate="{Binding DataInicio}"/>
+                <DatePicker Grid.Column="8" SelectedDate="{Binding DataFim}"/>
+
+                <Button Grid.Column="10" Content="↻ Atualizar" Command="{Binding AtualizarListaCommand}"
+                        Background="{DynamicResource CorAcento}" Foreground="White" FontWeight="Bold"
+                        Padding="14,8" BorderThickness="0" Cursor="Hand">
+                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                </Button>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="2" Background="{DynamicResource CardBg}" CornerRadius="12" Padding="20">
             <Border.Effect>
                 <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.08" Color="Black" Direction="270"/>
             </Border.Effect>
@@ -41,6 +78,8 @@
 
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Referência" Binding="{Binding NumeroRef}" Width="100"/>
+                    <DataGridTextColumn Header="Número" Binding="{Binding Numero}" Width="80"/>
+                    <DataGridTextColumn Header="Chave" Binding="{Binding Chave}" Width="140"/>
                     <DataGridTextColumn Header="Data / Hora" Binding="{Binding Data}" Width="150"/>
                     <DataGridTextColumn Header="Cliente" Binding="{Binding Cliente}" Width="*"/>
                     
@@ -73,7 +112,7 @@
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
-                    <DataGridTemplateColumn Header="Ações" Width="260">
+                    <DataGridTemplateColumn Header="Ações" Width="340">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
@@ -96,6 +135,16 @@
                                                 </Style.Triggers>
                                             </Style>
                                         </Button.Style>
+                                    </Button>
+
+                                    <Button Content="🗎 XML"
+                                            Command="{Binding DataContext.AbrirXmlCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                            CommandParameter="{Binding UrlXml}"
+                                            Background="#E0E7FF" Foreground="#3730A3" FontWeight="Bold"
+                                            BorderThickness="0" Padding="10,5" Margin="0,0,5,0" Cursor="Hand">
+                                        <Button.Resources>
+                                            <Style TargetType="Border"> <Setter Property="CornerRadius" Value="4"/> </Style>
+                                        </Button.Resources>
                                     </Button>
 
                                     <Button Content="🔍 Motivo" 

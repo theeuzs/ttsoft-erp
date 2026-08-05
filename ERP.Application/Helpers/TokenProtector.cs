@@ -32,7 +32,6 @@ public static class TokenProtector
         var bytesTexto = Encoding.UTF8.GetBytes(textoPlano);
         var bytesCifrados = encryptor.TransformFinalBlock(bytesTexto, 0, bytesTexto.Length);
 
-        // IV vai junto na frente do texto cifrado — não precisa guardar em coluna separada.
         var resultado = new byte[aes.IV.Length + bytesCifrados.Length];
         Buffer.BlockCopy(aes.IV, 0, resultado, 0, aes.IV.Length);
         Buffer.BlockCopy(bytesCifrados, 0, resultado, aes.IV.Length, bytesCifrados.Length);
@@ -61,9 +60,6 @@ public static class TokenProtector
         }
         catch
         {
-            // Mesmo salva-vidas do CriptografiaService original: se vier algo
-            // que não é um blob válido dessa criptografia, devolve como veio
-            // em vez de quebrar a aplicação.
             return textoCifrado;
         }
     }

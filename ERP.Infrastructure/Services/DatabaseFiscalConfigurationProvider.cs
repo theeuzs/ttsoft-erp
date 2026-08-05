@@ -29,7 +29,7 @@ public class DatabaseFiscalConfigurationProvider : IFiscalConfigurationProvider
             .FirstOrDefaultAsync(c => c.TenantId == _tenant.TenantId);
 
         if (config is null)
-            return new FiscalConfiguration(); // sem config gravada ainda — token vazio, Focus vai recusar com mensagem clara
+            return new FiscalConfiguration();
 
         return new FiscalConfiguration
         {

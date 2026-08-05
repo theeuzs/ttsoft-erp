@@ -33,7 +33,9 @@ public static class PermissionChecker
     public const string DespesasView     = "despesas.view";
     public const string FluxoCaixaView   = "fluxocaixa.view";
     public const string VendasXCustoView = "vendasxcusto.view";
+    public const string OrganizacaoVendasView = "organizacaovendas.view";
     public const string MargemView       = "margem.view";
+    public const string GerenciadorVendasView = "gerenciadorvendas.view";
 
     // Relatórios / Operacionais
     public const string AuditView        = "audit.view";
