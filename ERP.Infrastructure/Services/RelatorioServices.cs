@@ -169,28 +169,55 @@ public class GerenciadorVendasService : IGerenciadorVendasService
     public async Task<IReadOnlyList<GerenciadorVendaItemDto>> ObterAsync(
         DateTime? from = null, DateTime? to = null, CancellationToken ct = default)
     {
-        var query = _ctx.SaleItems.AsNoTracking()
-            .Include(i => i.Product).ThenInclude(p => p.Category)
-            .Include(i => i.Sale)
-            .Where(i => i.Sale.Status != Domain.Enums.SaleStatus.Cancelada);
+        // Duas etapas de propósito — um GroupBy só com Product+Category
+        // juntos (múltiplos joins aninhados) trava o tradutor de SQL do EF
+        // Core ("could not be translated"). Agrupar só por ProductId aqui
+        // (query simples) e buscar Product/Category depois, numa segunda
+        // query também simples, sem GroupBy nenhum.
+        var itensQuery = _ctx.SaleItems.AsNoTracking()
+            .Where(i => i.Sale.Status != SaleStatus.Cancelada);
 
-        if (from.HasValue) query = query.Where(i => i.Sale.SaleDate >= from.Value);
-        if (to.HasValue)   query = query.Where(i => i.Sale.SaleDate <= to.Value);
+        if (from.HasValue) itensQuery = itensQuery.Where(i => i.Sale.SaleDate >= from.Value);
+        if (to.HasValue)   itensQuery = itensQuery.Where(i => i.Sale.SaleDate <= to.Value);
 
-        var agrupado = await query
-            .GroupBy(i => new { i.ProductId, i.ProductName, CategoriaNome = i.Product.Category != null ? i.Product.Category.Name : "Sem categoria", i.Product.OriginalCost })
-            .Select(g => new GerenciadorVendaItemDto(
-                g.Key.ProductId,
-                g.Key.ProductName,
-                g.Key.CategoriaNome,
-                g.Sum(i => i.Quantity),
-                g.Key.OriginalCost,
-                g.Sum(i => i.TotalItem),
-                g.Key.OriginalCost * g.Sum(i => i.Quantity)))
-            .OrderByDescending(d => d.ValorVendaTotal)
+        var agrupadoPorProduto = await itensQuery
+            .GroupBy(i => i.ProductId)
+            .Select(g => new
+            {
+                ProductId         = g.Key,
+                ProductName       = g.Select(i => i.ProductName).FirstOrDefault() ?? "",
+                QuantidadeVendida = g.Sum(i => i.Quantity),
+                ValorVendaTotal   = g.Sum(i => i.TotalItem)
+            })
             .ToListAsync(ct);
 
-        return agrupado;
+        if (agrupadoPorProduto.Count == 0) return Array.Empty<GerenciadorVendaItemDto>();
+
+        var produtoIds = agrupadoPorProduto.Select(a => a.ProductId).ToList();
+        var produtos = await _ctx.Products.AsNoTracking()
+            .Include(p => p.Category)
+            .Where(p => produtoIds.Contains(p.Id))
+            .Select(p => new
+            {
+                p.Id,
+                p.OriginalCost,
+                CategoriaNome = p.Category != null ? p.Category.Name : "Sem categoria"
+            })
+            .ToDictionaryAsync(p => p.Id, ct);
+
+        return agrupadoPorProduto.Select(a =>
+        {
+            produtos.TryGetValue(a.ProductId, out var produto);
+            var custoUnitario = produto?.OriginalCost ?? 0;
+            var categoria     = produto?.CategoriaNome ?? "Produto removido";
+
+            return new GerenciadorVendaItemDto(
+                a.ProductId, a.ProductName, categoria,
+                a.QuantidadeVendida, custoUnitario, a.ValorVendaTotal,
+                custoUnitario * a.QuantidadeVendida);
+        })
+        .OrderByDescending(d => d.ValorVendaTotal)
+        .ToList();
     }
 }
 
