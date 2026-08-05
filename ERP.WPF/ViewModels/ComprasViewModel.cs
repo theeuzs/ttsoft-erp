@@ -1,5 +1,6 @@
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Domain.Enums;
 using ERP.WPF.Commands;
 using ERP.WPF.Helpers;
 using ERP.WPF.Reports;
@@ -48,6 +49,17 @@ public class ComprasViewModel : BaseViewModel
 
     private DateTime? _dataPrevista;
     public DateTime? DataPrevista { get => _dataPrevista; set => SetProperty(ref _dataPrevista, value); }
+
+    // ── Item 2.5 do roadmap Comercial: forma de pagamento e boleto ────────
+    private PaymentMethod? _formaPagamentoNota;
+    public PaymentMethod? FormaPagamentoNota { get => _formaPagamentoNota; set => SetProperty(ref _formaPagamentoNota, value); }
+    public IEnumerable<PaymentMethod> FormasPagamentoDisponiveis => Enum.GetValues<PaymentMethod>();
+
+    private string? _numeroBoleto;
+    public string? NumeroBoleto { get => _numeroBoleto; set => SetProperty(ref _numeroBoleto, value); }
+
+    private DateTime? _vencimentoBoleto;
+    public DateTime? VencimentoBoleto { get => _vencimentoBoleto; set => SetProperty(ref _vencimentoBoleto, value); }
 
     private string _observacoes = string.Empty;
     public string Observacoes { get => _observacoes; set => SetProperty(ref _observacoes, value); }
@@ -242,6 +254,9 @@ public class ComprasViewModel : BaseViewModel
                     FornecedorNome = FornecedorNome,
                     DataPrevista   = DataPrevista,
                     Observacoes    = Observacoes,
+                    FormaPagamento    = FormaPagamentoNota,
+                    NumeroBoleto      = NumeroBoleto,
+                    VencimentoBoleto  = VencimentoBoleto,
                     Itens          = ItensNovoPedido.Select(i => new CreatePedidoCompraItemDto
                     {
                         ProductId     = i.ProductId,
@@ -297,6 +312,9 @@ public class ComprasViewModel : BaseViewModel
         FornecedorNome = PedidoSelecionado.FornecedorNome;
         DataPrevista   = PedidoSelecionado.DataPrevista;
         Observacoes    = PedidoSelecionado.Observacoes ?? string.Empty;
+        FormaPagamentoNota = PedidoSelecionado.FormaPagamento;
+        NumeroBoleto       = PedidoSelecionado.NumeroBoleto;
+        VencimentoBoleto   = PedidoSelecionado.VencimentoBoleto;
 
         ItensNovoPedido.Clear();
         foreach (var item in PedidoSelecionado.Itens)
@@ -381,6 +399,9 @@ public class ComprasViewModel : BaseViewModel
         FornecedorNome = string.Empty;
         DataPrevista   = null;
         Observacoes    = string.Empty;
+        FormaPagamentoNota = null;
+        NumeroBoleto       = null;
+        VencimentoBoleto   = null;
         ItensNovoPedido.Clear();
         OnPropertyChanged(nameof(TotalNovoPedido));
         OnPropertyChanged(nameof(IsEditando));

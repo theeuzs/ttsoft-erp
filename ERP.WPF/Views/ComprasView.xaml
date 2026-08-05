@@ -24,6 +24,30 @@
                 <TextBlock Text="Previsão de Chegada" FontSize="11" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,4"/>
                 <DatePicker SelectedDate="{Binding DataPrevista}" Height="36" Margin="0,0,0,12"/>
 
+                <!-- Item 2.5 do roadmap Comercial: forma de pagamento e boleto -->
+                <TextBlock Text="Forma de Pagamento" FontSize="11" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,4"/>
+                <ComboBox ItemsSource="{Binding FormasPagamentoDisponiveis}" SelectedItem="{Binding FormaPagamentoNota}"
+                          Height="36" Padding="8,0" VerticalContentAlignment="Center"
+                          BorderBrush="{DynamicResource BordaInput}" Margin="0,0,0,12"/>
+
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Nº Boleto" FontSize="11" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding NumeroBoleto, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="36" Padding="8,0" VerticalContentAlignment="Center"
+                                 BorderBrush="{DynamicResource BordaInput}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Vencimento" FontSize="11" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,4"/>
+                        <DatePicker SelectedDate="{Binding VencimentoBoleto}" Height="36"/>
+                    </StackPanel>
+                </Grid>
+
                 <TextBlock Text="Observações" FontSize="11" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,4"/>
                 <TextBox Text="{Binding Observacoes, UpdateSourceTrigger=PropertyChanged}"
                          Height="60" Padding="8,6" TextWrapping="Wrap" AcceptsReturn="True"

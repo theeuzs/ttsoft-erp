@@ -74,7 +74,8 @@ public class PedidoCompraService : IPedidoCompraService
             ?? throw new KeyNotFoundException($"Pedido {id} não encontrado.");
 
         // Editar() já valida Status == Rascunho e lança se não for.
-        pedido.Editar(dto.FornecedorNome, dto.DataPrevista, dto.Observacoes);
+        pedido.Editar(dto.FornecedorNome, dto.DataPrevista, dto.Observacoes,
+                      dto.FormaPagamento, dto.NumeroBoleto, dto.VencimentoBoleto);
 
         // S17 FIX: remove os itens antigos do banco via DELETE direto...
         await _uow.PedidosCompra.RemoverItensAsync(id);
@@ -184,6 +185,9 @@ public class PedidoCompraService : IPedidoCompraService
         DataRecebimento = p.DataRecebimento,
         Status          = p.Status,
         Observacoes     = p.Observacoes,
+        FormaPagamento    = p.FormaPagamento,
+        NumeroBoleto      = p.NumeroBoleto,
+        VencimentoBoleto  = p.VencimentoBoleto,
         Total           = p.Total,
         Itens           = p.Itens.Select(i => new PedidoCompraItemDto
         {

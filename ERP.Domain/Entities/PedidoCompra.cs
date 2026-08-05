@@ -23,6 +23,13 @@ public class PedidoCompra : BaseEntity
     public string? Observacoes   { get; set; }
     public string? CriadoPor     { get; set; }   // Nome do usuário que criou
 
+    // ── Item 2.5 do roadmap Comercial: forma de pagamento e boleto de uma
+    // nota importada — nome/valor já eram editáveis (item 1.1), isso aqui
+    // era a lacuna genuína, não existia em lugar nenhum ainda.
+    public PaymentMethod? FormaPagamento { get; set; }
+    public string?  NumeroBoleto     { get; set; }
+    public DateTime? VencimentoBoleto { get; set; }
+
     public ICollection<PedidoCompraItem> Itens { get; set; } = new List<PedidoCompraItem>();
 
     // ── Totalizadores calculados ──────────────────────────────────────────
@@ -52,14 +59,18 @@ public class PedidoCompra : BaseEntity
     /// fornecedor ou recebido, o registro precisa refletir o que realmente aconteceu,
     /// não pode ser reescrito.
     /// </summary>
-    public void Editar(string fornecedorNome, DateTime? dataPrevista, string? observacoes)
+    public void Editar(string fornecedorNome, DateTime? dataPrevista, string? observacoes,
+                        PaymentMethod? formaPagamento = null, string? numeroBoleto = null, DateTime? vencimentoBoleto = null)
     {
         if (Status != StatusPedidoCompra.Rascunho)
             throw new InvalidOperationException("Apenas pedidos em Rascunho podem ser editados.");
 
-        FornecedorNome = fornecedorNome;
-        DataPrevista   = dataPrevista;
-        Observacoes    = observacoes;
+        FornecedorNome    = fornecedorNome;
+        DataPrevista      = dataPrevista;
+        Observacoes       = observacoes;
+        FormaPagamento    = formaPagamento;
+        NumeroBoleto      = numeroBoleto;
+        VencimentoBoleto  = vencimentoBoleto;
     }
 
     /// <summary>
