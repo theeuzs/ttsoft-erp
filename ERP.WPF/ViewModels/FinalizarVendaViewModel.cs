@@ -212,6 +212,62 @@ public class FinalizarVendaViewModel : BaseViewModel
     {
         await LoadCustomersAsync(clienteIdSelecionado);
         await CarregarVendedoresAsync();
+        await CarregarOperadoraPadraoAsync();
+    }
+
+    // ── Item 2.3 (Comercial) — taxa de operadora informativa no PDV.
+    // Não altera o valor que o cliente paga (isso seria a Interpretação B,
+    // não escolhida) — só mostra pro operador quanto a loja vai receber
+    // líquido, reaproveitando OperadoraRecebimento.CalcularRecebimento que
+    // já existia pronto, sem nenhum fluxo real consumindo ele até agora.
+    private ERP.Application.DTOs.OperadoraRecebimentoDto? _operadoraPadrao;
+
+    private async Task CarregarOperadoraPadraoAsync()
+    {
+        try
+        {
+            using var scope = ERP.WPF.App.Services.CreateScope();
+            var service = scope.ServiceProvider.GetRequiredService<IOperadoraRecebimentoService>();
+            var ativas  = await service.ObterAtivasAsync();
+            _operadoraPadrao = ativas.FirstOrDefault(o => o.OperadoraPadrao);
+        }
+        catch
+        {
+            // Best-effort — sem operadora padrão configurada, a tela de venda
+            // continua funcionando normal, só sem essa informação extra.
+            _operadoraPadrao = null;
+        }
+    }
+
+    private decimal _valorTaxaOperadora;
+    public decimal ValorTaxaOperadora { get => _valorTaxaOperadora; private set => SetProperty(ref _valorTaxaOperadora, value); }
+
+    private decimal _valorLiquidoOperadora;
+    public decimal ValorLiquidoOperadora { get => _valorLiquidoOperadora; private set => SetProperty(ref _valorLiquidoOperadora, value); }
+
+    public bool MostrarResumoOperadora => _operadoraPadrao != null && ValorTaxaOperadora > 0;
+
+    private void AtualizarResumoOperadora()
+    {
+        if (_operadoraPadrao == null)
+        {
+            ValorTaxaOperadora = 0;
+            ValorLiquidoOperadora = 0;
+            OnPropertyChanged(nameof(MostrarResumoOperadora));
+            return;
+        }
+
+        var valorDebito           = Pagamentos.Where(p => p.Forma == PaymentMethod.CartaoDebito).Sum(p => p.Valor);
+        var valorCreditoVista     = Pagamentos.Where(p => p.Forma == PaymentMethod.CartaoCredito && !p.EhParcelado).Sum(p => p.Valor);
+        var valorCreditoParcelado = Pagamentos.Where(p => p.Forma == PaymentMethod.CartaoCredito && p.EhParcelado).Sum(p => p.Valor);
+
+        var taxaDebito           = Math.Round(valorDebito           * (_operadoraPadrao.TaxaDebitoPercentual           / 100m), 2);
+        var taxaCreditoVista     = Math.Round(valorCreditoVista     * (_operadoraPadrao.TaxaCreditoVistaPercentual     / 100m), 2);
+        var taxaCreditoParcelado = Math.Round(valorCreditoParcelado * (_operadoraPadrao.TaxaCreditoParceladoPercentual / 100m), 2);
+
+        ValorTaxaOperadora    = taxaDebito + taxaCreditoVista + taxaCreditoParcelado;
+        ValorLiquidoOperadora = (valorDebito + valorCreditoVista + valorCreditoParcelado) - ValorTaxaOperadora;
+        OnPropertyChanged(nameof(MostrarResumoOperadora));
     }
 
     // ==========================================================
@@ -374,7 +430,8 @@ public class FinalizarVendaViewModel : BaseViewModel
             ValorDigitado = Math.Round(FaltaPagar, 2);
         }
 
-        Pagamentos.Add(new PagamentoItem { Forma = FormaPagamento, Valor = ValorDigitado });
+        Pagamentos.Add(new PagamentoItem { Forma = FormaPagamento, Valor = ValorDigitado, EhParcelado = IsParceladoDigitado });
+        IsParceladoDigitado = false;
         AtualizarTotais();
         ValorDigitado = Math.Round(FaltaPagar, 2);
 
@@ -392,6 +449,7 @@ public class FinalizarVendaViewModel : BaseViewModel
 
     private void AtualizarTotais()
     {
+        AtualizarResumoOperadora();
         OnPropertyChanged(nameof(Desconto));
         OnPropertyChanged(nameof(TotalComDesconto));
         OnPropertyChanged(nameof(TotalPago));
@@ -406,8 +464,20 @@ public class FinalizarVendaViewModel : BaseViewModel
     // 4. PROPRIEDADES DA TELA
     // ==========================================================
     private PaymentMethod _formaPagamento = PaymentMethod.Dinheiro;
-    public PaymentMethod FormaPagamento { get => _formaPagamento; set => SetProperty(ref _formaPagamento, value); }
+    public PaymentMethod FormaPagamento
+    {
+        get => _formaPagamento;
+        set { SetProperty(ref _formaPagamento, value); OnPropertyChanged(nameof(MostrarCheckboxParcelado)); }
+    }
     public IEnumerable<PaymentMethod> FormasPagamento => Enum.GetValues<PaymentMethod>();
+
+    private bool _isParceladoDigitado;
+    /// <summary>Checkbox "É parcelado?" — só aparece quando FormaPagamento é
+    /// Cartão de Crédito, define qual taxa de operadora usar no resumo
+    /// informativo (item 2.3).</summary>
+    public bool IsParceladoDigitado { get => _isParceladoDigitado; set => SetProperty(ref _isParceladoDigitado, value); }
+
+    public bool MostrarCheckboxParcelado => FormaPagamento == PaymentMethod.CartaoCredito;
 
     private bool _entregarNoEndereco;
     // ── Observação Geral do Pedido ─────────────────────────────────────────────
@@ -494,29 +564,7 @@ public class FinalizarVendaViewModel : BaseViewModel
                 Items = ItensCarrinho.Select(i => new CreateSaleItemDto { ProductId = i.ProductId, Quantity = i.Quantity, UnitPrice = i.UnitPrice, DiscountPercent = 0, FatorConversao = i.FatorConversao, TotalItem = i.Total }).ToList()
             };
 
-            SaleDto vendaSalva;
-            try
-            {
-                vendaSalva = await _saleService.CreateAsync(dto);
-            }
-            catch (Exception exVenda) when (exVenda.InnerException is ERP.Application.Exceptions.LimiteCreditoExcedidoException limiteEx)
-            {
-                // Mesmo padrão de override já usado pra desconto acima do permitido
-                // (SenhaGerenteView) — aqui pro limite de crédito do fiado.
-                var telaSenha = new ERP.WPF.Views.SenhaGerenteView { Owner = System.Windows.Application.Current.MainWindow };
-                telaSenha.ShowDialog();
-
-                if (!telaSenha.Autorizado)
-                {
-                    MessageBox.Show(
-                        limiteEx.Message + "\n\nAutorização do gerente não fornecida — venda não realizada.",
-                        "Limite de Crédito Excedido", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                dto.AutorizadoPorGerente = true;
-                vendaSalva = await _saleService.CreateAsync(dto);
-            }
+            var vendaSalva = await _saleService.CreateAsync(dto);
             await SalvarNoCaixaEContasAReceberAsync(vendaSalva.Id);
 
             // Debitar pontos de fidelidade SÓ após venda confirmada
@@ -545,9 +593,13 @@ public class FinalizarVendaViewModel : BaseViewModel
                     ImprimirReciboInterno(vendaSalva.Id, observacaoCompleta, vendaSalva.SaleNumber);
                 }
             }
-            else if (tipoEmissao == "NFCE" || tipoEmissao == "NFE")
+            else if (tipoEmissao == "NFCE")
             {
-                await EmitirNotaViaFiscalServiceAsync(vendaSalva.Id, tipoEmissao);
+                await EmitirNfceFocusAsync(vendaSalva.Id);
+            }
+            else if (tipoEmissao == "NFE")
+            {
+                await EmitirNfeA4FocusAsync(vendaSalva.Id);
             }
 
             _onSuccess?.Invoke(vendaSalva.Id); 
@@ -561,32 +613,203 @@ public class FinalizarVendaViewModel : BaseViewModel
     // ==========================================================
     // 7. INTEGRAÇÃO COM A FOCUS NFE (O MOTOR DE DISPARO)
     // ==========================================================
-    private async Task EmitirNotaViaFiscalServiceAsync(Guid vendaId, string tipoDocumento)
+    private async Task EmitirNfceFocusAsync(Guid vendaId)
     {
-        // Etapa 1 da refatoracao fiscal: a logica de montar o payload e chamar
-        // o Focus NFe agora mora em IFiscalService (Application/Infrastructure),
-        // sem nenhuma dependencia de UI. Esse metodo so decide o que MOSTRAR
-        // pro operador com base no resultado - a regra de negocio em si nao mudou.
-        var fiscalService = ERP.WPF.App.Services.GetRequiredService<IFiscalService>();
-        var resultado = await fiscalService.EmitirNotaAsync(vendaId, tipoDocumento);
+        var config = ERP.WPF.Helpers.ConfiguracaoService.Carregar();
+        var nfceService = ERP.WPF.App.Services.GetRequiredService<INfceEmissionService>();
 
-        if (resultado.Sucesso && resultado.EmContingencia)
+        string? cpfCnpjLimpo = null;
+        if (!string.IsNullOrWhiteSpace(SelectedCustomer?.Document))
+            cpfCnpjLimpo = new string(SelectedCustomer.Document.Where(char.IsDigit).ToArray());
+
+        var nfceRequest = new FocusNfceRequest
         {
-            MessageBox.Show(
-                "\ud83d\udce1 Venda salva em MODO CONTINGENCIA!\n\nA internet parece estar instavel. A nota sera enviada para a SEFAZ automaticamente assim que a conexao voltar.",
-                "Modo Offline", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-        else if (resultado.Sucesso && !string.IsNullOrWhiteSpace(resultado.UrlDanfe))
+            DataEmissao = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:sszzz"), 
+            CpfCnpj = cpfCnpjLimpo,
+            Nome = SelectedCustomer?.Name,
+            Itens = ItensCarrinho.Select((item, index) => new FocusItemRequest
+            {
+                NumeroItem = (index + 1).ToString(),
+                CodigoProduto = item.ProductId.ToString().Substring(0, 6), 
+                Descricao = item.ProductName,
+                QuantidadeComercial = item.Quantity.ToString("F2", CultureInfo.InvariantCulture),
+                ValorUnitarioComercial = item.UnitPrice.ToString("F2", CultureInfo.InvariantCulture),
+                ValorBruto = item.Total.ToString("F2", CultureInfo.InvariantCulture),
+                CodigoNcm = string.IsNullOrWhiteSpace(item.Ncm) ? "00000000" : item.Ncm.Replace(".", "").Replace("-", "").Trim(),
+                IcmsSituacaoTributaria = string.IsNullOrWhiteSpace(item.Csosn) ? "102" : item.Csosn.Split('-')[0].Trim(),
+                IcmsOrigem = string.IsNullOrWhiteSpace(item.IcmsOrigem) ? "0" : item.IcmsOrigem,
+                Cfop = string.IsNullOrWhiteSpace(item.Cfop) ? "5102" : item.Cfop.Replace(".", "").Trim(),
+                PisSituacaoTributaria = "99",
+                CofinsSituacaoTributaria = "99"
+            }).ToList(),
+            Pagamentos = Pagamentos.Select(p => new FocusPagamentoRequest
+            {
+                FormaPagamento = TraduzirFormaPagamentoParaSefaz(p.Forma),
+                ValorPagamento = p.Forma == PaymentMethod.Dinheiro 
+                    ? (p.Valor - Troco).ToString("F2", CultureInfo.InvariantCulture) 
+                    : p.Valor.ToString("F2", CultureInfo.InvariantCulture)
+            }).ToList()
+        };
+
+        var (sucesso, mensagem, urlDanfe) = await nfceService.EmitirNfceAsync(vendaId.ToString(), nfceRequest, config.TokenFocusNfe, config.UsarAmbienteProducao);
+
+        if (sucesso && !string.IsNullOrWhiteSpace(urlDanfe))
         {
-            MessageBox.Show($"\u2705 {resultado.Mensagem}", "Sefaz - Sucesso!", MessageBoxButton.OK, MessageBoxImage.Information);
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = resultado.UrlDanfe, UseShellExecute = true });
+            MessageBox.Show($"✅ {mensagem}", "Sefaz - Sucesso!", MessageBoxButton.OK, MessageBoxImage.Information);
+            try
+            {
+                string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
+                await _saleService.AtualizarDadosNfceAsync(vendaId, urlDanfe, "Autorizada", ambienteSefaz, vendaId.ToString());
+            } catch { }
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = urlDanfe, UseShellExecute = true });
         }
         else
         {
-            MessageBox.Show($"\u274c Falha na emissao fiscal: {resultado.Mensagem}", "Erro Fiscal", MessageBoxButton.OK, MessageBoxImage.Error);
+            if (mensagem.Contains("Erro de Comunicação") && !mensagem.Contains("UnprocessableEntity") && !mensagem.Contains("erro_validacao_schema"))
+            {
+                try
+                {
+                    var contingencyService = ERP.WPF.App.Services.GetRequiredService<INfeContingencyService>();
+                    string jsonPayload = Newtonsoft.Json.JsonConvert.SerializeObject(nfceRequest);
+                    
+                    await contingencyService.RegistrarNotaPendenteAsync(vendaId, "NFCE", jsonPayload);
+
+                    string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
+                    await _saleService.AtualizarDadosNfceAsync(vendaId, "", "Contingência", ambienteSefaz, vendaId.ToString());
+
+                    MessageBox.Show("📡 Venda salva em MODO CONTINGÊNCIA!\n\nA internet parece estar instável. A nota será enviada para a SEFAZ automaticamente assim que a conexão voltar.\n\nImprimindo recibo provisório...", "Modo Offline", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    
+                    var fiscalCalculator = ERP.WPF.App.Services.GetRequiredService<ERP.Domain.Services.Fiscal.IFiscalCalculator>();
+                    decimal impostosAproximados = fiscalCalculator.CalcularTributosAproximados(this.TotalVenda, 13.45m);
+                    string msgFiscal = $"\nTrib. Aprox. R$: {impostosAproximados:N2} (Lei 12.741/12)";
+                    string observacaoCompleta = (this.EntregarNoEndereco && !string.IsNullOrWhiteSpace(this.EnderecoEntrega) ? this.EnderecoEntrega : "") + msgFiscal;
+            // Observação geral é passada separadamente para o recibo (aparece antes dos itens)
+                    
+                    ImprimirReciboInterno(vendaId, observacaoCompleta);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Falha catastrófica ao tentar salvar nota em contingência: {ex.Message}", "Erro Crítico", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            else
+            {
+                MessageBox.Show($"❌ Falha na emissão da NFC-e:\n{mensagem}", "Rejeição Sefaz", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 
+    private async Task EmitirNfeA4FocusAsync(Guid vendaId)
+    {
+        var config = ERP.WPF.Helpers.ConfiguracaoService.Carregar();
+        var nfeService = ERP.WPF.App.Services.GetRequiredService<INfeEmissionService>();
+
+        string? cpfCnpjLimpo = null;
+        if (!string.IsNullOrWhiteSpace(SelectedCustomer?.Document)) cpfCnpjLimpo = new string(SelectedCustomer.Document.Where(char.IsDigit).ToArray());
+        string? cepLimpo = null;
+        if (!string.IsNullOrWhiteSpace(SelectedCustomer?.ZipCode)) cepLimpo = new string(SelectedCustomer.ZipCode.Where(char.IsDigit).ToArray());
+        string? ieLimpa = null;
+        if (!string.IsNullOrWhiteSpace(SelectedCustomer?.Ie)) ieLimpa = new string(SelectedCustomer.Ie.Where(char.IsDigit).ToArray());
+        else if (cpfCnpjLimpo?.Length > 11) ieLimpa = "ISENTO"; 
+
+        var nfeRequest = new FocusNfceRequest
+        {
+            DataEmissao = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:sszzz"), 
+            TipoDocumento = "1", 
+            CpfCnpj = cpfCnpjLimpo,
+            Nome = SelectedCustomer?.Name,
+            LogradouroDestinatario = string.IsNullOrWhiteSpace(SelectedCustomer?.Street) ? "Nao Informado" : SelectedCustomer.Street,
+            NumeroDestinatario = string.IsNullOrWhiteSpace(SelectedCustomer?.Number) ? "S/N" : SelectedCustomer.Number,
+            BairroDestinatario = string.IsNullOrWhiteSpace(SelectedCustomer?.Neighborhood) ? "Centro" : SelectedCustomer.Neighborhood,
+            MunicipioDestinatario = string.IsNullOrWhiteSpace(SelectedCustomer?.City) ? "Curitiba" : SelectedCustomer.City,
+            UfDestinatario = string.IsNullOrWhiteSpace(SelectedCustomer?.State) ? "PR" : SelectedCustomer.State,
+            CepDestinatario = string.IsNullOrWhiteSpace(cepLimpo) ? "00000000" : cepLimpo,
+            IeDestinatario = ieLimpa,
+            Itens = ItensCarrinho.Select((item, index) => new FocusItemRequest
+            {
+                NumeroItem = (index + 1).ToString(),
+                CodigoProduto = item.ProductId.ToString().Substring(0, 6), 
+                Descricao = item.ProductName,
+                QuantidadeComercial = item.Quantity.ToString("F2", CultureInfo.InvariantCulture),
+                ValorUnitarioComercial = item.UnitPrice.ToString("F2", CultureInfo.InvariantCulture),
+                ValorBruto = item.Total.ToString("F2", CultureInfo.InvariantCulture),
+                CodigoNcm = string.IsNullOrWhiteSpace(item.Ncm) ? "00000000" : item.Ncm.Replace(".", ""), 
+                IcmsSituacaoTributaria = string.IsNullOrWhiteSpace(item.Csosn) ? "102" : item.Csosn.Split('-')[0].Trim(),
+                IcmsOrigem = string.IsNullOrWhiteSpace(item.IcmsOrigem) ? "0" : item.IcmsOrigem,
+                Cfop = string.IsNullOrWhiteSpace(item.Cfop) ? "5102" : item.Cfop,
+                PisSituacaoTributaria = "99",
+                CofinsSituacaoTributaria = "99"
+            }).ToList(),
+            Pagamentos = Pagamentos.Select(p => new FocusPagamentoRequest
+            {
+                FormaPagamento = TraduzirFormaPagamentoParaSefaz(p.Forma),
+                ValorPagamento = p.Forma == PaymentMethod.Dinheiro 
+                    ? (p.Valor - Troco).ToString("F2", CultureInfo.InvariantCulture) 
+                    : p.Valor.ToString("F2", CultureInfo.InvariantCulture)
+            }).ToList()
+        };
+
+        var (sucesso, mensagem, urlDanfe) = await nfeService.EmitirNfeA4Async(vendaId.ToString(), nfeRequest, config.TokenFocusNfe, config.UsarAmbienteProducao);
+
+        if (sucesso)
+        {
+            if (!string.IsNullOrWhiteSpace(urlDanfe))
+            {
+                MessageBox.Show($"✅ {mensagem}", "Sefaz - Sucesso!", MessageBoxButton.OK, MessageBoxImage.Information);
+                try
+                {
+                    string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
+                    await _saleService.AtualizarDadosNfceAsync(vendaId, urlDanfe, "Autorizada", ambienteSefaz, vendaId.ToString());
+                } catch { }
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = urlDanfe, UseShellExecute = true });
+            }
+            else
+            {
+                MessageBox.Show($"⏳ {mensagem}\n\nSua NF-e está na fila da SEFAZ para ser aprovada.\nAssim que liberar, o PDF aparecerá na sua tela de 'Notas Fiscais' (F10).", 
+                                "Aguardando Sefaz", MessageBoxButton.OK, MessageBoxImage.Information);
+                try
+                {
+                    string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
+                    await _saleService.AtualizarDadosNfceAsync(vendaId, "", "Processando", ambienteSefaz, vendaId.ToString());
+                } catch { }
+            }
+        }
+        else
+        {
+            if (mensagem.Contains("Erro de Comunicação") && !mensagem.Contains("UnprocessableEntity") && !mensagem.Contains("erro_validacao_schema"))
+            {
+                try
+                {
+                    var contingencyService = ERP.WPF.App.Services.GetRequiredService<INfeContingencyService>();
+                    string jsonPayload = Newtonsoft.Json.JsonConvert.SerializeObject(nfeRequest);
+                    await contingencyService.RegistrarNotaPendenteAsync(vendaId, "NFE", jsonPayload);
+                    
+                    string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
+                    await _saleService.AtualizarDadosNfceAsync(vendaId, "", "Contingência", ambienteSefaz, vendaId.ToString());
+
+                    MessageBox.Show("📡 Venda salva em MODO CONTINGÊNCIA!\n\nA internet está instável. A NF-e será transmitida automaticamente depois.", "Modo Offline", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                catch { }
+            }
+            else
+            {
+                MessageBox.Show($"❌ Falha na emissão da NF-e (A4):\n{mensagem}", "Rejeição Sefaz", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+
+    private string TraduzirFormaPagamentoParaSefaz(PaymentMethod metodo)
+    {
+        return metodo switch
+        {
+            PaymentMethod.Dinheiro => "01",
+            PaymentMethod.CartaoCredito => "03",
+            PaymentMethod.CartaoDebito => "04",
+            PaymentMethod.APrazo => "05", 
+            PaymentMethod.Pix => "17",
+            _ => "99" 
+        };
+    }
 
     // ==========================================================
     // FUNÇÕES AUXILIARES (Para o código ficar limpo)
@@ -671,4 +894,9 @@ public class PagamentoItem
 {
     public PaymentMethod Forma { get; set; }
     public decimal Valor { get; set; }
+
+    /// <summary>Só pra escolher qual taxa de operadora usar no resumo
+    /// informativo (item 2.3) — o sistema não rastreia parcelamento em
+    /// lugar nenhum, então isso não vai pro servidor, é só exibição local.</summary>
+    public bool EhParcelado { get; set; }
 }

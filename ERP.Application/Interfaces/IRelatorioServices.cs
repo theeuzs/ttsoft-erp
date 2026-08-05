@@ -42,6 +42,14 @@ public interface IGerenciadorVendasService
         DateTime? from = null, DateTime? to = null, CancellationToken ct = default);
 }
 
+/// <summary>Item 2.4 do roadmap Comercial — vendas, custo e contas a receber
+/// pendentes cruzados por mês, pra alimentar o gráfico.</summary>
+public interface IVendasXCustoService
+{
+    Task<IReadOnlyList<VendasXCustoPeriodoDto>> ObterAsync(
+        DateTime? from = null, DateTime? to = null, CancellationToken ct = default);
+}
+
 public interface IFluxoCaixaService
 {
     Task<FluxoCaixaResultadoDto> ObterAsync(

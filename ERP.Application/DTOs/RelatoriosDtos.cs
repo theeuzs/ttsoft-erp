@@ -71,7 +71,9 @@ public record InventarioProdutoDto(
     string  Nome,
     string  SKU,
     string  Categoria,
-    decimal EstoqueSistema);
+    decimal EstoqueSistema,
+    string  Marca,
+    string  Fornecedor);
 
 // ── BI Avançado ───────────────────────────────────────────────────────────────
 
@@ -139,4 +141,14 @@ public record GerenciadorVendaItemDto(
     decimal CustoTotal)
 {
     public decimal LucroTotal => ValorVendaTotal - CustoTotal;
+}
+
+// ── Vendas x Custo (item 2.4) ───────────────────────────────────────────────
+public record VendasXCustoPeriodoDto(
+    string  Periodo,       // "MM/yyyy"
+    decimal TotalVendas,
+    decimal TotalCusto,
+    decimal ContasAReceberPendente)
+{
+    public decimal LucroBruto => TotalVendas - TotalCusto;
 }

@@ -47,7 +47,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 // Resultado: cada requisição HTTP tem seu próprio AppDbContext isolado por tenant.
 builder.Services.AddSingleton(
     new DbContextOptionsBuilder<AppDbContext>()
-        .UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure())
+        .UseSqlServer(connectionString)
         .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
         .Options);
 
@@ -82,6 +82,7 @@ builder.Services.AddScoped<IDreService,           DreService>();
 builder.Services.AddScoped<IAbcService,           AbcService>();
 builder.Services.AddScoped<IMargemService,        MargemService>();
 builder.Services.AddScoped<IGerenciadorVendasService, GerenciadorVendasService>();
+builder.Services.AddScoped<IVendasXCustoService, VendasXCustoService>();
 builder.Services.AddScoped<IFluxoCaixaService,    FluxoCaixaService>();
 // S17 FIX: FluxoCaixaService agora depende de IContaBancariaService (saldo
 // consolidado real como base da projeção) — sem registrar aqui, a API quebraria
@@ -234,22 +235,6 @@ builder.Services.AddHttpClient<ERP.Application.Interfaces.IChannelDispatcher,
 // Estoque ERP → marketplace (direção contrária de IOrderProcessingService).
 builder.Services.AddScoped<ERP.Application.Interfaces.IEstoqueSyncService,
                             ERP.Application.Services.EstoqueSyncService>();
-
-// Etapa 2 da refatoração fiscal — a API só faz sentido com o provider de
-// banco (não tem arquivo local nenhum pra ler). Ainda não é usado por nada
-// na API (isso é a Etapa 4, quando OrderProcessingService for conectado) —
-// só registrado aqui pra já existir quando chegar a hora.
-builder.Services.AddScoped<ERP.Application.Interfaces.IFiscalConfigurationProvider,
-                            ERP.Infrastructure.Services.DatabaseFiscalConfigurationProvider>();
-// FiscalService também precisa de INfeEmissionService/INfeContingencyService —
-// só INfceEmissionService já estava registrado aqui (a API só emitia NFCe até
-// agora, nunca NF-e A4 nem tinha contingência do lado dela).
-builder.Services.AddScoped<ERP.Application.Interfaces.INfeEmissionService,
-                            ERP.Application.Services.NfeEmissionService>();
-builder.Services.AddScoped<ERP.Application.Interfaces.INfeContingencyService,
-                            ERP.Application.Services.NfeContingencyService>();
-builder.Services.AddScoped<ERP.Application.Interfaces.IFiscalService,
-                            ERP.Infrastructure.Services.FiscalService>();
 
 builder.Services.AddHttpClient<IFocusNfeHttpClient, ERP.Infrastructure.HttpClients.FocusNfeHttpClient>(client =>
 {

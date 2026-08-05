@@ -17,6 +17,8 @@ public class InventarioItem
     public string Nome           { get; set; } = string.Empty;
     public string SKU            { get; set; } = string.Empty;
     public string Categoria      { get; set; } = string.Empty;
+    public string Marca          { get; set; } = string.Empty;
+    public string Fornecedor     { get; set; } = string.Empty;
     public decimal EstoqueSistema { get; set; }
 
     private decimal _estoqueContado;
@@ -53,6 +55,31 @@ public class InventarioViewModel : BaseViewModel
         set { SetProperty(ref _filtroBusca, value); AplicarFiltro(); }
     }
 
+    public ObservableCollection<string> MarcasDisponiveis      { get; } = new() { "Todas" };
+    public ObservableCollection<string> FornecedoresDisponiveis{ get; } = new() { "Todos" };
+    public ObservableCollection<string> ClassesDisponiveis     { get; } = new() { "Todas" };
+
+    private string _selectedMarca = "Todas";
+    public string SelectedMarca
+    {
+        get => _selectedMarca;
+        set { SetProperty(ref _selectedMarca, value); AplicarFiltro(); }
+    }
+
+    private string _selectedFornecedor = "Todos";
+    public string SelectedFornecedor
+    {
+        get => _selectedFornecedor;
+        set { SetProperty(ref _selectedFornecedor, value); AplicarFiltro(); }
+    }
+
+    private string _selectedClasse = "Todas";
+    public string SelectedClasse
+    {
+        get => _selectedClasse;
+        set { SetProperty(ref _selectedClasse, value); AplicarFiltro(); }
+    }
+
     private ObservableCollection<InventarioItem> _todosItens = new();
 
     public ICommand CarregarCommand { get; }
@@ -85,11 +112,31 @@ public class InventarioViewModel : BaseViewModel
                     Nome            = p.Nome,
                     SKU             = p.SKU,
                     Categoria       = p.Categoria,
+                    Marca           = p.Marca,
+                    Fornecedor      = p.Fornecedor,
                     EstoqueSistema  = p.EstoqueSistema,
                     EstoqueContado  = p.EstoqueSistema,
                     Diferenca       = 0,
                     Conferido       = false,
                 });
+
+            // Item 2.2 do roadmap Comercial — listas de opção pros filtros,
+            // montadas a partir do que realmente existe nos produtos carregados
+            // (não uma lista fixa hardcoded, que ficaria desatualizada).
+            MarcasDisponiveis.Clear();
+            MarcasDisponiveis.Add("Todas");
+            foreach (var m in _todosItens.Select(i => i.Marca).Distinct().OrderBy(m => m))
+                MarcasDisponiveis.Add(m);
+
+            FornecedoresDisponiveis.Clear();
+            FornecedoresDisponiveis.Add("Todos");
+            foreach (var f in _todosItens.Select(i => i.Fornecedor).Distinct().OrderBy(f => f))
+                FornecedoresDisponiveis.Add(f);
+
+            ClassesDisponiveis.Clear();
+            ClassesDisponiveis.Add("Todas");
+            foreach (var c in _todosItens.Select(i => i.Categoria).Distinct().OrderBy(c => c))
+                ClassesDisponiveis.Add(c);
 
             AplicarFiltro();
             AtualizarResumo();
@@ -112,12 +159,22 @@ public class InventarioViewModel : BaseViewModel
 
     private void AplicarFiltro()
     {
-        var filtrados = string.IsNullOrWhiteSpace(FiltroBusca)
-            ? _todosItens
-            : _todosItens.Where(p =>
+        var filtrados = _todosItens.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(FiltroBusca))
+            filtrados = filtrados.Where(p =>
                 p.Nome.Contains(FiltroBusca, StringComparison.OrdinalIgnoreCase) ||
                 p.SKU.Contains(FiltroBusca, StringComparison.OrdinalIgnoreCase) ||
                 p.Categoria.Contains(FiltroBusca, StringComparison.OrdinalIgnoreCase));
+
+        if (SelectedMarca != "Todas")
+            filtrados = filtrados.Where(p => p.Marca == SelectedMarca);
+
+        if (SelectedFornecedor != "Todos")
+            filtrados = filtrados.Where(p => p.Fornecedor == SelectedFornecedor);
+
+        if (SelectedClasse != "Todas")
+            filtrados = filtrados.Where(p => p.Categoria == SelectedClasse);
 
         Itens.Clear();
         foreach (var i in filtrados) Itens.Add(i);

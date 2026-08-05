@@ -252,6 +252,11 @@
                                         Background="#3B82F6" TabIndex="4" Click="BtnAddPagamento_Click"/>
                             </Grid>
 
+                            <CheckBox Content="É parcelado? (usa a taxa de crédito parcelado no resumo)"
+                                      IsChecked="{Binding IsParceladoDigitado}"
+                                      Visibility="{Binding MostrarCheckboxParcelado, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
+                                      FontSize="12" Foreground="{DynamicResource TextMuted}" Margin="0,4,0,0"/>
+
                             <Border Background="{DynamicResource FundoRodape}" Padding="15" CornerRadius="8"
                                     BorderBrush="{DynamicResource BordaCard}" BorderThickness="1">
                                 <StackPanel>
@@ -288,6 +293,20 @@
                                             </TextBlock.Style>
                                         </TextBlock>
                                     </Grid>
+
+                                    <!-- Item 2.3 (Comercial) — informativo, não muda o que o cliente paga -->
+                                    <Border Background="#FFF7ED" CornerRadius="6" Padding="8" Margin="0,8,0,0"
+                                            Visibility="{Binding MostrarResumoOperadora, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="💳" Margin="0,0,6,0"/>
+                                            <TextBlock FontSize="12" Foreground="#9A3412">
+                                                <Run Text="Taxa da operadora: R$ "/>
+                                                <Run Text="{Binding ValorTaxaOperadora, Mode=OneWay, StringFormat='{}{0:N2}'}" FontWeight="Bold"/>
+                                                <Run Text=" — você recebe líquido: R$ "/>
+                                                <Run Text="{Binding ValorLiquidoOperadora, Mode=OneWay, StringFormat='{}{0:N2}'}" FontWeight="Bold"/>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Border>
                                 </StackPanel>
                             </Border>
                         </StackPanel>

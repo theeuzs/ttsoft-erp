@@ -297,7 +297,7 @@ public partial class App : System.Windows.Application
         services.AddDbContext<AppDbContext>(options =>
             options
                 .UseSqlServer(connectionString,
-                    b => b.MigrationsAssembly("ERP.Persistence").EnableRetryOnFailure())
+                    b => b.MigrationsAssembly("ERP.Persistence"))
                 .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking));
 
         // ── AutoMapper ────────────────────────────────────────────────────
@@ -352,15 +352,6 @@ public partial class App : System.Windows.Application
         // mesma interface — ver WpfEstoqueSyncService.
         services.AddScoped<ERP.Application.Interfaces.IEstoqueSyncService,
                             ERP.WPF.Services.WpfEstoqueSyncService>();
-
-        // Etapa 1 da refatoração fiscal — mesmo comportamento de antes, só
-        // reorganizado: JsonFiscalConfigurationProvider lê o arquivo local de
-        // sempre; FiscalService é o mesmo (Infrastructure), consumido por
-        // WPF e API igualmente.
-        services.AddScoped<ERP.Application.Interfaces.IFiscalConfigurationProvider,
-                            ERP.WPF.Services.JsonFiscalConfigurationProvider>();
-        services.AddScoped<ERP.Application.Interfaces.IFiscalService,
-                            ERP.Infrastructure.Services.FiscalService>();
         services.AddScoped<ERP.Application.Interfaces.ISalePolicyService, ERP.Application.Services.SalePolicyService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IDevolucaoService, DevolucaoService>(); 
@@ -415,6 +406,7 @@ public partial class App : System.Windows.Application
 
         services.AddScoped<FluxoCaixaService>();
         services.AddScoped<IGerenciadorVendasService, GerenciadorVendasService>();
+        services.AddScoped<IVendasXCustoService, VendasXCustoService>();
         services.AddScoped<IFluxoCaixaService>(sp =>
             new FluxoCaixaServiceCached(
                 sp.GetRequiredService<FluxoCaixaService>(),

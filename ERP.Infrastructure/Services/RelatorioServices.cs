@@ -221,6 +221,61 @@ public class GerenciadorVendasService : IGerenciadorVendasService
     }
 }
 
+public class VendasXCustoService : IVendasXCustoService
+{
+    private readonly AppDbContext _ctx;
+    public VendasXCustoService(AppDbContext ctx) => _ctx = ctx;
+
+    public async Task<IReadOnlyList<VendasXCustoPeriodoDto>> ObterAsync(
+        DateTime? from = null, DateTime? to = null, CancellationToken ct = default)
+    {
+        var dataInicio = from ?? DateTime.Today.AddMonths(-5).AddDays(1 - DateTime.Today.Day);
+        var dataFim    = to   ?? DateTime.Today;
+
+        // Mesmo cuidado do Gerenciador de Vendas: busca dados crus com Select
+        // simples (sem GroupBy nenhum na query), agrupa por mês inteiramente
+        // em memória depois — evita o "could not be translated" do EF Core
+        // que já pegamos antes com joins+groupby mais complexos.
+        var itensVendidos = await _ctx.SaleItems.AsNoTracking()
+            .Where(i => i.Sale.Status != SaleStatus.Cancelada
+                     && i.Sale.SaleDate >= dataInicio && i.Sale.SaleDate <= dataFim)
+            .Select(i => new { i.Sale.SaleDate, i.ProductId, i.Quantity, i.TotalItem })
+            .ToListAsync(ct);
+
+        var produtoIds = itensVendidos.Select(i => i.ProductId).Distinct().ToList();
+        var custosPorProduto = await _ctx.Products.AsNoTracking()
+            .Where(p => produtoIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.OriginalCost })
+            .ToDictionaryAsync(p => p.Id, p => p.OriginalCost, ct);
+
+        var contasReceber = await _ctx.ContasReceber.AsNoTracking()
+            .Where(c => c.Status == "Pendente" && c.DataVencimento >= dataInicio && c.DataVencimento <= dataFim)
+            .Select(c => new { c.DataVencimento, Saldo = c.ValorTotal - c.ValorRecebido - c.ValorDesconto })
+            .ToListAsync(ct);
+
+        var vendasPorMes = itensVendidos
+            .GroupBy(i => new DateTime(i.SaleDate.Year, i.SaleDate.Month, 1))
+            .ToDictionary(g => g.Key, g => new
+            {
+                Vendas = g.Sum(i => i.TotalItem),
+                Custo  = g.Sum(i => i.Quantity * (custosPorProduto.TryGetValue(i.ProductId, out var c) ? c : 0))
+            });
+
+        var contasPorMes = contasReceber
+            .GroupBy(c => new DateTime(c.DataVencimento.Year, c.DataVencimento.Month, 1))
+            .ToDictionary(g => g.Key, g => g.Sum(c => c.Saldo));
+
+        var todosMeses = vendasPorMes.Keys.Union(contasPorMes.Keys).OrderBy(m => m);
+
+        return todosMeses.Select(mes => new VendasXCustoPeriodoDto(
+            mes.ToString("MM/yyyy"),
+            vendasPorMes.TryGetValue(mes, out var v) ? v.Vendas : 0,
+            vendasPorMes.TryGetValue(mes, out var v2) ? v2.Custo : 0,
+            contasPorMes.TryGetValue(mes, out var cr) ? cr : 0
+        )).ToList();
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  FLUXO DE CAIXA
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -393,6 +448,8 @@ public class InventarioService : IInventarioService
 
         return await ctx.Products.AsNoTracking()
             .Include(p => p.Category)
+            .Include(p => p.Brand)
+            .Include(p => p.Supplier)
             .OrderBy(p => p.Category != null ? p.Category.Name : "")
             .ThenBy(p => p.Name)
             .Select(p => new InventarioProdutoDto(
@@ -400,7 +457,9 @@ public class InventarioService : IInventarioService
                 p.Name,
                 p.SKU ?? string.Empty,
                 p.Category != null ? p.Category.Name : "Sem categoria",
-                p.Stock))
+                p.Stock,
+                p.Brand != null ? p.Brand.Name : "Sem marca",
+                p.Supplier != null ? p.Supplier.Name : "Sem fornecedor"))
             .ToListAsync();
     }
 
@@ -419,6 +478,8 @@ public class InventarioService : IInventarioService
         return await ctx.Products.AsNoTracking()
             .Where(p => idsList.Contains(p.Id))
             .Include(p => p.Category)
+            .Include(p => p.Brand)
+            .Include(p => p.Supplier)
             .OrderBy(p => p.Category != null ? p.Category.Name : "")
             .ThenBy(p => p.Name)
             .Select(p => new InventarioProdutoDto(
@@ -426,7 +487,9 @@ public class InventarioService : IInventarioService
                 p.Name,
                 p.SKU ?? string.Empty,
                 p.Category != null ? p.Category.Name : "Sem categoria",
-                p.Stock))
+                p.Stock,
+                p.Brand != null ? p.Brand.Name : "Sem marca",
+                p.Supplier != null ? p.Supplier.Name : "Sem fornecedor"))
             .ToListAsync(ct);
     }
 

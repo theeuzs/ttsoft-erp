@@ -71,10 +71,29 @@
             </Border>
         </Grid>
 
-        <!-- Busca -->
-        <TextBox Grid.Row="4" Text="{Binding FiltroBusca, UpdateSourceTrigger=PropertyChanged}"
-                 Padding="12" FontSize="14" BorderBrush="{DynamicResource BordaInput}" Background="{DynamicResource CardBg}"
-                 VerticalContentAlignment="Center"/>
+        <!-- Busca e Filtros (item 2.2 do roadmap Comercial) -->
+        <Grid Grid.Row="4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="160"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="160"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="160"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBox Grid.Column="0" Text="{Binding FiltroBusca, UpdateSourceTrigger=PropertyChanged}"
+                     Padding="12" FontSize="14" BorderBrush="{DynamicResource BordaInput}" Background="{DynamicResource CardBg}"
+                     VerticalContentAlignment="Center"/>
+
+            <ComboBox Grid.Column="2" ItemsSource="{Binding ClassesDisponiveis}" SelectedItem="{Binding SelectedClasse}"
+                      Padding="8" VerticalContentAlignment="Center" ToolTip="Classe"/>
+            <ComboBox Grid.Column="4" ItemsSource="{Binding MarcasDisponiveis}" SelectedItem="{Binding SelectedMarca}"
+                      Padding="8" VerticalContentAlignment="Center" ToolTip="Marca"/>
+            <ComboBox Grid.Column="6" ItemsSource="{Binding FornecedoresDisponiveis}" SelectedItem="{Binding SelectedFornecedor}"
+                      Padding="8" VerticalContentAlignment="Center" ToolTip="Fornecedor"/>
+        </Grid>
 
         <!-- Tabela -->
         <Border Grid.Row="6" Background="{DynamicResource CardBg}" CornerRadius="12">
@@ -95,6 +114,8 @@
                     <DataGridTextColumn Header="Produto" Binding="{Binding Nome}" Width="3*" IsReadOnly="True" FontWeight="SemiBold"/>
                     <DataGridTextColumn Header="SKU" Binding="{Binding SKU}" Width="90" IsReadOnly="True"/>
                     <DataGridTextColumn Header="Categoria" Binding="{Binding Categoria}" Width="130" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="Marca" Binding="{Binding Marca}" Width="120" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="Fornecedor" Binding="{Binding Fornecedor}" Width="140" IsReadOnly="True"/>
                     <DataGridTextColumn Header="Estoque Sistema" Binding="{Binding EstoqueSistema, StringFormat='N2'}" Width="130" IsReadOnly="True">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
