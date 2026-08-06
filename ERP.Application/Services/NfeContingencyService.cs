@@ -12,12 +12,14 @@ public class NfeContingencyService : INfeContingencyService
 {
     private readonly IFocusNfeHttpClient _httpClient;
     private readonly IUnitOfWork _uow;
+    private readonly IRequestTenant _tenant;
 
     // Recebemos o UnitOfWork por injeção de dependência, igualzinho ao SaleService!
-    public NfeContingencyService(IFocusNfeHttpClient httpClient, IUnitOfWork uow)
+    public NfeContingencyService(IFocusNfeHttpClient httpClient, IUnitOfWork uow, IRequestTenant tenant)
     {
         _httpClient = httpClient;
         _uow = uow;
+        _tenant = tenant;
     }
 
     public async Task<bool> VerificarConexaoSefazAsync()
@@ -39,6 +41,7 @@ public class NfeContingencyService : INfeContingencyService
         var notaPendente = new NfePendente
         {
             Id = Guid.NewGuid(),
+            TenantId = _tenant.TenantId,
             VendaId = vendaId,
             TipoNota = tipoNota,
             PayloadJson = payloadJson,

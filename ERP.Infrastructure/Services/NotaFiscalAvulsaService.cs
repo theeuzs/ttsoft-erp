@@ -270,7 +270,7 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
                 : !string.IsNullOrWhiteSpace(produto?.Barcode) ? produto!.Barcode!
                 : item.ProductId.ToString()[..6];
 
-            itensRequest.Add(new FocusItemRequest
+            var itemRequest = new FocusItemRequest
             {
                 NumeroItem             = (index + 1).ToString(),
                 CodigoProduto          = codigoProduto,
@@ -284,7 +284,34 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
                 IcmsOrigem             = "0",
                 PisSituacaoTributaria     = "99",
                 CofinsSituacaoTributaria  = "99",
-            });
+            };
+
+            // Achado de auditoria (06/08/2026): mesma correção do FiscalService
+            // — ICMSSTCalculator existia mas não alimentava nenhuma emissão real.
+            if (produto != null && produto.TemSubstituicaoTrib)
+            {
+                var csosnsComSt = new[] { "201", "202", "203" };
+                if (!csosnsComSt.Contains(itemRequest.IcmsSituacaoTributaria))
+                    itemRequest.IcmsSituacaoTributaria = "202";
+
+                string ufDestinoItem = string.IsNullOrWhiteSpace(nota.DestinatarioUf) ? "PR" : nota.DestinatarioUf!;
+                decimal aliqInterestadualItem = ufDestinoItem == "PR" ? 0m
+                    : ERP.Infrastructure.Services.MotorFiscalBrasileiro.ObterAliquotaInterestadual("PR", ufDestinoItem);
+
+                var stCalculator = new Domain.Services.Fiscal.ICMSSTCalculator();
+                var st = stCalculator.CalcularDoProduto(produto, item.Quantidade * item.ValorUnitario, aliqInterestadualItem);
+
+                if (st != null)
+                {
+                    itemRequest.IcmsModalidadeBaseCalculoSt = "4";
+                    itemRequest.IcmsMargemValorAdicionadoSt = st.MVAUtilizado.ToString("F2", CultureInfo.InvariantCulture);
+                    itemRequest.IcmsBaseCalculoSt            = st.BaseCalculoST.ToString("F2", CultureInfo.InvariantCulture);
+                    itemRequest.IcmsAliquotaSt               = (produto.AliquotaInternaUFDest ?? 0m).ToString("F2", CultureInfo.InvariantCulture);
+                    itemRequest.IcmsValorSt                  = st.ValorICMSST.ToString("F2", CultureInfo.InvariantCulture);
+                }
+            }
+
+            itensRequest.Add(itemRequest);
             valorTotalItens += item.Quantidade * item.ValorUnitario;
         }
 

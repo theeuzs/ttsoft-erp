@@ -276,13 +276,27 @@ public class FiscalService : IFiscalService
         await _ctx.SaveChangesAsync();
     }
 
-    private static List<FocusItemRequest> MontarItens(Domain.Entities.Sale sale) =>
-        sale.Items.Select((item, index) =>
+    // Item de auditoria (06/08/2026): o ICMSSTCalculator (fórmula correta,
+    // Convênio 142/2018) existia mas não alimentava a emissão de verdade —
+    // ficava só em FiscalController/testes. UF de origem hardcoded em "PR"
+    // (a mesma simplificação já usada nos fallbacks de endereço do
+    // destinatário em toda essa classe) — vira TODO configurável quando
+    // houver tenant fora do Paraná de verdade.
+    private const string UF_ORIGEM_LOJA = "PR";
+
+    private static List<FocusItemRequest> MontarItens(Domain.Entities.Sale sale)
+    {
+        string ufDestino = string.IsNullOrWhiteSpace(sale.Customer?.State) ? UF_ORIGEM_LOJA : sale.Customer!.State!;
+        var stCalculator = new Domain.Services.Fiscal.ICMSSTCalculator();
+
+        return sale.Items.Select((item, index) =>
         {
-            var ncm    = item.Product?.NCM;
-            var csosn  = item.Product?.CSOSN;
-            var cfop   = item.Product?.CFOPPadrao;
-            return new FocusItemRequest
+            var produto = item.Product;
+            var ncm    = produto?.NCM;
+            var csosn  = produto?.CSOSN;
+            var cfop   = produto?.CFOPPadrao;
+
+            var request = new FocusItemRequest
             {
                 NumeroItem             = (index + 1).ToString(),
                 CodigoProduto          = item.ProductId.ToString().Substring(0, 6),
@@ -297,7 +311,34 @@ public class FiscalService : IFiscalService
                 PisSituacaoTributaria     = "99",
                 CofinsSituacaoTributaria  = "99"
             };
+
+            if (produto != null && produto.TemSubstituicaoTrib)
+            {
+                // A Focus rejeita se mandar campo de ST com um CSOSN que não
+                // espera ST (ex: "102") — força um CSOSN compatível quando o
+                // catálogo não tiver um já certo, em vez de deixar a
+                // inconsistência ir pra SEFAZ.
+                var csosnsComSt = new[] { "201", "202", "203" };
+                if (!csosnsComSt.Contains(request.IcmsSituacaoTributaria))
+                    request.IcmsSituacaoTributaria = "202"; // sem permissão de crédito — mesma convenção do "102" default
+
+                decimal aliqInterestadual = ufDestino == UF_ORIGEM_LOJA ? 0m
+                    : MotorFiscalBrasileiro.ObterAliquotaInterestadual(UF_ORIGEM_LOJA, ufDestino);
+                var st = stCalculator.CalcularDoProduto(produto, item.TotalPrice, aliqInterestadual);
+
+                if (st != null)
+                {
+                    request.IcmsModalidadeBaseCalculoSt = "4"; // MVA
+                    request.IcmsMargemValorAdicionadoSt = st.MVAUtilizado.ToString("F2", CultureInfo.InvariantCulture);
+                    request.IcmsBaseCalculoSt            = st.BaseCalculoST.ToString("F2", CultureInfo.InvariantCulture);
+                    request.IcmsAliquotaSt               = (produto.AliquotaInternaUFDest ?? 0m).ToString("F2", CultureInfo.InvariantCulture);
+                    request.IcmsValorSt                  = st.ValorICMSST.ToString("F2", CultureInfo.InvariantCulture);
+                }
+            }
+
+            return request;
         }).ToList();
+    }
 
     private static List<FocusPagamentoRequest> MontarPagamentos(Domain.Entities.Sale sale) =>
         sale.Payments.Select(p => new FocusPagamentoRequest

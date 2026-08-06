@@ -380,6 +380,36 @@ public class AppDbContext : DbContext
             e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
         modelBuilder.Entity<NfeRecebida>().HasQueryFilter(
             e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+
+        // Achado de auditoria (06/08/2026): 10 entidades tinham TenantId
+        // (herdado de BaseEntity) mas não tinham HasQueryFilter — dependiam
+        // de Where(TenantId==...) manual em todo consumidor, sem rede de
+        // proteção se algum fosse esquecido.
+        modelBuilder.Entity<AuditLog>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<CaixaMovimento>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<ChatMessage>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<MetaVendas>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<NfseEmitida>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<Permission>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<SaleItemDevolucao>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<SaleItem>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<PedidoCompraItem>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<TransferenciaItem>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<NfePendente>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<OrcamentoItem>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+
         modelBuilder.Entity<OrderAction>().HasQueryFilter(
             a => !a.IsDeleted && a.TenantId == tenantFilter.Value);
         modelBuilder.Entity<OrderConflict>().HasQueryFilter(

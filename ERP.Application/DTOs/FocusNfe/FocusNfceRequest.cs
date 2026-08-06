@@ -126,6 +126,25 @@ public class FocusItemRequest
     [JsonPropertyName("icms_situacao_tributaria")]
     public string IcmsSituacaoTributaria { get; set; } = "102"; // O seu CSOSN (Tributada pelo Simples Nacional sem permissão de crédito)
 
+    // Achado de auditoria (06/08/2026): ICMSSTCalculator existia mas não
+    // alimentava a emissão de verdade — esses campos não existiam nem no DTO.
+    // Nomes confirmados direto na doc oficial da Focus, tabela de campos por
+    // CSOSN 201/202/203 (com cobrança de ICMS-ST no Simples Nacional).
+    [JsonPropertyName("icms_modalidade_base_calculo_st")]
+    public string? IcmsModalidadeBaseCalculoSt { get; set; } // modBCST — "4" = Margem Valor Agregado (MVA)
+
+    [JsonPropertyName("icms_margem_valor_adicionado_st")]
+    public string? IcmsMargemValorAdicionadoSt { get; set; } // pMVAST
+
+    [JsonPropertyName("icms_base_calculo_st")]
+    public string? IcmsBaseCalculoSt { get; set; } // vBCST
+
+    [JsonPropertyName("icms_aliquota_st")]
+    public string? IcmsAliquotaSt { get; set; } // pICMSST
+
+    [JsonPropertyName("icms_valor_st")]
+    public string? IcmsValorSt { get; set; } // vICMSST
+
     [JsonPropertyName("pis_situacao_tributaria")]
     public string PisSituacaoTributaria { get; set; } = "99";
 
