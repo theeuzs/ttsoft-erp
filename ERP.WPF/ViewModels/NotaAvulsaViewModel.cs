@@ -201,6 +201,7 @@ public class NotaAvulsaViewModel : BaseViewModel
     public ICommand RemoverItemCommand { get; }
     public ICommand SalvarRascunhoCommand { get; }
     public ICommand ConferirCommand { get; }
+    public ICommand GerarPdfEspelhoCommand { get; }
     public ICommand EmitirCommand { get; }
     public ICommand NovaNotaCommand { get; }
     public ICommand CarregarRascunhoCommand { get; }
@@ -222,6 +223,7 @@ public class NotaAvulsaViewModel : BaseViewModel
         RemoverItemCommand   = new RelayCommand(item => { if (item is ItemNotaAvulsa i) { Itens.Remove(i); OnPropertyChanged(nameof(Total)); } });
         SalvarRascunhoCommand = new AsyncRelayCommand(async _ => await SalvarRascunhoAsync());
         ConferirCommand        = new AsyncRelayCommand(async _ => await ConferirAsync());
+        GerarPdfEspelhoCommand = new AsyncRelayCommand(async _ => await GerarPdfEspelhoAsync());
         EmitirCommand           = new AsyncRelayCommand(async _ => await EmitirAsync());
         NovaNotaCommand         = new RelayCommand(_ => LimparFormulario());
         CarregarRascunhoCommand = new AsyncRelayCommand(async item => { if (item is NotaFiscalAvulsaResumoDto r) await CarregarRascunhoAsync(r.Id); });
@@ -424,6 +426,27 @@ public class NotaAvulsaViewModel : BaseViewModel
         catch (Exception ex)
         {
             MessageBox.Show($"Erro ao conferir: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async Task GerarPdfEspelhoAsync()
+    {
+        try
+        {
+            var service = App.Services.GetRequiredService<INotaFiscalAvulsaService>();
+            _notaId = await service.SalvarRascunhoAsync(MontarDto());
+
+            var conferencia = await service.ConferirAsync(_notaId.Value);
+            var nota = await service.ObterAsync(_notaId.Value);
+            if (nota == null) return;
+
+            var config = ERP.WPF.Helpers.ConfiguracaoService.Carregar();
+            var relatorio = new ERP.WPF.Reports.NotaAvulsaEspelhoPdfReport(nota, conferencia, config);
+            ERP.WPF.Reports.PdfReportBase.SalvarEAbrir(relatorio, $"Espelho_NotaAvulsa_{DestinatarioNome.Replace(" ", "_")}");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Erro ao gerar PDF: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 

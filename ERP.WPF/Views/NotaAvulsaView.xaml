@@ -206,11 +206,13 @@
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="6"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="6"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="6"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="6"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <Button Grid.Column="0" Content="🗑 Nova" Command="{Binding NovaNotaCommand}" Height="44"
@@ -219,11 +221,16 @@
                             Background="#64748B" Foreground="White" BorderThickness="0" Cursor="Hand">
                         <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
                     </Button>
-                    <Button Grid.Column="4" Content="🔍 Conferir Impostos" Command="{Binding ConferirCommand}" Height="44"
+                    <Button Grid.Column="4" Content="🔍 Conferir" Command="{Binding ConferirCommand}" Height="44"
                             Background="#F59E0B" Foreground="White" BorderThickness="0" Cursor="Hand">
                         <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
                     </Button>
-                    <Button Grid.Column="6" Content="🚀 Emitir" Command="{Binding EmitirCommand}" Height="44"
+                    <Button Grid.Column="6" Content="📄 PDF Espelho" Command="{Binding GerarPdfEspelhoCommand}" Height="44"
+                            Background="#7C3AED" Foreground="White" BorderThickness="0" Cursor="Hand"
+                            ToolTip="Gera um PDF de conferência com marca d'água 'RASCUNHO' — não é o DANFE, pra mandar o cliente conferir antes de emitir">
+                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                    </Button>
+                    <Button Grid.Column="8" Content="🚀 Emitir" Command="{Binding EmitirCommand}" Height="44"
                             Background="#16A34A" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand">
                         <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
                     </Button>
