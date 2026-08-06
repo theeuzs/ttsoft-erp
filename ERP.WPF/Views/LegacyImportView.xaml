@@ -1,0 +1,43 @@
+<UserControl x:Class="ERP.WPF.Views.LegacyImportView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource CardBgAlt}">
+
+    <StackPanel Margin="24" MaxWidth="640" HorizontalAlignment="Left">
+        <TextBlock Text="📦 Importar Sistema Antigo" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource TextDark}"/>
+        <TextBlock Text="Lê os arquivos 'vendas*' exportados do sistema anterior e cria o histórico de vendas correspondente."
+                   FontSize="13" Foreground="{DynamicResource TextMuted}" TextWrapping="Wrap" Margin="0,4,0,20"/>
+
+        <Border Background="{DynamicResource CardBg}" CornerRadius="10" Padding="16" Margin="0,0,0,16">
+            <StackPanel>
+                <TextBlock Text="Pasta de origem" FontSize="12" FontWeight="Bold" Margin="0,0,0,6"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0" Text="{Binding PastaOrigem}" IsReadOnly="True" Padding="8"
+                             BorderBrush="{DynamicResource BordaInput}" VerticalContentAlignment="Center"/>
+                    <Button Grid.Column="2" Content="..." Command="{Binding EscolherPastaCommand}"
+                            Width="40" BorderThickness="1" BorderBrush="{DynamicResource BordaInput}" Background="Transparent" Cursor="Hand"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <Border Background="#FEF3C7" CornerRadius="8" Padding="12" Margin="0,0,0,16">
+            <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#92400E">
+                ⚠️ Produtos do arquivo antigo que não existirem no seu catálogo hoje entram como referência genérica (primeiro produto cadastrado) — não é possível mapear automaticamente algo que não existe. Confira o histórico depois e corrija manualmente onde precisar.
+            </TextBlock>
+        </Border>
+
+        <Button Content="📥 Importar" Command="{Binding ImportarCommand}"
+                IsEnabled="{Binding Importando, Converter={StaticResource InverseBool}}"
+                Background="{DynamicResource CorAcento}" Foreground="White" FontWeight="Bold" FontSize="15"
+                Height="46" BorderThickness="0" Cursor="Hand" Margin="0,0,0,16">
+            <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+        </Button>
+
+        <TextBlock Text="{Binding ResultadoTexto}" FontSize="13" TextWrapping="Wrap" Foreground="{DynamicResource TextDark}"/>
+    </StackPanel>
+</UserControl>
