@@ -94,6 +94,43 @@ public void ObterAliquotaInterna_UFConhecida_RetornaAliquotaCorreta(string uf, d
             aliq.Should().Be(0m);
         }
 
+        [Fact(DisplayName = "GO→SP: fora da regra dos 7% (origem não é Sul/Sudeste) — 12%")]
+        public void ObterAliquotaInterestadual_GoParaSp_Retorna12()
+        {
+            // Bug real encontrado em auditoria (06/08/2026): a versão anterior
+            // retornava 7% aqui — a regra da Resolução SF 13/2012 só dá 7%
+            // quando a ORIGEM é Sul/Sudeste (exceto ES), não a chegada.
+            var aliq = ERP.Infrastructure.Services.MotorFiscalBrasileiro
+                .ObterAliquotaInterestadual("GO", "SP");
+            aliq.Should().Be(12m);
+        }
+
+        [Fact(DisplayName = "SP→BA: Sul/Sudeste (sem ES) para Nordeste — 7%")]
+        public void ObterAliquotaInterestadual_SpParaBa_Retorna7()
+        {
+            var aliq = ERP.Infrastructure.Services.MotorFiscalBrasileiro
+                .ObterAliquotaInterestadual("SP", "BA");
+            aliq.Should().Be(7m);
+        }
+
+        [Fact(DisplayName = "SP→RJ: Sul/Sudeste entre si — 12%, não 7%")]
+        public void ObterAliquotaInterestadual_SpParaRj_Retorna12()
+        {
+            var aliq = ERP.Infrastructure.Services.MotorFiscalBrasileiro
+                .ObterAliquotaInterestadual("SP", "RJ");
+            aliq.Should().Be(12m);
+        }
+
+        [Fact(DisplayName = "SP→ES: Espírito Santo é destino, não origem — 7%, mesma regra do NE/CO")]
+        public void ObterAliquotaInterestadual_SpParaEs_Retorna7()
+        {
+            // ES foi corrigido para o grupo de DESTINO (junto com N/NE/CO),
+            // não o grupo de origem Sul/Sudeste — era isso que estava errado.
+            var aliq = ERP.Infrastructure.Services.MotorFiscalBrasileiro
+                .ObterAliquotaInterestadual("SP", "ES");
+            aliq.Should().Be(7m);
+        }
+
         [Fact(DisplayName = "CFOP 5102 para operação interna de mercadoria")]
         public void ObterCFOP_OperacaoInterna_Retorna5102()
         {

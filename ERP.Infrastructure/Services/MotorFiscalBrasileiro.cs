@@ -8,27 +8,28 @@ namespace ERP.Infrastructure.Services;
 /// </summary>
 public static class MotorFiscalBrasileiro
 {
-    // ── Alíquotas interestaduais (Resolução SF 22/1989) ──────────────────────
-
-    private static readonly Dictionary<string, decimal> _aliqInterestadual = new()
-    {
-        // Sul e Sudeste → qualquer estado: 12%
-        { "SP-MG", 12m }, { "SP-RS", 12m }, { "SP-SC", 12m }, { "SP-PR", 12m },
-        { "MG-SP", 12m }, { "RS-SP", 12m }, { "SC-SP", 12m }, { "PR-SP", 12m },
-        // Demais combinações interestaduais: 7%
-    };
-
-    /// <summary>Retorna alíquota interestadual de ICMS entre dois estados.</summary>
+    /// <summary>Retorna alíquota interestadual de ICMS entre dois estados.
+    /// Regra real (Resolução do Senado Federal 13/2012): 7% só quando a
+    /// origem é Sul/Sudeste EXCETO Espírito Santo, e o destino é Norte,
+    /// Nordeste, Centro-Oeste OU Espírito Santo. Todo o resto — inclusive
+    /// Sul/Sudeste entre si — é 12%. A versão anterior tinha isso invertido
+    /// (retornava 7% pra GO→SP, quando o correto é 12%) e agrupava o ES no
+    /// lado errado — bug real, achado em auditoria, corrigido em 06/08/2026.</summary>
     public static decimal ObterAliquotaInterestadual(string ufOrigem, string ufDestino)
     {
         if (ufOrigem == ufDestino) return 0; // Operação interna
 
-        var estados_sul_sudeste = new[] { "SP", "MG", "RJ", "ES", "RS", "SC", "PR" };
-        var origemSulSudeste = estados_sul_sudeste.Contains(ufOrigem.ToUpper());
-        var destinoSulSudeste = estados_sul_sudeste.Contains(ufDestino.ToUpper());
+        var sulSudesteExcetoEs = new[] { "SP", "MG", "RJ", "RS", "SC", "PR" };
+        var norteNordesteCentroOesteOuEs = new[]
+        {
+            "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
+            "MT", "MS", "PA", "PB", "PI", "RN", "RO", "RR", "SE", "TO"
+        };
 
-        // SP/MG/RS/SC/PR entre si: 12%; para demais: 7%
-        return origemSulSudeste && destinoSulSudeste ? 12m : 7m;
+        bool origemSulSudesteSemEs = sulSudesteExcetoEs.Contains(ufOrigem.ToUpper());
+        bool destinoNorteNordesteCentroOesteOuEs = norteNordesteCentroOesteOuEs.Contains(ufDestino.ToUpper());
+
+        return origemSulSudesteSemEs && destinoNorteNordesteCentroOesteOuEs ? 7m : 12m;
     }
 
     // ── Alíquotas internas por UF ─────────────────────────────────────────────
