@@ -90,6 +90,46 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
         return nota.Id;
     }
 
+    public async Task<Guid> CopiarComoRascunhoAsync(Guid idOrigem)
+    {
+        var origem = await _ctx.NotasFiscais.AsNoTracking().Include(n => n.Itens)
+            .FirstOrDefaultAsync(n => n.Id == idOrigem)
+            ?? throw new KeyNotFoundException("Nota original não encontrada.");
+
+        var copia = new Domain.Entities.NotaFiscal
+        {
+            Tipo                     = "NFE",
+            Status                   = "Rascunho",
+            NaturezaOperacao         = origem.NaturezaOperacao,
+            TipoOperacaoEntradaSaida = origem.TipoOperacaoEntradaSaida,
+            Finalidade               = origem.Finalidade,
+            DestinatarioNome         = origem.DestinatarioNome,
+            DestinatarioDocumento    = origem.DestinatarioDocumento,
+            DestinatarioLogradouro   = origem.DestinatarioLogradouro,
+            DestinatarioNumero       = origem.DestinatarioNumero,
+            DestinatarioBairro       = origem.DestinatarioBairro,
+            DestinatarioMunicipio    = origem.DestinatarioMunicipio,
+            DestinatarioUf           = origem.DestinatarioUf,
+            DestinatarioCep          = origem.DestinatarioCep,
+            DestinatarioIe           = origem.DestinatarioIe,
+            IndicadorIeDestinatario  = origem.IndicadorIeDestinatario,
+        };
+
+        foreach (var item in origem.Itens)
+            copia.Itens.Add(new Domain.Entities.NotaFiscalItem
+            {
+                ProductId     = item.ProductId,
+                ProductName   = item.ProductName,
+                Quantidade    = item.Quantidade,
+                ValorUnitario = item.ValorUnitario,
+                Cfop          = item.Cfop,
+            });
+
+        _ctx.NotasFiscais.Add(copia);
+        await _ctx.SaveChangesAsync();
+        return copia.Id;
+    }
+
     public async Task<NotaFiscalAvulsaDto?> ObterAsync(Guid id)
     {
         var nota = await _ctx.NotasFiscais.AsNoTracking().Include(n => n.Itens)

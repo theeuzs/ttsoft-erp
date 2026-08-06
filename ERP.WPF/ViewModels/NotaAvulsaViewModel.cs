@@ -43,6 +43,66 @@ public static class OperacoesFiscaisPresets
         new("Simples remessa",                         "SIMPLES REMESSA",                   "S", "1", "5949", "6949"),
     };
 }
+/// <summary>Backlog premium — validações inline. Dígito verificador de
+/// verdade (não só contagem de dígitos) — cada validação aqui é uma
+/// rejeição da SEFAZ que o cliente nunca chega a ver.</summary>
+public static class ValidadorDocumento
+{
+    public static bool CnpjValido(string cnpj)
+    {
+        var s = new string((cnpj ?? "").Where(char.IsDigit).ToArray());
+        if (s.Length != 14 || s.Distinct().Count() == 1) return false;
+
+        int[] mult1 = { 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2 };
+        int[] mult2 = { 6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2 };
+
+        int soma = 0;
+        for (int i = 0; i < 12; i++) soma += (s[i] - '0') * mult1[i];
+        int resto = soma % 11;
+        int dv1 = resto < 2 ? 0 : 11 - resto;
+        if (dv1 != s[12] - '0') return false;
+
+        soma = 0;
+        for (int i = 0; i < 13; i++) soma += (s[i] - '0') * mult2[i];
+        resto = soma % 11;
+        int dv2 = resto < 2 ? 0 : 11 - resto;
+        return dv2 == s[13] - '0';
+    }
+
+    public static bool CpfValido(string cpf)
+    {
+        var s = new string((cpf ?? "").Where(char.IsDigit).ToArray());
+        if (s.Length != 11 || s.Distinct().Count() == 1) return false;
+
+        int soma = 0;
+        for (int i = 0; i < 9; i++) soma += (s[i] - '0') * (10 - i);
+        int resto = soma % 11;
+        int dv1 = resto < 2 ? 0 : 11 - resto;
+        if (dv1 != s[9] - '0') return false;
+
+        soma = 0;
+        for (int i = 0; i < 10; i++) soma += (s[i] - '0') * (11 - i);
+        resto = soma % 11;
+        int dv2 = resto < 2 ? 0 : 11 - resto;
+        return dv2 == s[10] - '0';
+    }
+
+    /// <summary>Aceita CNPJ (14) ou CPF (11) — nota avulsa pode ter qualquer um.</summary>
+    public static bool DocumentoValido(string doc)
+    {
+        var s = new string((doc ?? "").Where(char.IsDigit).ToArray());
+        if (s.Length == 14) return CnpjValido(s);
+        if (s.Length == 11) return CpfValido(s);
+        return false;
+    }
+
+    public static bool CepValido(string? cep)
+    {
+        var s = new string((cep ?? "").Where(char.IsDigit).ToArray());
+        return s.Length == 8;
+    }
+}
+
 public class ItemNotaAvulsa : BaseViewModel
 {
     public Guid ProductId { get; set; }
@@ -205,6 +265,7 @@ public class NotaAvulsaViewModel : BaseViewModel
     public ICommand EmitirCommand { get; }
     public ICommand NovaNotaCommand { get; }
     public ICommand CarregarRascunhoCommand { get; }
+    public ICommand CopiarNotaCommand { get; }
     public ICommand ExcluirRascunhoCommand { get; }
     public ICommand AtualizarRascunhosCommand { get; }
 
@@ -227,6 +288,7 @@ public class NotaAvulsaViewModel : BaseViewModel
         EmitirCommand           = new AsyncRelayCommand(async _ => await EmitirAsync());
         NovaNotaCommand         = new RelayCommand(_ => LimparFormulario());
         CarregarRascunhoCommand = new AsyncRelayCommand(async item => { if (item is NotaFiscalAvulsaResumoDto r) await CarregarRascunhoAsync(r.Id); });
+        CopiarNotaCommand = new AsyncRelayCommand(async item => { if (item is NotaFiscalAvulsaResumoDto r) await CopiarNotaAsync(r.Id); });
         ExcluirRascunhoCommand  = new AsyncRelayCommand(async item => { if (item is NotaFiscalAvulsaResumoDto r) await ExcluirRascunhoAsync(r.Id); });
         AtualizarRascunhosCommand = new AsyncRelayCommand(async _ => await CarregarRascunhosAsync());
 
@@ -450,11 +512,41 @@ public class NotaAvulsaViewModel : BaseViewModel
         }
     }
 
+    private List<string> ValidarFormulario()
+    {
+        var erros = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(DestinatarioNome))
+            erros.Add("Nome do destinatário é obrigatório.");
+
+        if (!string.IsNullOrWhiteSpace(DestinatarioDocumento) && !ValidadorDocumento.DocumentoValido(DestinatarioDocumento))
+            erros.Add("CPF/CNPJ do destinatário é inválido (dígito verificador não confere).");
+
+        if (!string.IsNullOrWhiteSpace(DestinatarioCep) && !ValidadorDocumento.CepValido(DestinatarioCep))
+            erros.Add("CEP precisa ter 8 dígitos.");
+
+        if (!Itens.Any())
+            erros.Add("Adicione pelo menos um item.");
+
+        foreach (var item in Itens)
+        {
+            if (item.Quantidade <= 0)
+                erros.Add($"Item \"{item.ProductName}\": quantidade precisa ser maior que zero.");
+            if (item.ValorUnitario <= 0)
+                erros.Add($"Item \"{item.ProductName}\": valor unitário precisa ser maior que zero.");
+        }
+
+        return erros;
+    }
+
     private async Task EmitirAsync()
     {
-        if (!Itens.Any())
+        var erros = ValidarFormulario();
+        if (erros.Any())
         {
-            MessageBox.Show("Adicione pelo menos um item antes de emitir.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(
+                "Corrija antes de emitir:\n\n• " + string.Join("\n• ", erros),
+                "Formulário incompleto", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -544,6 +636,22 @@ public class NotaAvulsaViewModel : BaseViewModel
         catch (Exception ex)
         {
             MessageBox.Show($"Erro ao carregar rascunho: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async Task CopiarNotaAsync(Guid idOrigem)
+    {
+        try
+        {
+            var service = App.Services.GetRequiredService<INotaFiscalAvulsaService>();
+            var novoId = await service.CopiarComoRascunhoAsync(idOrigem);
+            await CarregarRascunhoAsync(novoId);
+            await CarregarRascunhosAsync();
+            StatusTexto = "Nota copiada — revise e emita quando quiser.";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Erro ao copiar nota: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 

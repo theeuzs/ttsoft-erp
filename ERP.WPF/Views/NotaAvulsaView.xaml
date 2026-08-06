@@ -262,6 +262,10 @@
                                             <Button Content="Abrir" FontSize="11" Padding="8,4" Margin="0,0,6,0"
                                                     Command="{Binding DataContext.CarregarRascunhoCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                     CommandParameter="{Binding}" Cursor="Hand"/>
+                                            <Button Content="Copiar" FontSize="11" Padding="8,4" Margin="0,0,6,0" Background="#DBEAFE" Foreground="#1E40AF"
+                                                    Command="{Binding DataContext.CopiarNotaCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}" Cursor="Hand"
+                                                    ToolTip="Cria um rascunho novo com os mesmos dados, pra repetir uma operação"/>
                                             <Button Content="Excluir" FontSize="11" Padding="8,4" Foreground="#DC2626"
                                                     Command="{Binding DataContext.ExcluirRascunhoCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                     CommandParameter="{Binding}" Cursor="Hand"/>

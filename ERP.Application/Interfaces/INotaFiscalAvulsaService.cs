@@ -15,6 +15,12 @@ public interface INotaFiscalAvulsaService
     /// Só funciona em notas ainda em Rascunho — depois de emitida, não editável.</summary>
     Task<Guid> SalvarRascunhoAsync(SalvarNotaFiscalAvulsaDto dto);
 
+    /// <summary>Backlog premium — "copiar nota": cria um rascunho novo a
+    /// partir de qualquer nota existente (rascunho ou já emitida), com
+    /// destinatário e itens copiados. Útil pra repetir uma operação
+    /// recorrente sem redigitar tudo.</summary>
+    Task<Guid> CopiarComoRascunhoAsync(Guid idOrigem);
+
     Task<NotaFiscalAvulsaDto?> ObterAsync(Guid id);
 
     Task<IReadOnlyList<NotaFiscalAvulsaResumoDto>> ListarAsync();
