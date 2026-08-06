@@ -21,6 +21,11 @@
                 <Border Background="{DynamicResource CardBg}" CornerRadius="10" Padding="16" Margin="0,0,0,12">
                     <StackPanel>
                         <TextBlock Text="Operação" FontSize="14" FontWeight="Bold" Margin="0,0,0,10"/>
+
+                        <TextBlock Text="Operação pronta (opcional — preenche tudo abaixo)" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                        <ComboBox ItemsSource="{Binding PresetsDisponiveis}" SelectedItem="{Binding PresetSelecionado}"
+                                  DisplayMemberPath="Descricao" Padding="8" Margin="0,4,0,6"/>
+                        <TextBlock Text="⚠️ CFOP de partida comum pra matcon — confirme com o contador antes de confiar de olhos fechados." FontSize="10" Foreground="#B45309" Margin="0,0,0,10" TextWrapping="Wrap"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -170,15 +175,15 @@
                             </Button>
                         </Grid>
 
-                        <DataGrid ItemsSource="{Binding Itens}" AutoGenerateColumns="False" IsReadOnly="True"
+                        <DataGrid ItemsSource="{Binding Itens}" AutoGenerateColumns="False" IsReadOnly="False"
                                   Background="Transparent" BorderThickness="0" GridLinesVisibility="Horizontal" RowHeight="36">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Produto" Binding="{Binding ProductName}" Width="*"/>
-                                <DataGridTextColumn Header="Qtd" Binding="{Binding Quantidade}" Width="70"/>
-                                <DataGridTextColumn Header="Vlr. Unit." Binding="{Binding ValorUnitario, StringFormat='R$ {0:N2}'}" Width="100"/>
-                                <DataGridTextColumn Header="CFOP" Binding="{Binding Cfop}" Width="70"/>
-                                <DataGridTextColumn Header="Total" Binding="{Binding Total, StringFormat='R$ {0:N2}'}" Width="100"/>
-                                <DataGridTemplateColumn Header="" Width="60">
+                                <DataGridTextColumn Header="Produto" Binding="{Binding ProductName}" Width="*" IsReadOnly="True"/>
+                                <DataGridTextColumn Header="Qtd" Binding="{Binding Quantidade, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Width="70"/>
+                                <DataGridTextColumn Header="Vlr. Unit." Binding="{Binding ValorUnitario, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat='{}{0:N2}'}" Width="100"/>
+                                <DataGridTextColumn Header="CFOP" Binding="{Binding Cfop, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Width="70"/>
+                                <DataGridTextColumn Header="Total" Binding="{Binding Total, StringFormat='R$ {0:N2}'}" Width="100" IsReadOnly="True"/>
+                                <DataGridTemplateColumn Header="" Width="60" IsReadOnly="True">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
                                             <Button Content="✕" Command="{Binding DataContext.RemoverItemCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
@@ -188,6 +193,8 @@
                                 </DataGridTemplateColumn>
                             </DataGrid.Columns>
                         </DataGrid>
+
+                        <TextBlock Text="✏️ Clique duas vezes numa célula de Qtd, Valor ou CFOP pra editar direto na grade." FontSize="11" Foreground="{DynamicResource TextMuted}" Margin="0,6,0,0"/>
 
                         <TextBlock Text="{Binding Total, StringFormat='Total: R$ {0:N2}'}" FontSize="16" FontWeight="Bold"
                                    HorizontalAlignment="Right" Margin="0,10,0,0"/>

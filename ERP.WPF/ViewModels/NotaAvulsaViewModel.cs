@@ -12,13 +12,59 @@ using System.Windows.Input;
 
 namespace ERP.WPF.ViewModels;
 
-public class ItemNotaAvulsa
+/// <summary>Item 1.2 do plano premium — antes era classe "burra" (propriedades
+/// auto). Editar Qtd/Valor/CFOP direto na grade não atualizava nem a própria
+/// célula Total nem o total geral da nota. Agora notifica.</summary>
+/// <summary>Item 1.3 do plano premium — combobox de operações prontas estilo
+/// VHSYS. Preenche natureza + E/S + finalidade + CFOP padrão dos itens de
+/// uma vez. IMPORTANTE: os CFOPs abaixo são um ponto de partida comum pra
+/// matcon — confirme com o contador da Vila Verde antes de confiar de olhos
+/// fechados em produção; CFOP errado é responsabilidade fiscal de verdade,
+/// não só um bug de sistema.</summary>
+public record OperacaoFiscalPreset(
+    string Descricao, string NaturezaOperacao, string EntradaSaida, string Finalidade,
+    string CfopDentroUf, string CfopForaUf, string PagamentoPadrao = "90");
+
+public static class OperacoesFiscaisPresets
+{
+    public static readonly OperacaoFiscalPreset[] Lista =
+    {
+        new("Venda de mercadoria",                    "VENDA DE MERCADORIA",              "S", "1", "5102", "6102"),
+        new("Venda sujeita a ST",                      "VENDA DE MERCADORIA SUJEITA A ST",  "S", "1", "5405", "6404"),
+        new("Remessa em bonificação/brinde",           "REMESSA EM BONIFICACAO",            "S", "1", "5910", "6910"),
+        new("Amostra grátis",                          "AMOSTRA GRATIS",                    "S", "1", "5911", "6911"),
+        new("Remessa para demonstração",               "REMESSA PARA DEMONSTRACAO",         "S", "1", "5912", "6912"),
+        new("Retorno de demonstração",                 "RETORNO DE DEMONSTRACAO",           "E", "1", "5913", "6913"),
+        new("Remessa para conserto",                   "REMESSA PARA CONSERTO",             "S", "1", "5915", "6915"),
+        new("Retorno de conserto",                     "RETORNO DE CONSERTO",               "E", "1", "5916", "6916"),
+        new("Transferência entre filiais",             "TRANSFERENCIA ENTRE FILIAIS",       "S", "1", "5152", "6152"),
+        new("Devolução de compra",                     "DEVOLUCAO DE COMPRA",               "S", "1", "5202", "6202"),
+        new("Devolução de venda (entrada)",            "DEVOLUCAO DE VENDA",                "E", "4", "1202", "2202"),
+        new("Simples remessa",                         "SIMPLES REMESSA",                   "S", "1", "5949", "6949"),
+    };
+}
+public class ItemNotaAvulsa : BaseViewModel
 {
     public Guid ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
-    public decimal Quantidade { get; set; }
-    public decimal ValorUnitario { get; set; }
-    public string Cfop { get; set; } = "5102";
+
+    private decimal _quantidade;
+    public decimal Quantidade
+    {
+        get => _quantidade;
+        set { SetProperty(ref _quantidade, value); OnPropertyChanged(nameof(Total)); }
+    }
+
+    private decimal _valorUnitario;
+    public decimal ValorUnitario
+    {
+        get => _valorUnitario;
+        set { SetProperty(ref _valorUnitario, value); OnPropertyChanged(nameof(Total)); }
+    }
+
+    private string _cfop = "5102";
+    public string Cfop { get => _cfop; set => SetProperty(ref _cfop, value); }
+
     public decimal Total => Quantidade * ValorUnitario;
 }
 
@@ -35,7 +81,55 @@ public class NotaAvulsaViewModel : BaseViewModel
     // ── Cabeçalho ────────────────────────────────────────────────────────
     public string NaturezaOperacao { get; set; } = "VENDA DE MERCADORIA";
     public string[] TiposOperacao { get; } = { "S", "E" };
+
+    // ── Item 1.3 do plano premium: presets de operação ─────────────────────
+    public OperacaoFiscalPreset[] PresetsDisponiveis { get; } = OperacoesFiscaisPresets.Lista;
+
+    private OperacaoFiscalPreset? _presetSelecionado;
+    public OperacaoFiscalPreset? PresetSelecionado
+    {
+        get => _presetSelecionado;
+        set { SetProperty(ref _presetSelecionado, value); AplicarPreset(value); }
+    }
+
+    private void AplicarPreset(OperacaoFiscalPreset? preset)
+    {
+        if (preset == null) return;
+
+        NaturezaOperacao = preset.NaturezaOperacao;
+        TipoOperacaoEntradaSaida = preset.EntradaSaida;
+        Finalidade = preset.Finalidade;
+        OnPropertyChanged(nameof(NaturezaOperacao));
+        OnPropertyChanged(nameof(TipoOperacaoEntradaSaida));
+        OnPropertyChanged(nameof(Finalidade));
+
+        AplicarCfopDoPresetSeAtivo();
+
+        bool foraUf = !string.IsNullOrWhiteSpace(DestinatarioUf) && !string.Equals(DestinatarioUf, "PR", StringComparison.OrdinalIgnoreCase);
+        CfopItem = foraUf ? preset.CfopForaUf : preset.CfopDentroUf;
+        OnPropertyChanged(nameof(CfopItem));
+    }
+
+    /// <summary>CFOP dinâmico por UF — quando a UF do destinatário mudar
+    /// (inclusive via busca de CNPJ), troca 5xxx↔6xxx sozinho nos itens que
+    /// ainda estão no CFOP do preset (não mexe em CFOP que o usuário já
+    /// customizou manualmente pra algo fora do preset).</summary>
+    private void AplicarCfopDoPresetSeAtivo()
+    {
+        if (PresetSelecionado == null) return;
+        var preset = PresetSelecionado;
+
+        bool destinatarioForaUf = !string.IsNullOrWhiteSpace(DestinatarioUf)
+            && !string.Equals(DestinatarioUf, "PR", StringComparison.OrdinalIgnoreCase);
+        string cfopAlvo = destinatarioForaUf ? preset.CfopForaUf : preset.CfopDentroUf;
+
+        foreach (var item in Itens)
+            if (item.Cfop == preset.CfopDentroUf || item.Cfop == preset.CfopForaUf)
+                item.Cfop = cfopAlvo;
+    }
+
     public string TipoOperacaoEntradaSaida { get; set; } = "S";
+    public string Finalidade { get; set; } = "1";
 
     // ── Destinatário ─────────────────────────────────────────────────────
     public string DestinatarioNome { get; set; } = string.Empty;
@@ -60,7 +154,12 @@ public class NotaAvulsaViewModel : BaseViewModel
     public string? DestinatarioNumero { get; set; }
     public string? DestinatarioBairro { get; set; }
     public string? DestinatarioMunicipio { get; set; }
-    public string? DestinatarioUf { get; set; }
+    private string? _destinatarioUf;
+    public string? DestinatarioUf
+    {
+        get => _destinatarioUf;
+        set { SetProperty(ref _destinatarioUf, value); AplicarCfopDoPresetSeAtivo(); }
+    }
     public string? DestinatarioCep { get; set; }
     public string? DestinatarioIe { get; set; }
 
@@ -144,11 +243,17 @@ public class NotaAvulsaViewModel : BaseViewModel
         catch { ProdutosSugestao.Clear(); }
     }
 
+    private void AdicionarItemComListener(ItemNotaAvulsa item)
+    {
+        item.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ItemNotaAvulsa.Total)) OnPropertyChanged(nameof(Total)); };
+        Itens.Add(item);
+    }
+
     private void AdicionarItem()
     {
         if (ProdutoSelecionado == null) return;
 
-        Itens.Add(new ItemNotaAvulsa
+        AdicionarItemComListener(new ItemNotaAvulsa
         {
             ProductId     = ProdutoSelecionado.Id,
             ProductName   = ProdutoSelecionado.Name,
@@ -264,6 +369,7 @@ public class NotaAvulsaViewModel : BaseViewModel
         Id                        = _notaId,
         NaturezaOperacao          = NaturezaOperacao,
         TipoOperacaoEntradaSaida  = TipoOperacaoEntradaSaida,
+        Finalidade                = Finalidade,
         DestinatarioNome          = DestinatarioNome,
         DestinatarioDocumento     = DestinatarioDocumento,
         DestinatarioLogradouro    = DestinatarioLogradouro,
@@ -390,6 +496,7 @@ public class NotaAvulsaViewModel : BaseViewModel
             _notaId = nota.Id;
             NaturezaOperacao = nota.NaturezaOperacao;
             TipoOperacaoEntradaSaida = nota.TipoOperacaoEntradaSaida;
+            Finalidade = nota.Finalidade;
             DestinatarioNome = nota.DestinatarioNome;
             DestinatarioDocumento = nota.DestinatarioDocumento;
             DestinatarioLogradouro = nota.DestinatarioLogradouro;
@@ -403,7 +510,7 @@ public class NotaAvulsaViewModel : BaseViewModel
 
             Itens.Clear();
             foreach (var i in nota.Itens)
-                Itens.Add(new ItemNotaAvulsa
+                AdicionarItemComListener(new ItemNotaAvulsa
                 {
                     ProductId = i.ProductId, ProductName = i.ProductName,
                     Quantidade = i.Quantidade, ValorUnitario = i.ValorUnitario, Cfop = i.Cfop,
@@ -438,7 +545,9 @@ public class NotaAvulsaViewModel : BaseViewModel
     private void LimparFormulario()
     {
         _notaId = null;
+        _presetSelecionado = null; // sem disparar AplicarPreset de novo
         NaturezaOperacao = "VENDA DE MERCADORIA";
+        Finalidade = "1";
         TipoOperacaoEntradaSaida = "S";
         DestinatarioNome = string.Empty;
         DestinatarioDocumento = null;

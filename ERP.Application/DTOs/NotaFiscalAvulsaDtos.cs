@@ -19,6 +19,9 @@ public class SalvarNotaFiscalAvulsaDto
     public string NaturezaOperacao { get; set; } = "VENDA DE MERCADORIA";
     /// <summary>"E" ou "S".</summary>
     public string TipoOperacaoEntradaSaida { get; set; } = "S";
+    /// <summary>Convenção Focus: "1"=normal, "4"=devolução — antes nunca era
+    /// persistida do rascunho, sempre ficava "1" mesmo escolhendo devolução.</summary>
+    public string Finalidade { get; set; } = "1";
 
     public string DestinatarioNome { get; set; } = string.Empty;
     public string? DestinatarioDocumento { get; set; }

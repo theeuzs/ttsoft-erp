@@ -62,6 +62,7 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
 
         nota.NaturezaOperacao          = dto.NaturezaOperacao;
         nota.TipoOperacaoEntradaSaida  = dto.TipoOperacaoEntradaSaida;
+        nota.Finalidade                = dto.Finalidade;
         nota.DestinatarioNome          = dto.DestinatarioNome;
         nota.DestinatarioDocumento     = dto.DestinatarioDocumento;
         nota.DestinatarioLogradouro    = dto.DestinatarioLogradouro;
@@ -103,6 +104,7 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
             DataEmissao                 = nota.DataEmissao,
             NaturezaOperacao            = nota.NaturezaOperacao ?? "",
             TipoOperacaoEntradaSaida    = nota.TipoOperacaoEntradaSaida,
+            Finalidade                  = nota.Finalidade,
             DestinatarioNome            = nota.DestinatarioNome ?? "",
             DestinatarioDocumento       = nota.DestinatarioDocumento,
             DestinatarioLogradouro      = nota.DestinatarioLogradouro,
