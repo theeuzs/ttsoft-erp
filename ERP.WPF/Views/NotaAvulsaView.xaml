@@ -203,7 +203,8 @@
                     </StackPanel>
                 </Border>
 
-                <TextBlock Text="{Binding StatusTexto}" FontSize="12" Foreground="{DynamicResource CorAcento}" Margin="0,0,0,8"/>
+                <TextBlock Text="{Binding StatusTexto}" FontSize="12" Foreground="{DynamicResource CorAcento}" Margin="0,0,0,4"/>
+                <TextBlock Text="{Binding AutosaveStatusTexto}" FontSize="11" Foreground="{DynamicResource TextMuted}" FontStyle="Italic" Margin="0,0,0,8"/>
 
                 <Grid>
                     <Grid.ColumnDefinitions>

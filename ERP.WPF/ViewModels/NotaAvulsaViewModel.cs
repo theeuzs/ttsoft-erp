@@ -103,6 +103,48 @@ public static class ValidadorDocumento
     }
 }
 
+/// <summary>Backlog premium — tradutor de rejeições. Baseado nos códigos
+/// mais comuns e bem documentados da SEFAZ (539/204 duplicidade, 225 erro
+/// de schema, 230/301 IE do emitente, 889 GTIN, 694 grupo ICMS, 805 IE do
+/// destinatário) — casa por PADRÃO no texto da mensagem, não por código
+/// numérico exato (não temos certeza do formato exato que a Focus usa pra
+/// embutir o código). Ponto de partida — alimente com as rejeições reais
+/// que a Vila Verde for tomando; padrão desconhecido só mostra o texto cru.</summary>
+public static class TradutorRejeicoes
+{
+    private static readonly (string Padrao, string MensagemAmigavel, string AcaoSugerida)[] Padroes =
+    {
+        ("duplicidade", "Já existe uma nota autorizada com esse mesmo número/série.",
+            "Geralmente é sincronização — tenta de novo em alguns minutos. Se persistir, confira se essa nota não foi emitida duas vezes."),
+        ("ncm", "O código NCM de algum produto não é válido ou está desatualizado.",
+            "Confira o NCM no cadastro do produto — precisa ter 8 dígitos e constar na tabela vigente."),
+        ("inscri", "Tem um problema com a Inscrição Estadual — sua ou do destinatário.",
+            "Confira a IE cadastrada da empresa, ou o indicador de IE do destinatário (contribuinte/isento/não contribuinte)."),
+        ("cep", "O CEP informado não bate com o município do destinatário.",
+            "Confira se o CEP e o município realmente correspondem um ao outro."),
+        ("schema", "O XML tem erro de formatação — campo obrigatório vazio ou caractere não permitido.",
+            "Revise se todos os campos obrigatórios foram preenchidos, sem caracteres especiais."),
+        ("gtin", "Falta o código de barras (GTIN) de algum produto.",
+            "Cadastra o código de barras do produto — ou confirma que ele realmente não tem GTIN."),
+        ("cfop", "O CFOP não é compatível com essa operação ou com o estado do destinatário.",
+            "Confere se o CFOP bate com dentro/fora do estado — os presets de operação já calculam isso sozinhos."),
+        ("não habilitado", "A empresa não está habilitada pra emitir NF-e na SEFAZ.",
+            "Verifica com o contador se o cadastro fiscal da empresa está regular."),
+        ("grupo de icms", "Falta informação de ICMS pra UF de destino.",
+            "Confere se o produto tem CSOSN/situação tributária configurada certo."),
+    };
+
+    public static (string MensagemAmigavel, string AcaoSugerida)? Traduzir(string? mensagemOriginal)
+    {
+        if (string.IsNullOrWhiteSpace(mensagemOriginal)) return null;
+        var lower = mensagemOriginal.ToLowerInvariant();
+        foreach (var (padrao, amigavel, acao) in Padroes)
+            if (lower.Contains(padrao))
+                return (amigavel, acao);
+        return null;
+    }
+}
+
 public class ItemNotaAvulsa : BaseViewModel
 {
     public Guid ProductId { get; set; }
@@ -256,6 +298,19 @@ public class NotaAvulsaViewModel : BaseViewModel
     private string _statusTexto = string.Empty;
     public string StatusTexto { get => _statusTexto; set => SetProperty(ref _statusTexto, value); }
 
+    // ── Backlog premium: autosave. Como a maioria dos campos são
+    // propriedades "burras" (sem notificação por tecla), em vez de refazer
+    // o formulário inteiro pra ser reativo, um timer compara periodicamente
+    // um retrato do estado atual — funciona igual pro usuário (salva sozinho
+    // uns segundos depois de parar de digitar) sem o refactor grande.
+    private System.Windows.Threading.DispatcherTimer? _autosaveTimer;
+    private string _ultimoSnapshotVisto = "";
+    private string _ultimoSnapshotSalvo = "";
+    private int _tiquesEstavel;
+
+    private string _autosaveStatusTexto = string.Empty;
+    public string AutosaveStatusTexto { get => _autosaveStatusTexto; set => SetProperty(ref _autosaveStatusTexto, value); }
+
     public ICommand AdicionarItemCommand { get; }
     public ICommand BuscarCnpjCommand { get; }
     public ICommand RemoverItemCommand { get; }
@@ -293,6 +348,62 @@ public class NotaAvulsaViewModel : BaseViewModel
         AtualizarRascunhosCommand = new AsyncRelayCommand(async _ => await CarregarRascunhosAsync());
 
         _ = CarregarRascunhosAsync();
+        IniciarAutosave();
+    }
+
+    private void IniciarAutosave()
+    {
+        _autosaveTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _autosaveTimer.Tick += async (_, _) => await VerificarAutosaveAsync();
+        _autosaveTimer.Start();
+    }
+
+    private string CalcularSnapshot() =>
+        $"{NaturezaOperacao}|{TipoOperacaoEntradaSaida}|{DestinatarioNome}|{DestinatarioDocumento}|{DestinatarioLogradouro}|" +
+        $"{DestinatarioNumero}|{DestinatarioBairro}|{DestinatarioMunicipio}|{DestinatarioUf}|{DestinatarioCep}|{DestinatarioIe}|" +
+        string.Join(",", Itens.Select(i => $"{i.ProductId}:{i.Quantidade}:{i.ValorUnitario}:{i.Cfop}"));
+
+    /// <summary>Chamado a cada segundo. Salva sozinho depois de ~3s sem
+    /// mudança no formulário — nunca interrompe o usuário, nunca mostra
+    /// diálogo, só atualiza o indicador discreto.</summary>
+    private async Task VerificarAutosaveAsync()
+    {
+        var atual = CalcularSnapshot();
+
+        if (atual == _ultimoSnapshotVisto)
+        {
+            _tiquesEstavel++;
+        }
+        else
+        {
+            _ultimoSnapshotVisto = atual;
+            _tiquesEstavel = 0;
+        }
+
+        bool temConteudoRelevante = !string.IsNullOrWhiteSpace(DestinatarioNome) && Itens.Any();
+
+        if (_tiquesEstavel == 3 && atual != _ultimoSnapshotSalvo && temConteudoRelevante)
+        {
+            try
+            {
+                var service = App.Services.GetRequiredService<INotaFiscalAvulsaService>();
+                _notaId = await service.SalvarRascunhoAsync(MontarDto());
+                _ultimoSnapshotSalvo = atual;
+                AutosaveStatusTexto = $"💾 Salvo automaticamente às {DateTime.Now:HH:mm}";
+                await CarregarRascunhosAsync();
+            }
+            catch { /* autosave é best-effort — nunca deve incomodar o usuário com erro */ }
+        }
+    }
+
+    /// <summary>Reseta o rastreamento do autosave — chamado depois de um
+    /// salvamento manual (evita autosave redundante logo em seguida) e ao
+    /// trocar de nota (evita comparar contra o retrato da nota anterior).</summary>
+    private void ResetarRastreamentoAutosave()
+    {
+        _ultimoSnapshotSalvo = CalcularSnapshot();
+        _ultimoSnapshotVisto = _ultimoSnapshotSalvo;
+        _tiquesEstavel = 0;
     }
 
     private async Task BuscarProdutosAsync(string termo)
@@ -457,6 +568,7 @@ public class NotaAvulsaViewModel : BaseViewModel
         {
             var service = App.Services.GetRequiredService<INotaFiscalAvulsaService>();
             _notaId = await service.SalvarRascunhoAsync(MontarDto());
+            ResetarRastreamentoAutosave();
             MessageBox.Show("✅ Rascunho salvo!", "Nota Avulsa", MessageBoxButton.OK, MessageBoxImage.Information);
             await CarregarRascunhosAsync();
         }
@@ -571,7 +683,11 @@ public class NotaAvulsaViewModel : BaseViewModel
             }
             else
             {
-                MessageBox.Show($"❌ Falha ao emitir: {resultado.Mensagem}", "Erro Fiscal", MessageBoxButton.OK, MessageBoxImage.Error);
+                var traducao = TradutorRejeicoes.Traduzir(resultado.Mensagem);
+                var mensagemFinal = traducao == null
+                    ? $"❌ Falha ao emitir:\n{resultado.Mensagem}"
+                    : $"❌ {traducao.Value.MensagemAmigavel}\n\n💡 {traducao.Value.AcaoSugerida}\n\nMensagem original da SEFAZ:\n{resultado.Mensagem}";
+                MessageBox.Show(mensagemFinal, "Erro Fiscal", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
         catch (Exception ex)
@@ -632,6 +748,7 @@ public class NotaAvulsaViewModel : BaseViewModel
                 });
 
             OnPropertyChanged(string.Empty); // atualiza todo o formulário de uma vez
+            ResetarRastreamentoAutosave();
         }
         catch (Exception ex)
         {
@@ -691,5 +808,7 @@ public class NotaAvulsaViewModel : BaseViewModel
         DestinatarioIe = null;
         Itens.Clear();
         OnPropertyChanged(string.Empty);
+        AutosaveStatusTexto = string.Empty;
+        ResetarRastreamentoAutosave();
     }
 }
