@@ -45,4 +45,40 @@ public class NotaFiscal : BaseEntity
     /// cadastrado necessariamente).</summary>
     public string? DestinatarioNome { get; set; }
     public string? DestinatarioDocumento { get; set; }
+
+    // ── Item 9 do roadmap fiscal: nota avulsa ──────────────────────────────
+    /// <summary>"Rascunho" (mais um valor de Status) — nota salva mas ainda
+    /// não enviada à SEFAZ. Só rascunho pode ser editado/excluído.</summary>
+    public string? NaturezaOperacao { get; set; }
+
+    /// <summary>"E" (entrada) ou "S" (saída) — nota avulsa pode ser
+    /// remessa, transferência, etc., não só venda.</summary>
+    public string TipoOperacaoEntradaSaida { get; set; } = "S";
+
+    public string? DestinatarioLogradouro { get; set; }
+    public string? DestinatarioNumero { get; set; }
+    public string? DestinatarioBairro { get; set; }
+    public string? DestinatarioMunicipio { get; set; }
+    public string? DestinatarioUf { get; set; }
+    public string? DestinatarioCep { get; set; }
+    public string? DestinatarioIe { get; set; }
+
+    public ICollection<NotaFiscalItem> Itens { get; set; } = new List<NotaFiscalItem>();
+}
+
+/// <summary>Item de uma nota avulsa (rascunho ou já emitida) — não existe
+/// pra notas de venda (essas usam SaleItem, via VendaId).</summary>
+public class NotaFiscalItem : BaseEntity
+{
+    public Guid NotaFiscalId { get; set; }
+    public NotaFiscal NotaFiscal { get; set; } = null!;
+
+    public Guid ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public decimal Quantidade { get; set; }
+    public decimal ValorUnitario { get; set; }
+
+    /// <summary>Por item, sobrescreve o CFOP padrão do produto — nota avulsa
+    /// pode ter operação diferente de venda normal (remessa, transferência).</summary>
+    public string Cfop { get; set; } = "5102";
 }

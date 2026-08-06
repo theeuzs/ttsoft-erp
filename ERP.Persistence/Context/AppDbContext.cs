@@ -162,6 +162,7 @@ public class AppDbContext : DbContext
     public DbSet<ContaReceberEvento>   ContaReceberEventos { get; set; }
     public DbSet<TenantFiscalConfiguration> TenantFiscalConfigurations { get; set; }
     public DbSet<NotaFiscal> NotasFiscais { get; set; }
+    public DbSet<NotaFiscalItem> NotaFiscalItens { get; set; }
     public DbSet<ContaPagar>           ContasPagar         { get; set; }
     public DbSet<MovimentoHaver>       MovimentosHaver     { get; set; }
     public DbSet<Orcamento>            Orcamentos          { get; set; }
@@ -374,6 +375,8 @@ public class AppDbContext : DbContext
             e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
         modelBuilder.Entity<NotaFiscal>().HasQueryFilter(
             e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<NotaFiscalItem>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
         modelBuilder.Entity<OrderAction>().HasQueryFilter(
             a => !a.IsDeleted && a.TenantId == tenantFilter.Value);
         modelBuilder.Entity<OrderConflict>().HasQueryFilter(
@@ -481,6 +484,12 @@ public class AppDbContext : DbContext
             .WithMany()
             .HasForeignKey(n => n.VendaId)
             .OnDelete(DeleteBehavior.Restrict); // nunca apaga nota fiscal em cascata
+
+        modelBuilder.Entity<NotaFiscalItem>()
+            .HasOne(i => i.NotaFiscal)
+            .WithMany(n => n.Itens)
+            .HasForeignKey(i => i.NotaFiscalId)
+            .OnDelete(DeleteBehavior.Cascade); // item só existe junto com a nota
 
         modelBuilder.Entity<OrderAction>()
             .HasOne(a => a.ExternalOrder)

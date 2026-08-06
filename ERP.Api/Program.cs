@@ -248,6 +248,10 @@ builder.Services.AddScoped<ERP.Application.Interfaces.INfeContingencyService,
                             ERP.Application.Services.NfeContingencyService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IFiscalService,
                             ERP.Infrastructure.Services.FiscalService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IMotorFiscalService,
+                            ERP.Application.Services.MotorFiscalService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.INotaFiscalAvulsaService,
+                            ERP.Infrastructure.Services.NotaFiscalAvulsaService>();
 
 builder.Services.AddHttpClient<IFocusNfeHttpClient, ERP.Infrastructure.HttpClients.FocusNfeHttpClient>(client =>
 {

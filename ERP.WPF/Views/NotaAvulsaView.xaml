@@ -1,0 +1,243 @@
+<UserControl x:Class="ERP.WPF.Views.NotaAvulsaView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource CardBgAlt}">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="24">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="1*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Coluna principal — formulário -->
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="📝 Nota Fiscal Avulsa" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource TextDark}"/>
+                <TextBlock Text="NF-e sem venda por trás — remessa, transferência, brinde, amostra, etc."
+                           FontSize="13" Foreground="{DynamicResource TextMuted}" Margin="0,4,0,20"/>
+
+                <!-- Operação -->
+                <Border Background="{DynamicResource CardBg}" CornerRadius="10" Padding="16" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="Operação" FontSize="14" FontWeight="Bold" Margin="0,0,0,10"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="140"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Natureza da Operação" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                <TextBox Text="{Binding NaturezaOperacao}" Padding="8" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Entrada/Saída" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                <ComboBox ItemsSource="{Binding TiposOperacao}" SelectedItem="{Binding TipoOperacaoEntradaSaida}" Margin="0,4,0,0" Padding="8"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Destinatário -->
+                <Border Background="{DynamicResource CardBg}" CornerRadius="10" Padding="16" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="Destinatário" FontSize="14" FontWeight="Bold" Margin="0,0,0,10"/>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="160"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Nome / Razão Social *" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                <TextBox Text="{Binding DestinatarioNome}" Padding="8" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="CPF/CNPJ" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                <TextBox Text="{Binding DestinatarioDocumento}" Padding="8" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </Grid>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="90"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Logradouro" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                <TextBox Text="{Binding DestinatarioLogradouro}" Padding="8" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Número" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                <TextBox Text="{Binding DestinatarioNumero}" Padding="8" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </Grid>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="70"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="110"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Bairro" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                <TextBox Text="{Binding DestinatarioBairro}" Padding="8" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Município" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                <TextBox Text="{Binding DestinatarioMunicipio}" Padding="8" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="4">
+                                <TextBlock Text="UF" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                <TextBox Text="{Binding DestinatarioUf}" Padding="8" Margin="0,4,0,0" MaxLength="2"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="6">
+                                <TextBlock Text="CEP" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                <TextBox Text="{Binding DestinatarioCep}" Padding="8" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="8">
+                                <TextBlock Text="I.E." FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                <TextBox Text="{Binding DestinatarioIe}" Padding="8" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Itens -->
+                <Border Background="{DynamicResource CardBg}" CornerRadius="10" Padding="16" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="Itens" FontSize="14" FontWeight="Bold" Margin="0,0,0,10"/>
+
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0">
+                                <TextBox Text="{Binding BuscaProduto, UpdateSourceTrigger=PropertyChanged}" Padding="8" ToolTip="Buscar produto..."/>
+                                <ListBox ItemsSource="{Binding ProdutosSugestao}" SelectedItem="{Binding ProdutoSelecionado}"
+                                         DisplayMemberPath="Name" MaxHeight="140"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Qtd" FontSize="10" Foreground="{DynamicResource TextMuted}"/>
+                                <TextBox Text="{Binding QuantidadeItem}" Padding="8"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="4">
+                                <TextBlock Text="Valor Unit." FontSize="10" Foreground="{DynamicResource TextMuted}"/>
+                                <TextBox Text="{Binding ValorUnitarioItem}" Padding="8"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="6">
+                                <TextBlock Text="CFOP" FontSize="10" Foreground="{DynamicResource TextMuted}"/>
+                                <TextBox Text="{Binding CfopItem}" Padding="8"/>
+                            </StackPanel>
+                            <Button Grid.Column="8" Content="+ Adicionar" Command="{Binding AdicionarItemCommand}"
+                                    VerticalAlignment="Bottom" Background="{DynamicResource CorAcento}" Foreground="White"
+                                    Padding="12,8" BorderThickness="0" Cursor="Hand">
+                                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                            </Button>
+                        </Grid>
+
+                        <DataGrid ItemsSource="{Binding Itens}" AutoGenerateColumns="False" IsReadOnly="True"
+                                  Background="Transparent" BorderThickness="0" GridLinesVisibility="Horizontal" RowHeight="36">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Produto" Binding="{Binding ProductName}" Width="*"/>
+                                <DataGridTextColumn Header="Qtd" Binding="{Binding Quantidade}" Width="70"/>
+                                <DataGridTextColumn Header="Vlr. Unit." Binding="{Binding ValorUnitario, StringFormat='R$ {0:N2}'}" Width="100"/>
+                                <DataGridTextColumn Header="CFOP" Binding="{Binding Cfop}" Width="70"/>
+                                <DataGridTextColumn Header="Total" Binding="{Binding Total, StringFormat='R$ {0:N2}'}" Width="100"/>
+                                <DataGridTemplateColumn Header="" Width="60">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Content="✕" Command="{Binding DataContext.RemoverItemCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                    CommandParameter="{Binding}" Background="Transparent" BorderThickness="0" Foreground="#DC2626" Cursor="Hand"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <TextBlock Text="{Binding Total, StringFormat='Total: R$ {0:N2}'}" FontSize="16" FontWeight="Bold"
+                                   HorizontalAlignment="Right" Margin="0,10,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="{Binding StatusTexto}" FontSize="12" Foreground="{DynamicResource CorAcento}" Margin="0,0,0,8"/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Content="🗑 Nova" Command="{Binding NovaNotaCommand}" Height="44"
+                            Background="Transparent" BorderBrush="{DynamicResource BordaInput}" BorderThickness="1" Cursor="Hand"/>
+                    <Button Grid.Column="2" Content="💾 Salvar Rascunho" Command="{Binding SalvarRascunhoCommand}" Height="44"
+                            Background="#64748B" Foreground="White" BorderThickness="0" Cursor="Hand">
+                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                    </Button>
+                    <Button Grid.Column="4" Content="🔍 Conferir Impostos" Command="{Binding ConferirCommand}" Height="44"
+                            Background="#F59E0B" Foreground="White" BorderThickness="0" Cursor="Hand">
+                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                    </Button>
+                    <Button Grid.Column="6" Content="🚀 Emitir" Command="{Binding EmitirCommand}" Height="44"
+                            Background="#16A34A" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand">
+                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                    </Button>
+                </Grid>
+            </StackPanel>
+
+            <!-- Coluna lateral — rascunhos -->
+            <Border Grid.Column="2" Background="{DynamicResource CardBg}" CornerRadius="10" Padding="16" VerticalAlignment="Top">
+                <StackPanel>
+                    <Grid Margin="0,0,0,12">
+                        <TextBlock Text="Rascunhos e Notas" FontSize="14" FontWeight="Bold"/>
+                        <Button Content="↻" Command="{Binding AtualizarRascunhosCommand}" HorizontalAlignment="Right"
+                                Background="Transparent" BorderThickness="0" Cursor="Hand"/>
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding Rascunhos}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource CardBgAlt}" CornerRadius="6" Padding="10" Margin="0,0,0,8">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding DestinatarioNome}" FontWeight="Bold" FontSize="12"/>
+                                        <TextBlock Text="{Binding NaturezaOperacao}" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                        <Grid Margin="0,4,0,6">
+                                            <TextBlock Text="{Binding ValorTotal, StringFormat='R$ {0:N2}'}" FontSize="12" FontWeight="Bold"/>
+                                            <TextBlock Text="{Binding Status}" FontSize="11" HorizontalAlignment="Right" Foreground="#3B82F6"/>
+                                        </Grid>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="Abrir" FontSize="11" Padding="8,4" Margin="0,0,6,0"
+                                                    Command="{Binding DataContext.CarregarRascunhoCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}" Cursor="Hand"/>
+                                            <Button Content="Excluir" FontSize="11" Padding="8,4" Foreground="#DC2626"
+                                                    Command="{Binding DataContext.ExcluirRascunhoCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}" Cursor="Hand"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

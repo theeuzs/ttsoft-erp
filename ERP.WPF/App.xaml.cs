@@ -360,6 +360,8 @@ public partial class App : System.Windows.Application
                             ERP.WPF.Services.JsonFiscalConfigurationProvider>();
         services.AddScoped<ERP.Application.Interfaces.IFiscalService,
                             ERP.Infrastructure.Services.FiscalService>();
+        services.AddScoped<ERP.Application.Interfaces.INotaFiscalAvulsaService,
+                            ERP.Infrastructure.Services.NotaFiscalAvulsaService>();
         services.AddScoped<ERP.Application.Interfaces.ISalePolicyService, ERP.Application.Services.SalePolicyService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IDevolucaoService, DevolucaoService>(); 
