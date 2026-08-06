@@ -64,6 +64,7 @@ public class NotasFiscaisViewModel : BaseViewModel
     public ICommand CancelarNotaCommand { get; }
     public ICommand VerMotivoCommand { get; }
     public ICommand AtualizarListaCommand { get; }
+    public ICommand EmitirCartaCorrecaoCommand { get; }
 
     // Construtor com Injeção de Dependência
     public NotasFiscaisViewModel(ISaleService saleService)
@@ -75,6 +76,7 @@ public class NotasFiscaisViewModel : BaseViewModel
         CancelarNotaCommand = new ERP.WPF.Commands.AsyncRelayCommand(CancelarNota);
         AtualizarListaCommand = new ERP.WPF.Commands.RelayCommand(async (_) => await CarregarNotasReaisAsync());
         VerMotivoCommand = new ERP.WPF.Commands.AsyncRelayCommand(VerMotivo);
+        EmitirCartaCorrecaoCommand = new ERP.WPF.Commands.AsyncRelayCommand(EmitirCartaCorrecao);
 
         // Carrega os dados do banco assim que a tela abre
         _ = CarregarNotasReaisAsync(); 
@@ -305,6 +307,64 @@ public class NotasFiscaisViewModel : BaseViewModel
         catch (Exception ex)
         {
             MessageBox.Show($"Erro ao tentar cancelar:\n{ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async Task EmitirCartaCorrecao(object? obj)
+    {
+        if (obj is not string refNota) return;
+
+        var notaSelecionada = Notas.FirstOrDefault(n => n.NumeroRef == refNota);
+        if (notaSelecionada == null) return;
+
+        if (notaSelecionada.Tipo != "NFE")
+        {
+            MessageBox.Show("Carta de correção só existe pra NF-e (A4) — a SEFAZ não prevê esse evento pra NFC-e.",
+                "Aviso", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (notaSelecionada.Status != "Autorizada")
+        {
+            MessageBox.Show("Só é possível corrigir uma nota já autorizada.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        string texto = Microsoft.VisualBasic.Interaction.InputBox(
+            "Descreva a correção (mínimo 15 caracteres — não é possível corrigir valores, partes envolvidas, datas ou número/série, só dados formais como descrição de mercadoria e endereço):",
+            "Carta de Correção Eletrônica", "");
+
+        if (string.IsNullOrWhiteSpace(texto)) return;
+
+        if (texto.Length < 15)
+        {
+            MessageBox.Show("O texto precisa ter no mínimo 15 caracteres.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        try
+        {
+            var config = ERP.WPF.Helpers.ConfiguracaoService.Carregar();
+            var correcaoService = ERP.WPF.App.Services.GetRequiredService<INfeCorrecaoService>();
+
+            var (sucesso, mensagem, urlPdf) = await correcaoService.EmitirCartaCorrecaoAsync(
+                refNota, texto, config.TokenFocusNfe, config.UsarAmbienteProducao);
+
+            if (sucesso)
+            {
+                var abrir = MessageBox.Show($"✅ {mensagem}\n\nQuer abrir o PDF da carta de correção agora?",
+                    "Sucesso", MessageBoxButton.YesNo, MessageBoxImage.Information);
+                if (abrir == MessageBoxResult.Yes && !string.IsNullOrWhiteSpace(urlPdf))
+                    AbrirPdf(urlPdf);
+            }
+            else
+            {
+                MessageBox.Show($"❌ Falha ao emitir carta de correção:\n{mensagem}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Erro ao emitir carta de correção:\n{ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 

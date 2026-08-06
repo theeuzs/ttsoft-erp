@@ -129,6 +129,8 @@ builder.Services.AddScoped<ERP.Application.Interfaces.INfceEmissionService,
                             ERP.Application.Services.NfceEmissionService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.INfeCancellationService,
                             ERP.Application.Services.NfeCancellationService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.INfeCorrecaoService,
+                            ERP.Application.Services.NfeCorrecaoService>();
 
 builder.Services.AddScoped<IContaPagarService,
                             ERP.Infrastructure.Services.ContaPagarService>();

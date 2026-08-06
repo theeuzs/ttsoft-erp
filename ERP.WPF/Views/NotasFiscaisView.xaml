@@ -112,7 +112,7 @@
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
 
-                    <DataGridTemplateColumn Header="Ações" Width="340">
+                    <DataGridTemplateColumn Header="Ações" Width="440">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
@@ -145,6 +145,32 @@
                                         <Button.Resources>
                                             <Style TargetType="Border"> <Setter Property="CornerRadius" Value="4"/> </Style>
                                         </Button.Resources>
+                                    </Button>
+
+                                    <Button Content="✏ CC-e"
+                                            Command="{Binding DataContext.EmitirCartaCorrecaoCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                            CommandParameter="{Binding NumeroRef}"
+                                            Background="#DBEAFE" Foreground="#1E40AF" FontWeight="Bold"
+                                            BorderThickness="0" Padding="10,5" Margin="0,0,5,0" Cursor="Hand"
+                                            ToolTip="Carta de Correção Eletrônica — corrige erro formal sem cancelar a nota">
+                                        <Button.Resources>
+                                            <Style TargetType="Border"> <Setter Property="CornerRadius" Value="4"/> </Style>
+                                        </Button.Resources>
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Tipo}" Value="NFCE">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Cancelada">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Status}" Value="Rejeitada">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
                                     </Button>
 
                                     <Button Content="🔍 Motivo" 

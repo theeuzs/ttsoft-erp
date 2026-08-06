@@ -376,6 +376,7 @@ public partial class App : System.Windows.Application
         services.AddScoped<INfceEmissionService, NfceEmissionService>();
         services.AddScoped<INfeEmissionService, NfeEmissionService>();
         services.AddScoped<INfeCancellationService, NfeCancellationService>();
+        services.AddScoped<INfeCorrecaoService, ERP.Application.Services.NfeCorrecaoService>();
         services.AddScoped<INfeStatusService, NfeStatusService>();
         services.AddScoped<INfeContingencyService, NfeContingencyService>();
         services.AddSingleton<NfeContingencyWorker>();
