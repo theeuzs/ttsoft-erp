@@ -65,6 +65,7 @@ public class NotasFiscaisViewModel : BaseViewModel
     public ICommand VerMotivoCommand { get; }
     public ICommand AtualizarListaCommand { get; }
     public ICommand EmitirCartaCorrecaoCommand { get; }
+    public ICommand AbrirExportarNotasCommand { get; }
 
     // Construtor com Injeção de Dependência
     public NotasFiscaisViewModel(ISaleService saleService)
@@ -77,6 +78,11 @@ public class NotasFiscaisViewModel : BaseViewModel
         AtualizarListaCommand = new ERP.WPF.Commands.RelayCommand(async (_) => await CarregarNotasReaisAsync());
         VerMotivoCommand = new ERP.WPF.Commands.AsyncRelayCommand(VerMotivo);
         EmitirCartaCorrecaoCommand = new ERP.WPF.Commands.AsyncRelayCommand(EmitirCartaCorrecao);
+        AbrirExportarNotasCommand = new ERP.WPF.Commands.RelayCommand(_ =>
+        {
+            var view = new ERP.WPF.Views.ExportarNotasView { Owner = System.Windows.Application.Current.MainWindow };
+            view.ShowDialog();
+        });
 
         // Carrega os dados do banco assim que a tela abre
         _ = CarregarNotasReaisAsync(); 
