@@ -30,6 +30,9 @@ public class SalvarNotaFiscalAvulsaDto
     public string? DestinatarioCep { get; set; }
     public string? DestinatarioIe { get; set; }
 
+    /// <summary>"1"=contribuinte ICMS, "2"=isento, "9"=não contribuinte.</summary>
+    public string IndicadorIeDestinatario { get; set; } = "9";
+
     public List<NotaFiscalAvulsaItemDto> Itens { get; set; } = new();
 }
 

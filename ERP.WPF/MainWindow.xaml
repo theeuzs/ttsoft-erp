@@ -267,6 +267,8 @@
                                 <Button Content="NFC-e (Vendas)" Style="{StaticResource NavButton}" Tag="nfce"      Click="NavButton_Click"/>
                                 <Button Content="NF-e (Emissão)" Style="{StaticResource NavButton}" Tag="nfe"       Click="NavButton_Click"/>
                                 <Button Content="📝 Nota Avulsa" Style="{StaticResource NavButton}" Tag="notaavulsa" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=notaavulsa.view}"/>
+                                <Button Content="📥 Notas Recebidas (MD-e)" Style="{StaticResource NavButton}" Tag="nferecebida" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=nferecebida.view}"/>
+                                <Button Content="🧾 Emitir NFS-e" Style="{StaticResource NavButton}" Tag="nfse" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=nfse.view}"/>
                                 <Button Content="Importar XML"   Style="{StaticResource NavButton}" Tag="importXml" Click="NavButton_Click"/>
                             </StackPanel>
                         </Expander>

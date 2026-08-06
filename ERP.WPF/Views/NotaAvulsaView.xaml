@@ -106,6 +106,13 @@
                                 <TextBox Text="{Binding DestinatarioIe}" Padding="8" Margin="0,4,0,0"/>
                             </StackPanel>
                         </Grid>
+
+                        <TextBlock Text="Indicador de IE (obrigatório pra NF-e B2B)" FontSize="11" Foreground="{DynamicResource TextMuted}" Margin="0,10,0,0"/>
+                        <ComboBox SelectedValue="{Binding IndicadorIeDestinatario}" SelectedValuePath="Tag" Padding="8" Margin="0,4,0,0" HorizontalAlignment="Left" MinWidth="260">
+                            <ComboBoxItem Content="1 — Contribuinte ICMS (tem I.E.)" Tag="1"/>
+                            <ComboBoxItem Content="2 — Isento de I.E." Tag="2"/>
+                            <ComboBoxItem Content="9 — Não contribuinte" Tag="9"/>
+                        </ComboBox>
                     </StackPanel>
                 </Border>
 

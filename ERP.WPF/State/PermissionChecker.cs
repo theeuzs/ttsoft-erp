@@ -38,6 +38,7 @@ public static class PermissionChecker
     public const string GerenciadorVendasView = "gerenciadorvendas.view";
     public const string NotaAvulsaView = "notaavulsa.view";
     public const string NfeRecebidaView = "nferecebida.view";
+    public const string NfseView = "nfse.view";
 
     // Relatórios / Operacionais
     public const string AuditView        = "audit.view";

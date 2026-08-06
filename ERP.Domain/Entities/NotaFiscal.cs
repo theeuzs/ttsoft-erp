@@ -63,6 +63,11 @@ public class NotaFiscal : BaseEntity
     public string? DestinatarioCep { get; set; }
     public string? DestinatarioIe { get; set; }
 
+    /// <summary>"1"=contribuinte ICMS (tem IE), "2"=isento, "9"=não
+    /// contribuinte — sem mandar isso pra Focus, NF-e B2B toma rejeição
+    /// clássica dependendo do destinatário.</summary>
+    public string IndicadorIeDestinatario { get; set; } = "9";
+
     public ICollection<NotaFiscalItem> Itens { get; set; } = new List<NotaFiscalItem>();
 }
 

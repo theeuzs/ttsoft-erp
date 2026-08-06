@@ -65,6 +65,11 @@ public class FocusNfceRequest
     [JsonPropertyName("inscricao_estadual_destinatario")]
     public string? IeDestinatario { get; set; }
 
+    // Confirmado na doc oficial da Focus — sem isso, NF-e B2B toma rejeição
+    // clássica dependendo do destinatário (contribuinte/isento/não contribuinte).
+    [JsonPropertyName("indicador_inscricao_estadual_destinatario")]
+    public string? IndicadorIeDestinatario { get; set; }
+
     [JsonPropertyName("itens")]
     public List<FocusItemRequest> Itens { get; set; } = new();
 

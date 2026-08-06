@@ -47,6 +47,9 @@ public class NotaAvulsaViewModel : BaseViewModel
     public string? DestinatarioCep { get; set; }
     public string? DestinatarioIe { get; set; }
 
+    public string[] IndicadoresIe { get; } = { "1", "2", "9" };
+    public string IndicadorIeDestinatario { get; set; } = "9";
+
     // ── Item picker (mesmo padrão da tela de Compras) ──────────────────────
     private string _buscaProduto = string.Empty;
     public string BuscaProduto
@@ -151,6 +154,7 @@ public class NotaAvulsaViewModel : BaseViewModel
         DestinatarioUf            = DestinatarioUf,
         DestinatarioCep           = DestinatarioCep,
         DestinatarioIe            = DestinatarioIe,
+        IndicadorIeDestinatario   = IndicadorIeDestinatario,
         Itens = Itens.Select(i => new NotaFiscalAvulsaItemDto
         {
             ProductId = i.ProductId, ProductName = i.ProductName,
@@ -276,6 +280,7 @@ public class NotaAvulsaViewModel : BaseViewModel
             DestinatarioUf = nota.DestinatarioUf;
             DestinatarioCep = nota.DestinatarioCep;
             DestinatarioIe = nota.DestinatarioIe;
+            IndicadorIeDestinatario = nota.IndicadorIeDestinatario;
 
             Itens.Clear();
             foreach (var i in nota.Itens)

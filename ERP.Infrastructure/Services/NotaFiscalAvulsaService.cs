@@ -71,6 +71,7 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
         nota.DestinatarioUf            = dto.DestinatarioUf;
         nota.DestinatarioCep           = dto.DestinatarioCep;
         nota.DestinatarioIe            = dto.DestinatarioIe;
+        nota.IndicadorIeDestinatario   = dto.IndicadorIeDestinatario;
 
         foreach (var item in dto.Itens)
         {
@@ -111,6 +112,7 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
             DestinatarioUf              = nota.DestinatarioUf,
             DestinatarioCep             = nota.DestinatarioCep,
             DestinatarioIe              = nota.DestinatarioIe,
+            IndicadorIeDestinatario     = nota.IndicadorIeDestinatario,
             Itens = nota.Itens.Select(i => new NotaFiscalAvulsaItemDto
             {
                 ProductId     = i.ProductId,
@@ -185,39 +187,75 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
         if (!nota.Itens.Any())
             throw new InvalidOperationException("Nota sem itens.");
 
+        // Fix 2 (plano premium) — endereço inventado autorizado numa NF-e
+        // pra CNPJ é pior que rejeição: vira documento fiscal errado em nome
+        // de outra empresa. Bloqueia em vez de mandar fallback silencioso.
+        string? docLimpoValidacao = string.IsNullOrWhiteSpace(nota.DestinatarioDocumento)
+            ? null : new string(nota.DestinatarioDocumento.Where(char.IsDigit).ToArray());
+        bool ehCnpj = docLimpoValidacao?.Length == 14;
+        if (ehCnpj)
+        {
+            var faltando = new List<string>();
+            if (string.IsNullOrWhiteSpace(nota.DestinatarioLogradouro)) faltando.Add("Logradouro");
+            if (string.IsNullOrWhiteSpace(nota.DestinatarioMunicipio)) faltando.Add("Município");
+            if (string.IsNullOrWhiteSpace(nota.DestinatarioUf)) faltando.Add("UF");
+            if (string.IsNullOrWhiteSpace(nota.DestinatarioCep)) faltando.Add("CEP");
+            if (faltando.Any())
+                throw new InvalidOperationException(
+                    $"Destinatário com CNPJ precisa de endereço completo antes de emitir — faltando: {string.Join(", ", faltando)}.");
+        }
+
         var config = await _configProvider.ObterConfiguracaoAsync();
         string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
 
         var itensRequest = new List<FocusItemRequest>();
+        decimal valorTotalItens = 0;
         foreach (var (item, index) in nota.Itens.Select((it, idx) => (it, idx)))
         {
             var produto = await _uow.Products.GetByIdAsync(item.ProductId);
+
+            // Fix 6 (plano premium) — NF-e valida NCM de verdade (diferente
+            // da NFCe); "00000000" de fallback vai rejeitar. Bloqueia com
+            // mensagem clara em vez de deixar a SEFAZ rejeitar depois.
+            var ncmLimpo = produto?.NCM?.Replace(".", "").Replace("-", "").Trim();
+            if (string.IsNullOrWhiteSpace(ncmLimpo) || ncmLimpo.Length != 8)
+                throw new InvalidOperationException(
+                    $"Produto '{item.ProductName}' está sem NCM válido — edite o cadastro do produto antes de emitir.");
+
+            // Fix 4 (plano premium) — GUID truncado como código no DANFE é
+            // sem significado e arrisca colisão. Usa SKU de verdade.
+            string codigoProduto = !string.IsNullOrWhiteSpace(produto?.SKU) ? produto!.SKU!
+                : !string.IsNullOrWhiteSpace(produto?.Barcode) ? produto!.Barcode!
+                : item.ProductId.ToString()[..6];
+
             itensRequest.Add(new FocusItemRequest
             {
                 NumeroItem             = (index + 1).ToString(),
-                CodigoProduto          = item.ProductId.ToString().Substring(0, 6),
+                CodigoProduto          = codigoProduto,
                 Descricao              = item.ProductName,
                 QuantidadeComercial    = item.Quantidade.ToString("F2", CultureInfo.InvariantCulture),
                 ValorUnitarioComercial = item.ValorUnitario.ToString("F2", CultureInfo.InvariantCulture),
                 ValorBruto             = (item.Quantidade * item.ValorUnitario).ToString("F2", CultureInfo.InvariantCulture),
                 Cfop                   = item.Cfop,
-                CodigoNcm              = string.IsNullOrWhiteSpace(produto?.NCM) ? "00000000" : produto!.NCM!.Replace(".", "").Replace("-", "").Trim(),
+                CodigoNcm              = ncmLimpo,
                 IcmsSituacaoTributaria = string.IsNullOrWhiteSpace(produto?.CSOSN) ? "102" : produto!.CSOSN!.Split('-')[0].Trim(),
                 IcmsOrigem             = "0",
                 PisSituacaoTributaria     = "99",
                 CofinsSituacaoTributaria  = "99",
             });
+            valorTotalItens += item.Quantidade * item.ValorUnitario;
         }
 
-        string? docLimpo = string.IsNullOrWhiteSpace(nota.DestinatarioDocumento)
-            ? null : new string(nota.DestinatarioDocumento.Where(char.IsDigit).ToArray());
+        string? docLimpo = docLimpoValidacao;
         string? cepLimpo = string.IsNullOrWhiteSpace(nota.DestinatarioCep)
             ? null : new string(nota.DestinatarioCep.Where(char.IsDigit).ToArray());
 
         var request = new FocusNfceRequest
         {
             DataEmissao            = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:sszzz"),
-            TipoDocumento          = "1",
+            // Fix 1 (plano premium) — antes hardcoded "1" (saída), então toda
+            // nota de entrada/devolução-de-venda saía errada na SEFAZ.
+            TipoDocumento          = nota.TipoOperacaoEntradaSaida == "E" ? "0" : "1",
             NaturezaOperacao       = nota.NaturezaOperacao ?? "VENDA DE MERCADORIA",
             FinalidadeEmissao      = nota.Finalidade,
             CpfCnpj                = docLimpo,
@@ -229,8 +267,18 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
             UfDestinatario         = string.IsNullOrWhiteSpace(nota.DestinatarioUf) ? "PR" : nota.DestinatarioUf,
             CepDestinatario        = string.IsNullOrWhiteSpace(cepLimpo) ? "00000000" : cepLimpo,
             IeDestinatario         = nota.DestinatarioIe,
+            // Fix 3 (plano premium) — confirmado na doc da Focus
+            // (indicador_inscricao_estadual_destinatario); sem isso, NF-e
+            // B2B toma rejeição clássica dependendo do destinatário.
+            IndicadorIeDestinatario = nota.IndicadorIeDestinatario,
             Itens                  = itensRequest,
-            Pagamentos             = new List<FocusPagamentoRequest>(), // nota avulsa não tem pagamento vinculado
+            // Fix 5 (plano premium) — NF-e exige a tag de pagamento; nota
+            // avulsa sem cobrança (remessa, brinde, devolução) precisa ir
+            // explicitamente como forma "90 — Sem pagamento", não vazio.
+            Pagamentos = new List<FocusPagamentoRequest>
+            {
+                new() { FormaPagamento = "90", ValorPagamento = valorTotalItens.ToString("F2", CultureInfo.InvariantCulture) }
+            },
         };
 
         var referencia = $"avulsa-{nota.Id}";

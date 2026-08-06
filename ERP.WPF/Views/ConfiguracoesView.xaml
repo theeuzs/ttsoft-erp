@@ -133,6 +133,12 @@
                             <TextBlock Text="INTEGRAÇÃO FISCAL (SEFAZ)" FontWeight="Black" Foreground="#1E62A6" Margin="0,0,0,20"/>
 
                             <TextBlock Text="Token de Acesso (Focus NFe)" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+
+<TextBlock Text="CNPJ da Empresa" FontSize="12" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,4"/>
+<TextBox Text="{Binding CnpjEmpresa, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14"
+         BorderBrush="{DynamicResource BordaInput}" Background="{DynamicResource CardBgAlt}" Margin="0,0,0,15"
+         ToolTip="Necessário pro MD-e (recebimento automático de notas de fornecedor)"/>
+
 <Grid Margin="0,0,0,15">
     <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*"/>
@@ -151,11 +157,6 @@
             </Style>
         </TextBox.Style>
     </TextBox>
-
-    <TextBlock Text="CNPJ da Empresa" FontSize="12" Foreground="{DynamicResource TextMuted}" Margin="0,10,0,4"/>
-    <TextBox Text="{Binding CnpjEmpresa, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14"
-             BorderBrush="{DynamicResource BordaInput}" Background="{DynamicResource CardBgAlt}"
-             ToolTip="Necessário pro MD-e (recebimento automático de notas de fornecedor)"/>
 
     <TextBox Text="{Binding TokenFocusNfe, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14" BorderBrush="#3B82F6" Background="{DynamicResource CardBgAlt}">
         <TextBox.Style>
