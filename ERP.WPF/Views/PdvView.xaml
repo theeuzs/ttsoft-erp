@@ -420,6 +420,15 @@
                                             </ControlTemplate>
                                         </Button.Template>
                                     </Button>
+                                    <Button Content="⚖ Balança" Cursor="Hand"
+                                            Command="{Binding LerBalancaCommand}"
+                                            Margin="0,0,12,0" Padding="10,6"
+                                            Background="#E0E7FF" Foreground="#3730A3" FontWeight="SemiBold" BorderThickness="0"
+                                            ToolTip="Lê o peso da balança e aplica na quantidade do último item do carrinho">
+                                        <Button.Resources>
+                                            <Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>
+                                        </Button.Resources>
+                                    </Button>
                                     <Grid Margin="0,0,12,0">
                                         <Button Content="📋" Cursor="Hand"
                                                 Command="{Binding AbrirVendasSuspensasCommand}"

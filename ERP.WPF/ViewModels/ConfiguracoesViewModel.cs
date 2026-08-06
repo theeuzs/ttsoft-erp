@@ -49,6 +49,10 @@ public class ConfiguracoesViewModel : BaseViewModel
     /// hardcoded no DTO de emissão, nunca configurável.</summary>
     public string CnpjEmpresa { get => _cnpjEmpresa; set => SetProperty(ref _cnpjEmpresa, value); }
 
+    private string _balancaComPort = "COM1";
+    /// <summary>Código morto da auditoria ativado — porta serial da balança.</summary>
+    public string BalancaComPort { get => _balancaComPort; set => SetProperty(ref _balancaComPort, value); }
+
     private string _tokenFocusNfe = string.Empty;
     public string TokenFocusNfe 
     { 
@@ -107,6 +111,7 @@ public class ConfiguracoesViewModel : BaseViewModel
         // 👇 CARREGA OS DADOS DA SEFAZ 👇
         TokenFocusNfe = config.TokenFocusNfe ?? string.Empty;
         UsarAmbienteProducao = config.UsarAmbienteProducao;
+        BalancaComPort = config.BalancaComPort ?? "COM1";
 
         SelecionarLogoCommand = new RelayCommand(_ => SelecionarLogo());
         RemoverLogoCommand = new RelayCommand(_ => CaminhoLogo = string.Empty);
@@ -169,7 +174,8 @@ public class ConfiguracoesViewModel : BaseViewModel
             
             // 👇 SALVA OS DADOS DA SEFAZ 👇
             TokenFocusNfe = this.TokenFocusNfe,
-            UsarAmbienteProducao = this.UsarAmbienteProducao
+            UsarAmbienteProducao = this.UsarAmbienteProducao,
+            BalancaComPort = this.BalancaComPort
         };
         
         ConfiguracaoService.Salvar(config);

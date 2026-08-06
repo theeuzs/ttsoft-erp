@@ -334,6 +334,7 @@ public class PdvViewModel : BaseViewModel
         ClearCartCommand      = new RelayCommand(_ => ClearCart(),        _ => CartItems.Any());
         AplicarMarkup5Command    = new RelayCommand(_ => AplicarMarkup5(),      _ => CartItems.Any());
         SuspenderVendaCommand    = new AsyncRelayCommand(async _ => await SuspenderVendaAsync(), _ => CartItems.Any());
+        LerBalancaCommand        = new RelayCommand(_ => LerBalanca());
         AbrirVendasSuspensasCommand = new AsyncRelayCommand(async _ => await AbrirVendasSuspensasAsync());
         _ = AtualizarIndicadorVendasSuspensasAsync();
         SearchCustomerCommand = new AsyncRelayCommand(_ => SearchCustomerAsync());
@@ -617,6 +618,45 @@ public class PdvViewModel : BaseViewModel
         if (!Sugestoes.Any()) FecharSugestoes();
     }
 
+    /// <summary>Código morto da auditoria ativado (06/08/2026) — BalancaService
+    /// já existia, real e defensivo, sem nenhum consumidor. Aplica o peso lido
+    /// na quantidade do ÚLTIMO item do carrinho (fluxo simples e de baixo
+    /// risco: não mexe no fluxo de busca/adição, só ajusta a quantidade
+    /// depois que o produto já está no carrinho).</summary>
+    private void LerBalanca()
+    {
+        var ultimoItem = CartItems.LastOrDefault();
+        if (ultimoItem == null)
+        {
+            MessageBox.Show("Adicione um produto ao carrinho primeiro — a leitura da balança ajusta a quantidade do último item.",
+                "Balança", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var balanca = App.Services.GetRequiredService<ERP.Infrastructure.Services.BalancaService>();
+
+        if (!balanca.IsConectada)
+        {
+            var config = ERP.WPF.Helpers.ConfiguracaoService.Carregar();
+            bool conectou = balanca.Conectar(string.IsNullOrWhiteSpace(config.BalancaComPort) ? "COM1" : config.BalancaComPort);
+            if (!conectou)
+            {
+                MessageBox.Show("Não foi possível conectar na balança. Confira a porta COM em Configurações.",
+                    "Balança", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+        }
+
+        var leitura = balanca.LerPesoToledo();
+        if (!leitura.Sucesso)
+        {
+            MessageBox.Show($"Falha ao ler a balança: {leitura.Erro}", "Balança", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        ultimoItem.QuantidadeTexto = leitura.Peso.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     private void FecharSugestoes()
     {
         MostrarSugestoes = false;
@@ -638,6 +678,7 @@ public class PdvViewModel : BaseViewModel
     public ICommand ClearCartCommand { get; }
     public ICommand AplicarMarkup5Command  { get; }
     public ICommand SuspenderVendaCommand  { get; }
+    public ICommand LerBalancaCommand { get; }
     public ICommand AbrirVendasSuspensasCommand { get; }
     public ICommand SearchCustomerCommand { get; }
     public ICommand SalvarOrcamentoCommand { get; }

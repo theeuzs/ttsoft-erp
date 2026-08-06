@@ -102,6 +102,11 @@
 
                         <TextBlock Text="Endereço Completo" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
                         <TextBox Text="{Binding Endereco, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14" BorderBrush="{DynamicResource BordaInput}" Height="60" TextWrapping="Wrap" AcceptsReturn="True" Margin="0,0,0,15"/>
+
+                        <TextBlock Text="Porta COM da Balança" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                        <TextBox Text="{Binding BalancaComPort, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14"
+                                 BorderBrush="{DynamicResource BordaInput}" Margin="0,0,0,15"
+                                 ToolTip="Balança serial Toledo/Filizola conectada via RS-232 — ex: COM1, COM3"/>
                     </StackPanel>
                 </Border>
 

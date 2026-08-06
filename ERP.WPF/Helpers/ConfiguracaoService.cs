@@ -23,6 +23,10 @@ public class ReciboConfig
     public bool   UsarAmbienteProducao { get; set; } = false;
     public string ChavePix  { get; set; } = string.Empty;
     public string CidadePix { get; set; } = string.Empty;
+
+    /// <summary>Código morto da auditoria ativado — porta COM da balança
+    /// serial (Toledo/Filizola). Padrão COM1 se não configurado.</summary>
+    public string BalancaComPort { get; set; } = "COM1";
 }
 
 public static class ConfiguracaoService
