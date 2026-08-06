@@ -440,7 +440,8 @@ public record DevolucaoResultDto(
     decimal ValorTotalDevolvido,
     string  NumeroVendaOriginal,
     string  NomeCliente,
-    List<DevolucaoItemDto> ItensDevolvidos);
+    List<DevolucaoItemDto> ItensDevolvidos,
+    string? MensagemNotaFiscal = null);
 
 // ── DTOs de Cargos e Permissões ────────────────────────────────────────────
 public class RoleDto

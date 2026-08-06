@@ -9,12 +9,14 @@ public class DevolucaoService : IDevolucaoService
     private readonly IUnitOfWork    _uow;
     private readonly IHaverService  _haverService;
     private readonly IRequestTenant _tenant;
+    private readonly IFiscalService? _fiscalService;
 
-    public DevolucaoService(IUnitOfWork uow, IHaverService haverService, IRequestTenant tenant)
+    public DevolucaoService(IUnitOfWork uow, IHaverService haverService, IRequestTenant tenant, IFiscalService? fiscalService = null)
     {
         _uow          = uow;
         _haverService = haverService;
         _tenant       = tenant;
+        _fiscalService = fiscalService;
     }
 
     public async Task<decimal> GetQuantidadeJaDevolvida(Guid saleId, Guid productId)
@@ -111,6 +113,32 @@ public class DevolucaoService : IDevolucaoService
         //    e o MovimentoHaver foi salvo pelo HaverService internamente
         await _uow.CommitAsync();
 
+        // Item 7 do roadmap fiscal — NF-e de devolução (finalidade=4),
+        // referenciando a chave da nota original. Best-effort de propósito:
+        // a devolução operacional (estoque + Haver) já aconteceu e não pode
+        // ser desfeita por causa de uma falha na SEFAZ ou por essa venda não
+        // ter NF-e original (ex.: era NFC-e, ou não tinha nota nenhuma).
+        string? mensagemNotaFiscal = null;
+        if (_fiscalService != null)
+        {
+            try
+            {
+                var itensParaNota = itensValidos.Select(item =>
+                {
+                    var itemVenda = venda.Items.First(i => i.ProductId == item.ProductId);
+                    var unitPriceEfetivo = itemVenda.UnitPrice * (1m - itemVenda.DiscountPercent / 100m);
+                    return (item.ProductId, item.ProductName, item.QuantidadeDevolver, unitPriceEfetivo);
+                }).ToList();
+
+                var resultadoFiscal = await _fiscalService.EmitirNotaDevolucaoAsync(dto.VendaId, itensParaNota, dto.Motivo ?? "");
+                mensagemNotaFiscal = resultadoFiscal.Mensagem;
+            }
+            catch (Exception exFiscal)
+            {
+                mensagemNotaFiscal = $"Falha ao emitir NF-e de devolução: {exFiscal.Message}";
+            }
+        }
+
         string nomeCliente = "Consumidor Final";
         if (dto.CustomerId.HasValue)
         {
@@ -122,6 +150,7 @@ public class DevolucaoService : IDevolucaoService
             ValorTotalDevolvido:  valorTotal,
             NumeroVendaOriginal:  venda.SaleNumber ?? dto.VendaId.ToString()[..8].ToUpper(),
             NomeCliente:          nomeCliente,
-            ItensDevolvidos:      itensValidos);
+            ItensDevolvidos:      itensValidos,
+            MensagemNotaFiscal:   mensagemNotaFiscal);
     }
 }

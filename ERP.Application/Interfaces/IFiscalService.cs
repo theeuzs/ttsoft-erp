@@ -14,4 +14,11 @@ public interface IFiscalService
 {
     /// <param name="tipoDocumento">"NFCE" ou "NFE" (A4).</param>
     Task<FiscalEmissionResult> EmitirNotaAsync(Guid vendaId, string tipoDocumento);
+
+    /// <summary>Item 7 do roadmap fiscal — NF-e de devolução (finalidade=4,
+    /// referenciando a chave da nota original). Só funciona pra NF-e A4;
+    /// NFC-e não tem esse evento — a devolução de venda no balcão continua
+    /// só operacional (estoque + Haver), sem documento fiscal próprio.</summary>
+    Task<FiscalEmissionResult> EmitirNotaDevolucaoAsync(
+        Guid vendaId, List<(Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)> itensDevolvidos, string motivo);
 }

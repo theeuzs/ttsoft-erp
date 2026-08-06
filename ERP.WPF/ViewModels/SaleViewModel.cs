@@ -495,8 +495,12 @@ public class SaleViewModel : BaseViewModel
                 var pagamentos = new List<(string, decimal)>
                     { ("Crédito Haver", resultado.ValorTotalDevolvido) };
 
+                var mensagemFiscal = string.IsNullOrWhiteSpace(resultado.MensagemNotaFiscal)
+                    ? ""
+                    : $"\n\n📄 {resultado.MensagemNotaFiscal}";
+
                 var resposta = System.Windows.MessageBox.Show(
-                    $"✅ Devolução registrada!\nR$ {resultado.ValorTotalDevolvido:N2} creditados em Haver para {resultado.NomeCliente}.\n\nDeseja imprimir o recibo de devolução?",
+                    $"✅ Devolução registrada!\nR$ {resultado.ValorTotalDevolvido:N2} creditados em Haver para {resultado.NomeCliente}.{mensagemFiscal}\n\nDeseja imprimir o recibo de devolução?",
                     "Devolução Concluída",
                     System.Windows.MessageBoxButton.YesNo,
                     System.Windows.MessageBoxImage.Information);

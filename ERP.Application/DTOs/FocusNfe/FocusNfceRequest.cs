@@ -70,6 +70,17 @@ public class FocusNfceRequest
 
     [JsonPropertyName("pagamentos")]
     public List<FocusPagamentoRequest> Pagamentos { get; set; } = new();
+
+    // Item 7 do roadmap fiscal — nota de devolução. Confirmado na doc da
+    // Focus: precisa ser array (não objeto), mesmo com só uma nota referenciada.
+    [JsonPropertyName("notas_referenciadas")]
+    public List<NotaReferenciadaRequest>? NotasReferenciadas { get; set; }
+}
+
+public class NotaReferenciadaRequest
+{
+    [JsonPropertyName("chave_nfe")]
+    public string ChaveNfe { get; set; } = string.Empty;
 }
 
 // Essa classe representa cada produto do cupom

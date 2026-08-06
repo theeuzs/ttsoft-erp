@@ -113,6 +113,121 @@ public class FiscalService : IFiscalService
         return new FiscalEmissionResult { Sucesso = false, Mensagem = mensagem, Status = "Falha", Ambiente = ambienteSefaz };
     }
 
+    public async Task<FiscalEmissionResult> EmitirNotaDevolucaoAsync(
+        Guid vendaId, List<(Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)> itensDevolvidos, string motivo)
+    {
+        var sale = await _ctx.Sales.AsNoTracking()
+            .Include(s => s.Customer)
+            .FirstOrDefaultAsync(s => s.Id == vendaId)
+            ?? throw new KeyNotFoundException($"Venda {vendaId} não encontrada.");
+
+        if (string.IsNullOrWhiteSpace(sale.NfceChave))
+        {
+            // Best-effort de propósito: sem a chave da nota original não dá
+            // pra montar "notas_referenciadas" corretamente, e a SEFAZ exige
+            // isso pra devolução. A devolução operacional (estoque + Haver)
+            // já aconteceu antes de chegar aqui — isso só avisa, não desfaz nada.
+            return new FiscalEmissionResult
+            {
+                Sucesso = false,
+                Mensagem = "Essa venda não tem nota fiscal original (NF-e) registrada — não é possível emitir NF-e de devolução sem a chave da nota original.",
+                Status = "Não Aplicável"
+            };
+        }
+
+        var config = await _configProvider.ObterConfiguracaoAsync();
+        string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
+
+        var request = MontarRequestNfeDevolucao(sale, itensDevolvidos, motivo);
+        var referenciaDevolucao = $"devolucao-{vendaId}-{DateTime.Now:yyyyMMddHHmmss}";
+
+        var (sucesso, mensagem, urlDanfe, urlXml) = await _nfeService.EmitirNfeA4Async(
+            referenciaDevolucao, request, config.TokenFocusNfe, config.UsarAmbienteProducao);
+
+        if (sucesso && !string.IsNullOrWhiteSpace(urlDanfe))
+        {
+            _ctx.NotasFiscais.Add(new Domain.Entities.NotaFiscal
+            {
+                Tipo                  = "NFE",
+                VendaId               = vendaId,
+                Status                = "Autorizada",
+                Finalidade            = "4",
+                RefNFe                = sale.NfceChave,
+                UrlDanfe              = urlDanfe,
+                XmlUrl                = string.IsNullOrWhiteSpace(urlXml) ? null : urlXml,
+                Ambiente              = ambienteSefaz,
+                DataEmissao           = DateTime.Now,
+                DestinatarioNome      = sale.Customer?.Name,
+                DestinatarioDocumento = sale.Customer?.Document,
+                MotivoCancelamento    = null,
+            });
+            await _ctx.SaveChangesAsync();
+
+            return new FiscalEmissionResult
+            {
+                Sucesso = true, Mensagem = "NF-e de devolução emitida com sucesso!",
+                Status = "Autorizada", UrlDanfe = urlDanfe, Ambiente = ambienteSefaz
+            };
+        }
+
+        Log.Warning("Falha ao emitir NF-e de devolução pra venda {VendaId}: {Mensagem}", vendaId, mensagem);
+        return new FiscalEmissionResult { Sucesso = false, Mensagem = mensagem, Status = "Falha", Ambiente = ambienteSefaz };
+    }
+
+    private static FocusNfceRequest MontarRequestNfeDevolucao(
+        Domain.Entities.Sale sale, List<(Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)> itens, string motivo)
+    {
+        var customer = sale.Customer;
+        string? cpfCnpjLimpo = null;
+        if (!string.IsNullOrWhiteSpace(customer?.Document))
+            cpfCnpjLimpo = new string(customer.Document.Where(char.IsDigit).ToArray());
+        string? cepLimpo = null;
+        if (!string.IsNullOrWhiteSpace(customer?.ZipCode))
+            cepLimpo = new string(customer.ZipCode.Where(char.IsDigit).ToArray());
+        string? ieLimpa = null;
+        if (!string.IsNullOrWhiteSpace(customer?.StateRegistration))
+            ieLimpa = new string(customer.StateRegistration.Where(char.IsDigit).ToArray());
+        else if (cpfCnpjLimpo?.Length > 11) ieLimpa = "ISENTO";
+
+        var itensRequest = itens.Select((item, index) => new FocusItemRequest
+        {
+            NumeroItem             = (index + 1).ToString(),
+            CodigoProduto          = item.ProductId.ToString().Substring(0, 6),
+            Descricao              = item.ProductName,
+            QuantidadeComercial    = item.Quantidade.ToString("F2", CultureInfo.InvariantCulture),
+            ValorUnitarioComercial = item.ValorUnitario.ToString("F2", CultureInfo.InvariantCulture),
+            ValorBruto             = (item.Quantidade * item.ValorUnitario).ToString("F2", CultureInfo.InvariantCulture),
+            // Devolução de venda dentro do estado — CFOP de entrada (1xxx),
+            // não o de saída (5xxx) usado na venda original.
+            Cfop                   = "1202",
+            CodigoNcm              = "00000000",
+            IcmsSituacaoTributaria = "102",
+            IcmsOrigem             = "0",
+            PisSituacaoTributaria     = "99",
+            CofinsSituacaoTributaria  = "99",
+        }).ToList();
+
+        return new FocusNfceRequest
+        {
+            DataEmissao            = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:sszzz"),
+            TipoDocumento          = "1",
+            NaturezaOperacao       = "DEVOLUCAO DE VENDA",
+            FinalidadeEmissao      = "4",
+            CpfCnpj                = cpfCnpjLimpo,
+            Nome                   = customer?.Name,
+            LogradouroDestinatario = string.IsNullOrWhiteSpace(customer?.Street) ? "Nao Informado" : customer.Street,
+            NumeroDestinatario     = string.IsNullOrWhiteSpace(customer?.Number) ? "S/N" : customer.Number,
+            BairroDestinatario     = string.IsNullOrWhiteSpace(customer?.Neighborhood) ? "Centro" : customer.Neighborhood,
+            MunicipioDestinatario  = string.IsNullOrWhiteSpace(customer?.City) ? "Curitiba" : customer.City,
+            UfDestinatario         = string.IsNullOrWhiteSpace(customer?.State) ? "PR" : customer.State,
+            CepDestinatario        = string.IsNullOrWhiteSpace(cepLimpo) ? "00000000" : cepLimpo,
+            IeDestinatario         = ieLimpa,
+            Itens                  = itensRequest,
+            Pagamentos             = new List<FocusPagamentoRequest>(),
+            NotasReferenciadas     = new List<NotaReferenciadaRequest> { new() { ChaveNfe = sale.NfceChave! } },
+        };
+    }
+
     private static string TraduzirFormaPagamentoParaSefaz(PaymentMethod metodo) => metodo switch
     {
         PaymentMethod.Dinheiro      => "01",
