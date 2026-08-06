@@ -307,6 +307,12 @@ public partial class App : System.Windows.Application
         services.AddValidatorsFromAssemblyContaining<CreateProductValidator>();
 
         // ── Http Clients & Polly ──────────────────────────────────────────
+        services.AddHttpClient<ERP.Infrastructure.Services.BrasilApiService>(client =>
+        {
+            client.BaseAddress = new Uri("https://brasilapi.com.br/");
+            client.Timeout     = TimeSpan.FromSeconds(10);
+        });
+
         services.AddHttpClient<IFocusNfeHttpClient, FocusNfeHttpClient>(client =>
         {
             client.BaseAddress = new Uri("https://api.focusnfe.com.br/v2/");

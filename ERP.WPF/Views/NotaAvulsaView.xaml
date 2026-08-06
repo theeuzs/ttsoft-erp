@@ -48,6 +48,8 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="12"/>
                                 <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="6"/>
+                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
                                 <TextBlock Text="Nome / Razão Social *" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
@@ -55,9 +57,19 @@
                             </StackPanel>
                             <StackPanel Grid.Column="2">
                                 <TextBlock Text="CPF/CNPJ" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
-                                <TextBox Text="{Binding DestinatarioDocumento}" Padding="8" Margin="0,4,0,0"/>
+                                <TextBox Text="{Binding DestinatarioDocumento, UpdateSourceTrigger=PropertyChanged}" Padding="8" Margin="0,4,0,0"/>
                             </StackPanel>
+                            <Button Grid.Column="4" Content="🔍" Command="{Binding BuscarCnpjCommand}" ToolTip="Buscar CNPJ na Receita"
+                                    VerticalAlignment="Bottom" Width="38" Height="34" Cursor="Hand"
+                                    Background="{DynamicResource CorAcento}" Foreground="White" BorderThickness="0">
+                                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                            </Button>
                         </Grid>
+
+                        <Border Background="#FEF3C7" CornerRadius="4" Padding="8,4" Margin="0,0,0,10" HorizontalAlignment="Left"
+                                Visibility="{Binding SituacaoCadastral, Converter={StaticResource NullToCollapsed}}">
+                            <TextBlock Text="{Binding SituacaoCadastral, StringFormat='Situação na Receita: {0}'}" FontSize="11" FontWeight="Bold" Foreground="#92400E"/>
+                        </Border>
                         <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>

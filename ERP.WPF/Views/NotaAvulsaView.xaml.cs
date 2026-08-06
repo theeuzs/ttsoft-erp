@@ -10,6 +10,7 @@ public partial class NotaAvulsaView : UserControl
     {
         InitializeComponent();
         var productService = App.Services.GetRequiredService<IProductService>();
-        DataContext = new ViewModels.NotaAvulsaViewModel(productService);
+        var customerService = App.Services.GetRequiredService<ICustomerService>();
+        DataContext = new ViewModels.NotaAvulsaViewModel(productService, customerService);
     }
 }

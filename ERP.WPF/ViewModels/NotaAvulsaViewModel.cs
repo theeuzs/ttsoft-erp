@@ -29,6 +29,7 @@ public class ItemNotaAvulsa
 public class NotaAvulsaViewModel : BaseViewModel
 {
     private readonly IProductService _productService;
+    private readonly ICustomerService _customerService;
     private Guid? _notaId;
 
     // ── Cabeçalho ────────────────────────────────────────────────────────
@@ -38,7 +39,23 @@ public class NotaAvulsaViewModel : BaseViewModel
 
     // ── Destinatário ─────────────────────────────────────────────────────
     public string DestinatarioNome { get; set; } = string.Empty;
-    public string? DestinatarioDocumento { get; set; }
+
+    private string? _destinatarioDocumento;
+    public string? DestinatarioDocumento
+    {
+        get => _destinatarioDocumento;
+        set
+        {
+            SetProperty(ref _destinatarioDocumento, value);
+            var limpo = new string((value ?? "").Where(char.IsDigit).ToArray());
+            if (limpo.Length == 14) _ = BuscarCnpjAsync(limpo);
+        }
+    }
+
+    private string? _situacaoCadastral;
+    /// <summary>"ATIVA" (verde) ou outra coisa (amarelo) — vender pra CNPJ
+    /// baixado é dor de cabeça que dá pra evitar de graça.</summary>
+    public string? SituacaoCadastral { get => _situacaoCadastral; set => SetProperty(ref _situacaoCadastral, value); }
     public string? DestinatarioLogradouro { get; set; }
     public string? DestinatarioNumero { get; set; }
     public string? DestinatarioBairro { get; set; }
@@ -81,6 +98,7 @@ public class NotaAvulsaViewModel : BaseViewModel
     public string StatusTexto { get => _statusTexto; set => SetProperty(ref _statusTexto, value); }
 
     public ICommand AdicionarItemCommand { get; }
+    public ICommand BuscarCnpjCommand { get; }
     public ICommand RemoverItemCommand { get; }
     public ICommand SalvarRascunhoCommand { get; }
     public ICommand ConferirCommand { get; }
@@ -90,11 +108,18 @@ public class NotaAvulsaViewModel : BaseViewModel
     public ICommand ExcluirRascunhoCommand { get; }
     public ICommand AtualizarRascunhosCommand { get; }
 
-    public NotaAvulsaViewModel(IProductService productService)
+    public NotaAvulsaViewModel(IProductService productService, ICustomerService customerService)
     {
         _productService = productService;
+        _customerService = customerService;
 
         AdicionarItemCommand = new RelayCommand(_ => AdicionarItem(), _ => ProdutoSelecionado != null && QuantidadeItem > 0);
+        BuscarCnpjCommand = new AsyncRelayCommand(async _ =>
+        {
+            var limpo = new string((DestinatarioDocumento ?? "").Where(char.IsDigit).ToArray());
+            if (limpo.Length != 14) { MessageBox.Show("Digite um CNPJ válido (14 dígitos).", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+            await BuscarCnpjAsync(limpo);
+        });
         RemoverItemCommand   = new RelayCommand(item => { if (item is ItemNotaAvulsa i) { Itens.Remove(i); OnPropertyChanged(nameof(Total)); } });
         SalvarRascunhoCommand = new AsyncRelayCommand(async _ => await SalvarRascunhoAsync());
         ConferirCommand        = new AsyncRelayCommand(async _ => await ConferirAsync());
@@ -138,6 +163,100 @@ public class NotaAvulsaViewModel : BaseViewModel
         QuantidadeItem = 1;
         ValorUnitarioItem = 0;
         CfopItem = "5102";
+    }
+
+    private async Task BuscarCnpjAsync(string cnpjLimpo)
+    {
+        StatusTexto = "Buscando CNPJ...";
+        try
+        {
+            // Prioridade 1: já é cliente cadastrado? Puxa do cadastro (tem IE, telefone, tudo).
+            var clientes = await _customerService.SearchAsync(cnpjLimpo);
+            var clienteExistente = clientes.FirstOrDefault(c =>
+                new string(c.Document.Where(char.IsDigit).ToArray()) == cnpjLimpo);
+
+            if (clienteExistente != null)
+            {
+                DestinatarioNome = clienteExistente.Name;
+                DestinatarioLogradouro = clienteExistente.Street;
+                DestinatarioNumero = clienteExistente.Number;
+                DestinatarioBairro = clienteExistente.Neighborhood;
+                DestinatarioMunicipio = clienteExistente.City;
+                DestinatarioUf = clienteExistente.State;
+                DestinatarioCep = clienteExistente.ZipCode;
+                DestinatarioIe = clienteExistente.Ie;
+                IndicadorIeDestinatario = string.IsNullOrWhiteSpace(clienteExistente.Ie) ? "9" : "1";
+                SituacaoCadastral = null; // já é cliente confiável, não precisa do selo
+                OnPropertyChanged(string.Empty);
+                StatusTexto = "Preenchido a partir do cadastro de clientes.";
+                return;
+            }
+
+            // Prioridade 2: consulta a Receita via BrasilAPI (S11, já existia, só não era usado aqui)
+            var brasilApi = App.Services.GetRequiredService<ERP.Infrastructure.Services.BrasilApiService>();
+            var resultado = await brasilApi.ConsultarCnpjAsync(cnpjLimpo);
+
+            if (resultado == null)
+            {
+                StatusTexto = brasilApi.CircuitAberto
+                    ? "Consulta de CNPJ temporariamente indisponível — preencha manualmente."
+                    : "CNPJ não encontrado — preencha manualmente.";
+                return;
+            }
+
+            DestinatarioNome = string.IsNullOrWhiteSpace(resultado.NomeFantasia) ? resultado.RazaoSocial : resultado.NomeFantasia;
+            DestinatarioLogradouro = resultado.Logradouro;
+            DestinatarioNumero = resultado.Numero;
+            DestinatarioBairro = resultado.Bairro;
+            DestinatarioMunicipio = resultado.Municipio;
+            DestinatarioUf = resultado.Uf;
+            DestinatarioCep = resultado.Cep;
+            DestinatarioIe = null; // IE é estadual, BrasilAPI não traz — fica manual
+            IndicadorIeDestinatario = "9";
+            SituacaoCadastral = resultado.DescricaoSituacaoCadastral;
+            OnPropertyChanged(string.Empty);
+            StatusTexto = "Preenchido pela Receita Federal.";
+
+            if (!string.Equals(resultado.DescricaoSituacaoCadastral, "ATIVA", StringComparison.OrdinalIgnoreCase))
+            {
+                MessageBox.Show(
+                    $"⚠️ Atenção: a situação cadastral desse CNPJ é \"{resultado.DescricaoSituacaoCadastral}\", não ATIVA. Confirme antes de emitir nota pra essa empresa.",
+                    "Situação Cadastral", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
+            var salvar = MessageBox.Show(
+                $"Quer salvar \"{DestinatarioNome}\" como cliente cadastrado, pra próxima vez vir automático?",
+                "Salvar Cliente", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (salvar == MessageBoxResult.Yes)
+            {
+                try
+                {
+                    await _customerService.CreateAsync(new CreateCustomerDto
+                    {
+                        Document     = cnpjLimpo,
+                        Name         = DestinatarioNome,
+                        Street       = DestinatarioLogradouro,
+                        Number       = DestinatarioNumero,
+                        Neighborhood = DestinatarioBairro,
+                        City         = DestinatarioMunicipio,
+                        State        = DestinatarioUf,
+                        ZipCode      = DestinatarioCep,
+                        Email        = resultado.Email,
+                        Phone        = resultado.DddTelefone1,
+                    });
+                }
+                catch (Exception exCliente)
+                {
+                    MessageBox.Show($"Não foi possível salvar como cliente: {exCliente.Message}", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusTexto = string.Empty;
+            MessageBox.Show($"Erro ao buscar CNPJ: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally { if (StatusTexto.StartsWith("Buscando")) StatusTexto = string.Empty; }
     }
 
     private SalvarNotaFiscalAvulsaDto MontarDto() => new()
