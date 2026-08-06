@@ -7,6 +7,11 @@ public class FiscalConfiguration
 {
     public string TokenFocusNfe { get; set; } = string.Empty;
     public bool UsarAmbienteProducao { get; set; } = false;
+
+    /// <summary>Só disponível via DatabaseFiscalConfigurationProvider por
+    /// enquanto — o arquivo local (JsonFiscalConfigurationProvider) não tem
+    /// esse dado hoje. Necessário pro MD-e (consulta por CNPJ).</summary>
+    public string? Cnpj { get; set; }
 }
 
 /// <summary>

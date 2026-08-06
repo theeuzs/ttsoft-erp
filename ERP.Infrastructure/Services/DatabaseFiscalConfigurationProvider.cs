@@ -34,7 +34,8 @@ public class DatabaseFiscalConfigurationProvider : IFiscalConfigurationProvider
         return new FiscalConfiguration
         {
             TokenFocusNfe        = TokenProtector.Desproteger(config.TokenFocusNfeEncriptado),
-            UsarAmbienteProducao = config.UsarAmbienteProducao
+            UsarAmbienteProducao = config.UsarAmbienteProducao,
+            Cnpj                 = config.Cnpj
         };
     }
 
@@ -51,13 +52,15 @@ public class DatabaseFiscalConfigurationProvider : IFiscalConfigurationProvider
             {
                 TenantId              = _tenant.TenantId,
                 TokenFocusNfeEncriptado = tokenEncriptado,
-                UsarAmbienteProducao  = config.UsarAmbienteProducao
+                UsarAmbienteProducao  = config.UsarAmbienteProducao,
+                Cnpj                  = config.Cnpj
             });
         }
         else
         {
             existente.TokenFocusNfeEncriptado = tokenEncriptado;
             existente.UsarAmbienteProducao    = config.UsarAmbienteProducao;
+            existente.Cnpj                    = config.Cnpj;
         }
 
         await _ctx.SaveChangesAsync();

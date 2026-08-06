@@ -252,6 +252,8 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IMotorFiscalService,
                             ERP.Application.Services.MotorFiscalService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.INotaFiscalAvulsaService,
                             ERP.Infrastructure.Services.NotaFiscalAvulsaService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.INfeRecebidaService,
+                            ERP.Infrastructure.Services.NfeRecebidaService>();
 
 builder.Services.AddHttpClient<IFocusNfeHttpClient, ERP.Infrastructure.HttpClients.FocusNfeHttpClient>(client =>
 {

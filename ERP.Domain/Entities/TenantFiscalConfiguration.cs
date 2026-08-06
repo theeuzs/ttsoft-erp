@@ -16,4 +16,9 @@ public class TenantFiscalConfiguration : BaseEntity
     public string TokenFocusNfeEncriptado { get; set; } = string.Empty;
 
     public bool UsarAmbienteProducao { get; set; } = false;
+
+    /// <summary>CNPJ da empresa emitente — hoje esse dado só existe hardcoded
+    /// no FocusNfceRequest.CnpjEmitente; MD-e precisa dele de verdade pra
+    /// saber "notas emitidas contra qual CNPJ" consultar.</summary>
+    public string? Cnpj { get; set; }
 }

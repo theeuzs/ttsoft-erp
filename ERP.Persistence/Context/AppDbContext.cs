@@ -163,6 +163,7 @@ public class AppDbContext : DbContext
     public DbSet<TenantFiscalConfiguration> TenantFiscalConfigurations { get; set; }
     public DbSet<NotaFiscal> NotasFiscais { get; set; }
     public DbSet<NotaFiscalItem> NotaFiscalItens { get; set; }
+    public DbSet<NfeRecebida> NfesRecebidas { get; set; }
     public DbSet<ContaPagar>           ContasPagar         { get; set; }
     public DbSet<MovimentoHaver>       MovimentosHaver     { get; set; }
     public DbSet<Orcamento>            Orcamentos          { get; set; }
@@ -377,6 +378,8 @@ public class AppDbContext : DbContext
             e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
         modelBuilder.Entity<NotaFiscalItem>().HasQueryFilter(
             e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+        modelBuilder.Entity<NfeRecebida>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
         modelBuilder.Entity<OrderAction>().HasQueryFilter(
             a => !a.IsDeleted && a.TenantId == tenantFilter.Value);
         modelBuilder.Entity<OrderConflict>().HasQueryFilter(
@@ -523,6 +526,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<ContaReceberEvento>().HasIndex(e => e.ContaReceberId);
         modelBuilder.Entity<NotaFiscal>().HasIndex(n => n.VendaId);
         modelBuilder.Entity<NotaFiscal>().HasIndex(n => n.Chave);
+        modelBuilder.Entity<NfeRecebida>().HasIndex(n => n.Chave).IsUnique();
         modelBuilder.Entity<OrderAction>().HasIndex(a => a.CorrelationId);
         modelBuilder.Entity<OrderConflict>().HasIndex(c => c.CorrelationId);
 

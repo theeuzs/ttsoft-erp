@@ -362,6 +362,8 @@ public partial class App : System.Windows.Application
                             ERP.Infrastructure.Services.FiscalService>();
         services.AddScoped<ERP.Application.Interfaces.INotaFiscalAvulsaService,
                             ERP.Infrastructure.Services.NotaFiscalAvulsaService>();
+        services.AddScoped<ERP.Application.Interfaces.INfeRecebidaService,
+                            ERP.Infrastructure.Services.NfeRecebidaService>();
         services.AddScoped<ERP.Application.Interfaces.ISalePolicyService, ERP.Application.Services.SalePolicyService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IDevolucaoService, DevolucaoService>(); 

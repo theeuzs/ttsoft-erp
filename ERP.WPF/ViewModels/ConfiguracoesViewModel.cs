@@ -43,6 +43,12 @@ public class ConfiguracoesViewModel : BaseViewModel
     
 
     // 👇 NOVAS VARIÁVEIS DA SEFAZ 👇
+    private string _cnpjEmpresa = string.Empty;
+    /// <summary>CNPJ da própria empresa — item MD-e do roadmap fiscal precisa
+    /// disso pra consultar "notas emitidas contra qual CNPJ"; antes só existia
+    /// hardcoded no DTO de emissão, nunca configurável.</summary>
+    public string CnpjEmpresa { get => _cnpjEmpresa; set => SetProperty(ref _cnpjEmpresa, value); }
+
     private string _tokenFocusNfe = string.Empty;
     public string TokenFocusNfe 
     { 
@@ -133,7 +139,8 @@ public class ConfiguracoesViewModel : BaseViewModel
             await dbProvider.SalvarConfiguracaoAsync(new ERP.Application.Interfaces.FiscalConfiguration
             {
                 TokenFocusNfe        = TokenFocusNfe,
-                UsarAmbienteProducao = UsarAmbienteProducao
+                UsarAmbienteProducao = UsarAmbienteProducao,
+                Cnpj                 = CnpjEmpresa
             });
 
             MessageBox.Show("✅ Configuração fiscal migrada pro banco com sucesso!", "TTSoft ERP",
