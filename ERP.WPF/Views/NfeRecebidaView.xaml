@@ -1,6 +1,7 @@
 <UserControl x:Class="ERP.WPF.Views.NfeRecebidaView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:ERP.WPF.Controls"
              Background="{DynamicResource CardBgAlt}">
 
     <Grid Margin="24">
@@ -15,6 +16,7 @@
                 <TextBlock Text="📥 Notas Recebidas (MD-e)" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource TextDark}"/>
                 <TextBlock Text="Notas de fornecedor emitidas contra o seu CNPJ — descobertas automaticamente, sem precisar pedir o XML por e-mail."
                            FontSize="13" Foreground="{DynamicResource TextMuted}" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                <controls:AmbienteFiscalBadge Margin="0,8,0,0"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                 <TextBlock Text="{Binding StatusTexto}" FontSize="12" Foreground="{DynamicResource CorAcento}"

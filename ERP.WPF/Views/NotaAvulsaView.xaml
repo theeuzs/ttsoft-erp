@@ -1,6 +1,7 @@
 <UserControl x:Class="ERP.WPF.Views.NotaAvulsaView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:ERP.WPF.Controls"
              Background="{DynamicResource CardBgAlt}">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -14,6 +15,7 @@
             <!-- Coluna principal — formulário -->
             <StackPanel Grid.Column="0">
                 <TextBlock Text="📝 Nota Fiscal Avulsa" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource TextDark}"/>
+                <controls:AmbienteFiscalBadge Margin="0,8,0,0"/>
                 <TextBlock Text="NF-e sem venda por trás — remessa, transferência, brinde, amostra, etc."
                            FontSize="13" Foreground="{DynamicResource TextMuted}" Margin="0,4,0,20"/>
 
