@@ -100,6 +100,13 @@
          Margin="0,5,0,15" Height="30" VerticalContentAlignment="Center"
          ToolTip="CPF, CNPJ, e-mail, celular ou chave aleatória"/>
 
+                        <TextBlock Text="Token de Confirmação Automática do PIX (opcional)" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+                        <TextBox Text="{Binding PixApiToken, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14"
+                                 BorderBrush="{DynamicResource BordaInput}" Margin="0,0,0,8"
+                                 ToolTip="Vazio = só confirmação manual (clicar no botão). Preenchido = detecta o pagamento sozinho."/>
+                        <ComboBox ItemsSource="{Binding ProvedoresPix}" SelectedItem="{Binding PixProvedor}"
+                                  Padding="8" Margin="0,0,0,15" HorizontalAlignment="Left" MinWidth="180"/>
+
                         <TextBlock Text="Endereço Completo" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
                         <TextBox Text="{Binding Endereco, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14" BorderBrush="{DynamicResource BordaInput}" Height="60" TextWrapping="Wrap" AcceptsReturn="True" Margin="0,0,0,15"/>
 

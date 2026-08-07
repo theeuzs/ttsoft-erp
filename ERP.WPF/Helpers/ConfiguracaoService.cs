@@ -24,6 +24,13 @@ public class ReciboConfig
     public string ChavePix  { get; set; } = string.Empty;
     public string CidadePix { get; set; } = string.Empty;
 
+    /// <summary>Código morto da auditoria ativado — token de API do provedor
+    /// de Pix, pra confirmação automática (PixPollingService). Vazio = só
+    /// confirmação manual, como já era.</summary>
+    public string PixApiToken { get; set; } = string.Empty;
+    /// <summary>"openpix" ou "gerencianet".</summary>
+    public string PixProvedor { get; set; } = "openpix";
+
     /// <summary>Código morto da auditoria ativado — porta COM da balança
     /// serial (Toledo/Filizola). Padrão COM1 se não configurado.</summary>
     public string BalancaComPort { get; set; } = "COM1";

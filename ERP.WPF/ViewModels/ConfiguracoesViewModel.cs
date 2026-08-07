@@ -49,6 +49,15 @@ public class ConfiguracoesViewModel : BaseViewModel
     /// hardcoded no DTO de emissão, nunca configurável.</summary>
     public string CnpjEmpresa { get => _cnpjEmpresa; set => SetProperty(ref _cnpjEmpresa, value); }
 
+    private string _pixApiToken = string.Empty;
+    /// <summary>Código morto da auditoria ativado — token do provedor de Pix
+    /// pra confirmação automática (PixPollingService).</summary>
+    public string PixApiToken { get => _pixApiToken; set => SetProperty(ref _pixApiToken, value); }
+
+    public string[] ProvedoresPix { get; } = { "openpix", "gerencianet" };
+    private string _pixProvedor = "openpix";
+    public string PixProvedor { get => _pixProvedor; set => SetProperty(ref _pixProvedor, value); }
+
     private string _balancaComPort = "COM1";
     /// <summary>Código morto da auditoria ativado — porta serial da balança.</summary>
     public string BalancaComPort { get => _balancaComPort; set => SetProperty(ref _balancaComPort, value); }
@@ -112,6 +121,8 @@ public class ConfiguracoesViewModel : BaseViewModel
         TokenFocusNfe = config.TokenFocusNfe ?? string.Empty;
         UsarAmbienteProducao = config.UsarAmbienteProducao;
         BalancaComPort = config.BalancaComPort ?? "COM1";
+        PixApiToken = config.PixApiToken ?? string.Empty;
+        PixProvedor = config.PixProvedor ?? "openpix";
 
         SelecionarLogoCommand = new RelayCommand(_ => SelecionarLogo());
         RemoverLogoCommand = new RelayCommand(_ => CaminhoLogo = string.Empty);
@@ -175,7 +186,9 @@ public class ConfiguracoesViewModel : BaseViewModel
             // 👇 SALVA OS DADOS DA SEFAZ 👇
             TokenFocusNfe = this.TokenFocusNfe,
             UsarAmbienteProducao = this.UsarAmbienteProducao,
-            BalancaComPort = this.BalancaComPort
+            BalancaComPort = this.BalancaComPort,
+            PixApiToken = this.PixApiToken,
+            PixProvedor = this.PixProvedor
         };
         
         ConfiguracaoService.Salvar(config);

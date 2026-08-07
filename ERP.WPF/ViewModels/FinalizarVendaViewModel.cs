@@ -536,14 +536,27 @@ public class FinalizarVendaViewModel : BaseViewModel
                 var config = ERP.WPF.Helpers.ConfiguracaoService.Carregar();
                 if (!string.IsNullOrWhiteSpace(config.ChavePix))
                 {
+                    string txid = $"ERP{DateTime.Now:yyyyMMddHHmmss}";
                     var pixView = new ERP.WPF.Views.PixQrCodeView(
                         valor:            pagamentoPix.Valor,
                         chavePix:         config.ChavePix,
                         nomeBeneficiario: config.NomeFantasia,
                         cidade:           "BRASIL",
-                        txid:             $"ERP{DateTime.Now:yyyyMMddHHmmss}");
+                        txid:             txid);
+
+                    // Código morto da auditoria ativado (06/08/2026) — a
+                    // janela já tinha o método ConfirmarPagamentoAutomaticamente()
+                    // pronto, esperando por isso, com o comentário "Chamado
+                    // pelo PDV quando recebe confirmação externa". PixPollingService
+                    // existia, testado, mas nunca era instanciado em lugar
+                    // nenhum. Sem token configurado, IniciarPolling() é um
+                    // no-op (mesmo comportamento manual de sempre).
+                    using var poller = new ERP.WPF.Helpers.PixPollingService();
+                    poller.PagamentoConfirmado += () => pixView.ConfirmarPagamentoAutomaticamente();
+                    poller.IniciarPolling(txid, config.PixApiToken, config.PixProvedor);
 
                     bool? resultado = pixView.ShowDialog();
+                    poller.Parar();
                 }
             }
 
