@@ -103,8 +103,18 @@ public class SyncEngineService
         try
         {
             using var doc = JsonDocument.Parse(payloadJson);
-            if (doc.RootElement.TryGetProperty("id", out var idProp) && idProp.TryGetGuid(out var g))
+            // Bug real achado pelos testes (08/2026): JsonSerializer.Serialize
+            // sem opções customizadas preserva o nome exato da propriedade C#
+            // (Id, PascalCase) — a busca por "id" minúsculo nunca encontrava
+            // nada, então RegistrarFalhaEventoAsync nunca rodava numa falha
+            // real; o log do Serilog aparecia (incondicional), mas
+            // Tentativas/UltimoErro nunca eram gravados no banco, deixando a
+            // tela de diagnóstico (Fase 3) cega justamente quando mais precisa
+            // funcionar. "Id" é o nome real; "id" fica como fallback defensivo.
+            if (doc.RootElement.TryGetProperty("Id", out var idProp) && idProp.TryGetGuid(out var g))
                 return g;
+            if (doc.RootElement.TryGetProperty("id", out var idPropLower) && idPropLower.TryGetGuid(out var g2))
+                return g2;
         }
         catch { /* payload malformado — RegistrarFalhaEventoAsync simplesmente não roda pra esse caso */ }
         return null;

@@ -15,6 +15,16 @@ public interface IContaBancariaService
         Guid contaBancariaId, decimal valor, string descricao, TipoMovimentoContaBancaria tipo,
         OrigemMovimentoFinanceiro origemTipo = OrigemMovimentoFinanceiro.Manual, Guid? origemId = null);
 
+    /// <summary>Idempotência (achado de auditoria pré-Fase-2 do Offline-First,
+    /// 08/2026) — usado pelo MotorFinanceiroService pra checar se essa origem
+    /// (ex: essa venda em PIX) já gerou movimento antes de criar outro.</summary>
+    /// <summary>Idempotência financeira granular (achado de auditoria pré-Fase-2
+    /// do Offline-First, 08/2026) — checa por linha de pagamento específica E
+    /// tipo (Entrada/Saída), porque um PIX recebido e seu estorno depois
+    /// compartilham o mesmo SalePaymentId mas são eventos diferentes — checar
+    /// só por SalePaymentId bloquearia o estorno legítimo.</summary>
+    Task<bool> ExisteMovimentoParaSalePaymentAsync(Guid salePaymentId, TipoMovimentoContaBancaria tipo);
+
     Task<IReadOnlyList<MovimentoContaBancariaDto>> ObterExtratoAsync(Guid contaBancariaId);
 
     /// <summary>
@@ -45,11 +55,11 @@ public interface IContaBancariaService
     /// exceção) se nenhuma conta padrão estiver definida, pra não travar a venda
     /// por causa de uma configuração financeira pendente.
     /// </summary>
-    Task RegistrarRecebimentoVendaAsync(Guid? vendaId, decimal valor, string descricao);
+    Task RegistrarRecebimentoVendaAsync(Guid? vendaId, decimal valor, string descricao, Guid? salePaymentId = null);
 
     /// <summary>
     /// Estorna uma entrada de PIX de uma venda cancelada — cria uma SAÍDA
     /// compensatória, nunca apaga a entrada original (auditoria preservada).
     /// </summary>
-    Task RegistrarEstornoVendaAsync(Guid vendaId, decimal valor, string descricao);
+    Task RegistrarEstornoVendaAsync(Guid vendaId, decimal valor, string descricao, Guid? salePaymentId = null);
 }

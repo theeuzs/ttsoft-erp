@@ -20,6 +20,11 @@ public class RecebivelOperadora : BaseEntity
     /// <summary>Venda que originou esse recebível — só referência, não obrigatório.</summary>
     public Guid? VendaId { get; set; }
 
+    /// <summary>Idempotência financeira granular (08/2026) — identifica a linha
+    /// de pagamento específica (uma venda pode ter 2 cartões, cada um com seu
+    /// próprio recebível legítimo). VendaId continua pra relatório/consulta.</summary>
+    public Guid? SalePaymentId { get; set; }
+
     public FormaRecebimentoOperadora FormaRecebimento { get; set; }
 
     public decimal ValorBruto   { get; set; } // valor da venda, o que o cliente pagou

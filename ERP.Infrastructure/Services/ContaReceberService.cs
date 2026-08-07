@@ -49,12 +49,13 @@ public class ContaReceberService : IContaReceberService
         await _ctx.SaveChangesAsync();
     }
 
-    public async Task GerarContaAPrazoAsync(Guid clienteId, Guid? vendaId, decimal valor, string descricao)
+    public async Task GerarContaAPrazoAsync(Guid clienteId, Guid? vendaId, decimal valor, string descricao, Guid? salePaymentId = null)
     {
         var conta = new ContaReceber
         {
             CustomerId     = clienteId,
             SaleId         = vendaId,
+            SalePaymentId  = salePaymentId,
             ValorTotal     = valor,
             ValorRecebido  = 0,
             DataEmissao    = DateTime.Now,
@@ -67,6 +68,12 @@ public class ContaReceberService : IContaReceberService
 
         await RegistrarEventoAsync(conta.Id, "Criada", valor, descricao);
     }
+
+    public async Task<IEnumerable<ContaReceber>> GetBySaleIdAsync(Guid saleId)
+        => await _uow.ContasReceber.GetBySaleIdAsync(saleId);
+
+    public async Task<bool> ExisteContaParaSalePaymentAsync(Guid salePaymentId)
+        => await _ctx.ContasReceber.AsNoTracking().AnyAsync(c => c.SalePaymentId == salePaymentId);
 
     public async Task<IEnumerable<ContaReceber>> GetPendentesAsync()
         => await _ctx.ContasReceber.AsNoTracking()

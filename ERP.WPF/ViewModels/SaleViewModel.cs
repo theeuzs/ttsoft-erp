@@ -202,7 +202,7 @@ public class SaleViewModel : BaseViewModel
                 // faz na hora de criar.
                 var pagamentosTuple = pagamentos
                     .Where(p => p.Amount > 0 && Enum.TryParse<PaymentMethod>(p.PaymentMethod.ToString(), out _))
-                    .Select(p => (Enum.Parse<PaymentMethod>(p.PaymentMethod.ToString()), p.Amount));
+                    .Select(p => (p.Id, Enum.Parse<PaymentMethod>(p.PaymentMethod.ToString()), p.Amount));
 
                 await motorFinanceiro.EstornarVendaAsync(
                     venda.Id, usuarioId, $"ESTORNO VENDA {venda.SaleNumber}", troco, pagamentosTuple);

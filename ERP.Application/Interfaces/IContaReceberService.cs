@@ -8,7 +8,16 @@ namespace ERP.Application.Interfaces;
 
 public interface IContaReceberService
 {
-    Task GerarContaAPrazoAsync(Guid clienteId, Guid? vendaId, decimal valor, string descricao);
+    Task GerarContaAPrazoAsync(Guid clienteId, Guid? vendaId, decimal valor, string descricao, Guid? salePaymentId = null);
+
+    /// <summary>Idempotência financeira granular (achado de auditoria pré-Fase-2
+    /// do Offline-First, 08/2026) — checa por linha de pagamento específica.</summary>
+    Task<bool> ExisteContaParaSalePaymentAsync(Guid salePaymentId);
+
+    /// <summary>Idempotência (achado de auditoria pré-Fase-2 do Offline-First,
+    /// 08/2026) — usado pelo MotorFinanceiroService pra checar se essa venda
+    /// já gerou uma conta a prazo antes de criar outra.</summary>
+    Task<IEnumerable<ContaReceber>> GetBySaleIdAsync(Guid saleId);
 
     // ── Parcelamento ──────────────────────────────────────────────────────────
     /// <summary>

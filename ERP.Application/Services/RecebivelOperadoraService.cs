@@ -31,7 +31,10 @@ public class RecebivelOperadoraService : IRecebivelOperadoraService
         }).ToList();
     }
 
-    public async Task RegistrarRecebivelVendaAsync(Guid? vendaId, PaymentMethod formaPagamento, decimal valorBruto)
+    public async Task<bool> ExisteRecebivelParaSalePaymentAsync(Guid salePaymentId)
+        => await _uow.RecebiveisOperadora.ExisteParaSalePaymentAsync(salePaymentId);
+
+    public async Task RegistrarRecebivelVendaAsync(Guid? vendaId, PaymentMethod formaPagamento, decimal valorBruto, Guid? salePaymentId = null)
     {
         var operadora = await _uow.OperadorasRecebimento.GetPadraoAsync();
         if (operadora is null) return; // sem operadora padrão configurada — não trava a venda.
@@ -55,6 +58,7 @@ public class RecebivelOperadoraService : IRecebivelOperadoraService
         {
             OperadoraRecebimentoId  = operadora.Id,
             VendaId                 = vendaId,
+            SalePaymentId           = salePaymentId,
             FormaRecebimento        = formaRecebimento,
             ValorBruto              = valorBruto,
             ValorTaxa               = valorTaxa,

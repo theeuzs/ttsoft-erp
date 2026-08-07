@@ -566,6 +566,16 @@ public class FinalizarVendaViewModel : BaseViewModel
             string observacaoCompleta = (this.EntregarNoEndereco && !string.IsNullOrWhiteSpace(this.EnderecoEntrega) ? this.EnderecoEntrega : "") + msgFiscal;
             // Observação geral é passada separadamente para o recibo (aparece antes dos itens)
 
+            // Idempotência financeira granular (achado de auditoria pré-Fase-2 do
+            // Offline-First, 08/2026) — gera o Id de cada linha de pagamento AQUI,
+            // uma vez só, ANTES de qualquer chamada de rede. O mesmo Id vai tanto
+            // pro CreateSaleDto (vira SalePayment.Id no banco) quanto, mais abaixo,
+            // pro ProcessarRecebimentoVendaAsync — é essa igualdade que permite ao
+            // Motor Financeiro saber exatamente qual linha está processando.
+            var linhasPagamento = Pagamentos
+                .Select(p => (Id: Guid.NewGuid(), p.Forma, p.Valor))
+                .ToList();
+
             var dto = new CreateSaleDto
             {
                 CustomerId = SelectedCustomer?.Id,
@@ -573,12 +583,12 @@ public class FinalizarVendaViewModel : BaseViewModel
                 UsuarioId = ERP.WPF.State.AppSession.UserId, 
                 Notes = observacaoCompleta,
                 DiscountAmount = this.Desconto + this.DescontoFidelidade,
-                Payments = Pagamentos.Select(p => new CreateSalePaymentDto { PaymentMethod = p.Forma, Amount = p.Valor }).ToList(), 
+                Payments = linhasPagamento.Select(p => new CreateSalePaymentDto { Id = p.Id, PaymentMethod = p.Forma, Amount = p.Valor }).ToList(), 
                 Items = ItensCarrinho.Select(i => new CreateSaleItemDto { ProductId = i.ProductId, Quantity = i.Quantity, UnitPrice = i.UnitPrice, DiscountPercent = 0, FatorConversao = i.FatorConversao, TotalItem = i.Total }).ToList()
             };
 
             var vendaSalva = await _saleService.CreateAsync(dto);
-            await SalvarNoCaixaEContasAReceberAsync(vendaSalva.Id);
+            await SalvarNoCaixaEContasAReceberAsync(vendaSalva.Id, linhasPagamento);
 
             // Debitar pontos de fidelidade SÓ após venda confirmada
             if (_pontosADebitar > 0 && SelectedCustomer != null)
@@ -652,7 +662,8 @@ public class FinalizarVendaViewModel : BaseViewModel
     // ==========================================================
     // FUNÇÕES AUXILIARES (Para o código ficar limpo)
     // ==========================================================
-    private async Task SalvarNoCaixaEContasAReceberAsync(Guid vendaId)
+    private async Task SalvarNoCaixaEContasAReceberAsync(
+        Guid vendaId, List<(Guid Id, PaymentMethod Forma, decimal Valor)> linhasPagamento)
     {
         using (var scope = ERP.WPF.App.Services.CreateScope())
         {
@@ -672,7 +683,7 @@ public class FinalizarVendaViewModel : BaseViewModel
 
             await motorFinanceiro.ProcessarRecebimentoVendaAsync(
                 vendaId, usuarioId, SelectedCustomer?.Id, nomeCliente, nomeVendedor, nomeOperador, Troco,
-                Pagamentos.Select(p => (p.Forma, p.Valor)));
+                linhasPagamento.Select(p => (p.Id, p.Forma, p.Valor)));
         }
     }
 

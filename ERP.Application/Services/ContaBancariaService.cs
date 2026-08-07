@@ -63,6 +63,9 @@ public class ContaBancariaService : IContaBancariaService
         await _uow.CommitAsync();
     }
 
+    public async Task<bool> ExisteMovimentoParaSalePaymentAsync(Guid salePaymentId, TipoMovimentoContaBancaria tipo)
+        => await _uow.ContasBancarias.ExisteMovimentoParaSalePaymentAsync(salePaymentId, tipo);
+
     public async Task RegistrarMovimentoAsync(
         Guid contaBancariaId, decimal valor, string descricao, TipoMovimentoContaBancaria tipo,
         OrigemMovimentoFinanceiro origemTipo = OrigemMovimentoFinanceiro.Manual, Guid? origemId = null)
@@ -219,7 +222,7 @@ public class ContaBancariaService : IContaBancariaService
     public async Task DefinirComoContaPadraoAsync(Guid contaBancariaId)
         => await _uow.ContasBancarias.DefinirContaPadraoAsync(contaBancariaId);
 
-    public async Task RegistrarRecebimentoVendaAsync(Guid? vendaId, decimal valor, string descricao)
+    public async Task RegistrarRecebimentoVendaAsync(Guid? vendaId, decimal valor, string descricao, Guid? salePaymentId = null)
     {
         // S17 FIX: fecha o ciclo PDV → Financeiro. Antes, vendas em PIX/Cartão só
         // tocavam o CaixaMovimento (corretamente, sem contar como dinheiro físico),
@@ -235,13 +238,14 @@ public class ContaBancariaService : IContaBancariaService
             Descricao       = descricao,
             OrigemTipo      = OrigemMovimentoFinanceiro.Venda,
             OrigemId        = vendaId,
+            SalePaymentId   = salePaymentId,
             Tipo            = TipoMovimentoContaBancaria.Entrada,
             DataHora        = DateTime.Now
         });
         await _uow.CommitAsync();
     }
 
-    public async Task RegistrarEstornoVendaAsync(Guid vendaId, decimal valor, string descricao)
+    public async Task RegistrarEstornoVendaAsync(Guid vendaId, decimal valor, string descricao, Guid? salePaymentId = null)
     {
         // S17 FIX cancelamento: NUNCA apaga ou edita a entrada original — cria
         // uma Saída compensatória nova, preservando o histórico de auditoria
@@ -258,6 +262,7 @@ public class ContaBancariaService : IContaBancariaService
             Descricao       = descricao,
             OrigemTipo      = OrigemMovimentoFinanceiro.Venda,
             OrigemId        = vendaId,
+            SalePaymentId   = salePaymentId,
             Tipo            = TipoMovimentoContaBancaria.Saida,
             DataHora        = DateTime.Now
         });

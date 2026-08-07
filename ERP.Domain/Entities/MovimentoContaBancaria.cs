@@ -40,4 +40,12 @@ public class MovimentoContaBancaria : BaseEntity
     /// </summary>
     public OrigemMovimentoFinanceiro OrigemTipo { get; set; } = OrigemMovimentoFinanceiro.Manual;
     public Guid? OrigemId { get; set; }
+
+    /// <summary>Idempotência financeira granular (08/2026) — só preenchido
+    /// quando OrigemTipo=Venda. Identifica a linha de pagamento específica,
+    /// não a venda inteira (uma venda pode ter 2 PIX legítimos, e um PIX
+    /// recebido + seu estorno depois compartilham o mesmo SalePaymentId mas
+    /// com Tipo diferente — por isso o índice único é composto, nunca só
+    /// nesse campo).</summary>
+    public Guid? SalePaymentId { get; set; }
 }

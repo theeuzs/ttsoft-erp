@@ -28,6 +28,11 @@ public interface ICaixaRepository
     // Adiciona o movimento direto na tabela, ignorando a memória velha!
     Task AddMovimentoAsync(ERP.Domain.Entities.CaixaMovimento movimento);
 
+    /// <summary>Idempotência financeira granular (achado de auditoria pré-Fase-2
+    /// do Offline-First, 08/2026) — checa por linha de pagamento específica,
+    /// não por venda inteira (uma venda pode ter várias linhas legítimas).</summary>
+    Task<bool> ExisteMovimentoParaSalePaymentAsync(Guid salePaymentId);
+
     // S8: saldo em dinheiro para validação de sangria (Abertura + Suprimento + VendaDinheiro − Sangria)
     Task<decimal> GetSaldoDinheiroAsync(Guid caixaId);
 

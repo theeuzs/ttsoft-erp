@@ -16,13 +16,24 @@ public class OfflineSyncService
 {
     private readonly string _dbPath;
 
-    public OfflineSyncService()
+    /// <param name="dbPath">Testabilidade — igual ao padrão já usado em
+    /// PixPollingService (S15 FIX): default preserva o comportamento de
+    /// produção exatamente como era (caminho fixo em LocalApplicationData);
+    /// os testes passam um caminho temporário isolado.</param>
+    public OfflineSyncService(string? dbPath = null)
     {
-        var pasta = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "TTSoft.ERP");
-        Directory.CreateDirectory(pasta);
-        _dbPath = Path.Combine(pasta, "offline.db");
+        if (dbPath != null)
+        {
+            _dbPath = dbPath;
+        }
+        else
+        {
+            var pasta = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "TTSoft.ERP");
+            Directory.CreateDirectory(pasta);
+            _dbPath = Path.Combine(pasta, "offline.db");
+        }
         InicializarBanco();
     }
 

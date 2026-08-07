@@ -51,6 +51,10 @@ public class RecebivelOperadoraRepository : IRecebivelOperadoraRepository
             .Where(r => r.VendaId == vendaId)
             .ToListAsync();
 
+    public async Task<bool> ExisteParaSalePaymentAsync(Guid salePaymentId)
+        => await _context.RecebiveisOperadora.AsNoTracking()
+            .AnyAsync(r => r.SalePaymentId == salePaymentId);
+
     public async Task CancelarPendentesPorVendaAsync(Guid vendaId)
         => await _context.RecebiveisOperadora
             .Where(r => r.VendaId == vendaId && r.Status == StatusRecebivel.Pendente)

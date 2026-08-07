@@ -84,7 +84,7 @@ public class CaixaService : ICaixaService
     // 🟢 Registra movimento no caixa DO USUÁRIO
     public async Task RegistrarMovimentoAsync(Guid usuarioId, decimal valor, string descricao,
                                                PaymentMethod formaPagamento, TipoMovimentoCaixa tipo,
-                                               decimal maxSangriaValue = 0m)
+                                               decimal maxSangriaValue = 0m, Guid? vendaId = null, Guid? salePaymentId = null)
     {
         // S8 FIX: silêncio com caixa fechado → 200 OK fantasma; agora lança exceção (400 no controller).
         var caixaAberto = await _uow.Caixas.GetCaixaAbertoByUsuarioAsync(usuarioId)
@@ -108,7 +108,9 @@ public class CaixaService : ICaixaService
             Descricao      = descricao,
             FormaPagamento = formaPagamento,
             Tipo           = tipo,
-            DataHora       = DateTime.Now
+            DataHora       = DateTime.Now,
+            VendaId        = vendaId,
+            SalePaymentId  = salePaymentId
         };
 
         await _uow.Caixas.AddMovimentoAsync(novoMovimento);
@@ -116,6 +118,9 @@ public class CaixaService : ICaixaService
     }
 
     // 🟢 Fecha o caixa DO USUÁRIO
+    public async Task<bool> ExisteMovimentoParaSalePaymentAsync(Guid salePaymentId)
+        => await _uow.Caixas.ExisteMovimentoParaSalePaymentAsync(salePaymentId);
+
     public async Task FecharCaixaAsync(Guid usuarioId)
     {
         var caixaAberto = await _uow.Caixas.GetCaixaAbertoByUsuarioAsync(usuarioId);

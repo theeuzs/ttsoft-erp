@@ -4,6 +4,22 @@ using ERP.Domain.Enums;
 
 namespace ERP.Application.Services;
 
+/// <summary>
+/// Ponto único de entrada pro PDV processar o recebimento de uma venda. Antes,
+/// essa decisão (Dinheiro → Caixa, PIX → Conta Bancária, Cartão → Recebível de
+/// Operadora, A Prazo → Conta a Receber, Haver → saldo do cliente) vivia inline
+/// dentro do FinalizarVendaViewModel.
+///
+/// Idempotência financeira granular (achado de auditoria pré-Fase-2 do
+/// Offline-First, 08/2026): a pergunta certa não é "essa venda já foi
+/// processada?" — é "essa LINHA de pagamento específica já gerou esse
+/// lançamento?". Uma venda pode ter várias linhas legítimas (2 cartões,
+/// PIX+dinheiro, débito+crédito) que não são duplicatas umas das outras.
+/// Confirmado com dados reais de produção: os 3 casos que pareciam duplicata
+/// eram todos legítimos (split de pagamento ou recebimento+estorno) — nenhum
+/// era bug de verdade. SalePaymentId (gerado no cliente, mesmo padrão do
+/// Sale.Id da Fase 1) é a chave de idempotência certa.
+/// </summary>
 public class MotorFinanceiroService : IMotorFinanceiroService
 {
     private readonly ICaixaService             _caixaService;
@@ -27,7 +43,7 @@ public class MotorFinanceiroService : IMotorFinanceiroService
     public async Task ProcessarRecebimentoVendaAsync(
         Guid vendaId, Guid usuarioId, Guid? clienteId, string nomeCliente, string nomeVendedor,
         string nomeOperador, decimal troco,
-        IEnumerable<(PaymentMethod Forma, decimal Valor)> pagamentos)
+        IEnumerable<(Guid SalePaymentId, PaymentMethod Forma, decimal Valor)> pagamentos)
     {
         if (usuarioId == Guid.Empty)
             throw new InvalidOperationException("Sessão de usuário perdida! Por favor, faça login novamente.");
@@ -37,16 +53,16 @@ public class MotorFinanceiroService : IMotorFinanceiroService
             switch (p.Forma)
             {
                 case PaymentMethod.APrazo:
-                    await RegistrarAPrazoAsync(vendaId, clienteId, nomeVendedor, p.Valor);
+                    await RegistrarAPrazoAsync(vendaId, p.SalePaymentId, clienteId, nomeVendedor, p.Valor);
                     break;
                 case PaymentMethod.Dinheiro:
-                    await RegistrarDinheiroAsync(usuarioId, p.Valor, troco);
+                    await RegistrarDinheiroAsync(vendaId, p.SalePaymentId, usuarioId, p.Valor, troco);
                     break;
                 case PaymentMethod.Haver:
-                    await RegistrarHaverAsync(usuarioId, clienteId, nomeOperador, p.Valor);
+                    await RegistrarHaverAsync(vendaId, p.SalePaymentId, usuarioId, clienteId, nomeOperador, p.Valor);
                     break;
                 default:
-                    await RegistrarDigitalAsync(vendaId, usuarioId, nomeCliente, p.Forma, p.Valor);
+                    await RegistrarDigitalAsync(vendaId, p.SalePaymentId, usuarioId, nomeCliente, p.Forma, p.Valor);
                     break;
             }
         }
@@ -69,7 +85,7 @@ public class MotorFinanceiroService : IMotorFinanceiroService
 
     public async Task EstornarVendaAsync(
         Guid vendaId, Guid usuarioId, string descricaoEstorno, decimal troco,
-        IEnumerable<(PaymentMethod Forma, decimal Valor)> pagamentos)
+        IEnumerable<(Guid SalePaymentId, PaymentMethod Forma, decimal Valor)> pagamentos)
     {
         var trocoRestante = troco;
 
@@ -91,16 +107,24 @@ public class MotorFinanceiroService : IMotorFinanceiroService
 
                 if (valorEstornar > 0)
                 {
+                    // Estorno de Dinheiro é uma Sangria manual, não passa pela
+                    // checagem de idempotência de RegistrarDinheiroAsync — é um
+                    // fluxo diferente (cancelamento, não sincronização), disparado
+                    // no máximo uma vez por cancelamento de venda.
                     await _caixaService.RegistrarMovimentoAsync(
-                        usuarioId, valorEstornar, descricaoEstorno, p.Forma, TipoMovimentoCaixa.Sangria);
+                        usuarioId, valorEstornar, descricaoEstorno, p.Forma, TipoMovimentoCaixa.Sangria,
+                        vendaId: vendaId, salePaymentId: p.SalePaymentId);
                 }
             }
             else if (p.Forma == PaymentMethod.Pix)
             {
                 // PIX caiu na hora — estorna com uma Saída compensatória na Conta
-                // Bancária. Nunca uma "Sangria" de Caixa (isso nunca fez sentido
-                // pra PIX, era o bug original: tratava tudo como dinheiro físico).
-                await _contaBancariaService.RegistrarEstornoVendaAsync(vendaId, p.Valor, descricaoEstorno);
+                // Bancária. Idempotência por (SalePaymentId, Saida) — se esse
+                // pagamento já foi estornado, não estorna de novo.
+                if (await _contaBancariaService.ExisteMovimentoParaSalePaymentAsync(p.SalePaymentId, TipoMovimentoContaBancaria.Saida))
+                    continue;
+
+                await _contaBancariaService.RegistrarEstornoVendaAsync(vendaId, p.Valor, descricaoEstorno, p.SalePaymentId);
             }
             else if (p.Forma == PaymentMethod.CartaoDebito || p.Forma == PaymentMethod.CartaoCredito)
             {
@@ -112,39 +136,52 @@ public class MotorFinanceiroService : IMotorFinanceiroService
         }
     }
 
-    private async Task RegistrarAPrazoAsync(Guid vendaId, Guid? clienteId, string nomeVendedor, decimal valor)
+    private async Task RegistrarAPrazoAsync(Guid vendaId, Guid salePaymentId, Guid? clienteId, string nomeVendedor, decimal valor)
     {
         if (clienteId is null)
             throw new InvalidOperationException("Venda a prazo precisa de um cliente selecionado.");
 
+        // Idempotência granular — segunda camada é a constraint única em
+        // ContaReceber.SalePaymentId no banco; essa checagem aqui evita a
+        // exceção de constraint no caso comum (retry do Sync Engine).
+        if (await _contaReceberService.ExisteContaParaSalePaymentAsync(salePaymentId)) return;
+
         // Mantido igual ao original: usa o nome do VENDEDOR aqui, não do cliente.
         await _contaReceberService.GerarContaAPrazoAsync(
-            clienteId.Value, vendaId, valor, $"Venda A Prazo - {nomeVendedor}");
+            clienteId.Value, vendaId, valor, $"Venda A Prazo - {nomeVendedor}", salePaymentId);
     }
 
-    private async Task RegistrarDinheiroAsync(Guid usuarioId, decimal valor, decimal troco)
+    private async Task RegistrarDinheiroAsync(Guid vendaId, Guid salePaymentId, Guid usuarioId, decimal valor, decimal troco)
     {
+        if (await _caixaService.ExisteMovimentoParaSalePaymentAsync(salePaymentId)) return;
+
         decimal valorParaCaixa = troco > 0 ? valor - troco : valor;
         await _caixaService.RegistrarMovimentoAsync(
-            usuarioId, valorParaCaixa, "VENDA - DINHEIRO", PaymentMethod.Dinheiro, TipoMovimentoCaixa.Venda);
+            usuarioId, valorParaCaixa, "VENDA - DINHEIRO", PaymentMethod.Dinheiro, TipoMovimentoCaixa.Venda,
+            vendaId: vendaId, salePaymentId: salePaymentId);
     }
 
-    private async Task RegistrarHaverAsync(Guid usuarioId, Guid? clienteId, string nomeOperador, decimal valor)
+    private async Task RegistrarHaverAsync(Guid vendaId, Guid salePaymentId, Guid usuarioId, Guid? clienteId, string nomeOperador, decimal valor)
     {
         if (clienteId is null) return;
+        if (await _caixaService.ExisteMovimentoParaSalePaymentAsync(salePaymentId)) return;
 
         // Mantido igual ao original: usa o nome do OPERADOR logado aqui, não do cliente.
         await _haverService.RegistrarMovimentoVendaAsync(
             clienteId.Value, valor, "Saida", "Uso em venda", nomeOperador);
 
         await _caixaService.RegistrarMovimentoAsync(
-            usuarioId, valor, "VENDA (Haver)", PaymentMethod.Haver, TipoMovimentoCaixa.Venda);
+            usuarioId, valor, "VENDA (Haver)", PaymentMethod.Haver, TipoMovimentoCaixa.Venda,
+            vendaId: vendaId, salePaymentId: salePaymentId);
     }
 
-    private async Task RegistrarDigitalAsync(Guid vendaId, Guid usuarioId, string nomeCliente, PaymentMethod forma, decimal valor)
+    private async Task RegistrarDigitalAsync(Guid vendaId, Guid salePaymentId, Guid usuarioId, string nomeCliente, PaymentMethod forma, decimal valor)
     {
+        if (await _caixaService.ExisteMovimentoParaSalePaymentAsync(salePaymentId)) return;
+
         await _caixaService.RegistrarMovimentoAsync(
-            usuarioId, valor, $"VENDA DIGITAL - {forma}", forma, TipoMovimentoCaixa.Venda);
+            usuarioId, valor, $"VENDA DIGITAL - {forma}", forma, TipoMovimentoCaixa.Venda,
+            vendaId: vendaId, salePaymentId: salePaymentId);
 
         // Ponto único de decisão: PIX cai direto na Conta Bancária (é
         // literalmente instantâneo, 1 pra 1, sem intermediário). Cartão gera um
@@ -154,12 +191,15 @@ public class MotorFinanceiroService : IMotorFinanceiroService
         // (Conta Padrão / Operadora Padrão) ainda não existir.
         if (forma == PaymentMethod.Pix)
         {
+            if (await _contaBancariaService.ExisteMovimentoParaSalePaymentAsync(salePaymentId, TipoMovimentoContaBancaria.Entrada))
+                return;
             await _contaBancariaService.RegistrarRecebimentoVendaAsync(
-                vendaId, valor, $"Venda - {nomeCliente} ({forma})");
+                vendaId, valor, $"Venda - {nomeCliente} ({forma})", salePaymentId);
         }
         else if (forma == PaymentMethod.CartaoDebito || forma == PaymentMethod.CartaoCredito)
         {
-            await _recebivelOperadoraService.RegistrarRecebivelVendaAsync(vendaId, forma, valor);
+            if (await _recebivelOperadoraService.ExisteRecebivelParaSalePaymentAsync(salePaymentId)) return;
+            await _recebivelOperadoraService.RegistrarRecebivelVendaAsync(vendaId, forma, valor, salePaymentId);
         }
     }
 }

@@ -102,7 +102,7 @@ public class SaleService : ISaleService
             Notes = dto.Notes,
             Payments = dto.Payments.Select(p => new SalePayment
             {
-                Id = Guid.NewGuid(), 
+                Id = p.Id ?? Guid.NewGuid(),
                 SaleId = novaVendaId,
                 PaymentMethod = p.PaymentMethod,
                 Amount = p.Amount

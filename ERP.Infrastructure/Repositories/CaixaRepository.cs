@@ -72,6 +72,9 @@ public class CaixaRepository : ICaixaRepository
         await _context.AddAsync(movimento);
     }
 
+    public async Task<bool> ExisteMovimentoParaSalePaymentAsync(Guid salePaymentId)
+        => await _context.Set<CaixaMovimento>().AsNoTracking().AnyAsync(m => m.SalePaymentId == salePaymentId);
+
     // S8: computa saldo em dinheiro para validação de sangria.
     // Abertura + Suprimento + vendas em dinheiro - Sangrias.
     // Movimentos de venda sem FormaPagamento explícita contam como dinheiro (legado).

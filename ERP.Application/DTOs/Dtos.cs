@@ -147,6 +147,14 @@ public record CustomerDto(
 // ── Sale ──────────────────────────────────────────────────
 public class CreateSalePaymentDto
 {
+    /// <summary>Idempotência financeira granular (achado de auditoria pré-Fase-2
+    /// do Offline-First, 08/2026) — gerado no cliente (WPF), igual o Sale.Id,
+    /// no momento em que a linha de pagamento é montada. Identifica ESSA linha
+    /// especificamente, não a venda inteira — uma venda pode ter várias linhas
+    /// legítimas (2 cartões, PIX+dinheiro, etc.) que não podem ser tratadas
+    /// como duplicata umas das outras.</summary>
+    public Guid? Id { get; set; }
+
     public PaymentMethod PaymentMethod { get; set; }
     public decimal Amount { get; set; }
 }
@@ -186,7 +194,7 @@ public class CreateSaleItemDto
     public decimal TotalItem { get; set; }
 }
 
-public record SalePaymentDto(string PaymentMethod, decimal Amount);
+public record SalePaymentDto(Guid Id, string PaymentMethod, decimal Amount);
 
 public record SaleDto(
     Guid Id,

@@ -557,6 +557,34 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<NotaFiscal>().HasIndex(n => n.VendaId);
         modelBuilder.Entity<NotaFiscal>().HasIndex(n => n.Chave);
         modelBuilder.Entity<NfeRecebida>().HasIndex(n => n.Chave).IsUnique();
+
+        // Segunda camada de defesa contra duplicidade financeira (achado de
+        // auditoria pré-Fase-2 do Offline-First, 08/2026) — um "if não existe,
+        // cria" sozinho no código ainda pode sofrer corrida (duas threads
+        // checam "não existe" ao mesmo tempo, as duas criam).
+        //
+        // Chave é SalePaymentId, NÃO VendaId/OrigemId — confirmado contra dado
+        // real de produção: uma venda pode ter várias linhas de pagamento
+        // legítimas (2 cartões, débito+crédito, PIX+dinheiro) que não podem
+        // ser tratadas como duplicata umas das outras. Um índice único por
+        // venda inteira teria bloqueado 3 casos reais e legítimos (nenhum dos
+        // "duplicados" encontrados na auditoria era bug de verdade).
+        //
+        // SQL Server trata NULL como distinto em índice único por padrão —
+        // lançamentos que não vêm de venda continuam livres, sem limite.
+        modelBuilder.Entity<ContaReceber>().HasIndex(c => c.SalePaymentId).IsUnique()
+            .HasFilter("[SalePaymentId] IS NOT NULL");
+        modelBuilder.Entity<RecebivelOperadora>().HasIndex(r => r.SalePaymentId).IsUnique()
+            .HasFilter("[SalePaymentId] IS NOT NULL");
+        modelBuilder.Entity<CaixaMovimento>().HasIndex(c => c.SalePaymentId).IsUnique()
+            .HasFilter("[SalePaymentId] IS NOT NULL");
+        // Composto com Tipo — um PIX recebido e seu estorno depois compartilham
+        // o mesmo SalePaymentId, mas são dois eventos financeiros diferentes
+        // (Entrada vs Saída). Único só em SalePaymentId bloquearia o estorno
+        // legítimo (confirmado no código real: RegistrarEstornoVendaAsync cria
+        // uma Saída nova de propósito, nunca edita a Entrada original).
+        modelBuilder.Entity<MovimentoContaBancaria>().HasIndex(m => new { m.SalePaymentId, m.Tipo }).IsUnique()
+            .HasFilter("[SalePaymentId] IS NOT NULL");
         modelBuilder.Entity<OrderAction>().HasIndex(a => a.CorrelationId);
         modelBuilder.Entity<OrderConflict>().HasIndex(c => c.CorrelationId);
 

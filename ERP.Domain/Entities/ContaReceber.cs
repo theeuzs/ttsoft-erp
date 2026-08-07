@@ -11,6 +11,11 @@ public class ContaReceber : BaseEntity
     // Opcional: Vincula a dívida a uma venda específica do PDV
     public Guid? SaleId { get; set; }
 
+    /// <summary>Idempotência financeira granular (08/2026) — identifica a linha
+    /// de pagamento específica que gerou essa conta, não só a venda. SaleId
+    /// continua existindo pra relatório/consulta ("contas dessa venda").</summary>
+    public Guid? SalePaymentId { get; set; }
+
     // Valores da dívida
     public decimal ValorTotal { get; set; }
     public decimal ValorRecebido { get; set; }

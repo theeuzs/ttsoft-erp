@@ -15,8 +15,12 @@ public interface ICaixaService
     // 🟢 Registra movimento no caixa DO USUÁRIO
     Task RegistrarMovimentoAsync(Guid usuarioId, decimal valor, string descricao,
                                   PaymentMethod formaPagamento, TipoMovimentoCaixa tipo,
-                                  decimal maxSangriaValue = 0m);
+                                  decimal maxSangriaValue = 0m, Guid? vendaId = null, Guid? salePaymentId = null);
 
     // 🟢 Fecha o caixa DO USUÁRIO
     Task FecharCaixaAsync(Guid usuarioId);
+
+    /// <summary>Idempotência financeira granular (achado de auditoria pré-Fase-2
+    /// do Offline-First, 08/2026) — checa por linha de pagamento específica.</summary>
+    Task<bool> ExisteMovimentoParaSalePaymentAsync(Guid salePaymentId);
 }

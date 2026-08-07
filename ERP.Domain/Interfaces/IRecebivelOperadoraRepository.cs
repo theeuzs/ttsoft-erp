@@ -23,4 +23,8 @@ public interface IRecebivelOperadoraRepository
 
     /// <summary>Cancela os recebíveis AINDA PENDENTES de uma venda (chamado no cancelamento da venda).</summary>
     Task CancelarPendentesPorVendaAsync(Guid vendaId);
+
+    /// <summary>Idempotência financeira granular (achado de auditoria pré-Fase-2
+    /// do Offline-First, 08/2026) — checa por linha de pagamento específica.</summary>
+    Task<bool> ExisteParaSalePaymentAsync(Guid salePaymentId);
 }

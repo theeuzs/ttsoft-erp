@@ -37,6 +37,10 @@ public class ContaBancariaRepository : IContaBancariaRepository
     public async Task AddMovimentoAsync(MovimentoContaBancaria movimento)
         => await _context.MovimentosContaBancaria.AddAsync(movimento);
 
+    public async Task<bool> ExisteMovimentoParaSalePaymentAsync(Guid salePaymentId, TipoMovimentoContaBancaria tipo)
+        => await _context.MovimentosContaBancaria.AsNoTracking()
+            .AnyAsync(m => m.SalePaymentId == salePaymentId && m.Tipo == tipo);
+
     public async Task<IEnumerable<MovimentoContaBancaria>> GetMovimentosAsync(Guid contaBancariaId)
         => await _context.MovimentosContaBancaria
             .AsNoTracking()

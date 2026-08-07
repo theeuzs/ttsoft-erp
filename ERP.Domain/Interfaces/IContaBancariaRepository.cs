@@ -16,6 +16,12 @@ public interface IContaBancariaRepository
     Task AddMovimentoAsync(MovimentoContaBancaria movimento);
     Task<IEnumerable<MovimentoContaBancaria>> GetMovimentosAsync(Guid contaBancariaId);
 
+    /// <summary>Idempotência financeira granular (achado de auditoria pré-Fase-2
+    /// do Offline-First, 08/2026) — checa por linha de pagamento específica E
+    /// tipo (Entrada/Saída), porque um PIX recebido e seu estorno depois
+    /// compartilham o mesmo SalePaymentId mas são eventos diferentes.</summary>
+    Task<bool> ExisteMovimentoParaSalePaymentAsync(Guid salePaymentId, TipoMovimentoContaBancaria tipo);
+
     /// <summary>Saldo atual = SaldoInicial + soma de Entradas − soma de Saídas.</summary>
     Task<decimal> GetSaldoAsync(Guid contaBancariaId);
 

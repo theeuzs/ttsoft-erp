@@ -22,7 +22,7 @@ public interface IMotorFinanceiroService
         string nomeVendedor,
         string nomeOperador,
         decimal troco,
-        IEnumerable<(PaymentMethod Forma, decimal Valor)> pagamentos);
+        IEnumerable<(Guid SalePaymentId, PaymentMethod Forma, decimal Valor)> pagamentos);
 
     /// <summary>
     /// Liquidação de um lote de Recebíveis de Operadora — passa pelo Motor
@@ -51,5 +51,5 @@ public interface IMotorFinanceiroService
     /// </summary>
     Task EstornarVendaAsync(
         Guid vendaId, Guid usuarioId, string descricaoEstorno, decimal troco,
-        IEnumerable<(PaymentMethod Forma, decimal Valor)> pagamentos);
+        IEnumerable<(Guid SalePaymentId, PaymentMethod Forma, decimal Valor)> pagamentos);
 }

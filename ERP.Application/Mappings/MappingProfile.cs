@@ -90,7 +90,7 @@ public class MappingProfile : Profile
             ));
 
         CreateMap<SalePayment, SalePaymentDto>()
-            .ConstructUsing(src => new SalePaymentDto(src.PaymentMethod.ToString(), src.Amount));
+            .ConstructUsing(src => new SalePaymentDto(src.Id, src.PaymentMethod.ToString(), src.Amount));
 
         CreateMap<Sale, SaleDetailDto>()
             .ConstructUsing((s, ctx) => new SaleDetailDto(
@@ -105,7 +105,7 @@ public class MappingProfile : Profile
                 s.Subtotal,
                 s.DiscountAmount,
                 s.Total,
-                s.Payments.Select(p => new SalePaymentDto(p.PaymentMethod.ToString(), p.Amount)).ToList(),
+                s.Payments.Select(p => new SalePaymentDto(p.Id, p.PaymentMethod.ToString(), p.Amount)).ToList(),
                 ctx.Mapper.Map<List<SaleItemDto>>(s.Items),
                 s.Notes
             ));
