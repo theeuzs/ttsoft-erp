@@ -306,6 +306,7 @@
                                 <Button Content="🏪 Filiais" Style="{StaticResource NavButton}" Tag="filiais" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=users.view}"/>
                                 <Button Content="⚙️ Configurações" Style="{StaticResource NavButton}" Tag="config" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=config.view}"/>
                                 <Button Content="📦 Importar Sistema Antigo" Style="{StaticResource NavButton}" Tag="legacyimport" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=legacyimport.view}"/>
+                                <Button Content="🔄 Sync Offline (temp.)" Style="{StaticResource NavButton}" Tag="syncdiagnostico" Click="NavButton_Click" Visibility="{Binding Converter={StaticResource RoleToVisibilityConverter}, ConverterParameter=syncdiagnostico.view}"/>
                             </StackPanel>
                         </Expander>
 

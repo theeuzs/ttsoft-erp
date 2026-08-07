@@ -40,6 +40,7 @@ public static class PermissionChecker
     public const string NfeRecebidaView = "nferecebida.view";
     public const string NfseView = "nfse.view";
     public const string LegacyImportView = "legacyimport.view";
+    public const string SincronizacaoDiagnosticoView = "syncdiagnostico.view";
 
     // Relatórios / Operacionais
     public const string AuditView        = "audit.view";

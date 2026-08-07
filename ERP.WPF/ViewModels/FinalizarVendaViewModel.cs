@@ -566,18 +566,23 @@ public class FinalizarVendaViewModel : BaseViewModel
             string observacaoCompleta = (this.EntregarNoEndereco && !string.IsNullOrWhiteSpace(this.EnderecoEntrega) ? this.EnderecoEntrega : "") + msgFiscal;
             // Observação geral é passada separadamente para o recibo (aparece antes dos itens)
 
-            // Idempotência financeira granular (achado de auditoria pré-Fase-2 do
-            // Offline-First, 08/2026) — gera o Id de cada linha de pagamento AQUI,
-            // uma vez só, ANTES de qualquer chamada de rede. O mesmo Id vai tanto
-            // pro CreateSaleDto (vira SalePayment.Id no banco) quanto, mais abaixo,
-            // pro ProcessarRecebimentoVendaAsync — é essa igualdade que permite ao
-            // Motor Financeiro saber exatamente qual linha está processando.
+            // Fase 2 do Offline-First (achado da revisão cruzada com GPT/Gemini,
+            // 08/2026) — Sale.Id também precisa ser gerado no cliente, igual já
+            // fazíamos com SalePayment.Id. Sem isso, o mecanismo de idempotência
+            // do CreateAsync (já pronto e testado desde a Fase 1) nunca é
+            // acionado no caminho online normal — existe, mas ninguém "liga a
+            // chave". É esse MESMO Id que, se cair pro offline, vai ser
+            // reaproveitado no SQLite e na sincronização depois — nunca gera Id
+            // novo no fallback, senão a proteção inteira perde o sentido.
+            Guid vendaId = Guid.NewGuid();
+
             var linhasPagamento = Pagamentos
                 .Select(p => (Id: Guid.NewGuid(), p.Forma, p.Valor))
                 .ToList();
 
             var dto = new CreateSaleDto
             {
+                Id = vendaId,
                 CustomerId = SelectedCustomer?.Id,
                 SellerName = SelectedVendedor?.Name,
                 UsuarioId = ERP.WPF.State.AppSession.UserId, 
@@ -587,11 +592,20 @@ public class FinalizarVendaViewModel : BaseViewModel
                 Items = ItensCarrinho.Select(i => new CreateSaleItemDto { ProductId = i.ProductId, Quantity = i.Quantity, UnitPrice = i.UnitPrice, DiscountPercent = 0, FatorConversao = i.FatorConversao, TotalItem = i.Total }).ToList()
             };
 
-            var vendaSalva = await _saleService.CreateAsync(dto);
-            await SalvarNoCaixaEContasAReceberAsync(vendaSalva.Id, linhasPagamento);
+            SaleDto vendaSalva;
+            bool ficouOffline = false;
 
-            // Debitar pontos de fidelidade SÓ após venda confirmada
-            if (_pontosADebitar > 0 && SelectedCustomer != null)
+            var offlineDb = ERP.WPF.App.Services.GetRequiredService<ERP.Infrastructure.Services.OfflineSyncService>();
+            (vendaSalva, ficouOffline) = await TentarCriarVendaComFallbackOfflineAsync(
+                _saleService, offlineDb, dto, SelectedCustomer?.Name, SelectedVendedor?.Name, this.TotalVenda);
+
+            if (!ficouOffline)
+                await SalvarNoCaixaEContasAReceberAsync(vendaSalva.Id, linhasPagamento);
+
+            // Debitar pontos de fidelidade SÓ após venda confirmada — e só
+            // online: offline não tem cliente ainda persistido no servidor
+            // pra debitar contra, fica pendente pra quando sincronizar.
+            if (!ficouOffline && _pontosADebitar > 0 && SelectedCustomer != null)
             {
                 try
                 {
@@ -604,7 +618,23 @@ public class FinalizarVendaViewModel : BaseViewModel
                 catch { /* não bloqueia a venda se falhar */ }
             }
 
-            if (tipoEmissao == "NORMAL")
+            if (ficouOffline)
+            {
+                // Reaproveita o MESMO momento de interação que a venda online já
+                // usa (perguntar sobre impressão) — visível, mas não trava a
+                // fila mais do que o fluxo normal já trava hoje.
+                var respostaOffline = MessageBox.Show(
+                    "🟠 Sem conexão — venda registrada nesse computador e será " +
+                    "sincronizada automaticamente quando a internet voltar.\n\n" +
+                    "Deseja imprimir o recibo mesmo assim?",
+                    "Vila Verde - Modo Offline",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+
+                if (respostaOffline == MessageBoxResult.Yes)
+                    ImprimirReciboInterno(vendaSalva.Id, observacaoCompleta, vendaSalva.SaleNumber);
+            }
+            else if (tipoEmissao == "NORMAL")
             {
                 var resposta = MessageBox.Show("✅ Venda finalizada com sucesso!\n\nDeseja imprimir o recibo da venda?", 
                                                "Vila Verde - Impressão", 
@@ -662,6 +692,51 @@ public class FinalizarVendaViewModel : BaseViewModel
     // ==========================================================
     // FUNÇÕES AUXILIARES (Para o código ficar limpo)
     // ==========================================================
+    /// <summary>Fase 2 do Offline-First — isolado como método próprio, `static`,
+    /// e testável sem instância nenhuma da ViewModel (achado da revisão cruzada
+    /// com GPT/Gemini: testar o método inteiro de FinalizarVendaAsync exigiria
+    /// um MessageBox.Show real aparecendo durante dotnet test, o que trava
+    /// esperando clique humano — não roda em CI). Dependências vêm por
+    /// parâmetro, nunca via ERP.WPF.App.Services aqui dentro, exatamente pra
+    /// isso ser mockável.
+    ///
+    /// dto.Id PRECISA já vir preenchido pelo chamador — esse método nunca gera
+    /// Id novo, nem no caminho online nem no fallback. Reaproveitar o MESMO Id
+    /// gerado no cliente é o que faz a idempotência (§7 do
+    /// OFFLINE_FIRST_ARCHITECTURE.md) funcionar de verdade.</summary>
+    public static async Task<(SaleDto Venda, bool FicouOffline)> TentarCriarVendaComFallbackOfflineAsync(
+        ISaleService saleService, ERP.Infrastructure.Services.OfflineSyncService offlineDb, CreateSaleDto dto,
+        string? nomeCliente, string? nomeVendedor, decimal totalVenda)
+    {
+        if (!dto.Id.HasValue)
+            throw new InvalidOperationException(
+                "CreateSaleDto.Id precisa estar preenchido antes de chamar TentarCriarVendaComFallbackOfflineAsync — é a chave de idempotência (§7).");
+
+        try
+        {
+            var venda = await saleService.CreateAsync(dto);
+            return (venda, false);
+        }
+        catch (Exception ex) when (ERP.Application.Services.ConnectivityExceptionClassifier.EhFalhaDeConectividade(ex))
+        {
+            // Cai pro modo offline — NUNCA gera Id novo aqui, reaproveita
+            // dto.Id exatamente como veio. Financeiro/fiscal ficam pendentes:
+            // rodam quando o Sync Engine processar a Outbox (§16.5 do
+            // OFFLINE_FIRST_ARCHITECTURE.md — venda + evento gravam juntos,
+            // numa transação SQLite só).
+            await offlineDb.SalvarVendaOfflineComOutboxAsync(dto.Id.Value, dto);
+
+            // SaleDto provisório só pra continuar o fluxo local (impressão) —
+            // o número real da venda só existe depois de sincronizar.
+            var vendaProvisoria = new SaleDto(
+                dto.Id.Value, $"OFFLINE-{dto.Id.Value.ToString()[..8].ToUpper()}",
+                nomeCliente, nomeVendedor, DateTime.Now,
+                ERP.Domain.Enums.SaleStatus.SemNota, "Offline", totalVenda);
+
+            return (vendaProvisoria, true);
+        }
+    }
+
     private async Task SalvarNoCaixaEContasAReceberAsync(
         Guid vendaId, List<(Guid Id, PaymentMethod Forma, decimal Valor)> linhasPagamento)
     {
