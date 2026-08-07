@@ -62,6 +62,20 @@ public class SaleService : ISaleService
     {
         await _validator.ValidateAndThrowAsync(dto);
 
+        // Fase 1 do Offline-First — idempotência (§7 do OFFLINE_FIRST_ARCHITECTURE.md).
+        // Cenário: PDV envia a venda, servidor grava com sucesso, mas a resposta
+        // se perde (queda de rede bem nesse instante) — o PDV, achando que
+        // falhou, tenta de novo. Sem essa checagem, isso duplicaria a venda.
+        // dto.Id só vem preenchido em sincronização offline; venda online
+        // normal nunca manda esse campo, então esse bloco não muda nada do
+        // comportamento existente pra elas.
+        if (dto.Id.HasValue)
+        {
+            var existente = await _uow.Sales.GetByIdAsync(dto.Id.Value);
+            if (existente != null)
+                return _mapper.Map<SaleDto>(existente);
+        }
+
         // Regra de caixa é por SaleOrigin agora (ver ISalePolicyService) — PDV continua
         // exigindo, Marketplace nunca passa pelo caixa físico. _salePolicy null (DI
         // não configurado em algum caller antigo) cai no default seguro: exige caixa,
@@ -74,7 +88,7 @@ public class SaleService : ISaleService
                 throw new InvalidOperationException("Não é possível realizar vendas: O CAIXA ESTÁ FECHADO.");
         }
 
-        var novaVendaId = Guid.NewGuid();
+        var novaVendaId = dto.Id ?? Guid.NewGuid();
 
         var sale = new Sale
         {

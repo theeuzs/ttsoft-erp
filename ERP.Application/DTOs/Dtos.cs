@@ -153,6 +153,13 @@ public class CreateSalePaymentDto
 
 public class CreateSaleDto
 {
+    /// <summary>Fase 1 do Offline-First — quando vier preenchido (venda
+    /// sincronizada de um PDV offline, gerada localmente com Guid.NewGuid()
+    /// no momento da venda), o servidor usa esse mesmo Id e checa
+    /// idempotência antes de criar. Nulo = comportamento de sempre (venda
+    /// online, Id gerado no servidor).</summary>
+    public Guid? Id { get; set; }
+
     public Guid? CustomerId { get; set; }
     public string? SellerName { get; set; }
     public Guid UsuarioId { get; set; }

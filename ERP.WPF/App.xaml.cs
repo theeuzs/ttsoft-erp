@@ -452,6 +452,7 @@ public partial class App : System.Windows.Application
                            ERP.Infrastructure.Services.NfseEmissionService>();
         services.AddSingleton<ERP.Domain.Services.Fiscal.ICMSSTCalculator>();
         services.AddSingleton<ERP.Infrastructure.Services.OfflineSyncService>();
+        services.AddScoped<ERP.WPF.Services.SyncEngineService>();
         services.AddSingleton<ERP.Infrastructure.Services.SpedEfdGenerator>();
 
         // ── Fase 3 ────────────────────────────────────────────────────────
