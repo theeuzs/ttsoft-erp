@@ -3,6 +3,7 @@ using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using ERP.Infrastructure.Services;
 using Serilog;
+using System.Linq;
 using System.Text.Json;
 
 namespace ERP.WPF.Services;
@@ -26,15 +27,18 @@ public class SyncEngineService
     private readonly ISaleService _saleService;
     private readonly IProductService _productService;
     private readonly ICustomerService _customerService;
+    private readonly IMotorFinanceiroService _motorFinanceiro;
 
     public SyncEngineService(
         OfflineSyncService offlineDb, ISaleService saleService,
-        IProductService productService, ICustomerService customerService)
+        IProductService productService, ICustomerService customerService,
+        IMotorFinanceiroService motorFinanceiro)
     {
         _offlineDb       = offlineDb;
         _saleService     = saleService;
         _productService  = productService;
         _customerService = customerService;
+        _motorFinanceiro = motorFinanceiro;
     }
 
     /// <summary>Grava uma venda offline (SQLite + Outbox, numa transação só —
@@ -79,6 +83,36 @@ public class SyncEngineService
                 // resposta se perdeu), ele devolve a existente em vez de duplicar.
                 // Esse método não precisa (e não deve) checar isso de novo aqui.
                 await _saleService.CreateAsync(dto);
+
+                // Achado do teste manual da Fase 2 (08/2026) — faltava exatamente
+                // isso: CreateAsync sozinho só grava a venda, nunca o financeiro
+                // (Caixa/Conta Bancária/Recebível/Conta a Receber). Uma venda
+                // offline sincronizada ficava "sem dinheiro" no Azure até essa
+                // correção — confirmado com dado real (venda de R$79,80 apareceu
+                // em Sales, CaixaMovimentos não ganhou linha nova nenhuma).
+                // Idempotência aqui é por SalePaymentId (correção anterior),
+                // então chamar isso de novo numa segunda sincronização da MESMA
+                // venda (ex: retry) é seguro — vira no-op.
+                string? nomeCliente = null;
+                if (dto.CustomerId.HasValue)
+                {
+                    try
+                    {
+                        var cliente = await _customerService.GetByIdAsync(dto.CustomerId.Value);
+                        nomeCliente = cliente?.Name;
+                    }
+                    catch { /* nome é só descritivo — não trava a sincronização se falhar */ }
+                }
+
+                if (dto.Payments.Any(p => !p.Id.HasValue))
+                    throw new InvalidOperationException(
+                        "CreateSalePaymentDto.Id precisa estar preenchido em toda linha antes de sincronizar — é a chave de idempotência financeira granular.");
+
+                await _motorFinanceiro.ProcessarRecebimentoVendaAsync(
+                    dto.Id.Value, dto.UsuarioId, dto.CustomerId,
+                    nomeCliente ?? "Consumidor Final", dto.SellerName ?? "Balcão", "Sync Automático",
+                    dto.Troco,
+                    dto.Payments.Select(p => (p.Id!.Value, p.PaymentMethod, p.Amount)));
 
                 await _offlineDb.MarcarEventoSincronizadoAsync(outboxId, dto.Id.Value);
                 sucessos++;

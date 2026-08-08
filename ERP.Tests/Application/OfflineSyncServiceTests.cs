@@ -61,7 +61,7 @@ namespace ERP.Tests.Application.Services
             },
             Payments = new List<CreateSalePaymentDto>
             {
-                new() { PaymentMethod = ERP.Domain.Enums.PaymentMethod.Dinheiro, Amount = 10m }
+                new() { Id = Guid.NewGuid(), PaymentMethod = ERP.Domain.Enums.PaymentMethod.Dinheiro, Amount = 10m }
             }
         };
 
@@ -163,8 +163,9 @@ namespace ERP.Tests.Application.Services
 
             var productServiceMock  = new Mock<IProductService>();
             var customerServiceMock = new Mock<ICustomerService>();
+            var motorFinanceiroMock = new Mock<IMotorFinanceiroService>();
 
-            var engine = new SyncEngineService(_offlineDb, saleServiceMock.Object, productServiceMock.Object, customerServiceMock.Object);
+            var engine = new SyncEngineService(_offlineDb, saleServiceMock.Object, productServiceMock.Object, customerServiceMock.Object, motorFinanceiroMock.Object);
             var sincronizados = await engine.ProcessarOutboxAsync();
 
             sincronizados.Should().Be(1, "só a venda sem erro deve contar como sincronizada nessa passada");

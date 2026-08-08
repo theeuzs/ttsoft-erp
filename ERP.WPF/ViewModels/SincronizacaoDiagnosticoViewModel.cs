@@ -52,8 +52,9 @@ public class SincronizacaoDiagnosticoViewModel : BaseViewModel
             var saleService = App.Services.GetRequiredService<ISaleService>();
             var productService  = App.Services.GetRequiredService<IProductService>();
             var customerService = App.Services.GetRequiredService<ICustomerService>();
+            var motorFinanceiro  = App.Services.GetRequiredService<IMotorFinanceiroService>();
 
-            var engine = new SyncEngineService(offlineDb, saleService, productService, customerService);
+            var engine = new SyncEngineService(offlineDb, saleService, productService, customerService, motorFinanceiro);
             var sincronizados = await engine.ProcessarOutboxAsync();
 
             ResultadoTexto = $"{sincronizados} evento(s) sincronizado(s) às {DateTime.Now:HH:mm:ss}.";
@@ -78,8 +79,9 @@ public class SincronizacaoDiagnosticoViewModel : BaseViewModel
             var saleService = App.Services.GetRequiredService<ISaleService>();
             var productService  = App.Services.GetRequiredService<IProductService>();
             var customerService = App.Services.GetRequiredService<ICustomerService>();
+            var motorFinanceiro  = App.Services.GetRequiredService<IMotorFinanceiroService>();
 
-            var engine = new SyncEngineService(offlineDb, saleService, productService, customerService);
+            var engine = new SyncEngineService(offlineDb, saleService, productService, customerService, motorFinanceiro);
             await engine.SincronizarCatalogoAsync();
 
             ResultadoTexto = $"Catálogo sincronizado às {DateTime.Now:HH:mm:ss}.";

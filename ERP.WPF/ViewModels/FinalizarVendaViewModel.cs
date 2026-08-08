@@ -588,6 +588,7 @@ public class FinalizarVendaViewModel : BaseViewModel
                 UsuarioId = ERP.WPF.State.AppSession.UserId, 
                 Notes = observacaoCompleta,
                 DiscountAmount = this.Desconto + this.DescontoFidelidade,
+                Troco = this.Troco,
                 Payments = linhasPagamento.Select(p => new CreateSalePaymentDto { Id = p.Id, PaymentMethod = p.Forma, Amount = p.Valor }).ToList(), 
                 Items = ItensCarrinho.Select(i => new CreateSaleItemDto { ProductId = i.ProductId, Quantity = i.Quantity, UnitPrice = i.UnitPrice, DiscountPercent = 0, FatorConversao = i.FatorConversao, TotalItem = i.Total }).ToList()
             };

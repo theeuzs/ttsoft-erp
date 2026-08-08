@@ -174,6 +174,15 @@ public class CreateSaleDto
     public string? Notes { get; set; }
     public decimal DiscountAmount { get; set; }
     public SaleOrigin Origem { get; set; } = SaleOrigin.PDV;
+
+    /// <summary>Achado do teste manual da Fase 2 (08/2026) — Troco não era
+    /// persistido em lugar nenhum; sem isso, o Sync Engine não tem como saber
+    /// o valor líquido a lançar no Caixa quando processa uma venda offline
+    /// depois. Payments[i].Amount pra Dinheiro carrega o valor BRUTO tendido
+    /// (ex: R$50 numa venda de R$39,90) — Troco é o que precisa ser
+    /// descontado disso no lançamento de caixa.</summary>
+    public decimal Troco { get; set; }
+
     public List<CreateSalePaymentDto> Payments { get; set; } = new();
     public List<CreateSaleItemDto> Items { get; set; } = new();
 
