@@ -17,6 +17,8 @@ public partial class MainWindow : Window
     private DispatcherTimer _timerLicenca;
     private DispatcherTimer _timerInatividade;
     private DispatcherTimer _timerBackup;
+    private DispatcherTimer _timerSyncOutbox;
+    private DispatcherTimer _timerSyncCatalogo;
     private DateTime _ultimaAtividade = DateTime.Now;
     private const int MinutosInatividade = 59;
     
@@ -35,6 +37,7 @@ public partial class MainWindow : Window
         IniciarMonitorDeLicenca();
         IniciarTimerInatividade();
         IniciarTimerBackup();
+        IniciarSincronizacaoAutomatica();
 
         var notifVm = new NotificacoesViewModel();
         _ = notifVm.VerificarNotificacoesAsync();
@@ -165,6 +168,66 @@ public partial class MainWindow : Window
             }
         };
         _timerBackup.Start();
+    }
+
+    /// <summary>Fase 3 do Offline-First (docs/OFFLINE_FIRST_ARCHITECTURE.md, §10)
+    /// — os três gatilhos de sincronização que a v1 pedia: ao abrir o sistema,
+    /// periódico de catálogo (15 min) e retry da Outbox (1 min). Mesmo padrão
+    /// de DispatcherTimer já usado pra licença/inatividade/backup nessa mesma
+    /// classe — reaproveitado de propósito, não é mecanismo novo.
+    ///
+    /// Cada tick cria um escopo de DI novo — SyncEngineService e suas
+    /// dependências (ISaleService, etc.) são Scoped, e o app roda por horas;
+    /// não dá pra segurar a mesma instância entre ticks (mesmo padrão já usado
+    /// em FinalizarVendaViewModel pra resolver serviços via scope).
+    ///
+    /// Best-effort sempre: uma falha de sincronização nunca pode aparecer
+    /// pro operador como erro — só tenta de novo no próximo ciclo. É
+    /// exatamente o comportamento que já existia nos métodos individuais
+    /// (SincronizarCatalogoAsync, ProcessarOutboxAsync já engolem erro e
+    /// logam via Serilog) — aqui só decide QUANDO chamar.</summary>
+    private void IniciarSincronizacaoAutomatica()
+    {
+        _timerSyncOutbox = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+        _timerSyncOutbox.Tick += async (s, e) => await ProcessarOutboxSilenciosoAsync();
+        _timerSyncOutbox.Start();
+
+        _timerSyncCatalogo = new DispatcherTimer { Interval = TimeSpan.FromMinutes(15) };
+        _timerSyncCatalogo.Tick += async (s, e) => await SincronizarCatalogoSilenciosoAsync();
+        _timerSyncCatalogo.Start();
+
+        // Sync ao abrir o sistema (§10) — dispara os dois uma vez já no início,
+        // sem esperar o primeiro intervalo completo.
+        _ = ProcessarOutboxSilenciosoAsync();
+        _ = SincronizarCatalogoSilenciosoAsync();
+    }
+
+    private async Task ProcessarOutboxSilenciosoAsync()
+    {
+        try
+        {
+            using var scope = ERP.WPF.App.Services.CreateScope();
+            var engine = scope.ServiceProvider.GetRequiredService<ERP.WPF.Services.SyncEngineService>();
+            await engine.ProcessarOutboxAsync();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Sincronização automática (Outbox): falha no ciclo — tenta de novo no próximo minuto");
+        }
+    }
+
+    private async Task SincronizarCatalogoSilenciosoAsync()
+    {
+        try
+        {
+            using var scope = ERP.WPF.App.Services.CreateScope();
+            var engine = scope.ServiceProvider.GetRequiredService<ERP.WPF.Services.SyncEngineService>();
+            await engine.SincronizarCatalogoAsync();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Sincronização automática (Catálogo): falha no ciclo — tenta de novo no próximo intervalo");
+        }
     }
 
     // ── Controles de Teclado e Navegação ──────────────────────────────────
