@@ -697,9 +697,14 @@ public class PdvViewModel : BaseViewModel
     private void AtualizarIndicadorConectividade()
     {
         var pendentes = ERP.WPF.Services.ConnectivityIndicatorState.VendasPendentes;
+        // Rótulo explícito "Sincronização" — existe outro indicador na mesma
+        // tela (ModoContingenciaVisivel, ao lado do MEU CAIXA) que fala de
+        // contingência FISCAL (conexão com a SEFAZ/Focus, checada só na hora
+        // de emitir nota) — coisa diferente, mecanismo diferente. Sem essa
+        // distinção no texto, os dois pareciam estar discordando um do outro.
         IndicadorConectividade = ERP.WPF.Services.ConnectivityIndicatorState.Online
-            ? (pendentes > 0 ? $"🟢 Online — sincronizando {pendentes} pendente(s)" : "🟢 Online")
-            : (pendentes > 0 ? $"🔴 Offline — {pendentes} venda(s) aguardando sincronização" : "🔴 Offline");
+            ? (pendentes > 0 ? $"🟢 Sincronização: Online — {pendentes} pendente(s)" : "🟢 Sincronização: Online")
+            : (pendentes > 0 ? $"🔴 Sincronização: Offline — {pendentes} venda(s) aguardando" : "🔴 Sincronização: Offline");
     }
     public ICommand AbrirVendasSuspensasCommand { get; }
     public ICommand SearchCustomerCommand { get; }

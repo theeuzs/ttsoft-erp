@@ -57,6 +57,9 @@ public class SincronizacaoDiagnosticoViewModel : BaseViewModel
             var engine = new SyncEngineService(offlineDb, saleService, productService, customerService, motorFinanceiro);
             var sincronizados = await engine.ProcessarOutboxAsync();
 
+            var status = await offlineDb.GetStatusAsync();
+            ConnectivityIndicatorState.AtualizarAposCiclo(true, status.VendasPendentes);
+
             ResultadoTexto = $"{sincronizados} evento(s) sincronizado(s) às {DateTime.Now:HH:mm:ss}.";
         }
         catch (Exception ex)
@@ -82,13 +85,23 @@ public class SincronizacaoDiagnosticoViewModel : BaseViewModel
             var motorFinanceiro  = App.Services.GetRequiredService<IMotorFinanceiroService>();
 
             var engine = new SyncEngineService(offlineDb, saleService, productService, customerService, motorFinanceiro);
-            await engine.SincronizarCatalogoAsync();
+            bool alcancouRede = await engine.SincronizarCatalogoAsync();
 
-            ResultadoTexto = $"Catálogo sincronizado às {DateTime.Now:HH:mm:ss}.";
+            var status = await offlineDb.GetStatusAsync();
+            // Achado real do teste manual (08/2026) — clicar aqui não
+            // atualizava o indicador do PDV, só o ciclo automático do
+            // MainWindow fazia isso. O indicador ficava parado no último
+            // resultado do timer, ignorando o clique manual.
+            ConnectivityIndicatorState.AtualizarAposCiclo(alcancouRede, status.VendasPendentes);
+
+            ResultadoTexto = alcancouRede
+                ? $"Catálogo sincronizado às {DateTime.Now:HH:mm:ss}."
+                : $"Falha ao alcançar o servidor às {DateTime.Now:HH:mm:ss} — provavelmente offline.";
         }
         catch (Exception ex)
         {
             ResultadoTexto = $"Erro ao sincronizar catálogo: {ex.Message}";
+            ConnectivityIndicatorState.AtualizarAposCiclo(false, 0);
         }
         finally
         {
