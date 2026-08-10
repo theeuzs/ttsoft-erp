@@ -165,18 +165,35 @@ public class SyncEngineService
     /// online" mesmo num minuto sem venda nenhuma acontecendo.</summary>
     public async Task<bool> SincronizarCatalogoAsync()
     {
-        bool produtosOk = false;
+        // Achado do teste manual (08/2026) — rodar produtos e clientes em
+        // sequência somava dois timeouts de conexão, um atrás do outro,
+        // quando os dois falham. Em paralelo, os dois esperam o MESMO
+        // timeout, não a soma — o indicador de conectividade responde bem
+        // mais rápido quando genuinamente offline.
+        var tarefaProdutos = SincronizarProdutosComResultadoAsync();
+        var tarefaClientes = SincronizarClientesComResultadoAsync();
+        await Task.WhenAll(tarefaProdutos, tarefaClientes);
+
+        return tarefaProdutos.Result;
+    }
+
+    private async Task<bool> SincronizarProdutosComResultadoAsync()
+    {
         try
         {
             var produtos = await _productService.GetAllAsync();
             await _offlineDb.SincronizarProdutosAsync(produtos.Cast<object>());
-            produtosOk = true;
+            return true;
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "SyncEngine: falha ao sincronizar catálogo de produtos");
+            return false;
         }
+    }
 
+    private async Task SincronizarClientesComResultadoAsync()
+    {
         try
         {
             var clientes = await _customerService.GetAllAsync();
@@ -186,7 +203,5 @@ public class SyncEngineService
         {
             Log.Warning(ex, "SyncEngine: falha ao sincronizar catálogo de clientes");
         }
-
-        return produtosOk;
     }
 }
