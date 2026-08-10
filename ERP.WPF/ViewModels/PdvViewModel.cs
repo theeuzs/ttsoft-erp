@@ -326,6 +326,12 @@ public class PdvViewModel : BaseViewModel
         _motorFiscal             = motorFiscal;
         _produtoAgregadoService  = produtoAgregadoService;
 
+        // Fase 3 do Offline-First — assina o estado compartilhado (§12); o
+        // MainWindow atualiza isso depois de cada ciclo do SyncEngine, essa
+        // ViewModel só reflete, sem detecção de rede própria.
+        AtualizarIndicadorConectividade();
+        ERP.WPF.Services.ConnectivityIndicatorState.Changed += AtualizarIndicadorConectividade;
+
         SearchProductCommand = new AsyncRelayCommand(_ => SearchProductAsync());
         CarregarProdutosCampanhaAsync().SafeFireAndForgetSilentAsync("PDV-Campanha");
         AddToCartCommand = new RelayCommand(p => AddToCart(p as ProductDto), p => p is ProductDto);
@@ -679,6 +685,22 @@ public class PdvViewModel : BaseViewModel
     public ICommand AplicarMarkup5Command  { get; }
     public ICommand SuspenderVendaCommand  { get; }
     public ICommand LerBalancaCommand { get; }
+
+    // ── Fase 3 do Offline-First — indicador 🟢/🔴 (§12 do documento) ────────
+    private string _indicadorConectividade = "🟢 Online";
+    public string IndicadorConectividade
+    {
+        get => _indicadorConectividade;
+        set => SetProperty(ref _indicadorConectividade, value);
+    }
+
+    private void AtualizarIndicadorConectividade()
+    {
+        var pendentes = ERP.WPF.Services.ConnectivityIndicatorState.VendasPendentes;
+        IndicadorConectividade = ERP.WPF.Services.ConnectivityIndicatorState.Online
+            ? (pendentes > 0 ? $"🟢 Online — sincronizando {pendentes} pendente(s)" : "🟢 Online")
+            : (pendentes > 0 ? $"🔴 Offline — {pendentes} venda(s) aguardando sincronização" : "🔴 Offline");
+    }
     public ICommand AbrirVendasSuspensasCommand { get; }
     public ICommand SearchCustomerCommand { get; }
     public ICommand SalvarOrcamentoCommand { get; }

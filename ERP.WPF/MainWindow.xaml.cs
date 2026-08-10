@@ -207,8 +207,12 @@ public partial class MainWindow : Window
         try
         {
             using var scope = ERP.WPF.App.Services.CreateScope();
+            var offlineDb = scope.ServiceProvider.GetRequiredService<ERP.Infrastructure.Services.OfflineSyncService>();
             var engine = scope.ServiceProvider.GetRequiredService<ERP.WPF.Services.SyncEngineService>();
             await engine.ProcessarOutboxAsync();
+
+            var status = await offlineDb.GetStatusAsync();
+            ERP.WPF.Services.ConnectivityIndicatorState.AtualizarAposCiclo(true, status.VendasPendentes);
         }
         catch (Exception ex)
         {
@@ -221,12 +225,20 @@ public partial class MainWindow : Window
         try
         {
             using var scope = ERP.WPF.App.Services.CreateScope();
+            var offlineDb = scope.ServiceProvider.GetRequiredService<ERP.Infrastructure.Services.OfflineSyncService>();
             var engine = scope.ServiceProvider.GetRequiredService<ERP.WPF.Services.SyncEngineService>();
-            await engine.SincronizarCatalogoAsync();
+            bool alcancouRede = await engine.SincronizarCatalogoAsync();
+
+            var status = await offlineDb.GetStatusAsync();
+            // Esse ciclo é o sinal de conectividade mais confiável (§10) — roda
+            // sempre, mesmo sem venda pendente, então "alcancouRede" reflete o
+            // estado real da rede nesse instante, não só "tinha o que sincronizar".
+            ERP.WPF.Services.ConnectivityIndicatorState.AtualizarAposCiclo(alcancouRede, status.VendasPendentes);
         }
         catch (Exception ex)
         {
             Serilog.Log.Warning(ex, "Sincronização automática (Catálogo): falha no ciclo — tenta de novo no próximo intervalo");
+            ERP.WPF.Services.ConnectivityIndicatorState.AtualizarAposCiclo(false, 0);
         }
     }
 

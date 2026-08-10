@@ -156,13 +156,21 @@ public class SyncEngineService
 
     /// <summary>Sincronização de catálogo (§8, §10) — produtos e clientes,
     /// por snapshot/estado (sem risco, diferente de venda/estoque). Chamado
-    /// a cada 15 min enquanto online, e uma vez ao abrir o sistema.</summary>
-    public async Task SincronizarCatalogoAsync()
+    /// a cada 15 min enquanto online, e uma vez ao abrir o sistema.
+    ///
+    /// Fase 3 — o retorno bool virou o sinal de conectividade mais confiável
+    /// do app (ConnectivityIndicatorState): diferente do ciclo da Outbox, que
+    /// só faz uma chamada de rede QUANDO existe venda pendente, esse aqui
+    /// sempre tenta, mesmo sem nada pendente — é ele que sabe dizer "estamos
+    /// online" mesmo num minuto sem venda nenhuma acontecendo.</summary>
+    public async Task<bool> SincronizarCatalogoAsync()
     {
+        bool produtosOk = false;
         try
         {
             var produtos = await _productService.GetAllAsync();
             await _offlineDb.SincronizarProdutosAsync(produtos.Cast<object>());
+            produtosOk = true;
         }
         catch (Exception ex)
         {
@@ -178,5 +186,7 @@ public class SyncEngineService
         {
             Log.Warning(ex, "SyncEngine: falha ao sincronizar catálogo de clientes");
         }
+
+        return produtosOk;
     }
 }

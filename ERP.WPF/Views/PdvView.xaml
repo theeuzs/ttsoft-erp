@@ -37,6 +37,13 @@
     </UserControl.Resources>
 
     <Grid>
+        <!-- Fase 3 do Offline-First — indicador §12, sempre visível, mesmo
+             com o caixa fechado (conectividade importa antes de abrir também). -->
+        <Border Background="#1E293B" CornerRadius="6" Padding="10,5"
+                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,16,0" Panel.ZIndex="999">
+            <TextBlock Text="{Binding IndicadorConectividade}" FontSize="12" FontWeight="SemiBold" Foreground="White"/>
+        </Border>
+
         <Border Background="#334155" Padding="40" CornerRadius="12" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{Binding CaixaFechadoVisivel}">
             <Border.Effect><DropShadowEffect BlurRadius="20" Opacity="0.3" ShadowDepth="5"/></Border.Effect>
             <StackPanel HorizontalAlignment="Center">
