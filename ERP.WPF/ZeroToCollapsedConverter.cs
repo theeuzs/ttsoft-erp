@@ -1,0 +1,17 @@
+using System;
+using System.Globalization;
+using System.Windows;
+using System.Windows.Data;
+
+namespace ERP.WPF;
+
+/// <summary>Colapsa quando o número é zero (ou nulo) — usado pra esconder o
+/// painel "precisa de atenção" quando não há nenhum pedido travado.</summary>
+public class ZeroToCollapsedConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => (value is int i && i > 0) ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotImplementedException();
+}

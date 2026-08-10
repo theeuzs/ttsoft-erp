@@ -394,6 +394,7 @@ public partial class MainWindow : Window
             "nfse" => new NfseView(),
             "legacyimport" => new LegacyImportView(),
             "syncdiagnostico" => new SincronizacaoDiagnosticoView(),
+            "marketplacedashboard" => new MarketplaceDashboardView(),
             "inventario"  => new InventarioView(),
             "notificacoes" => new Views.NotificacoesView(),
             "catalogo"     => CreateView<CatalogoView, CatalogoViewModel>(),

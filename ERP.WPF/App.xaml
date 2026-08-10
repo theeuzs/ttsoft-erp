@@ -13,6 +13,8 @@
             <local:NegativoConverter x:Key="NegativoConverter"/>
             <local:DecimalConverter  x:Key="DecimalConverter"/>
             <local:NullToCollapsedConverter x:Key="NullToCollapsed"/>
+            <local:ZeroToCollapsedConverter x:Key="ZeroToCollapsed"/>
+            <local:IntToBarWidthConverter x:Key="IntToBarWidth"/>
             <conv:InverseBoolConverter      x:Key="InverseBool"/>
 
             <!-- Sprint 5: converters do PDV (barra de meta + destaque de item) -->
