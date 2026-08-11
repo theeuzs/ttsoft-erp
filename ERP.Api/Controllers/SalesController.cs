@@ -12,18 +12,24 @@ namespace ERP.Api.Controllers;
 [Authorize]
 public class SalesController : ControllerBase
 {
-    private readonly ISaleService         _saleService;
-    private readonly IContaReceberService _contaService;
-    private readonly IRequestTenant       _tenant;
+    private readonly ISaleService          _saleService;
+    private readonly IContaReceberService  _contaService;
+    private readonly IMotorFinanceiroService _motorFinanceiro;
+    private readonly ICustomerService      _customerService;
+    private readonly IRequestTenant        _tenant;
 
     public SalesController(
-        ISaleService         saleService,
-        IContaReceberService contaService,
-        IRequestTenant       tenant)
+        ISaleService          saleService,
+        IContaReceberService  contaService,
+        IMotorFinanceiroService motorFinanceiro,
+        ICustomerService      customerService,
+        IRequestTenant        tenant)
     {
-        _saleService  = saleService;
-        _contaService = contaService;
-        _tenant       = tenant;
+        _saleService     = saleService;
+        _contaService    = contaService;
+        _motorFinanceiro = motorFinanceiro;
+        _customerService = customerService;
+        _tenant          = tenant;
     }
 
     /// <summary>Lista vendas com filtro opcional por período e vendedor.</summary>
@@ -81,14 +87,47 @@ public class SalesController : ControllerBase
                       - dto.DiscountAmount;
             dto.Payments = [new CreateSalePaymentDto
             {
+                Id            = Guid.NewGuid(), // sempre precisa de Id — é a chave de idempotência financeira granular (§7)
                 PaymentMethod = ERP.Domain.Enums.PaymentMethod.Dinheiro,
                 Amount        = Math.Max(0, total)
             }];
         }
 
+        // Garante Id em QUALQUER payment que chegue sem um — mesma regra de
+        // segurança do SyncEngineService: nunca deixa passar silenciosamente,
+        // porque ProcessarRecebimentoVendaAsync exige SalePaymentId pra cada
+        // linha, e um Id ausente ali quebraria a idempotência financeira.
+        foreach (var p in dto.Payments!)
+            p.Id ??= Guid.NewGuid();
+
         try
         {
             var sale = await _saleService.CreateAsync(dto);
+
+            // Fase A da migração WPF→API (08/2026) — POST /api/sales antes só
+            // criava a venda, nunca processava o financeiro (Caixa/Conta
+            // Bancária/Recebível/Conta a Receber). Mesmo buraco que achamos e
+            // corrigimos no SyncEngineService — corrigido aqui também, pelo
+            // mesmo motivo. Idempotente por SalePaymentId: chamar de novo numa
+            // segunda tentativa (ex: resposta perdida, cliente reenviou o
+            // mesmo POST com o mesmo Sale.Id) não duplica nada.
+            string? nomeCliente = null;
+            if (dto.CustomerId.HasValue)
+            {
+                try
+                {
+                    var cliente = await _customerService.GetByIdAsync(dto.CustomerId.Value);
+                    nomeCliente = cliente?.Name;
+                }
+                catch { /* nome é só descritivo — não trava a venda se falhar */ }
+            }
+
+            await _motorFinanceiro.ProcessarRecebimentoVendaAsync(
+                sale.Id, dto.UsuarioId, dto.CustomerId,
+                nomeCliente ?? "Consumidor Final", dto.SellerName ?? "Balcão", _tenant.UserName ?? "API",
+                dto.Troco,
+                dto.Payments.Select(p => (p.Id!.Value, p.PaymentMethod, p.Amount)));
+
             return CreatedAtAction(nameof(GetById), new { id = sale.Id }, sale);
         }
         catch (InvalidOperationException ex)

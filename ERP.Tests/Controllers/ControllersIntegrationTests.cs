@@ -162,6 +162,13 @@ public class ErpApiFactory : WebApplicationFactory<Program>
                 new DbContextOptionsBuilder<AppDbContext>()
                     .UseInMemoryDatabase(dbName)
                     .UseInternalServiceProvider(internalServiceProvider)
+                    // InMemory não suporta transação de verdade — SaleService usa
+                    // BeginTransactionAsync corretamente contra SQL Server real; o
+                    // provider InMemory só não consegue honrar isso, e por padrão
+                    // isso vira ERRO (não aviso) a partir de uma certa versão do EF
+                    // Core. Suprimido aqui só pro provider de teste — não afeta o
+                    // comportamento real da transação em produção.
+                    .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
                     .Options);
 
             services.AddScoped<AppDbContext>(sp => new AppDbContext(
@@ -420,6 +427,138 @@ public class SalesControllerTests : IntegrationTestBase
     public async Task GetById_NaoExistente_Retorna404()
         => (await AuthClient.GetAsync($"/api/sales/{Guid.NewGuid()}"))
             .StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Fase A da migração WPF→API (08/2026) — POST /api/sales precisa processar
+    // o financeiro (não só criar a venda), e precisa ser idempotente ponta a
+    // ponta pelo HTTP, não só na camada de serviço isolada. Testado aqui antes
+    // de qualquer mudança no WPF, como combinado.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    private async Task<Guid> SeedProdutoAsync(decimal preco = 50m)
+    {
+        var produtoId = Guid.NewGuid();
+        using (new TenantScope(ErpApiFactory.TestTenantId))
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Products.Add(new ERP.Domain.Entities.Product
+            {
+                Id = produtoId, TenantId = ErpApiFactory.TestTenantId,
+                Name = "Produto Teste Venda API", SalePrice = preco, Stock = 1000,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+        return produtoId;
+    }
+
+    private async Task SeedCaixaAbertoAsync(Guid usuarioId)
+    {
+        using (new TenantScope(ErpApiFactory.TestTenantId))
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Caixas.Add(new ERP.Domain.Entities.Caixa
+            {
+                Id = Guid.NewGuid(), TenantId = ErpApiFactory.TestTenantId,
+                UsuarioId = usuarioId, OperadorNome = "Operador Teste",
+                Status = ERP.Domain.Enums.StatusCaixa.Aberto,
+                DataAbertura = DateTime.Now, ValorAbertura = 100m,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+    }
+
+
+    public async Task Create_ComPagamentoDinheiro_ProcessaFinanceiroJunto()
+    {
+        var produtoId = await SeedProdutoAsync(50m);
+        var vendaId = Guid.NewGuid();
+        var salePaymentId = Guid.NewGuid();
+        var usuarioId = Guid.NewGuid();
+        await SeedCaixaAbertoAsync(usuarioId);
+
+        var dto = new
+        {
+            Id = vendaId,
+            UsuarioId = usuarioId,
+            Items = new[] { new { ProductId = produtoId, Quantity = 1m, UnitPrice = 50m, TotalItem = 50m } },
+            Payments = new[] { new { Id = salePaymentId, PaymentMethod = "Dinheiro", Amount = 50m } }
+        };
+
+        var resp = await AuthClient.PostAsJsonAsync("/api/sales", dto);
+        var corpo = await resp.Content.ReadAsStringAsync();
+        resp.StatusCode.Should().Be(HttpStatusCode.Created, $"resposta da API: {corpo}");
+
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var movimento = db.CaixaMovimentos.FirstOrDefault(m => m.SalePaymentId == salePaymentId);
+        movimento.Should().NotBeNull("a API precisa acionar o Motor Financeiro, não só criar a venda");
+        movimento!.VendaId.Should().Be(vendaId);
+        movimento.Valor.Should().Be(50m);
+    }
+
+    [Fact(DisplayName = "POST /api/sales — mesmo Sale.Id duas vezes → venda e financeiro não duplicam")]
+    public async Task Create_MesmoSaleIdDuasVezes_NaoDuplicaVendaNemFinanceiro()
+    {
+        var produtoId = await SeedProdutoAsync(80m);
+        var vendaId = Guid.NewGuid();
+        var salePaymentId = Guid.NewGuid();
+        var usuarioId = Guid.NewGuid();
+        await SeedCaixaAbertoAsync(usuarioId);
+
+        var dto = new
+        {
+            Id = vendaId,
+            UsuarioId = usuarioId,
+            Items = new[] { new { ProductId = produtoId, Quantity = 1m, UnitPrice = 80m, TotalItem = 80m } },
+            Payments = new[] { new { Id = salePaymentId, PaymentMethod = "Dinheiro", Amount = 80m } }
+        };
+
+        // Simula exatamente o cenário "servidor gravou, resposta perdida":
+        // o mesmo POST (mesmo Sale.Id, mesmo SalePaymentId) chega duas vezes.
+        var resp1 = await AuthClient.PostAsJsonAsync("/api/sales", dto);
+        var corpo1 = await resp1.Content.ReadAsStringAsync();
+        var resp2 = await AuthClient.PostAsJsonAsync("/api/sales", dto);
+        var corpo2 = await resp2.Content.ReadAsStringAsync();
+
+        resp1.StatusCode.Should().Be(HttpStatusCode.Created, $"resposta da API (1a tentativa): {corpo1}");
+        resp2.IsSuccessStatusCode.Should().BeTrue($"a segunda tentativa não pode dar erro — resposta da API (2a tentativa): {corpo2}");
+
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Sales.Count(s => s.Id == vendaId).Should().Be(1);
+        db.CaixaMovimentos.Count(m => m.SalePaymentId == salePaymentId).Should().Be(1);
+    }
+
+    [Fact(DisplayName = "POST /api/sales — sem Payments explícito (legado PDV Web) ainda gera lançamento financeiro")]
+    public async Task Create_SemPaymentsExplicito_AindaGeraLancamentoFinanceiro()
+    {
+        var produtoId = await SeedProdutoAsync(30m);
+        var vendaId = Guid.NewGuid();
+        var usuarioId = Guid.NewGuid();
+        await SeedCaixaAbertoAsync(usuarioId);
+
+        // Sem "Payments" no payload — igual o PDV Web legado manda hoje.
+        var dto = new
+        {
+            Id = vendaId,
+            UsuarioId = usuarioId,
+            Items = new[] { new { ProductId = produtoId, Quantity = 1m, UnitPrice = 30m, TotalItem = 30m } }
+        };
+
+        var resp = await AuthClient.PostAsJsonAsync("/api/sales", dto);
+        var corpo = await resp.Content.ReadAsStringAsync();
+        resp.StatusCode.Should().Be(HttpStatusCode.Created, $"resposta da API: {corpo}");
+
+        using var scope = Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var movimento = db.CaixaMovimentos.FirstOrDefault(m => m.VendaId == vendaId);
+        movimento.Should().NotBeNull();
+        movimento!.SalePaymentId.Should().NotBeNull("o Id gerado automaticamente pro pagamento padrão também precisa existir");
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
