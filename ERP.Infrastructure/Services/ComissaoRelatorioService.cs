@@ -19,17 +19,20 @@ public class ComissaoRelatorioService : IComissaoRelatorioService
         var end = fim    ?? DateTime.Today.AddDays(1);
 
         // Agrupa vendas por vendedor no período
-        var vendas = await _ctx.Sales.AsNoTracking()
+        var vendas = (await _ctx.Sales.AsNoTracking()
             .Where(s => s.SaleDate >= ini && s.SaleDate < end
                      && s.Status != ERP.Domain.Enums.SaleStatus.Cancelada)
             .GroupBy(s => s.SellerName ?? "Sem vendedor")
+            .ToListAsync(ct))
+            // Materializado ANTES de somar — mesma limitação do SQLite com
+            // Sum() sobre decimal (não tem tipo decimal nativo pra agregar em SQL).
             .Select(g => new
             {
                 Vendedor     = g.Key,
                 QtdVendas    = g.Count(),
                 TotalVendido = g.Sum(s => s.Total)
             })
-            .ToListAsync(ct);
+            .ToList();
 
         // Busca percentuais de comissão por usuário/cargo
         var usuarios = await _ctx.Users.AsNoTracking()

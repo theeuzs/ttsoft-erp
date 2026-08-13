@@ -80,9 +80,12 @@ public class AppDbContext : DbContext
     /// <remarks>
     /// ATENÇÃO — não otimize este método para retornar um campo diretamente:
     ///   ERRADO: p => p.TenantId == _requestTenant.TenantId  (captura o valor no build do modelo — congela o primeiro tenant)
-    ///   CERTO:  p => p.TenantId == tenantFilter.Value             (EF Core avalia a chamada por query, no contexto correto)
-    /// O EF Core 8 reconhece GetTenantId() como referência captiva avaliada por query.
-    /// Trocar para acesso direto ao campo faz o modelo cachear o primeiro tenant e vazar dados.
+    ///   TAMBÉM ERRADO (achado 08/2026, com prova em SQL bruto): p => p.TenantId == algumObjetoExterno.Value
+    ///     — mesmo sendo uma "chamada" e não um campo, se o objeto foi capturado de FORA do DbContext
+    ///     (variável local, helper externo), o EF Core ainda pode congelar o valor da primeira consulta
+    ///     compilada como constante — foi exatamente esse o bug real encontrado e corrigido.
+    ///   CERTO:  p => p.TenantId == this.CurrentFilterTenantId  (propriedade da PRÓPRIA instância do DbContext —
+    ///     EF Core reconhece "this.Algo" como ligado ao contexto Scoped atual, e sempre parametriza.)
     /// </remarks>
     /// Resolve o TenantId para gravação/validação de entidades.
     /// Ordem de prioridade (fix 1.7.6):
@@ -193,28 +196,29 @@ public class AppDbContext : DbContext
     public DbSet<OrderConflict>             OrderConflicts             { get; set; }
     public DbSet<ProcessingSession>         ProcessingSessions         { get; set; }
 
-    // ── TenantFilterHelper: cascata AsyncLocal → _globalTenantId ──────────────
-    // Usado pelo HasQueryFilter em vez de _asyncTenantId diretamente.
-    // Propriedade de instância em objeto capturado → EF Core avalia por query (não cacheia).
-    // S13 FIX: quando AsyncLocal está vazio (WPF sem SetQueryTenantId explícito),
-    // cai no _globalTenantId atualizado no login — corrige "Produto não encontrado" no WPF.
-    private sealed class TenantFilterHelper
-    {
-        private readonly AsyncLocal<Guid> _asyncLocal;
-        public TenantFilterHelper(AsyncLocal<Guid> asyncLocal) => _asyncLocal = asyncLocal;
-        public Guid Value => _asyncLocal.Value != Guid.Empty ? _asyncLocal.Value : _globalTenantId;
-    }
+    // ── CORREÇÃO CRÍTICA (08/2026) — achado de investigação real, com prova em
+    // SQL bruto: o padrão anterior (TenantFilterHelper, um objeto EXTERNO
+    // capturado na closure do HasQueryFilter) NÃO era reavaliado por consulta
+    // como o comentário antigo dizia — o EF Core "congelava" o valor da
+    // PRIMEIRA consulta compilada e reutilizava esse valor como CONSTANTE em
+    // todas as consultas seguintes, mesmo com tenant diferente. Prova: o SQL
+    // gerado tinha o TenantId como STRING LITERAL fixa (do primeiro tenant)
+    // E como parâmetro (do tenant atual) na MESMA cláusula WHERE — como as
+    // duas nunca podem ser iguais ao mesmo tempo, toda consulta depois da
+    // primeira vinha vazia, para QUALQUER tenant.
+    //
+    // A correção: uma PROPRIEDADE DE INSTÂNCIA no próprio DbContext (this.),
+    // não um objeto externo. O EF Core reconhece "this.Algo" como ligado à
+    // instância atual (Scoped, uma por requisição) e SEMPRE parametriza —
+    // nunca trata como constante cacheável. Esse é o padrão documentado pela
+    // própria Microsoft para esse cenário exato.
+    public Guid CurrentFilterTenantId
+        => _asyncTenantId.Value != Guid.Empty ? _asyncTenantId.Value : _globalTenantId;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
         base.OnModelCreating(modelBuilder);
-
-        // S13 FIX: usa TenantFilterHelper em vez de _asyncTenantId diretamente.
-        // tenantFilter.Value cascateia: AsyncLocal (API/testes) → _globalTenantId (WPF).
-        // EF Core avalia propriedades de instância em closures por query (não cacheia),
-        // ao contrário de chamadas de método estático sem argumentos (cacheadas no InMemory).
-        var tenantFilter = new TenantFilterHelper(_asyncTenantId);
 
         // ══════════════════════════════════════════════════════════════
         //  FILTROS GLOBAIS
@@ -234,28 +238,28 @@ public class AppDbContext : DbContext
 
         // ── Entidades com IsDeleted + TenantId ────────────────────────
         modelBuilder.Entity<Product>().HasQueryFilter(
-            p => !p.IsDeleted && p.TenantId == tenantFilter.Value);
+            p => !p.IsDeleted && p.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<Customer>().HasQueryFilter(
-            c => !c.IsDeleted && c.TenantId == tenantFilter.Value);
+            c => !c.IsDeleted && c.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<Sale>().HasQueryFilter(
-            s => !s.IsDeleted && s.TenantId == tenantFilter.Value);
+            s => !s.IsDeleted && s.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<Caixa>().HasQueryFilter(
-            c => !c.IsDeleted && c.TenantId == tenantFilter.Value);
+            c => !c.IsDeleted && c.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<ContaBancaria>().HasQueryFilter(
-            c => !c.IsDeleted && c.TenantId == tenantFilter.Value);
+            c => !c.IsDeleted && c.TenantId == this.CurrentFilterTenantId);
         // S17: MovimentoContaBancaria ganha filtro próprio (defesa em profundidade) —
         // diferente de CaixaMovimento, que hoje só é seguro porque sempre é consultado
         // a partir de um CaixaId já filtrado por tenant a montante.
         modelBuilder.Entity<MovimentoContaBancaria>().HasQueryFilter(
-            m => !m.IsDeleted && m.TenantId == tenantFilter.Value);
+            m => !m.IsDeleted && m.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<OperadoraRecebimento>().HasQueryFilter(
-            o => !o.IsDeleted && o.TenantId == tenantFilter.Value);
+            o => !o.IsDeleted && o.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<RecebivelOperadora>().HasQueryFilter(
-            r => !r.IsDeleted && r.TenantId == tenantFilter.Value);
+            r => !r.IsDeleted && r.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<VendaSuspensa>().HasQueryFilter(
-            v => !v.IsDeleted && v.TenantId == tenantFilter.Value);
+            v => !v.IsDeleted && v.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<VendaSuspensaItem>().HasQueryFilter(
-            i => !i.IsDeleted && i.TenantId == tenantFilter.Value);
+            i => !i.IsDeleted && i.TenantId == this.CurrentFilterTenantId);
 
         // S17 FIX: precisão decimal explícita — sem isso, EF usa um default que pode
         // truncar valor monetário silenciosamente. Aviso apareceu na migration (o mesmo
@@ -277,25 +281,25 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<VendaSuspensaItem>().Property(i => i.WholesalePrice).HasPrecision(18, 4);
         modelBuilder.Entity<VendaSuspensaItem>().Property(i => i.WholesaleMinQuantity).HasPrecision(18, 4);
         modelBuilder.Entity<PedidoCompra>().HasQueryFilter(
-            p => !p.IsDeleted && p.TenantId == tenantFilter.Value);
+            p => !p.IsDeleted && p.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<Orcamento>().HasQueryFilter(
-            o => !o.IsDeleted && o.TenantId == tenantFilter.Value);
+            o => !o.IsDeleted && o.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<Category>().HasQueryFilter(
-            c => !c.IsDeleted && c.TenantId == tenantFilter.Value);
+            c => !c.IsDeleted && c.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<Brand>().HasQueryFilter(
-            b => !b.IsDeleted && b.TenantId == tenantFilter.Value);
+            b => !b.IsDeleted && b.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<Supplier>().HasQueryFilter(
-            s => !s.IsDeleted && s.TenantId == tenantFilter.Value);
+            s => !s.IsDeleted && s.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<ProdutoAgregado>().HasQueryFilter(
-            pa => !pa.IsDeleted && pa.TenantId == tenantFilter.Value);
+            pa => !pa.IsDeleted && pa.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<Entrega>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<Veiculo>().HasQueryFilter(
-            v => !v.IsDeleted && v.TenantId == tenantFilter.Value);
+            v => !v.IsDeleted && v.TenantId == this.CurrentFilterTenantId);
 
         // ── Tintométrico ──────────────────────────────────────────────────────
         modelBuilder.Entity<FormulaTintometrica>().HasQueryFilter(
-            f => !f.IsDeleted && f.TenantId == tenantFilter.Value);
+            f => !f.IsDeleted && f.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<FormulaTintometrica>(e =>
         {
             e.HasOne(f => f.Product)
@@ -306,27 +310,27 @@ public class AppDbContext : DbContext
 
         // ── Entidades sem IsDeleted — só TenantId ─────────────────────
         modelBuilder.Entity<User>().HasQueryFilter(
-            u => u.TenantId == tenantFilter.Value);
+            u => u.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<Role>().HasQueryFilter(
-            r => r.TenantId == tenantFilter.Value);
+            r => r.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<Branch>().HasQueryFilter(
-            b => b.TenantId == tenantFilter.Value);
+            b => b.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<ProductBranchStock>().HasQueryFilter(
-            s => s.TenantId == tenantFilter.Value);
+            s => s.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<TransferenciaEstoque>().HasQueryFilter(
-            t => t.TenantId == tenantFilter.Value);
+            t => t.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<ContaReceber>().HasQueryFilter(
-            c => c.TenantId == tenantFilter.Value);
+            c => c.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<ContaPagar>().HasQueryFilter(
-            c => c.TenantId == tenantFilter.Value);
+            c => c.TenantId == this.CurrentFilterTenantId);
 
         // ── Fidelidade e Haver — agora com isolamento de tenant ───────
         // PontosFidelidade herda BaseEntity (tem TenantId).
         // MovimentoHaver deve ter TenantId para filtrar corretamente.
         modelBuilder.Entity<PontosFidelidade>().HasQueryFilter(
-            p => p.TenantId == tenantFilter.Value);
+            p => p.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<MovimentoHaver>().HasQueryFilter(
-            m => m.TenantId == tenantFilter.Value);
+            m => m.TenantId == this.CurrentFilterTenantId);
 
         // ── ProdutoAgregado: many-to-many auto-referenciante ──────────
         modelBuilder.Entity<ProdutoAgregado>(e =>
@@ -357,65 +361,65 @@ public class AppDbContext : DbContext
         //  não confiar só no filtro do pai pra isolar tenant num filho.
         // ══════════════════════════════════════════════════════════════
         modelBuilder.Entity<SalesChannel>().HasQueryFilter(
-            s => !s.IsDeleted && s.TenantId == tenantFilter.Value);
+            s => !s.IsDeleted && s.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<SalesChannelPricingPolicy>().HasQueryFilter(
-            p => !p.IsDeleted && p.TenantId == tenantFilter.Value);
+            p => !p.IsDeleted && p.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<ExternalOrder>().HasQueryFilter(
-            o => !o.IsDeleted && o.TenantId == tenantFilter.Value);
+            o => !o.IsDeleted && o.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<ExternalOrderItem>().HasQueryFilter(
-            i => !i.IsDeleted && i.TenantId == tenantFilter.Value);
+            i => !i.IsDeleted && i.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<SkuMapping>().HasQueryFilter(
-            m => !m.IsDeleted && m.TenantId == tenantFilter.Value);
+            m => !m.IsDeleted && m.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<ShadowStockReservation>().HasQueryFilter(
-            r => !r.IsDeleted && r.TenantId == tenantFilter.Value);
+            r => !r.IsDeleted && r.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<OrderEvent>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<ContaReceberEvento>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<TenantFiscalConfiguration>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<NotaFiscal>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<NotaFiscalItem>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<NfeRecebida>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
 
         // Achado de auditoria (06/08/2026): 10 entidades tinham TenantId
         // (herdado de BaseEntity) mas não tinham HasQueryFilter — dependiam
         // de Where(TenantId==...) manual em todo consumidor, sem rede de
         // proteção se algum fosse esquecido.
         modelBuilder.Entity<AuditLog>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<CaixaMovimento>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<ChatMessage>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<MetaVendas>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<NfseEmitida>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<Permission>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<SaleItemDevolucao>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<SaleItem>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<PedidoCompraItem>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<TransferenciaItem>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<NfePendente>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<OrcamentoItem>().HasQueryFilter(
-            e => !e.IsDeleted && e.TenantId == tenantFilter.Value);
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
 
         modelBuilder.Entity<OrderAction>().HasQueryFilter(
-            a => !a.IsDeleted && a.TenantId == tenantFilter.Value);
+            a => !a.IsDeleted && a.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<OrderConflict>().HasQueryFilter(
-            c => !c.IsDeleted && c.TenantId == tenantFilter.Value);
+            c => !c.IsDeleted && c.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<ProcessingSession>().HasQueryFilter(
-            p => !p.IsDeleted && p.TenantId == tenantFilter.Value);
+            p => !p.IsDeleted && p.TenantId == this.CurrentFilterTenantId);
 
         // ── Precisão decimal explícita (mesmo motivo do S17 FIX acima) ──
         modelBuilder.Entity<SalesChannelPricingPolicy>().Property(p => p.PercentualAjuste).HasPrecision(5, 2);

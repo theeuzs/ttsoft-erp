@@ -79,18 +79,21 @@ public class ContaPagarService : IContaPagarService
     public async Task<ContaPagarResumoDto> GetResumoAsync(CancellationToken ct = default)
     {
         var hoje  = DateTime.Today;
-        var resumo = await _ctx.ContasPagar
+        var contasPendentes = await _ctx.ContasPagar
             .AsNoTracking()
             .Where(c => c.Status == "Pendente")
-            .GroupBy(_ => 1)
-            .Select(g => new ContaPagarResumoDto
-            {
-                TotalPendente = g.Sum(c => c.Valor),
-                TotalVencido  = g.Where(c => c.DataVencimento < hoje).Sum(c => c.Valor),
-                QtdContas     = g.Count(),
-                QtdVencidas   = g.Count(c => c.DataVencimento < hoje)
-            })
-            .FirstOrDefaultAsync(ct);
+            .ToListAsync(ct);
+
+        // Somado em memória — SQLite não sabe traduzir Sum() sobre decimal pra
+        // SQL; GroupBy(_ => 1) só existia pra fazer a agregação no banco, não
+        // precisa mais dele com a lista já materializada.
+        var resumo = contasPendentes.Count == 0 ? null : new ContaPagarResumoDto
+        {
+            TotalPendente = contasPendentes.Sum(c => c.Valor),
+            TotalVencido  = contasPendentes.Where(c => c.DataVencimento < hoje).Sum(c => c.Valor),
+            QtdContas     = contasPendentes.Count,
+            QtdVencidas   = contasPendentes.Count(c => c.DataVencimento < hoje)
+        };
 
         return resumo ?? new ContaPagarResumoDto();
     }

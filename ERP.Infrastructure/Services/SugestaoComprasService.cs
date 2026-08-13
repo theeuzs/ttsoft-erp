@@ -29,12 +29,15 @@ public class SugestaoComprasService : ISugestaoComprasService
         var inicio30d = DateTime.Today.AddDays(-30);
 
         // Giro dos últimos 30 dias por produto
-        var giros = await _ctx.SaleItems.AsNoTracking()
+        var giros = (await _ctx.SaleItems.AsNoTracking()
             .Where(i => i.Sale.SaleDate >= inicio30d
                      && i.Sale.Status != SaleStatus.Cancelada)
             .GroupBy(i => i.ProductId)
+            .ToListAsync())
+            // Materializado ANTES de somar — Quantity é decimal, mesma
+            // limitação do SQLite com Sum() sobre decimal.
             .Select(g => new { ProductId = g.Key, TotalVendido = g.Sum(i => i.Quantity) })
-            .ToListAsync();
+            .ToList();
 
         var prodIds = giros.Select(g => g.ProductId).ToList();
 

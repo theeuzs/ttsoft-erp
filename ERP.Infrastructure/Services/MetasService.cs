@@ -33,15 +33,20 @@ public class MetasService : IMetasService
             .OrderBy(m => m.VendedorNome)
             .ToListAsync(ct);
 
-        var vendas = await _ctx.Sales
+        var vendas = (await _ctx.Sales
             .AsNoTracking()
             .Where(s => s.TenantId == tenantId
                      && s.SaleDate >= inicioMes
                      && s.SaleDate <= fimMes
                      && s.Status   != SaleStatus.Cancelada)
             .GroupBy(s => s.SellerName ?? "Desconhecido")
+            .ToListAsync(ct))
+            // Materializado ANTES de somar — SQLite não sabe traduzir Sum()
+            // sobre decimal pra SQL (não tem tipo decimal nativo); somar em
+            // memória (LINQ to Objects) funciona igual em qualquer provider,
+            // sem precisar converter o tipo armazenado em lugar nenhum.
             .Select(g => new { Vendedor = g.Key, Total = g.Sum(s => s.Total) })
-            .ToListAsync(ct);
+            .ToList();
 
         var totalVendas = vendas.Sum(v => v.Total);
 

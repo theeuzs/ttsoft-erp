@@ -120,6 +120,15 @@ public class ErpApiFactory : WebApplicationFactory<Program>
     public  const string          JwtIssuer    = "ERPTest";
     public  const string          JwtAudience  = "ERPTest";
 
+    // Fase A da migração WPF→API (08/2026) — trocado de EF Core InMemory pra
+    // SQLite em memória. InMemory não é banco relacional de verdade: não
+    // executa ExecuteSqlInterpolatedAsync (usado em BaixarEstoqueAtomicoAsync,
+    // proteção P0 contra corrida de estoque entre terminais), nem honra
+    // transação real. SQLite :memory: é um banco relacional genuíno, só que
+    // descartável — a conexão precisa ficar ABERTA pela vida inteira da
+    // fábrica, porque fechar a única conexão destrói o banco em memória.
+    private Microsoft.Data.Sqlite.SqliteConnection? _sqliteConnection;
+
     public ErpApiFactory()
     {
         // S12 FIX: injeta JWT config via env vars — precedência > appsettings.json.
@@ -153,23 +162,29 @@ public class ErpApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<DbContextOptions<AppDbContext>>();
             services.RemoveAll<AppDbContext>();
 
-            var internalServiceProvider = new ServiceCollection()
-                .AddEntityFrameworkInMemoryDatabase()
-                .BuildServiceProvider();
+            // Uma conexão só, aberta e guardada — SQLite :memory: sem isso
+            // fecharia (e destruiria o banco) entre uma requisição e outra.
+            // "Data Source=:memory:" simples cria um banco NOVO por conexão —
+            // mesmo guardando uma referência, o pipeline HTTP e o código do
+            // teste podem acabar em conexões diferentes sem se ver. Modo
+            // cache=shared com nome único por fábrica resolve isso: todas as
+            // conexões que abrirem essa mesma URI enxergam o mesmo banco.
+            var nomeUnico = $"testdb_{Guid.NewGuid():N}";
+            _sqliteConnection = new Microsoft.Data.Sqlite.SqliteConnection(
+                $"Data Source=file:{nomeUnico}?mode=memory&cache=shared");
+            _sqliteConnection.Open();
 
-            var dbName = $"IntegrationTests_{Guid.NewGuid()}";
-            services.AddSingleton(
-                new DbContextOptionsBuilder<AppDbContext>()
-                    .UseInMemoryDatabase(dbName)
-                    .UseInternalServiceProvider(internalServiceProvider)
-                    // InMemory não suporta transação de verdade — SaleService usa
-                    // BeginTransactionAsync corretamente contra SQL Server real; o
-                    // provider InMemory só não consegue honrar isso, e por padrão
-                    // isso vira ERRO (não aviso) a partir de uma certa versão do EF
-                    // Core. Suprimido aqui só pro provider de teste — não afeta o
-                    // comportamento real da transação em produção.
-                    .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
-                    .Options);
+            var opcoesDb = new DbContextOptionsBuilder<AppDbContext>()
+                .UseSqlite(_sqliteConnection)
+                .Options;
+            services.AddSingleton(opcoesDb);
+
+            // EnsureCreated (não migrations) — cria o schema direto do
+            // modelo atual do C#, sem precisar rodar as 76 migrations SQL
+            // Server contra SQLite (sintaxe não é 100% compatível entre os
+            // dois). Só roda uma vez, no início da fábrica.
+            using (var dbSetup = new AppDbContext(opcoesDb, new SimpleTenantStub(TestTenantId)))
+                dbSetup.Database.EnsureCreated();
 
             services.AddScoped<AppDbContext>(sp => new AppDbContext(
                 sp.GetRequiredService<DbContextOptions<AppDbContext>>(),
@@ -260,6 +275,25 @@ public class ErpApiFactory : WebApplicationFactory<Program>
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", GerarToken(cargo));
         return client;
+    }
+
+    /// <summary>Implementação mínima de IRequestTenant só pra criar o schema uma
+    /// vez via EnsureCreated — não participa de nenhum teste de verdade.</summary>
+    private sealed class SimpleTenantStub : IRequestTenant
+    {
+        public SimpleTenantStub(Guid tenantId) => TenantId = tenantId;
+        public Guid TenantId { get; set; }
+        public Guid UserId { get; set; } = Guid.NewGuid();
+        public string UserName { get; set; } = "setup";
+        public decimal MaxDiscountPercentage { get; set; } = 100m;
+        public decimal MaxSangriaValue { get; set; } = 999999m;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+            _sqliteConnection?.Dispose();
+        base.Dispose(disposing);
     }
 }
 
@@ -472,6 +506,7 @@ public class SalesControllerTests : IntegrationTestBase
     }
 
 
+    [Fact(DisplayName = "POST /api/sales — cria venda E processa financeiro (Caixa) numa chamada só")]
     public async Task Create_ComPagamentoDinheiro_ProcessaFinanceiroJunto()
     {
         var produtoId = await SeedProdutoAsync(50m);
@@ -494,7 +529,12 @@ public class SalesControllerTests : IntegrationTestBase
 
         using var scope = Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var movimento = db.CaixaMovimentos.FirstOrDefault(m => m.SalePaymentId == salePaymentId);
+        // IgnoreQueryFilters() — a consulta de verificação do teste não passa
+        // pelo pipeline HTTP (que seta o TenantId a partir do JWT), então o
+        // filtro global de tenant escondia a linha recém-criada mesmo ela
+        // existindo. Achado real (08/2026), confirmado com diagnóstico antes
+        // de aplicar — não era problema de tempo nem de conexão SQLite.
+        var movimento = db.CaixaMovimentos.IgnoreQueryFilters().FirstOrDefault(m => m.SalePaymentId == salePaymentId);
         movimento.Should().NotBeNull("a API precisa acionar o Motor Financeiro, não só criar a venda");
         movimento!.VendaId.Should().Be(vendaId);
         movimento.Valor.Should().Be(50m);
@@ -529,8 +569,8 @@ public class SalesControllerTests : IntegrationTestBase
 
         using var scope = Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        db.Sales.Count(s => s.Id == vendaId).Should().Be(1);
-        db.CaixaMovimentos.Count(m => m.SalePaymentId == salePaymentId).Should().Be(1);
+        db.Sales.IgnoreQueryFilters().Count(s => s.Id == vendaId).Should().Be(1);
+        db.CaixaMovimentos.IgnoreQueryFilters().Count(m => m.SalePaymentId == salePaymentId).Should().Be(1);
     }
 
     [Fact(DisplayName = "POST /api/sales — sem Payments explícito (legado PDV Web) ainda gera lançamento financeiro")]
@@ -555,7 +595,7 @@ public class SalesControllerTests : IntegrationTestBase
 
         using var scope = Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var movimento = db.CaixaMovimentos.FirstOrDefault(m => m.VendaId == vendaId);
+        var movimento = db.CaixaMovimentos.IgnoreQueryFilters().FirstOrDefault(m => m.VendaId == vendaId);
         movimento.Should().NotBeNull();
         movimento!.SalePaymentId.Should().NotBeNull("o Id gerado automaticamente pro pagamento padrão também precisa existir");
     }
@@ -1443,6 +1483,68 @@ public class MetricsControllerTests : IntegrationTestBase
                 .Should().Contain($"TenantA-{produtoId:N}");
         }
 
+        [Fact(DisplayName = "FASE0 #4 — Ordem das requisições não afeta isolamento de tenant (regressão do bug de closure congelada no HasQueryFilter)")]
+        [Trait("F11", "DualTenant")]
+        public async Task Products_OrdemDasRequisicoes_NaoAfetaIsolamentoDeTenant()
+        {
+            // Regressão permanente do achado de 08/2026: o HasQueryFilter usava
+            // um objeto externo capturado na closure (tenantFilter.Value), e o
+            // EF Core congelava esse valor na primeira consulta compilada,
+            // ignorando o tenant real de toda consulta seguinte — confirmado
+            // com prova em SQL bruto (TenantId aparecia como string literal
+            // fixa E como parâmetro na mesma cláusula WHERE). Corrigido trocando
+            // pra this.CurrentFilterTenantId (propriedade de instância do
+            // DbContext). Esse teste garante que o segundo tenant a fazer uma
+            // requisição sempre vê o próprio dado, não o do primeiro.
+            var tenantA = Guid.NewGuid();
+            var tenantB = Guid.NewGuid();
+            var produtoIdA = Guid.NewGuid();
+            var produtoIdB = Guid.NewGuid();
+
+            using (new TenantScope(tenantA))
+            {
+                using var scope = _factory.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                db.Products.Add(new ERP.Domain.Entities.Product
+                {
+                    Id = produtoIdA, TenantId = tenantA,
+                    Name = $"Argamassa AC-II — TenantA-{produtoIdA:N}",
+                    SalePrice = 22.50m, Stock = 50,
+                    CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+                });
+                await db.SaveChangesAsync();
+            }
+
+            using (new TenantScope(tenantB))
+            {
+                using var scope = _factory.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                db.Products.Add(new ERP.Domain.Entities.Product
+                {
+                    Id = produtoIdB, TenantId = tenantB,
+                    Name = $"Cimento CP-II — TenantB-{produtoIdB:N}",
+                    SalePrice = 30.00m, Stock = 20,
+                    CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+                });
+                await db.SaveChangesAsync();
+            }
+
+            // ORDEM INVERTIDA: B primeiro, A depois.
+            var clientB = _factory.CreateClient();
+            clientB.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", _factory.GerarToken(tenantId: tenantB));
+            var respB = await clientB.GetAsync("/api/products");
+            (await respB.Content.ReadAsStringAsync())
+                .Should().Contain($"TenantB-{produtoIdB:N}");
+
+            var clientA = _factory.CreateClient();
+            clientA.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", _factory.GerarToken(tenantId: tenantA));
+            var respA = await clientA.GetAsync("/api/products");
+            (await respA.Content.ReadAsStringAsync())
+                .Should().Contain($"TenantA-{produtoIdA:N}");
+        }
+
         [Fact(DisplayName = "FASE0 #3 — GET /api/haver/saldo com cliente de outro tenant retorna 0")]
         public async Task Haver_ClienteOutroTenant_NaoVazaDado()
         {
@@ -1521,6 +1623,7 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         await SeedAsync(tenantA, db => db.Customers.Add(new ERP.Domain.Entities.Customer
         {
             Id = Guid.NewGuid(), TenantId = tenantA, Name = marker,
+            Document = $"DOC-{tenantA:N}", // único — Document tem índice único na tabela inteira, não por tenant
             CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
         }));
 
@@ -1577,13 +1680,26 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         var tenantA = Guid.NewGuid();
         var tenantB = Guid.NewGuid();
         var marker  = $"CR-A-{tenantA:N}";
+        var customerId = Guid.NewGuid();
 
-        await SeedAsync(tenantA, db => db.ContasReceber.Add(new ERP.Domain.Entities.ContaReceber
+        await SeedAsync(tenantA, db =>
         {
-            Id = Guid.NewGuid(), TenantId = tenantA, Descricao = marker,
-            ValorTotal = 1000m, DataVencimento = DateTime.UtcNow.AddDays(30),
-            CustomerId = Guid.NewGuid(), CreatedAt = DateTime.UtcNow
-        }));
+            // Cliente precisa existir antes — ContaReceber tem FK obrigatória
+            // pra Customer, e o SQLite (relacional de verdade) barra a
+            // inserção se o pai não existir. O InMemory nunca validou isso.
+            db.Customers.Add(new ERP.Domain.Entities.Customer
+            {
+                Id = customerId, TenantId = tenantA, Name = "Cliente CR Teste",
+                Document = $"DOC-{customerId:N}",
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            db.ContasReceber.Add(new ERP.Domain.Entities.ContaReceber
+            {
+                Id = Guid.NewGuid(), TenantId = tenantA, Descricao = marker,
+                ValorTotal = 1000m, DataVencimento = DateTime.UtcNow.AddDays(30),
+                CustomerId = customerId, CreatedAt = DateTime.UtcNow
+            });
+        });
 
         var resp = await ClientFor(tenantB).GetAsync("/api/contas-receber/pendentes");
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -1618,12 +1734,21 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         var tenantB   = Guid.NewGuid();
         var clienteId = Guid.NewGuid();
 
-        await SeedAsync(tenantA, db => db.PontosFidelidade.Add(new ERP.Domain.Entities.PontosFidelidade
+        await SeedAsync(tenantA, db =>
         {
-            Id = Guid.NewGuid(), TenantId = tenantA,
-            CustomerId = clienteId, Tipo = "Credito",
-            Pontos = 500, Data = DateTime.UtcNow, Descricao = "Compra teste"
-        }));
+            db.Customers.Add(new ERP.Domain.Entities.Customer
+            {
+                Id = clienteId, TenantId = tenantA, Name = "Cliente Fidelidade Teste",
+                Document = $"DOC-{clienteId:N}",
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            db.PontosFidelidade.Add(new ERP.Domain.Entities.PontosFidelidade
+            {
+                Id = Guid.NewGuid(), TenantId = tenantA,
+                CustomerId = clienteId, Tipo = "Credito",
+                Pontos = 500, Data = DateTime.UtcNow, Descricao = "Compra teste"
+            });
+        });
 
         var resp = await ClientFor(tenantB).GetAsync($"/api/fidelidade/{clienteId}/saldo");
 
@@ -1660,14 +1785,23 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
         var tenantA = Guid.NewGuid();
         var tenantB = Guid.NewGuid();
         var marker  = $"END-A-{tenantA:N}";
+        var saleId  = Guid.NewGuid();
 
-        await SeedAsync(tenantA, db => db.Entregas.Add(new ERP.Domain.Entities.Entrega
+        await SeedAsync(tenantA, db =>
         {
-            Id = Guid.NewGuid(), TenantId = tenantA,
-            ClienteNome = marker, SaleId = Guid.NewGuid(),
-            Status = ERP.Domain.Enums.StatusEntrega.Pendente,
-            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
-        }));
+            db.Sales.Add(new ERP.Domain.Entities.Sale
+            {
+                Id = saleId, TenantId = tenantA, SaleNumber = $"TESTE-{saleId:N}",
+                Total = 100m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            db.Entregas.Add(new ERP.Domain.Entities.Entrega
+            {
+                Id = Guid.NewGuid(), TenantId = tenantA,
+                ClienteNome = marker, SaleId = saleId,
+                Status = ERP.Domain.Enums.StatusEntrega.Pendente,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+        });
 
         var resp = await ClientFor(tenantB).GetAsync("/api/entregas");
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
