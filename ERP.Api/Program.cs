@@ -260,7 +260,6 @@ builder.Services.AddHttpClient<IFocusNfeHttpClient, ERP.Infrastructure.HttpClien
 {
     client.BaseAddress = new Uri("https://api.focusnfe.com.br/v2/");
 });
-builder.Services.AddSingleton<ERP.Infrastructure.Services.TEFService>();
 
 // ── FluentValidation ──────────────────────────────────────────────────────────
 builder.Services.AddValidatorsFromAssemblyContaining<ERP.Application.Validators.CreateProductValidator>();

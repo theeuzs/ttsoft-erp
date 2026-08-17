@@ -352,11 +352,28 @@ public partial class App : System.Windows.Application
         services.AddScoped<IUserQueryService, UserQueryService>();
         services.AddScoped<IAuditLogService,  AuditLogService>();
         services.AddScoped<ICustomerService, CustomerService>();
-        services.AddScoped<ISaleService, SaleService>();
-        // SaleService roda direto aqui no WPF (sem passar pela API) — mas
-        // sincronizar estoque com marketplace precisa da API (token OAuth,
-        // dispatcher). Implementação diferente da usada no lado da API,
-        // mesma interface — ver WpfEstoqueSyncService.
+        // Fase B da migração WPF→API (08/2026) — HttpSaleService no lugar do
+        // SaleService local. Checklist de segurança feito antes da troca
+        // (revisão cruzada com GPT): os 11 consumidores de ISaleService no
+        // WPF passam todos pela mesma raiz de DI (nenhum registro paralelo);
+        // nenhum código verifica o tipo concreto; HttpSaleService(handler:
+        // null) é compatível com DI padrão (parâmetro opcional, nenhum
+        // HttpMessageHandler registrado — o container usa o default); nenhum
+        // teste bootstrapa esse container de produção (todos usam mock ou
+        // instância direta, confirmado); e nenhum fluxo precisa continuar
+        // local deliberadamente.
+        services.AddScoped<ISaleService, ERP.WPF.Services.HttpSaleService>();
+        // ATENÇÃO — WpfEstoqueSyncService (linha abaixo) virou código morto
+        // com essa troca: só era chamado de dentro do SaleService LOCAL
+        // (ERP.Application.Services.SaleService.CreateAsync, via
+        // IEstoqueSyncService opcional no construtor), e essa classe nunca
+        // mais roda pra vendas do PDV agora. Não é regressão — a
+        // sincronização de estoque com marketplace continua funcionando,
+        // porque a API TAMBÉM registra IEstoqueSyncService (Program.cs) e é
+        // o SaleService do LADO DO SERVIDOR que passa a rodar quando a venda
+        // chega via POST /api/sales. Mantido registrado por enquanto (não
+        // quebra nada continuar existindo sem uso) — candidato a limpeza
+        // numa sessão futura, não bloqueador dessa migração.
         services.AddScoped<ERP.Application.Interfaces.IEstoqueSyncService,
                             ERP.WPF.Services.WpfEstoqueSyncService>();
 
@@ -459,7 +476,6 @@ public partial class App : System.Windows.Application
         // ── Fase 3 ────────────────────────────────────────────────────────
         services.AddScoped<ERP.Application.Interfaces.IBIService,
                            ERP.Infrastructure.Services.BIService>();
-        services.AddSingleton<ERP.Infrastructure.Services.TEFService>();
         services.AddSingleton<ERP.Infrastructure.Services.BalancaService>();
         services.AddSingleton<ERP.Infrastructure.Services.SpedContribuicoesGenerator>();
 

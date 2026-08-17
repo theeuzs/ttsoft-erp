@@ -463,6 +463,59 @@ public class SalesControllerTests : IntegrationTestBase
             .StatusCode.Should().Be(HttpStatusCode.NotFound);
 
     // ═══════════════════════════════════════════════════════════════════════
+    // Fase B (08/2026) — PATCH /api/sales/{id}/nfce, ponte de compatibilidade
+    // pra ISaleService.AtualizarDadosNfceAsync continuar funcionando via HTTP.
+    // Não é migração fiscal — só expõe o UPDATE que já existia local.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    [Fact(DisplayName = "PATCH /api/sales/{id}/nfce — atualiza os 4 campos de NFC-e da venda")]
+    public async Task AtualizarDadosNfce_VendaExistente_AtualizaCampos()
+    {
+        var vendaId = Guid.NewGuid();
+        var usuarioId = Guid.NewGuid();
+        using (new TenantScope(ErpApiFactory.TestTenantId))
+        {
+            using var scope = Factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Caixas.Add(new ERP.Domain.Entities.Caixa
+            {
+                Id = Guid.NewGuid(), TenantId = ErpApiFactory.TestTenantId,
+                UsuarioId = usuarioId, OperadorNome = "Operador Teste",
+                Status = ERP.Domain.Enums.StatusCaixa.Aberto,
+                DataAbertura = DateTime.Now, ValorAbertura = 100m,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            db.Sales.Add(new ERP.Domain.Entities.Sale
+            {
+                Id = vendaId, TenantId = ErpApiFactory.TestTenantId,
+                SaleNumber = $"TESTE-{vendaId:N}", Total = 50m,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var dto = new { UrlDanfe = "https://danfe.teste/x", Status = "Autorizada", Ambiente = "homologacao", Referencia = "ref-123" };
+        var resp = await AuthClient.PatchAsJsonAsync($"/api/sales/{vendaId}/nfce", dto);
+        resp.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        using var scopeVerif = Factory.Services.CreateScope();
+        var dbVerif = scopeVerif.ServiceProvider.GetRequiredService<AppDbContext>();
+        var venda = dbVerif.Sales.IgnoreQueryFilters().First(s => s.Id == vendaId);
+        venda.NfceUrlDanfe.Should().Be("https://danfe.teste/x");
+        venda.NfceStatusFocus.Should().Be("Autorizada");
+        venda.NfceAmbiente.Should().Be("homologacao");
+        venda.NfceReferencia.Should().Be("ref-123");
+    }
+
+    [Fact(DisplayName = "PATCH /api/sales/{id}/nfce — venda inexistente não lança erro (mesmo comportamento do SaleService local)")]
+    public async Task AtualizarDadosNfce_VendaInexistente_NaoLancaErro()
+    {
+        var dto = new { UrlDanfe = "x", Status = "y", Ambiente = "z", Referencia = "w" };
+        var resp = await AuthClient.PatchAsJsonAsync($"/api/sales/{Guid.NewGuid()}/nfce", dto);
+        resp.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
     // Fase A da migração WPF→API (08/2026) — POST /api/sales precisa processar
     // o financeiro (não só criar a venda), e precisa ser idempotente ponta a
     // ponta pelo HTTP, não só na camada de serviço isolada. Testado aqui antes

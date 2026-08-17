@@ -296,14 +296,36 @@ public class FiscalService : IFiscalService
             var csosn  = produto?.CSOSN;
             var cfop   = produto?.CFOPPadrao;
 
+            // S18 FIX (13/08) — vUnCom é campo meramente informativo pra SEFAZ
+            // (Manual de Orientação do Contribuinte v6.0, pág. 184: "o
+            // contribuinte pode utilizar a precisão desejada, 0-10 decimais"),
+            // e a própria regra de cálculo oficial deriva o valor unitário
+            // DO total, não o contrário ("o valor unitário será obtido pela
+            // divisão do valor do produto pela quantidade comercial").
+            // Antes, ValorUnitarioComercial vinha de item.UnitPrice já
+            // arredondado pra 2 casas em outro lugar (preço de pacote/atacado,
+            // onde UnitPrice é só um valor "equivalente" pra cupom/exibição,
+            // não o valor fiscal) — 2 arredondamentos independentes do mesmo
+            // número, sem garantia de baterem entre si (rejeição 629: achado
+            // real, TUBO 50 ESGOTO 1M, 6×9,98=59,88 ≠ 59,90 enviado).
+            // Derivar aqui, na hora de montar o payload, garante
+            // qCom × vUnCom = vProd por construção, sempre — sem mexer em
+            // SaleItem.UnitPrice, SaleService, ou no cálculo de atacado.
+            // ValorBruto continua vindo de item.TotalPrice, sem nenhuma
+            // mudança de valor comercial.
+            decimal valorBruto = item.TotalPrice;
+            decimal valorUnitarioFiscal = item.Quantity > 0
+                ? Math.Round(valorBruto / item.Quantity, 10, MidpointRounding.AwayFromZero)
+                : item.UnitPrice;
+
             var request = new FocusItemRequest
             {
                 NumeroItem             = (index + 1).ToString(),
                 CodigoProduto          = item.ProductId.ToString().Substring(0, 6),
                 Descricao              = item.ProductName,
                 QuantidadeComercial    = item.Quantity.ToString("F2", CultureInfo.InvariantCulture),
-                ValorUnitarioComercial = item.UnitPrice.ToString("F2", CultureInfo.InvariantCulture),
-                ValorBruto             = item.TotalPrice.ToString("F2", CultureInfo.InvariantCulture),
+                ValorUnitarioComercial = valorUnitarioFiscal.ToString("F10", CultureInfo.InvariantCulture),
+                ValorBruto             = valorBruto.ToString("F2", CultureInfo.InvariantCulture),
                 CodigoNcm              = string.IsNullOrWhiteSpace(ncm) ? "00000000" : ncm!.Replace(".", "").Replace("-", "").Trim(),
                 IcmsSituacaoTributaria = string.IsNullOrWhiteSpace(csosn) ? "102" : csosn!.Split('-')[0].Trim(),
                 IcmsOrigem             = "0",

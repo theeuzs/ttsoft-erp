@@ -14,12 +14,15 @@ namespace ERP.WPF.Services;
 /// aqui (isso é integração de Fase 2/3), não mexe em nenhuma tela do PDV.
 /// Só os métodos que o Fase 2 vai chamar quando ligar isso de verdade.
 ///
-/// Importante: isso NÃO fala com a API por HTTP. Chama ISaleService.CreateAsync
-/// — a MESMA instância local que a venda online do PDV já usa, resolvida
-/// pelo container de DI do próprio WPF (confirmado em WpfEstoqueSyncService.cs:
-/// o SaleService já roda dentro do processo WPF, falando direto com o Azure
-/// SQL via EF Core, sem passar pela API). O motor de sync só reaproveita
-/// essa mesma peça, com o dado vindo da fila local em vez da tela.
+/// ATUALIZADO na Fase B (08/2026): chama ISaleService.CreateAsync — a MESMA
+/// instância que o PDV online usa, resolvida pelo container de DI do WPF.
+/// Antes da Fase B isso era o SaleService local (Azure SQL direto, sem
+/// HTTP); depois da troca de DI, é HttpSaleService (POST /api/sales). O
+/// motor de sync nunca precisou saber qual — só reaproveita a MESMA peça
+/// injetada, com o dado vindo da fila local em vez da tela. É essa
+/// dependência compartilhada que faz a troca de DI valer tanto pro caminho
+/// online quanto pro de sincronização, sem precisar de nenhuma mudança
+/// nessa classe.
 /// </summary>
 public class SyncEngineService
 {
@@ -116,6 +119,28 @@ public class SyncEngineService
 
                 await _offlineDb.MarcarEventoSincronizadoAsync(outboxId, dto.Id.Value);
                 sucessos++;
+            }
+            catch (ERP.Application.Exceptions.SessaoExpiradaException)
+            {
+                // Revisão cruzada com GPT (08/2026) — sessão expirada é um
+                // problema GLOBAL de autenticação, não um erro dessa venda
+                // específica. Diferente do catch genérico abaixo (best-effort
+                // por item, segue pra próxima venda): aqui a gente PARA o
+                // ciclo inteiro. Continuar tentando as próximas vendas com o
+                // mesmo token inválido só geraria uma sequência de 401 sem
+                // nenhum benefício — e cada evento tentado de novo no próximo
+                // ciclo já é o comportamento certo (nada precisa ser marcado
+                // como sincronizado nem descartado; o item simplesmente
+                // continua pendente na fila, do jeito que já estava).
+                //
+                // De propósito NÃO chama RegistrarFalhaEventoAsync aqui — não
+                // é justo incrementar o contador de tentativas dessa venda
+                // específica por causa de um problema que não é dela.
+                Log.Warning(
+                    "SyncEngine: sessão da API expirada/inválida — ciclo de sincronização interrompido " +
+                    "(evento {OutboxId} e os seguintes continuam pendentes; próximo ciclo tenta de novo " +
+                    "com o token que estiver em AppSession.JwtToken naquele momento)", outboxId);
+                break;
             }
             catch (Exception ex)
             {

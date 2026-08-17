@@ -15,17 +15,20 @@ public class NotasFiscaisController : ControllerBase
     private readonly INotasFiscaisService    _notasService;
     private readonly INfceEmissionService    _nfce;
     private readonly INfeCancellationService _cancel;
+    private readonly IFiscalService          _fiscal;
     private readonly IConfiguration         _config;
 
     public NotasFiscaisController(
         INotasFiscaisService    notasService,
         INfceEmissionService    nfce,
         INfeCancellationService cancel,
+        IFiscalService          fiscal,
         IConfiguration          config)
     {
         _notasService = notasService;
         _nfce         = nfce;
         _cancel       = cancel;
+        _fiscal       = fiscal;
         _config       = config;
     }
 
@@ -92,6 +95,41 @@ public class NotasFiscaisController : ControllerBase
             return BadRequest(new { erro = mensagem });
 
         return Ok(new { Sucesso = true, Referencia = referencia, UrlDanfe = urlDanfe, UrlXml = urlXml });
+    }
+
+    /// <summary>S16 FIX: emite NFC-e ou NF-e a partir de uma venda já persistida —
+    /// usado pelo Portal (histórico de notas e PDV web), que chamava essa rota
+    /// sem ela existir (404 em produção). Delega para IFiscalService.EmitirNotaAsync,
+    /// a mesma lógica já usada pelo WPF (FinalizarVendaViewModel/SaleViewModel) e
+    /// pelo OrderProcessingService para pedidos de marketplace.</summary>
+    [HasPermission(Permissions.NotasFiscaisView)]
+    [HttpPost("{tipo}/emitir-da-venda/{vendaId:guid}")]
+    public async Task<IActionResult> EmitirDaVenda(string tipo, Guid vendaId)
+    {
+        var tipoDocumento = tipo.Equals("nfe", StringComparison.OrdinalIgnoreCase) ? "NFE" : "NFCE";
+
+        FiscalEmissionResult resultado;
+        try
+        {
+            resultado = await _fiscal.EmitirNotaAsync(vendaId, tipoDocumento);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { erro = ex.Message });
+        }
+
+        if (!resultado.Sucesso)
+            return BadRequest(new { erro = resultado.Mensagem });
+
+        return Ok(new
+        {
+            Sucesso        = true,
+            Mensagem       = resultado.Mensagem,
+            Status         = resultado.Status,
+            UrlDanfe       = resultado.UrlDanfe,
+            Ambiente       = resultado.Ambiente,
+            EmContingencia = resultado.EmContingencia
+        });
     }
 
     /// <summary>Cancela uma NFC-e ou NF-e emitida.</summary>

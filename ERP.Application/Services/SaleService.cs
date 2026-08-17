@@ -193,15 +193,40 @@ public class SaleService : ISaleService
                     if (!descontoOk) throw new InvalidOperationException(descontoErro!);
 
                     // S8 FIX: UnitPrice sempre do servidor (Product.GetPrecoParaGrupo), nunca do cliente.
-                    // WholesalePrice se quantidade atinge mínimo definido no cadastro.
-                    var unitPrice = product.GetPrecoParaGrupo(grupoPreco);
-                    if (product.WholesalePrice.HasValue
-                        && product.WholesaleMinQuantity.HasValue
-                        && itemDto.Quantity >= product.WholesaleMinQuantity.Value)
-                        unitPrice = product.WholesalePrice.Value;
+                    var unitPriceNormal = product.GetPrecoParaGrupo(grupoPreco);
 
-                    var totalItem = ERP.Application.Helpers.DescontoPolicy.CalcularTotal(
-                        unitPrice, itemDto.Quantity, itemDto.DiscountPercent);
+                    bool ehAtacado = product.WholesalePrice.HasValue
+                        && product.WholesaleMinQuantity.HasValue
+                        && itemDto.Quantity >= product.WholesaleMinQuantity.Value;
+
+                    decimal unitPrice;
+                    decimal totalItem;
+
+                    if (ehAtacado)
+                    {
+                        // S18 FIX (13/08, incidente real Vila Verde + confirmado com o
+                        // dono do sistema): WholesalePrice é preço do PACOTE/barra
+                        // inteira fechada, não preço por unidade. O código antigo fazia
+                        // `unitPrice = product.WholesalePrice.Value` e multiplicava por
+                        // Quantity inteira — cobrava 6 barras de R$59,90 como
+                        // 6 × R$59,90 = R$359,40 em vez de R$59,90 pela barra de 6m.
+                        // Agora replica a mesma fórmula que o WPF já usa (CartItem.Total,
+                        // PdvViewModel.cs) — pacotes fechados × preço do pacote + sobra
+                        // fracionária × preço normal — pra servidor e tela nunca mais
+                        // divergirem em qual é o valor real da venda.
+                        var (totalAtacado, precoEquivalente) = ERP.Application.Helpers.DescontoPolicy.CalcularTotalAtacado(
+                            itemDto.Quantity, product.WholesaleMinQuantity!.Value, product.WholesalePrice!.Value,
+                            unitPriceNormal, itemDto.DiscountPercent);
+
+                        totalItem = totalAtacado;
+                        unitPrice = precoEquivalente;
+                    }
+                    else
+                    {
+                        unitPrice = unitPriceNormal;
+                        totalItem = ERP.Application.Helpers.DescontoPolicy.CalcularTotal(
+                            unitPrice, itemDto.Quantity, itemDto.DiscountPercent);
+                    }
 
                     sale.Items.Add(new SaleItem
                     {

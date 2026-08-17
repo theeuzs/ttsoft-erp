@@ -79,7 +79,7 @@ public class FocusNfceRequest
     // Item 7 do roadmap fiscal — nota de devolução. Confirmado na doc da
     // Focus: precisa ser array (não objeto), mesmo com só uma nota referenciada.
     [JsonPropertyName("notas_referenciadas")]
-    public List<NotaReferenciadaRequest>? NotasReferenciadas { get; set; }
+    public List<NotaReferenciadaRequest>? NotasReferenciadas { get; set; } = new();
 }
 
 public class NotaReferenciadaRequest

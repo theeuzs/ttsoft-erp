@@ -1,6 +1,7 @@
 // ERP.Application/Services/ConnectivityExceptionClassifier.cs
 using ERP.Application.Exceptions;
 using Microsoft.Data.SqlClient;
+using System.Net.Http;
 
 namespace ERP.Application.Services;
 
@@ -68,6 +69,27 @@ public static class ConnectivityExceptionClassifier
             // não é um "falso positivo" perigoso).
             if (atual is SqlException) return true;
             if (atual is TimeoutException) return true;
+
+            // Fase B da migração WPF→API (08/2026) — HttpSaleService pode
+            // lançar isso via EnsureSuccessStatusCode() (servidor fora do ar,
+            // 5xx) ou a própria falha de conexão (DNS, TLS, conexão recusada).
+            // Mesmo tratamento que SqlException já recebe pro caminho local.
+            if (atual is HttpRequestException) return true;
+
+            // TaskCanceledException — DE PROPÓSITO não tem um `if` explícito
+            // aqui. HttpClient lança esse tipo tanto pra timeout genuíno
+            // quanto pra cancelamento intencional via CancellationToken, e a
+            // ÚNICA forma confiável de diferenciar é olhar o InnerException:
+            // timeout real vem com InnerException do tipo TimeoutException
+            // (comportamento documentado do .NET 5+); cancelamento
+            // intencional não tem InnerException nenhum. O loop já resolve
+            // isso sozinho — TaskCanceledException não bate em nenhum `if`
+            // acima, desce pro InnerException na próxima iteração, e É LÁ que
+            // a decisão certa acontece: acha TimeoutException → true; não
+            // acha nada → cai no fail-safe → false. Adicionar um `if
+            // (atual is TaskCanceledException) return true;` aqui trataria
+            // cancelamento proposital como se fosse queda de conexão — exatamente
+            // o erro que a revisão cruzada com GPT (08/2026) pediu pra evitar.
 
             // DbUpdateException por si só é ambíguo — só conta como
             // conectividade se algum nível MAIS FUNDO da cadeia (a partir

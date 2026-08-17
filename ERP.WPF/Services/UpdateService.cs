@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
@@ -17,6 +18,11 @@ public class VersaoInfo
     public string UrlDownload    { get; set; } = string.Empty;
     public string Notas          { get; set; } = string.Empty;
     public string DataLancamento { get; set; } = string.Empty;
+
+    /// <summary>SHA-256 (hex) do .exe publicado em UrlDownload. Ausente/vazio
+    /// bloqueia a atualização — nunca é tratado como "sem verificação, segue
+    /// mesmo assim". Ver S17 FIX.</summary>
+    public string? Sha256        { get; set; }
 }
 
 public static class UpdateService
@@ -75,6 +81,28 @@ public static class UpdateService
     {
         try
         {
+            // S17 FIX: manifesto sem SHA-256 bloqueia a atualização. Nunca
+            // "se tiver hash, valido" — é "só existe atualização com hash
+            // válido", pra ninguém reativar o comportamento inseguro sem
+            // perceber publicando um versao.json incompleto.
+            if (string.IsNullOrWhiteSpace(info.Sha256))
+            {
+                MessageBox.Show(
+                    "Manifesto de atualização sem SHA-256. Atualização bloqueada por segurança.",
+                    "Erro de Atualização", MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
+            }
+
+            // S17 FIX: nada impede hoje que UrlDownload aponte pra http://
+            // — exigir https explicitamente antes de baixar qualquer coisa.
+            if (!UrlEhHttps(info.UrlDownload))
+            {
+                MessageBox.Show(
+                    "URL de download da atualização não é HTTPS. Atualização bloqueada por segurança.",
+                    "Erro de Atualização", MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
+            }
+
             string tempExe = Path.Combine(Path.GetTempPath(), "ERP.WPF.new.exe");
 
             using var client = new HttpClient();
@@ -102,7 +130,23 @@ public static class UpdateService
 
             file.Close();
 
-            // Dispara o Updater passando: [novo_exe] [destino_exe] [pid_do_erp]
+            // S17 FIX: valida integridade do que foi baixado antes de fechar
+            // o ERP e disparar o Updater — falha aqui não derruba a sessão
+            // do usuário. Essa é a camada de UX; a validação que de fato
+            // decide se o executável é substituído é a segunda, dentro do
+            // próprio ERP.Updater (não confia que quem o chamou já validou).
+            string hashCalculado = CalcularSha256Arquivo(tempExe);
+            if (!HashConfere(info.Sha256, hashCalculado))
+            {
+                try { File.Delete(tempExe); } catch { /* limpeza best-effort */ }
+
+                MessageBox.Show(
+                    "O arquivo baixado não confere com o SHA-256 esperado. Atualização bloqueada por segurança.",
+                    "Erro de Atualização", MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
+            }
+
+            // Dispara o Updater passando: [novo_exe] [destino_exe] [pid_do_erp] [sha256_esperado]
             string exeAtual = Process.GetCurrentProcess().MainModule!.FileName;
             string updater  = Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory, "Updater.exe");
@@ -114,7 +158,7 @@ public static class UpdateService
             Process.Start(new ProcessStartInfo
             {
                 FileName        = updater,
-                Arguments       = $"\"{tempExe}\" \"{exeAtual}\" {Process.GetCurrentProcess().Id}",
+                Arguments       = $"\"{tempExe}\" \"{exeAtual}\" {Process.GetCurrentProcess().Id} {info.Sha256!.Trim()}",
                 UseShellExecute = true
             });
 
@@ -130,4 +174,28 @@ public static class UpdateService
             return false;
         }
     }
+
+    /// <summary>S17 FIX: true só se a URL for absoluta e o esquema for
+    /// exatamente https — nada aqui aceita http:// nem URL relativa.</summary>
+    public static bool UrlEhHttps(string? url)
+        => Uri.TryCreate(url, UriKind.Absolute, out var uri)
+           && uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>S17 FIX: SHA-256 do arquivo em hex, sem separadores.
+    /// Assume que ninguém mais tem o arquivo aberto para escrita.</summary>
+    public static string CalcularSha256Arquivo(string caminhoArquivo)
+    {
+        using var sha256 = SHA256.Create();
+        using var stream = File.OpenRead(caminhoArquivo);
+        return Convert.ToHexString(sha256.ComputeHash(stream));
+    }
+
+    /// <summary>S17 FIX: comparação fail-closed — esperado ausente/vazio
+    /// NUNCA confere, mesmo que o calculado também esteja vazio. Ignora
+    /// maiúsculas/minúsculas e espaços nas pontas (hex pode vir dos dois
+    /// jeitos dependendo de quem gerou o manifesto).</summary>
+    public static bool HashConfere(string? esperado, string? calculado)
+        => !string.IsNullOrWhiteSpace(esperado)
+           && !string.IsNullOrWhiteSpace(calculado)
+           && string.Equals(esperado.Trim(), calculado.Trim(), StringComparison.OrdinalIgnoreCase);
 }

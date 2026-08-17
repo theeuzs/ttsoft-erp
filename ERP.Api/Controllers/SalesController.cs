@@ -154,6 +154,21 @@ public class SalesController : ControllerBase
         catch (InvalidOperationException ex) { return BadRequest(new { erro = ex.Message }); }
     }
 
+    /// <summary>
+    /// Atualiza os dados de NFC-e de uma venda (URL do DANFE, status, ambiente,
+    /// referência). Fase B (08/2026) — ponte de compatibilidade pra
+    /// NfeContingencyWorker/FiscalService/NotasFiscaisViewModel continuarem
+    /// funcionando via HTTP; não é a migração fiscal completa (Fase C).
+    /// Comportamento idêntico ao SaleService local: se a venda não existir,
+    /// não lança erro (mesmo no-op silencioso que já existia).
+    /// </summary>
+    [HttpPatch("{id:guid}/nfce")]
+    public async Task<IActionResult> AtualizarDadosNfce(Guid id, [FromBody] AtualizarDadosNfceRequestDto dto)
+    {
+        await _saleService.AtualizarDadosNfceAsync(id, dto.UrlDanfe, dto.Status, dto.Ambiente, dto.Referencia);
+        return NoContent();
+    }
+
     /// <summary>Relatório de vendas por período com agrupamento por vendedor.</summary>
     [HttpGet("report")]
     public async Task<IActionResult> GetReport(
@@ -167,3 +182,10 @@ public class SalesController : ControllerBase
 }
 
 public record CancelSaleRequestDto(string Motivo = "Cancelamento via API");
+
+// Fase B (08/2026) — ponte de compatibilidade: NÃO é a migração fiscal (Fase
+// C), só expõe o método que já existia em SaleService.AtualizarDadosNfceAsync
+// via HTTP, pra NfeContingencyWorker/FiscalService/NotasFiscaisViewModel
+// continuarem funcionando quando ISaleService virar HttpSaleService.
+public record AtualizarDadosNfceRequestDto(
+    string UrlDanfe, string Status, string Ambiente, string Referencia);

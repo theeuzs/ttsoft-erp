@@ -6,7 +6,9 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
+using System.Net.Http;
 using System.Runtime.Serialization;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace ERP.Tests.Application;
@@ -129,5 +131,58 @@ public class ConnectivityExceptionClassifierTests
         var sqlEx = CriarSqlExceptionFake();
 
         ConnectivityExceptionClassifier.EhFalhaDeConectividade(sqlEx).Should().BeTrue();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Fase B da migração WPF→API (08/2026) — HttpSaleService pode lançar
+    // HttpRequestException/TaskCanceledException, não só SqlException/
+    // TimeoutException. Matriz revisada com o GPT antes de mexer no código.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void HttpRequestException_SemEmbrulho_EhConectividade()
+    {
+        // Caminho real: HttpSaleService lança isso direto (via
+        // EnsureSuccessStatusCode ou falha de conexão), sem embrulhar em
+        // nada — diferente do caminho local, que sempre embrulha numa
+        // Exception genérica dentro da transação do SaleService.
+        var httpEx = new HttpRequestException("Servidor inacessível.");
+
+        ConnectivityExceptionClassifier.EhFalhaDeConectividade(httpEx).Should().BeTrue(
+            "servidor fora do ar ou rede indisponível tem que cair pro modo offline");
+    }
+
+    [Fact]
+    public void HttpRequestException_Embrulhada_EhConectividade()
+    {
+        var httpEx = new HttpRequestException("DNS não resolveu.");
+        var embrulhada = new Exception("erro qualquer", httpEx);
+
+        ConnectivityExceptionClassifier.EhFalhaDeConectividade(embrulhada).Should().BeTrue();
+    }
+
+    [Fact]
+    public void TaskCanceledException_ComInnerExceptionTimeoutException_EhConectividade()
+    {
+        // Comportamento documentado do .NET 5+: quando HttpClient.Timeout
+        // estoura, a exceção lançada é TaskCanceledException com
+        // InnerException do tipo TimeoutException especificamente — é assim
+        // que o .NET diferencia "estourou o tempo" de "alguém cancelou".
+        var timeoutReal = new TimeoutException("A operação excedeu o tempo limite configurado.");
+        var taskCanceled = new TaskCanceledException("A tarefa foi cancelada.", timeoutReal);
+
+        ConnectivityExceptionClassifier.EhFalhaDeConectividade(taskCanceled).Should().BeTrue(
+            "timeout genuíno de HttpClient.Timeout tem que cair pro modo offline, igual TimeoutException do SQL já cai hoje");
+    }
+
+    [Fact]
+    public void TaskCanceledException_SemInnerException_NaoEhConectividade()
+    {
+        // Cancelamento intencional via CancellationToken — NÃO tem
+        // InnerException nenhum. Não pode ser confundido com timeout de rede.
+        var cancelamentoIntencional = new TaskCanceledException("A operação foi cancelada.");
+
+        ConnectivityExceptionClassifier.EhFalhaDeConectividade(cancelamentoIntencional).Should().BeFalse(
+            "cancelamento proposital não é queda de conexão — não pode virar venda offline silenciosamente");
     }
 }
