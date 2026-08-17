@@ -19,6 +19,13 @@ namespace ERP.Infrastructure.Services;
 /// </summary>
 public class FiscalService : IFiscalService
 {
+    // S21 FIX (17/08) — DataEmissao usa ERP.Domain.Common.FusoBrasilHelper
+    // (calcula a partir de UtcNow, independente do fuso do servidor) em vez
+    // de DateTime.Now/sale.SaleDate.ToString("...zzz"). Ver o helper pro
+    // motivo completo — foi o que causou a rejeição SEFAZ 703 (data de
+    // emissão 3h no futuro) na primeira venda real depois do S18/S19/S20.
+    private static string DataEmissaoAgora() => ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasilComOffset();
+
     private readonly Persistence.Context.AppDbContext _ctx;
     private readonly IFiscalConfigurationProvider _configProvider;
     private readonly INfceEmissionService _nfceService;
@@ -156,7 +163,7 @@ public class FiscalService : IFiscalService
                 UrlDanfe              = urlDanfe,
                 XmlUrl                = string.IsNullOrWhiteSpace(urlXml) ? null : urlXml,
                 Ambiente              = ambienteSefaz,
-                DataEmissao           = DateTime.Now,
+                DataEmissao           = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
                 DestinatarioNome      = sale.Customer?.Name,
                 DestinatarioDocumento = sale.Customer?.Document,
                 MotivoCancelamento    = null,
@@ -209,7 +216,7 @@ public class FiscalService : IFiscalService
 
         return new FocusNfceRequest
         {
-            DataEmissao            = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:sszzz"),
+            DataEmissao            = DataEmissaoAgora(),
             TipoDocumento          = "1",
             NaturezaOperacao       = "DEVOLUCAO DE VENDA",
             FinalidadeEmissao      = "4",
@@ -260,7 +267,7 @@ public class FiscalService : IFiscalService
                 UrlDanfe              = urlDanfe,
                 XmlUrl                = string.IsNullOrWhiteSpace(urlXml) ? null : urlXml,
                 Ambiente              = ambiente,
-                DataEmissao           = DateTime.Now,
+                DataEmissao           = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
                 DestinatarioNome      = sale.Customer?.Name,
                 DestinatarioDocumento = sale.Customer?.Document,
             });
@@ -375,13 +382,26 @@ public class FiscalService : IFiscalService
         if (!string.IsNullOrWhiteSpace(sale.Customer?.Document))
             cpfCnpjLimpo = new string(sale.Customer.Document.Where(char.IsDigit).ToArray());
 
+        // S20 FIX (13/08) — achado testando o S18/S19 em produção real: a
+        // NFC-e exige <indIEDest> OU <enderDest> sempre que há destinatário
+        // identificado (CPF/CNPJ). NFC-e não precisa de endereço — só do
+        // indicador — mas esse método nunca setava nenhum dos dois, e a
+        // Focus rejeitava com "Missing child element(s)... enderDest,
+        // indIEDest" assim que a venda tinha um cliente de verdade
+        // vinculado (a rejeição 629 original nunca chegou a expor isso
+        // porque parava antes, no erro de cálculo). "9" = Não Contribuinte
+        // — o caso normal de Consumidor Final numa venda de balcão, sem
+        // inscrição estadual.
+        string? indicadorIe = string.IsNullOrWhiteSpace(cpfCnpjLimpo) ? null : "9";
+
         return new FocusNfceRequest
         {
-            DataEmissao = sale.SaleDate.ToString("yyyy-MM-ddTHH:mm:sszzz"),
-            CpfCnpj     = cpfCnpjLimpo,
-            Nome        = sale.Customer?.Name,
-            Itens       = MontarItens(sale),
-            Pagamentos  = MontarPagamentos(sale)
+            DataEmissao             = DataEmissaoAgora(),
+            CpfCnpj                 = cpfCnpjLimpo,
+            Nome                    = sale.Customer?.Name,
+            IndicadorIeDestinatario = indicadorIe,
+            Itens                   = MontarItens(sale),
+            Pagamentos              = MontarPagamentos(sale)
         };
     }
 
@@ -399,9 +419,16 @@ public class FiscalService : IFiscalService
             ieLimpa = new string(customer.StateRegistration.Where(char.IsDigit).ToArray());
         else if (cpfCnpjLimpo?.Length > 11) ieLimpa = "ISENTO";
 
+        // S20 FIX (13/08) — mesmo campo faltando aqui: "1" = Contribuinte
+        // ICMS quando existe IE de verdade cadastrada; "9" = Não
+        // Contribuinte pros demais casos (pessoa física ou empresa isenta).
+        string? indicadorIe = string.IsNullOrWhiteSpace(cpfCnpjLimpo)
+            ? null
+            : (!string.IsNullOrWhiteSpace(ieLimpa) && ieLimpa != "ISENTO" ? "1" : "9");
+
         return new FocusNfceRequest
         {
-            DataEmissao            = sale.SaleDate.ToString("yyyy-MM-ddTHH:mm:sszzz"),
+            DataEmissao            = DataEmissaoAgora(),
             TipoDocumento          = "1",
             CpfCnpj                = cpfCnpjLimpo,
             Nome                   = customer?.Name,
@@ -412,6 +439,7 @@ public class FiscalService : IFiscalService
             UfDestinatario         = string.IsNullOrWhiteSpace(customer?.State) ? "PR" : customer.State,
             CepDestinatario        = string.IsNullOrWhiteSpace(cepLimpo) ? "00000000" : cepLimpo,
             IeDestinatario         = ieLimpa,
+            IndicadorIeDestinatario = indicadorIe,
             Itens                  = MontarItens(sale),
             Pagamentos             = MontarPagamentos(sale)
         };

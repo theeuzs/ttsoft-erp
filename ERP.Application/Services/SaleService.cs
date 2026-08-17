@@ -98,7 +98,7 @@ public class SaleService : ISaleService
             CustomerId = dto.CustomerId,
             SellerName = dto.SellerName,
             DiscountAmount = dto.DiscountAmount,
-            SaleDate = DateTime.Now,
+            SaleDate = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
             Notes = dto.Notes,
             Payments = dto.Payments.Select(p => new SalePayment
             {
