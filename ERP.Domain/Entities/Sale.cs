@@ -16,6 +16,12 @@ public class Sale : BaseEntity
     public virtual ICollection<SalePayment> Payments { get; set; } = new List<SalePayment>();
     public decimal Subtotal { get; set; }
     public decimal DiscountAmount { get; set; }
+    // S24 (17/08) — frete pra NF-e A4 (marketplace/entrega): entra no Total
+    // de verdade, não é só um detalhe pro momento de emitir. Sem isso, o
+    // valor cobrado do cliente (produtos + frete) nunca bate com o que a
+    // NF-e precisa declarar em vFrete, e a conferência de pagamento
+    // (FaltaPagar) ficaria cega pro frete.
+    public decimal ShippingValue { get; set; }
     public decimal Total { get; set; }
     public string? Notes { get; set; }
     public string? CancelReason { get; set; }
@@ -42,7 +48,7 @@ public class Sale : BaseEntity
     public void RecalculateTotals()
     {
         Subtotal = Items.Sum(i => i.TotalPrice);
-        Total = Subtotal - DiscountAmount;
+        Total = Subtotal - DiscountAmount + ShippingValue;
     }
 }
 

@@ -4,6 +4,7 @@ using ERP.Persistence.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ERP.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260818152211_AddShippingValueToSale")]
+    partial class AddShippingValueToSale
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1327,9 +1330,6 @@ namespace ERP.Persistence.Migrations
                     b.Property<string>("DestinatarioUf")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("EspecieVolumes")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("Finalidade")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -1338,15 +1338,8 @@ namespace ERP.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("InformacoesComplementares")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
-
-                    b.Property<string>("ModalidadeFrete")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("MotivoCancelamento")
                         .HasColumnType("nvarchar(max)");
@@ -1356,15 +1349,6 @@ namespace ERP.Persistence.Migrations
 
                     b.Property<string>("Numero")
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<decimal?>("PesoBrutoKg")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal?>("PesoLiquidoKg")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int?>("QuantidadeVolumes")
-                        .HasColumnType("int");
 
                     b.Property<string>("RefNFe")
                         .HasColumnType("nvarchar(max)");
@@ -1387,34 +1371,10 @@ namespace ERP.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("TransportadoraDocumento")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("TransportadoraEndereco")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("TransportadoraIe")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("TransportadoraMunicipio")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("TransportadoraNome")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("TransportadoraUf")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("UrlDanfe")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("VeiculoPlaca")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("VeiculoUf")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<Guid?>("VendaId")
@@ -1475,41 +1435,6 @@ namespace ERP.Persistence.Migrations
                     b.HasIndex("NotaFiscalId");
 
                     b.ToTable("NotaFiscalItens");
-                });
-
-            modelBuilder.Entity("ERP.Domain.Entities.NotaFiscalPagamento", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("FormaPagamento")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<Guid>("NotaFiscalId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<decimal>("Valor")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("NotaFiscalId");
-
-                    b.ToTable("NotaFiscalPagamentos");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.OperadoraRecebimento", b =>
@@ -3422,17 +3347,6 @@ namespace ERP.Persistence.Migrations
                     b.Navigation("NotaFiscal");
                 });
 
-            modelBuilder.Entity("ERP.Domain.Entities.NotaFiscalPagamento", b =>
-                {
-                    b.HasOne("ERP.Domain.Entities.NotaFiscal", "NotaFiscal")
-                        .WithMany("Pagamentos")
-                        .HasForeignKey("NotaFiscalId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("NotaFiscal");
-                });
-
             modelBuilder.Entity("ERP.Domain.Entities.OperadoraRecebimento", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.ContaBancaria", "ContaDestino")
@@ -3832,8 +3746,6 @@ namespace ERP.Persistence.Migrations
             modelBuilder.Entity("ERP.Domain.Entities.NotaFiscal", b =>
                 {
                     b.Navigation("Itens");
-
-                    b.Navigation("Pagamentos");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.Orcamento", b =>

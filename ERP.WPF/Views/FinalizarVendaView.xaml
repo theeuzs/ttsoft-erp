@@ -370,6 +370,17 @@
                                          Margin="0" Padding="8,4" AcceptsReturn="True" Height="45" TabIndex="8"
                                          Background="{DynamicResource FundoInput}"
                                          BorderBrush="{DynamicResource BordaInput}"/>
+
+                                <StackPanel Visibility="{Binding EnderecoVisivel}" Margin="0,8,0,0">
+                                    <TextBlock Text="🚚 Valor do Frete (R$)" FontSize="11" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,4"/>
+                                    <TextBox Text="{Binding Frete, UpdateSourceTrigger=LostFocus, StringFormat='N2'}"
+                                             Background="{DynamicResource FundoInput}"
+                                             Foreground="{DynamicResource TextDark}" FontWeight="Bold"
+                                             FontSize="14" Padding="8,0" Height="40" VerticalContentAlignment="Center"
+                                             BorderBrush="{DynamicResource BordaInput}" BorderThickness="1"
+                                             ToolTip="Entra no total da venda e é declarado na NF-e A4 (campo vFrete) — não use pra vender pelo balcão sem entrega."
+                                             TabIndex="85"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 

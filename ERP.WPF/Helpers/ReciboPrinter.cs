@@ -134,11 +134,40 @@ public static class ReciboPrinter
                 : qtdExibir.ToString("0.##");
 
             // SEMPRE usa item.Total (que vem de TotalItem salvo no banco = valor exato do carrinho)
-            // Recalcula o unitário a partir do total para nunca ter diferença de centavos
             decimal totalExibir = item.Total;
-            decimal unitExibir  = qtdExibir > 0 ? Math.Round(totalExibir / qtdExibir, 2) : item.UnitPrice;
-            string calculo = $"{qtdFormatada} {unidadeLabel} x {unitExibir:N2} = {totalExibir:N2}";
-            AddLinhaDupla(painel, "", calculo, true, 13);
+
+            // S22 (17/08) — pra item de atacado ("barra cravada"), o preço
+            // unitário exibido antes era um valor DERIVADO (Total/Quantidade,
+            // arredondado pra 2 casas) — a linha "12 MT x 9,98 = 119,80" não
+            // fecha (12×9,98=119,76), porque R$9,98 nunca foi o preço real por
+            // unidade, é só uma aproximação fiscal do preço do pacote fechado
+            // (ver S18). Depois de duas rodadas de feedback: nada de
+            // "pacote"/"barra", e nem de decompor em linhas — só quantidade
+            // total e valor total, igual qualquer outro item. O cliente
+            // comprou 8 MT e pagou R$84,90; como o sistema chegou nesse valor
+            // internamente é regra de precificação, não precisa aparecer aqui.
+            //
+            // Generalizado pra reimpressão/F5 (17/08): reimprimir (tecla Y no
+            // PDV) e visualizar/reimprimir no Histórico de Vendas reconstroem
+            // o item SEM WholesaleMinQuantity/WholesalePrice (só a venda ao
+            // vivo tem esses dados) — então checar item.IsWholesaleActive não
+            // funcionaria nesses casos. Em vez disso, detecta pela matemática:
+            // se o preço unitário derivado (Total/Quantidade) não reproduz o
+            // Total batendo exato, é sinal de que não existe um preço unitário
+            // real por trás desse valor (atacado ou qualquer outro motivo) —
+            // mesmo critério, sem precisar saber POR QUE não bate.
+            decimal unitDerivado = qtdExibir > 0 ? Math.Round(totalExibir / qtdExibir, 2) : item.UnitPrice;
+            bool multiplicacaoFecha = qtdExibir > 0 && Math.Round(unitDerivado * qtdExibir, 2) == Math.Round(totalExibir, 2);
+
+            if (multiplicacaoFecha)
+            {
+                string calculo = $"{qtdFormatada} {unidadeLabel} x {unitDerivado:N2} = {totalExibir:N2}";
+                AddLinhaDupla(painel, "", calculo, true, 13);
+            }
+            else
+            {
+                AddLinhaDupla(painel, $"{qtdFormatada} {unidadeLabel}", $"{totalExibir:N2}", true, 13);
+            }
             
             // 3. A MÁGICA DA OBSERVAÇÃO ENTRA AQUI!
             if (!string.IsNullOrWhiteSpace(item.Observacao))

@@ -426,6 +426,15 @@ public class FiscalService : IFiscalService
             ? null
             : (!string.IsNullOrWhiteSpace(ieLimpa) && ieLimpa != "ISENTO" ? "1" : "9");
 
+        // S24 (17/08) — frete real da venda (ex: marketplace com entrega).
+        // Modalidade "1" = por conta do destinatário, o caso comum quando o
+        // frete foi cobrado do cliente (ex: Mercado Livre repassa o valor
+        // pago pelo comprador). Sem frete, mantém "9" (sem transporte).
+        string modalidadeFrete = sale.ShippingValue > 0 ? "1" : "9";
+        string? valorFrete     = sale.ShippingValue > 0
+            ? sale.ShippingValue.ToString("F2", CultureInfo.InvariantCulture)
+            : null;
+
         return new FocusNfceRequest
         {
             DataEmissao            = DataEmissaoAgora(),
@@ -440,6 +449,8 @@ public class FiscalService : IFiscalService
             CepDestinatario        = string.IsNullOrWhiteSpace(cepLimpo) ? "00000000" : cepLimpo,
             IeDestinatario         = ieLimpa,
             IndicadorIeDestinatario = indicadorIe,
+            ModalidadeFrete        = modalidadeFrete,
+            ValorFrete             = valorFrete,
             Itens                  = MontarItens(sale),
             Pagamentos             = MontarPagamentos(sale)
         };

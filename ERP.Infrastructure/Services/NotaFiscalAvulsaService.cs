@@ -15,17 +15,22 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
     private readonly IMotorFiscalService _motorFiscal;
     private readonly IFiscalConfigurationProvider _configProvider;
     private readonly INfeEmissionService _nfeService;
+    private readonly INfeCancellationService _cancelService;
+    private readonly INfeStatusService _statusService;
     private readonly IRequestTenant _tenant;
 
     public NotaFiscalAvulsaService(
         Persistence.Context.AppDbContext ctx, IUnitOfWork uow, IMotorFiscalService motorFiscal,
-        IFiscalConfigurationProvider configProvider, INfeEmissionService nfeService, IRequestTenant tenant)
+        IFiscalConfigurationProvider configProvider, INfeEmissionService nfeService,
+        INfeCancellationService cancelService, INfeStatusService statusService, IRequestTenant tenant)
     {
         _ctx            = ctx;
         _uow            = uow;
         _motorFiscal    = motorFiscal;
         _configProvider = configProvider;
         _nfeService     = nfeService;
+        _cancelService  = cancelService;
+        _statusService  = statusService;
         _tenant         = tenant;
     }
 
@@ -40,15 +45,29 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
 
         if (dto.Id.HasValue)
         {
-            nota = await _ctx.NotasFiscais.Include(n => n.Itens)
+            var notaExistente = await _ctx.NotasFiscais.Include(n => n.Itens).Include(n => n.Pagamentos)
                 .FirstOrDefaultAsync(n => n.Id == dto.Id.Value)
                 ?? throw new KeyNotFoundException("Nota não encontrada.");
 
-            if (nota.Status != "Rascunho")
+            if (notaExistente.Status != "Rascunho")
                 throw new InvalidOperationException("Só é possível editar uma nota em Rascunho.");
 
-            _ctx.NotaFiscalItens.RemoveRange(nota.Itens);
-            nota.Itens.Clear();
+            // S27 correção (19/08) — remover os itens/pagamentos antigos E
+            // adicionar os novos na MESMA SaveChangesAsync (delete+insert no
+            // mesmo lote) causava DbUpdateConcurrencyException "0 rows
+            // affected" ao editar o mesmo rascunho pela segunda vez. Não
+            // confirmei o mecanismo exato do EF Core aqui (não consigo
+            // rodar o projeto), mas separar a remoção num commit à parte
+            // resolve independente da causa exata. AppDbContext roda
+            // ChangeTracker.Clear() depois de cada SaveChangesAsync — por
+            // isso a nota precisa ser buscada de novo depois desse commit.
+            if (notaExistente.Itens.Any())
+                _ctx.NotaFiscalItens.RemoveRange(notaExistente.Itens);
+            if (notaExistente.Pagamentos.Any())
+                _ctx.NotaFiscalPagamentos.RemoveRange(notaExistente.Pagamentos);
+            await _ctx.SaveChangesAsync();
+
+            nota = await _ctx.NotasFiscais.FirstAsync(n => n.Id == dto.Id.Value);
         }
         else
         {
@@ -74,15 +93,53 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
         nota.DestinatarioIe            = dto.DestinatarioIe;
         nota.IndicadorIeDestinatario   = dto.IndicadorIeDestinatario;
 
+        // Achados da revisão de arquitetura (18/08)
+        nota.RefNFe                      = dto.RefNfeReferenciada;
+        nota.InformacoesComplementares   = dto.InformacoesComplementares;
+        nota.ModalidadeFrete             = dto.ModalidadeFrete;
+        nota.TransportadoraNome          = dto.TransportadoraNome;
+        nota.TransportadoraDocumento     = dto.TransportadoraDocumento;
+        nota.TransportadoraIe            = dto.TransportadoraIe;
+        nota.TransportadoraEndereco      = dto.TransportadoraEndereco;
+        nota.TransportadoraMunicipio     = dto.TransportadoraMunicipio;
+        nota.TransportadoraUf            = dto.TransportadoraUf;
+        nota.VeiculoPlaca                = dto.VeiculoPlaca;
+        nota.VeiculoUf                   = dto.VeiculoUf;
+        nota.QuantidadeVolumes           = dto.QuantidadeVolumes;
+        nota.EspecieVolumes              = dto.EspecieVolumes;
+        nota.PesoBrutoKg                 = dto.PesoBrutoKg;
+        nota.PesoLiquidoKg               = dto.PesoLiquidoKg;
+
+        // S27 correção (19/08), 2ª tentativa — adicionar via nota.Itens.Add()/
+        // nota.Pagamentos.Add() numa nota que foi buscada SEM .Include() (o
+        // caso do caminho de edição, depois do commit intermediário acima)
+        // pode não registrar o fixup de FK corretamente, porque o EF não tem
+        // como saber se a coleção representa "tudo" ou só o que foi
+        // adicionado agora. Setando a FK na mão e adicionando direto no
+        // DbSet, sem depender da coleção de navegação, elimina essa
+        // ambiguidade de vez.
         foreach (var item in dto.Itens)
         {
-            nota.Itens.Add(new Domain.Entities.NotaFiscalItem
+            _ctx.NotaFiscalItens.Add(new Domain.Entities.NotaFiscalItem
             {
+                NotaFiscalId  = nota.Id,
                 ProductId     = item.ProductId,
                 ProductName   = item.ProductName,
                 Quantidade    = item.Quantidade,
                 ValorUnitario = item.ValorUnitario,
                 Cfop          = item.Cfop,
+            });
+        }
+
+        // Pagamentos — os antigos já foram removidos (e commitados) lá em
+        // cima, no caminho de edição; aqui só reconstrói do zero.
+        foreach (var pag in dto.Pagamentos)
+        {
+            _ctx.NotaFiscalPagamentos.Add(new Domain.Entities.NotaFiscalPagamento
+            {
+                NotaFiscalId   = nota.Id,
+                FormaPagamento = pag.FormaPagamento,
+                Valor          = pag.Valor,
             });
         }
 
@@ -92,7 +149,7 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
 
     public async Task<Guid> CopiarComoRascunhoAsync(Guid idOrigem)
     {
-        var origem = await _ctx.NotasFiscais.AsNoTracking().Include(n => n.Itens)
+        var origem = await _ctx.NotasFiscais.AsNoTracking().Include(n => n.Itens).Include(n => n.Pagamentos)
             .FirstOrDefaultAsync(n => n.Id == idOrigem)
             ?? throw new KeyNotFoundException("Nota original não encontrada.");
 
@@ -113,7 +170,34 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
             DestinatarioCep          = origem.DestinatarioCep,
             DestinatarioIe           = origem.DestinatarioIe,
             IndicadorIeDestinatario  = origem.IndicadorIeDestinatario,
+
+            // Achados da revisão de arquitetura (18/08) — transporte e
+            // informações complementares fazem sentido copiar (tendem a se
+            // repetir). RefNFe NUNCA é copiado: cada devolução referencia
+            // uma venda original diferente — copiar a mesma chave criaria
+            // uma segunda nota apontando pra venda errada.
+            InformacoesComplementares = origem.InformacoesComplementares,
+            ModalidadeFrete           = origem.ModalidadeFrete,
+            TransportadoraNome        = origem.TransportadoraNome,
+            TransportadoraDocumento   = origem.TransportadoraDocumento,
+            TransportadoraIe          = origem.TransportadoraIe,
+            TransportadoraEndereco    = origem.TransportadoraEndereco,
+            TransportadoraMunicipio   = origem.TransportadoraMunicipio,
+            TransportadoraUf          = origem.TransportadoraUf,
+            VeiculoPlaca              = origem.VeiculoPlaca,
+            VeiculoUf                 = origem.VeiculoUf,
+            QuantidadeVolumes         = origem.QuantidadeVolumes,
+            EspecieVolumes            = origem.EspecieVolumes,
+            PesoBrutoKg               = origem.PesoBrutoKg,
+            PesoLiquidoKg             = origem.PesoLiquidoKg,
         };
+
+        foreach (var pag in origem.Pagamentos)
+            copia.Pagamentos.Add(new Domain.Entities.NotaFiscalPagamento
+            {
+                FormaPagamento = pag.FormaPagamento,
+                Valor          = pag.Valor,
+            });
 
         foreach (var item in origem.Itens)
             copia.Itens.Add(new Domain.Entities.NotaFiscalItem
@@ -132,7 +216,7 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
 
     public async Task<NotaFiscalAvulsaDto?> ObterAsync(Guid id)
     {
-        var nota = await _ctx.NotasFiscais.AsNoTracking().Include(n => n.Itens)
+        var nota = await _ctx.NotasFiscais.AsNoTracking().Include(n => n.Itens).Include(n => n.Pagamentos)
             .FirstOrDefaultAsync(n => n.Id == id);
         if (nota == null) return null;
 
@@ -155,6 +239,21 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
             DestinatarioCep             = nota.DestinatarioCep,
             DestinatarioIe              = nota.DestinatarioIe,
             IndicadorIeDestinatario     = nota.IndicadorIeDestinatario,
+            RefNfeReferenciada          = nota.RefNFe,
+            InformacoesComplementares   = nota.InformacoesComplementares,
+            ModalidadeFrete             = nota.ModalidadeFrete,
+            TransportadoraNome          = nota.TransportadoraNome,
+            TransportadoraDocumento     = nota.TransportadoraDocumento,
+            TransportadoraIe            = nota.TransportadoraIe,
+            TransportadoraEndereco      = nota.TransportadoraEndereco,
+            TransportadoraMunicipio     = nota.TransportadoraMunicipio,
+            TransportadoraUf            = nota.TransportadoraUf,
+            VeiculoPlaca                = nota.VeiculoPlaca,
+            VeiculoUf                   = nota.VeiculoUf,
+            QuantidadeVolumes           = nota.QuantidadeVolumes,
+            EspecieVolumes              = nota.EspecieVolumes,
+            PesoBrutoKg                 = nota.PesoBrutoKg,
+            PesoLiquidoKg               = nota.PesoLiquidoKg,
             Itens = nota.Itens.Select(i => new NotaFiscalAvulsaItemDto
             {
                 ProductId     = i.ProductId,
@@ -162,6 +261,11 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
                 Quantidade    = i.Quantidade,
                 ValorUnitario = i.ValorUnitario,
                 Cfop          = i.Cfop,
+            }).ToList(),
+            Pagamentos = nota.Pagamentos.Select(p => new NotaFiscalAvulsaPagamentoDto
+            {
+                FormaPagamento = p.FormaPagamento,
+                Valor          = p.Valor,
             }).ToList(),
         };
     }
@@ -181,13 +285,14 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
 
     public async Task ExcluirRascunhoAsync(Guid id)
     {
-        var nota = await _ctx.NotasFiscais.Include(n => n.Itens).FirstOrDefaultAsync(n => n.Id == id)
+        var nota = await _ctx.NotasFiscais.Include(n => n.Itens).Include(n => n.Pagamentos).FirstOrDefaultAsync(n => n.Id == id)
             ?? throw new KeyNotFoundException("Nota não encontrada.");
 
         if (nota.Status != "Rascunho")
             throw new InvalidOperationException("Só é possível excluir uma nota em Rascunho — nota já emitida se cancela, não se exclui.");
 
         _ctx.NotaFiscalItens.RemoveRange(nota.Itens);
+        _ctx.NotaFiscalPagamentos.RemoveRange(nota.Pagamentos);
         _ctx.NotasFiscais.Remove(nota);
         await _ctx.SaveChangesAsync();
     }
@@ -219,7 +324,7 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
 
     public async Task<FiscalEmissionResult> EmitirAsync(Guid id)
     {
-        var nota = await _ctx.NotasFiscais.Include(n => n.Itens)
+        var nota = await _ctx.NotasFiscais.Include(n => n.Itens).Include(n => n.Pagamentos)
             .FirstOrDefaultAsync(n => n.Id == id)
             ?? throw new KeyNotFoundException("Nota não encontrada.");
 
@@ -228,6 +333,16 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
 
         if (!nota.Itens.Any())
             throw new InvalidOperationException("Nota sem itens.");
+
+        // Achado da revisão de arquitetura (18/08) — Finalidade "4" (devolução)
+        // sem a chave da nota original é rejeição garantida da SEFAZ. Bloqueia
+        // aqui em vez de deixar a Focus rejeitar depois.
+        if (nota.Finalidade == "4" && string.IsNullOrWhiteSpace(nota.RefNFe))
+            throw new InvalidOperationException(
+                "Nota de devolução precisa da chave de acesso (44 dígitos) da nota fiscal original antes de emitir.");
+        if (nota.Finalidade == "4" && nota.RefNFe!.Where(char.IsDigit).Count() != 44)
+            throw new InvalidOperationException(
+                "Chave da nota referenciada precisa ter exatamente 44 dígitos.");
 
         // Fix 2 (plano premium) — endereço inventado autorizado numa NF-e
         // pra CNPJ é pior que rejeição: vira documento fiscal errado em nome
@@ -319,9 +434,58 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
         string? cepLimpo = string.IsNullOrWhiteSpace(nota.DestinatarioCep)
             ? null : new string(nota.DestinatarioCep.Where(char.IsDigit).ToArray());
 
+        // Achado da revisão de arquitetura (18/08) — pagamento real quando
+        // a nota avulsa formaliza uma venda B2B de verdade (confirmado que
+        // acontece na prática); "90 sem pagamento" continua sendo o default
+        // seguro pra remessa/devolução/brinde sem cobrança real.
+        var pagamentosRequest = nota.Pagamentos.Any()
+            ? nota.Pagamentos.Select(p => new FocusPagamentoRequest
+              {
+                  FormaPagamento = p.FormaPagamento,
+                  ValorPagamento = p.Valor.ToString("F2", CultureInfo.InvariantCulture)
+              }).ToList()
+            : new List<FocusPagamentoRequest>
+              {
+                  new() { FormaPagamento = "90", ValorPagamento = valorTotalItens.ToString("F2", CultureInfo.InvariantCulture) }
+              };
+
+        // Notas referenciadas — só a devolução exige (já bloqueado acima se
+        // faltar), mas se algum dia outro cenário quiser referenciar sem ser
+        // devolução, a mesma chave serve.
+        List<NotaReferenciadaRequest>? notasReferenciadas = string.IsNullOrWhiteSpace(nota.RefNFe)
+            ? new()
+            : new() { new NotaReferenciadaRequest { ChaveNfe = new string(nota.RefNFe.Where(char.IsDigit).ToArray()) } };
+
+        // Transporte — só preenche o que existir; "9" (sem frete) fica
+        // sozinho quando a operação é retirada/entrega própria.
+        // S27 correção (19/08) — mesmo erro do S19 (NotasReferenciadas nulo):
+        // Focus espera um array (vazio que seja), nunca `null`, senão
+        // rejeita com "erro_validacao_schema" antes de chegar na SEFAZ.
+        List<FocusVolumeRequest> volumes = nota.QuantidadeVolumes.HasValue || nota.PesoBrutoKg.HasValue || nota.PesoLiquidoKg.HasValue
+            ? new()
+              {
+                  new FocusVolumeRequest
+                  {
+                      Quantidade  = nota.QuantidadeVolumes?.ToString(CultureInfo.InvariantCulture),
+                      Especie     = nota.EspecieVolumes,
+                      PesoBruto   = nota.PesoBrutoKg?.ToString("F3", CultureInfo.InvariantCulture),
+                      PesoLiquido = nota.PesoLiquidoKg?.ToString("F3", CultureInfo.InvariantCulture),
+                  }
+              }
+            : new();
+
+        // Transportadora — mesmo padrão de limpeza/decisão CNPJ-ou-CPF já
+        // usado pro destinatário, uma vez só em vez de repetir Where().
+        string? transportadoraDocLimpo = string.IsNullOrWhiteSpace(nota.TransportadoraDocumento)
+            ? null : new string(nota.TransportadoraDocumento.Where(char.IsDigit).ToArray());
+
         var request = new FocusNfceRequest
         {
-            DataEmissao            = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:sszzz"),
+            // S21 FIX (aplicado aqui em 18/08) — DateTime.Now+"zzz" depende
+            // do fuso AMBIENTE do servidor; já causou rejeição SEFAZ 703
+            // (data de emissão no futuro) numa venda normal. Mesmo risco
+            // aqui, nunca corrigido nessa tela até agora.
+            DataEmissao            = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasilComOffset(),
             // Fix 1 (plano premium) — antes hardcoded "1" (saída), então toda
             // nota de entrada/devolução-de-venda saía errada na SEFAZ.
             TipoDocumento          = nota.TipoOperacaoEntradaSaida == "E" ? "0" : "1",
@@ -341,13 +505,22 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
             // B2B toma rejeição clássica dependendo do destinatário.
             IndicadorIeDestinatario = nota.IndicadorIeDestinatario,
             Itens                  = itensRequest,
-            // Fix 5 (plano premium) — NF-e exige a tag de pagamento; nota
-            // avulsa sem cobrança (remessa, brinde, devolução) precisa ir
-            // explicitamente como forma "90 — Sem pagamento", não vazio.
-            Pagamentos = new List<FocusPagamentoRequest>
-            {
-                new() { FormaPagamento = "90", ValorPagamento = valorTotalItens.ToString("F2", CultureInfo.InvariantCulture) }
-            },
+            // Fix 5 (plano premium), refeito em 18/08 — antes SEMPRE "90 sem
+            // pagamento", mesmo em venda B2B com cobrança real.
+            Pagamentos              = pagamentosRequest,
+            NotasReferenciadas      = notasReferenciadas,
+            ModalidadeFrete         = nota.ModalidadeFrete,
+            CnpjTransportador       = transportadoraDocLimpo?.Length == 14 ? transportadoraDocLimpo : null,
+            CpfTransportador        = transportadoraDocLimpo?.Length == 11 ? transportadoraDocLimpo : null,
+            NomeTransportador       = nota.TransportadoraNome,
+            InscricaoEstadualTransportador = nota.TransportadoraIe,
+            EnderecoTransportador   = nota.TransportadoraEndereco,
+            MunicipioTransportador  = nota.TransportadoraMunicipio,
+            UfTransportador         = nota.TransportadoraUf,
+            VeiculoPlaca            = nota.VeiculoPlaca,
+            VeiculoUf               = nota.VeiculoUf,
+            Volumes                 = volumes,
+            InformacoesAdicionaisContribuinte = nota.InformacoesComplementares,
         };
 
         var referencia = $"avulsa-{nota.Id}";
@@ -360,7 +533,7 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
             nota.UrlDanfe    = urlDanfe;
             nota.XmlUrl      = string.IsNullOrWhiteSpace(urlXml) ? null : urlXml;
             nota.Ambiente    = ambienteSefaz;
-            nota.DataEmissao = DateTime.Now;
+            nota.DataEmissao = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
             await _ctx.SaveChangesAsync();
 
             return new FiscalEmissionResult
@@ -370,6 +543,99 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
             };
         }
 
+        // Achado testando de verdade (19-20/08) — Focus pode responder
+        // "sucesso" sem ainda ter o DANFE pronto (SEFAZ processando de
+        // verdade, não é rejeição). Antes disso caía direto no "Falha ao
+        // emitir" e a nota ficava parada em Rascunho pra sempre — sem
+        // rastro nenhum de que já tinha sido enviada de verdade pra SEFAZ,
+        // arriscando reenvio duplicado ou perder o resultado real.
+        if (sucesso)
+        {
+            nota.Status   = "Processando";
+            nota.Ambiente = ambienteSefaz;
+            await _ctx.SaveChangesAsync();
+
+            return new FiscalEmissionResult
+            {
+                Sucesso = true, Mensagem = mensagem, Status = "Processando", Ambiente = ambienteSefaz
+            };
+        }
+
         return new FiscalEmissionResult { Sucesso = false, Mensagem = mensagem, Status = "Falha", Ambiente = ambienteSefaz };
+    }
+
+    public async Task<FiscalEmissionResult> CancelarAsync(Guid id, string justificativa)
+    {
+        var nota = await _ctx.NotasFiscais.FirstOrDefaultAsync(n => n.Id == id)
+            ?? throw new KeyNotFoundException("Nota não encontrada.");
+
+        if (nota.Status != "Autorizada")
+            throw new InvalidOperationException(
+                $"Só é possível cancelar uma nota Autorizada — essa está \"{nota.Status}\".");
+
+        if (string.IsNullOrWhiteSpace(justificativa) || justificativa.Length < 15)
+            throw new InvalidOperationException("Justificativa do cancelamento precisa ter no mínimo 15 caracteres.");
+
+        var config = await _configProvider.ObterConfiguracaoAsync();
+        var referencia = $"avulsa-{nota.Id}";
+
+        var (sucesso, mensagem) = await _cancelService.CancelarNotaAsync(
+            referencia, justificativa, config.TokenFocusNfe, config.UsarAmbienteProducao, "NFE");
+
+        if (sucesso)
+        {
+            nota.Status             = "Cancelada";
+            nota.MotivoCancelamento = justificativa;
+            await _ctx.SaveChangesAsync();
+
+            return new FiscalEmissionResult { Sucesso = true, Mensagem = mensagem, Status = "Cancelada" };
+        }
+
+        return new FiscalEmissionResult { Sucesso = false, Mensagem = mensagem, Status = "FalhaCancelamento" };
+    }
+
+    /// <summary>Achado testando em homologação (19-20/08) — quando a Focus
+    /// responde "processando" (SEFAZ ainda não confirmou), a nota fica
+    /// marcada "Processando" em vez de silenciosamente continuar
+    /// "Rascunho". Esse método consulta o resultado real mais tarde,
+    /// reaproveitando o INfeStatusService que a tela normal de Notas
+    /// Fiscais já usa.</summary>
+    public async Task<FiscalEmissionResult> ConsultarStatusAsync(Guid id)
+    {
+        var nota = await _ctx.NotasFiscais.FirstOrDefaultAsync(n => n.Id == id)
+            ?? throw new KeyNotFoundException("Nota não encontrada.");
+
+        if (nota.Status != "Processando")
+            throw new InvalidOperationException(
+                $"Só faz sentido consultar status de uma nota Processando — essa está \"{nota.Status}\".");
+
+        var config = await _configProvider.ObterConfiguracaoAsync();
+        var referencia = $"avulsa-{nota.Id}";
+
+        var (sucesso, statusFocus, urlDanfe) = await _statusService.ConsultarStatusNotaAsync(
+            referencia, config.TokenFocusNfe, config.UsarAmbienteProducao);
+
+        if (!sucesso)
+            return new FiscalEmissionResult { Sucesso = false, Mensagem = "Não foi possível consultar — tente de novo em instantes.", Status = "Processando" };
+
+        if (statusFocus == "autorizado" && !string.IsNullOrWhiteSpace(urlDanfe))
+        {
+            nota.Status      = "Autorizada";
+            nota.UrlDanfe    = urlDanfe;
+            nota.DataEmissao = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
+            await _ctx.SaveChangesAsync();
+            return new FiscalEmissionResult { Sucesso = true, Mensagem = "NF-e autorizada.", Status = "Autorizada", UrlDanfe = urlDanfe };
+        }
+
+        if (statusFocus == "processando_autorizacao")
+            return new FiscalEmissionResult { Sucesso = true, Mensagem = "Ainda processando na SEFAZ — tente de novo em instantes.", Status = "Processando" };
+
+        // Qualquer outro status (erro_autorizacao, cancelado, etc.) — a
+        // SEFAZ já decidiu, e não foi autorizar. Marca como rejeitada pra
+        // não ficar "Processando" pra sempre.
+        var motivo = await _statusService.ConsultarMotivoRejeicaoAsync(referencia, config.TokenFocusNfe, config.UsarAmbienteProducao);
+        nota.Status = "Rejeitada";
+        await _ctx.SaveChangesAsync();
+        return new FiscalEmissionResult { Sucesso = false, Mensagem = $"Status: {statusFocus}. {motivo}", Status = "Rejeitada" };
     }
 }

@@ -166,6 +166,7 @@ public class AppDbContext : DbContext
     public DbSet<TenantFiscalConfiguration> TenantFiscalConfigurations { get; set; }
     public DbSet<NotaFiscal> NotasFiscais { get; set; }
     public DbSet<NotaFiscalItem> NotaFiscalItens { get; set; }
+    public DbSet<NotaFiscalPagamento> NotaFiscalPagamentos { get; set; }
     public DbSet<NfeRecebida> NfesRecebidas { get; set; }
     public DbSet<ContaPagar>           ContasPagar         { get; set; }
     public DbSet<MovimentoHaver>       MovimentosHaver     { get; set; }
@@ -382,6 +383,8 @@ public class AppDbContext : DbContext
             e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<NotaFiscalItem>().HasQueryFilter(
             e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
+        modelBuilder.Entity<NotaFiscalPagamento>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<NfeRecebida>().HasQueryFilter(
             e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
 
@@ -527,6 +530,12 @@ public class AppDbContext : DbContext
             .WithMany(n => n.Itens)
             .HasForeignKey(i => i.NotaFiscalId)
             .OnDelete(DeleteBehavior.Cascade); // item só existe junto com a nota
+
+        modelBuilder.Entity<NotaFiscalPagamento>()
+            .HasOne(p => p.NotaFiscal)
+            .WithMany(n => n.Pagamentos)
+            .HasForeignKey(p => p.NotaFiscalId)
+            .OnDelete(DeleteBehavior.Cascade); // pagamento só existe junto com a nota
 
         modelBuilder.Entity<OrderAction>()
             .HasOne(a => a.ExternalOrder)

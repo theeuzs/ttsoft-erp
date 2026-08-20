@@ -167,9 +167,22 @@ public class LoginViewModel : BaseViewModel
                 ERP.Persistence.Context.AppDbContext.SetCurrentUser(user.Id, user.Name);
                 ERP.WPF.State.AppSession.DataVencimentoLicenca = resultadoLicenca.DataVencimento;
 
-                // S10 FIX: Obtém JWT da API para uso no ChatService (melhor esforço).
-                // Se a API estiver indisponível, o chat fica offline mas o sistema funciona.
-                _ = ObterJwtDaApiAsync(cnpjCliente, this.Usuario, this.Senha);
+                // S10 FIX (original): Obtém JWT da API para uso no ChatService (melhor esforço).
+                // S23 FIX (17/08): esse mesmo AppSession.JwtToken virou crítico pra
+                // Vendas/Histórico desde a Fase B (HttpSaleService), mas continuava
+                // fire-and-forget com falha silenciosa — login "funcionava" sem
+                // avisar nada, e só quebrava na hora de fechar uma venda (401
+                // confuso). Agora espera o resultado, com retry pra tolerar cold
+                // start do Azure App Service, e avisa claramente se não conseguir.
+                bool jwtObtido = await ObterJwtDaApiComRetryAsync(cnpjCliente, this.Usuario, this.Senha);
+
+                if (!jwtObtido)
+                {
+                    System.Windows.MessageBox.Show(
+                        "Login local concluído, mas não foi possível conectar à API (o servidor pode estar iniciando).\n\n" +
+                        "Vendas e Histórico não vão funcionar até isso ser resolvido — tente novamente em alguns segundos ou reabra o sistema.",
+                        "Aviso de Conexão", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                }
 
                 OnLoginResult?.Invoke(this, true);
             }
@@ -188,18 +201,35 @@ public class LoginViewModel : BaseViewModel
         }
     }
 
+    // S23 FIX (17/08): retry pra tolerar cold start do Azure App Service —
+    // sem isso, um login logo após o servidor acordar (ou logo após um
+    // deploy/restart) tinha boa chance de nunca conseguir o token.
+    private static async Task<bool> ObterJwtDaApiComRetryAsync(string cnpj, string usuario, string senha)
+    {
+        const int tentativas = 2;
+        for (int i = 1; i <= tentativas; i++)
+        {
+            if (await ObterJwtDaApiAsync(cnpj, usuario, senha))
+                return true;
+
+            if (i < tentativas)
+                await Task.Delay(TimeSpan.FromSeconds(2));
+        }
+        return false;
+    }
+
     // S10 FIX: Obtém JWT da API após auth local — usado pelo ChatService para
-    // autenticar no ERPChatHub. Fire-and-forget: falha não impede o login.
-    private static async Task ObterJwtDaApiAsync(string cnpj, string usuario, string senha)
+    // autenticar no ERPChatHub, e (S23) pelo HttpSaleService pra Vendas/Histórico.
+    private static async Task<bool> ObterJwtDaApiAsync(string cnpj, string usuario, string senha)
     {
         var apiUrl = AppSession.ApiBaseUrl;
-        if (string.IsNullOrEmpty(apiUrl)) return;
+        if (string.IsNullOrEmpty(apiUrl)) return false;
 
         try
         {
             using var http = new System.Net.Http.HttpClient
             {
-                Timeout = TimeSpan.FromSeconds(8)
+                Timeout = TimeSpan.FromSeconds(12) // S23: era 8s — curto demais pra cold start
             };
             http.DefaultRequestHeaders.Add("X-Tenant-CNPJ", cnpj);
 
@@ -211,9 +241,14 @@ public class LoginViewModel : BaseViewModel
                 var json = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
                 var jwt  = json.GetProperty("accessToken").GetString();
                 if (!string.IsNullOrEmpty(jwt))
+                {
                     AppSession.JwtToken = jwt;
+                    return true;
+                }
             }
         }
-        catch { /* Chat offline — não impede o login */ }
+        catch { /* tentativa falhou — o retry cuida disso */ }
+
+        return false;
     }
 }

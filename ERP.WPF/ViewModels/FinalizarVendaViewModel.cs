@@ -365,8 +365,8 @@ public class FinalizarVendaViewModel : BaseViewModel
     }
 
     public bool TemDesconto => Desconto > 0 || DescontoFidelidade > 0;
-    public decimal ValorComDesconto => TotalVenda - Desconto - DescontoFidelidade;
-    public decimal TotalComDesconto => TotalVenda - Desconto - DescontoFidelidade;
+    public decimal ValorComDesconto => TotalVenda - Desconto - DescontoFidelidade + Frete;
+    public decimal TotalComDesconto => TotalVenda - Desconto - DescontoFidelidade + Frete;
     public ObservableCollection<PagamentoItem> Pagamentos { get; } = new();
 
     private decimal _valorDigitado;
@@ -497,11 +497,30 @@ public class FinalizarVendaViewModel : BaseViewModel
             OnPropertyChanged(nameof(EnderecoVisivel)); 
             if (value) EnderecoEntrega = SelectedCustomer != null ? $"{SelectedCustomer.Street}, {SelectedCustomer.Number} - {SelectedCustomer.Neighborhood}" : _clienteEnderecoFormatado;
             else EnderecoEntrega = string.Empty; 
+            if (!value) Frete = 0;
         } 
     }
     public Visibility EnderecoVisivel => EntregarNoEndereco ? Visibility.Visible : Visibility.Collapsed;
     private string _enderecoEntrega = string.Empty;
     public string EnderecoEntrega { get => _enderecoEntrega; set => SetProperty(ref _enderecoEntrega, value); }
+
+    // S24 (17/08) — frete real da venda (ex: marketplace com entrega). Só
+    // faz sentido junto da entrega, então usa a mesma visibilidade do
+    // endereço. Entra no total (TotalComDesconto) e vai pro campo
+    // valor_frete da NF-e A4 na hora de emitir — sem isso, não tinha como
+    // declarar o frete pra SEFAZ nem conferir o pagamento certo.
+    private decimal _frete;
+    public decimal Frete
+    {
+        get => _frete;
+        set
+        {
+            SetProperty(ref _frete, value);
+            OnPropertyChanged(nameof(TotalComDesconto));
+            OnPropertyChanged(nameof(FaltaPagar));
+            OnPropertyChanged(nameof(Troco));
+        }
+    }
 
     public decimal  DescontoFidelidade      { get; private set; } = 0;
     private int     _pontosADebitar            = 0; // só debitado após venda confirmada
@@ -588,6 +607,7 @@ public class FinalizarVendaViewModel : BaseViewModel
                 UsuarioId = ERP.WPF.State.AppSession.UserId, 
                 Notes = observacaoCompleta,
                 DiscountAmount = this.Desconto + this.DescontoFidelidade,
+                ShippingValue  = this.Frete,
                 Troco = this.Troco,
                 Payments = linhasPagamento.Select(p => new CreateSalePaymentDto { Id = p.Id, PaymentMethod = p.Forma, Amount = p.Valor }).ToList(), 
                 Items = ItensCarrinho.Select(i => new CreateSaleItemDto { ProductId = i.ProductId, Quantity = i.Quantity, UnitPrice = i.UnitPrice, DiscountPercent = 0, FatorConversao = i.FatorConversao, TotalItem = i.Total }).ToList()

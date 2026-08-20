@@ -1,6 +1,7 @@
 using ERP.Application.DTOs.FocusNfe;
 using ERP.Application.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 using System;
 using System.Threading.Tasks;
 
@@ -93,7 +94,14 @@ public class NfeContingencyWorker
                         }
                 }
             }}
-            catch { }
+            catch (Exception exCiclo)
+            {
+                // S25 FIX (18/08) — era `catch { }`, engolia QUALQUER erro do ciclo
+                // inteiro (falha ao criar scope, DI, conexão com banco, etc.) sem
+                // deixar rastro nenhum — o worker "funcionava" silenciosamente sem
+                // fazer nada, e ninguém teria como descobrir por quê.
+                Log.Error(exCiclo, "NfeContingencyWorker: falha no ciclo de contingência (WPF)");
+            }
 
             await Task.Delay(TimeSpan.FromMinutes(2));
         }

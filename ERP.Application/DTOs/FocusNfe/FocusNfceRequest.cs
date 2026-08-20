@@ -30,6 +30,47 @@ public class FocusNfceRequest
     [JsonPropertyName("modalidade_frete")]
     public string ModalidadeFrete { get; set; } = "9";
 
+    // S24 (17/08) — valor do frete no nível do documento (não por item). A
+    // Focus soma isso automaticamente no valor_total da nota e monta a tag
+    // vFrete certa no XML — não precisa ratear item por item manualmente.
+    [JsonPropertyName("valor_frete")]
+    public string? ValorFrete { get; set; }
+
+    // Achados da revisão de arquitetura da Nota Avulsa (18/08) — nomes de
+    // campo confirmados na doc oficial (campos.focusnfe.com.br/nfe/NotaFiscalXML.html).
+    [JsonPropertyName("cnpj_transportador")]
+    public string? CnpjTransportador { get; set; }
+
+    [JsonPropertyName("cpf_transportador")]
+    public string? CpfTransportador { get; set; }
+
+    [JsonPropertyName("nome_transportador")]
+    public string? NomeTransportador { get; set; }
+
+    [JsonPropertyName("inscricao_estadual_transportador")]
+    public string? InscricaoEstadualTransportador { get; set; }
+
+    [JsonPropertyName("endereco_transportador")]
+    public string? EnderecoTransportador { get; set; }
+
+    [JsonPropertyName("municipio_transportador")]
+    public string? MunicipioTransportador { get; set; }
+
+    [JsonPropertyName("uf_transportador")]
+    public string? UfTransportador { get; set; }
+
+    [JsonPropertyName("veiculo_placa")]
+    public string? VeiculoPlaca { get; set; }
+
+    [JsonPropertyName("veiculo_uf")]
+    public string? VeiculoUf { get; set; }
+
+    [JsonPropertyName("volumes")]
+    public List<FocusVolumeRequest>? Volumes { get; set; } = new();
+
+    [JsonPropertyName("informacoes_adicionais_contribuinte")]
+    public string? InformacoesAdicionaisContribuinte { get; set; }
+
     [JsonPropertyName("nome_destinatario")]
     public string? Nome { get; set; }
 
@@ -160,4 +201,21 @@ public class FocusPagamentoRequest
 
     [JsonPropertyName("valor_pagamento")]
     public string ValorPagamento { get; set; } = string.Empty;
+}
+
+// Volume transportado — campos confirmados na doc oficial da Focus
+// (campos.focusnfe.com.br/nfe/VolumeTransportadoXML.html).
+public class FocusVolumeRequest
+{
+    [JsonPropertyName("quantidade")]
+    public string? Quantidade { get; set; }
+
+    [JsonPropertyName("especie")]
+    public string? Especie { get; set; }
+
+    [JsonPropertyName("peso_liquido")]
+    public string? PesoLiquido { get; set; }
+
+    [JsonPropertyName("peso_bruto")]
+    public string? PesoBruto { get; set; }
 }

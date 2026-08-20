@@ -253,4 +253,39 @@ public class SaleServiceAtacadoTests
         item.UnitPrice.Should().Be(35m);
         item.TotalItem.Should().Be(105m);
     }
+
+    [Fact(DisplayName = "CriarVenda - Frete (S24) entra no Total da venda")]
+    [Trait("Categoria", "Vendas - Frete")]
+    public async Task CriarVenda_ComFrete_EntraNoTotal()
+    {
+        var usuarioId = Guid.NewGuid();
+        var produtoId = Guid.NewGuid();
+        var produtoFake = new Product
+        {
+            Id = produtoId, Name = "Disco de Corte", Stock = 100, SalePrice = 2.99m
+        };
+
+        // Caso real: 10 discos a R$2,99 (R$29,90) + frete R$19,99 = R$49,89
+        var dto = new CreateSaleDto
+        {
+            UsuarioId      = usuarioId,
+            ShippingValue  = 19.99m,
+            Items          = new List<CreateSaleItemDto> { new() { ProductId = produtoId, Quantity = 10 } },
+            Payments       = new List<CreateSalePaymentDto>
+            {
+                new() { PaymentMethod = ERP.Domain.Enums.PaymentMethod.Pix, Amount = 49.89m }
+            }
+        };
+
+        _uowMock.Setup(u => u.Caixas.GetCaixaAbertoByUsuarioAsync(usuarioId)).ReturnsAsync(new Caixa { Id = Guid.NewGuid() });
+        _uowMock.Setup(u => u.Products.GetByIdAsync(produtoId)).ReturnsAsync(produtoFake);
+        _mapperMock.Setup(m => m.Map<SaleDto>(It.IsAny<Sale>())).Returns((SaleDto)null!);
+
+        await _saleService.CreateAsync(dto);
+
+        _vendaCapturada.Should().NotBeNull();
+        _vendaCapturada!.ShippingValue.Should().Be(19.99m);
+        _vendaCapturada!.Subtotal.Should().Be(29.90m);
+        _vendaCapturada!.Total.Should().Be(49.89m);
+    }
 }

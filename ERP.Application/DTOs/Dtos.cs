@@ -173,6 +173,8 @@ public class CreateSaleDto
     public Guid UsuarioId { get; set; }
     public string? Notes { get; set; }
     public decimal DiscountAmount { get; set; }
+    // S24 (17/08) — frete pra NF-e A4 de venda com entrega (ex: marketplace).
+    public decimal ShippingValue { get; set; }
     public SaleOrigin Origem { get; set; } = SaleOrigin.PDV;
 
     /// <summary>Achado do teste manual da Fase 2 (08/2026) — Troco não era
@@ -233,6 +235,7 @@ public record SaleDetailDto(
     SaleStatus Status,
     decimal Subtotal,
     decimal DiscountAmount,
+    decimal ShippingValue,
     decimal Total,
     List<SalePaymentDto> Payments,
     List<SaleItemDto> Items,

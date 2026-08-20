@@ -43,6 +43,22 @@
                                 <ComboBox ItemsSource="{Binding TiposOperacao}" SelectedItem="{Binding TipoOperacaoEntradaSaida}" Margin="0,4,0,0" Padding="8"/>
                             </StackPanel>
                         </Grid>
+
+                        <TextBlock Text="Finalidade" FontSize="11" Foreground="{DynamicResource TextMuted}" Margin="0,10,0,0"/>
+                        <ComboBox SelectedValue="{Binding Finalidade}" SelectedValuePath="Tag" Padding="8" Margin="0,4,0,0" HorizontalAlignment="Left" MinWidth="220">
+                            <ComboBoxItem Content="1 — Normal" Tag="1"/>
+                            <ComboBoxItem Content="2 — Complementar" Tag="2"/>
+                            <ComboBoxItem Content="3 — Ajuste" Tag="3"/>
+                            <ComboBoxItem Content="4 — Devolução de mercadoria" Tag="4"/>
+                        </ComboBox>
+
+                        <!-- Achado da revisão de arquitetura (18/08): SEFAZ rejeita devolução
+                             sem a chave da nota original — antes esse campo nem existia. -->
+                        <StackPanel Visibility="{Binding ChaveReferenciadaVisivel}" Margin="0,10,0,0">
+                            <TextBlock Text="Chave da NF-e original (44 dígitos) *" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                            <TextBox Text="{Binding RefNfeReferenciada}" Padding="8" Margin="0,4,0,0" MaxLength="44"
+                                     ToolTip="Obrigatório pela SEFAZ pra qualquer devolução — sem isso a nota é rejeitada."/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
@@ -200,6 +216,161 @@
 
                         <TextBlock Text="{Binding Total, StringFormat='Total: R$ {0:N2}'}" FontSize="16" FontWeight="Bold"
                                    HorizontalAlignment="Right" Margin="0,10,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Pagamento — achado da revisão de arquitetura (18/08): antes sempre
+                     "90 sem pagamento", mesmo em venda B2B com cobrança real. -->
+                <Border Background="{DynamicResource CardBg}" CornerRadius="10" Padding="16" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="Pagamento" FontSize="14" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBlock Text="Deixe vazio pra remessa/devolução/brinde sem cobrança real." FontSize="11" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,10"/>
+
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Forma" FontSize="10" Foreground="{DynamicResource TextMuted}"/>
+                                <ComboBox ItemsSource="{Binding FormasPagamento}" SelectedValue="{Binding FormaPagamentoSelecionada}"
+                                          SelectedValuePath="Codigo" DisplayMemberPath="Label" Padding="8"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Valor" FontSize="10" Foreground="{DynamicResource TextMuted}"/>
+                                <TextBox Text="{Binding ValorPagamentoItem}" Padding="8"/>
+                            </StackPanel>
+                            <Button Grid.Column="4" Content="+ Adicionar" Command="{Binding AdicionarPagamentoCommand}"
+                                    VerticalAlignment="Bottom" Background="{DynamicResource CorAcento}" Foreground="White"
+                                    Padding="12,8" BorderThickness="0" Cursor="Hand">
+                                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                            </Button>
+                        </Grid>
+
+                        <ItemsControl ItemsSource="{Binding Pagamentos}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="100"/>
+                                            <ColumnDefinition Width="30"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding FormaPagamentoLabel}" VerticalAlignment="Center" FontSize="12"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Valor, StringFormat='R$ {0:N2}'}" VerticalAlignment="Center" FontSize="12" FontWeight="Bold"/>
+                                        <Button Grid.Column="2" Content="✕"
+                                                Command="{Binding DataContext.RemoverPagamentoCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}" Background="Transparent" BorderThickness="0" Foreground="#DC2626" Cursor="Hand"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Grid Margin="0,6,0,0">
+                            <TextBlock Text="{Binding TotalPagamentos, StringFormat='Total pago: R$ {0:N2}'}" FontSize="12" FontWeight="Bold"/>
+                            <TextBlock Text="{Binding DiferencaPagamentoTotal, StringFormat='Diferença: R$ {0:N2}'}" FontSize="12"
+                                       HorizontalAlignment="Right" Foreground="{DynamicResource TextMuted}"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Transporte — só relevante quando não é retirada/entrega própria. -->
+                <Border Background="{DynamicResource CardBg}" CornerRadius="10" Padding="16" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="Transporte" FontSize="14" FontWeight="Bold" Margin="0,0,0,10"/>
+                        <ComboBox SelectedValue="{Binding ModalidadeFrete}" SelectedValuePath="Tag" Padding="8" HorizontalAlignment="Left" MinWidth="280">
+                            <ComboBoxItem Content="9 — Sem frete (retirada/entrega própria)" Tag="9"/>
+                            <ComboBoxItem Content="0 — Por conta do remetente (CIF)" Tag="0"/>
+                            <ComboBoxItem Content="1 — Por conta do destinatário (FOB)" Tag="1"/>
+                            <ComboBoxItem Content="2 — Por conta de terceiros" Tag="2"/>
+                            <ComboBoxItem Content="3 — Transporte próprio (remetente)" Tag="3"/>
+                            <ComboBoxItem Content="4 — Transporte próprio (destinatário)" Tag="4"/>
+                        </ComboBox>
+
+                        <StackPanel Visibility="{Binding TransportadoraVisivel}" Margin="0,12,0,0">
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="160"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Transportadora (nome)" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                    <TextBox Text="{Binding TransportadoraNome}" Padding="8" Margin="0,4,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="CNPJ/CPF" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                    <TextBox Text="{Binding TransportadoraDocumento}" Padding="8" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Grid>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="60"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Endereço" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                    <TextBox Text="{Binding TransportadoraEndereco}" Padding="8" Margin="0,4,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Município" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                    <TextBox Text="{Binding TransportadoraMunicipio}" Padding="8" Margin="0,4,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="4">
+                                    <TextBlock Text="UF" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                    <TextBox Text="{Binding TransportadoraUf}" Padding="8" Margin="0,4,0,0" MaxLength="2"/>
+                                </StackPanel>
+                            </Grid>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="110"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Placa" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                    <TextBox Text="{Binding VeiculoPlaca}" Padding="8" Margin="0,4,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="UF" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                    <TextBox Text="{Binding VeiculoUf}" Padding="8" Margin="0,4,0,0" MaxLength="2"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="4">
+                                    <TextBlock Text="Espécie dos volumes" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                    <TextBox Text="{Binding EspecieVolumes}" Padding="8" Margin="0,4,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="6">
+                                    <TextBlock Text="Qtd. volumes" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                    <TextBox Text="{Binding QuantidadeVolumes}" Padding="8" Margin="0,4,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="8">
+                                    <TextBlock Text="Peso bruto (kg)" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                                    <TextBox Text="{Binding PesoBrutoKg}" Padding="8" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Informações Complementares -->
+                <Border Background="{DynamicResource CardBg}" CornerRadius="10" Padding="16" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="Informações Complementares" FontSize="14" FontWeight="Bold" Margin="0,0,0,10"/>
+                        <TextBox Text="{Binding InformacoesComplementares}" Padding="8" AcceptsReturn="True" TextWrapping="Wrap"
+                                  Height="60" VerticalScrollBarVisibility="Auto"
+                                  ToolTip="Observação livre — motivo da devolução, dados bancários, exigência legal do regime, etc."/>
                     </StackPanel>
                 </Border>
 

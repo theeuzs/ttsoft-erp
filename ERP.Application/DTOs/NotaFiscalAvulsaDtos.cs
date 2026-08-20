@@ -10,6 +10,17 @@ public class NotaFiscalAvulsaItemDto
     public string Cfop { get; set; } = "5102";
 }
 
+/// <summary>Uma forma de pagamento — várias podem compor o total (ex: parte
+/// PIX, parte cartão). Lista vazia é válida (remessa/devolução/brinde sem
+/// cobrança real) — nesse caso a emissão cai no "90 sem pagamento" sozinha.</summary>
+public class NotaFiscalAvulsaPagamentoDto
+{
+    /// <summary>Código Focus: "01" Dinheiro, "03" Cartão Crédito, "04" Cartão
+    /// Débito, "15" Boleto, "17" PIX, "90" Sem pagamento, etc.</summary>
+    public string FormaPagamento { get; set; } = "90";
+    public decimal Valor { get; set; }
+}
+
 /// <summary>DTO de entrada — salvar (criar/atualizar) um rascunho.</summary>
 public class SalvarNotaFiscalAvulsaDto
 {
@@ -36,7 +47,34 @@ public class SalvarNotaFiscalAvulsaDto
     /// <summary>"1"=contribuinte ICMS, "2"=isento, "9"=não contribuinte.</summary>
     public string IndicadorIeDestinatario { get; set; } = "9";
 
+    // ── Achados da revisão de arquitetura (18/08) ──────────────────────────
+
+    /// <summary>Chave de 44 dígitos da nota original — obrigatória quando
+    /// Finalidade="4" (devolução), senão a SEFAZ rejeita sumariamente.</summary>
+    public string? RefNfeReferenciada { get; set; }
+
+    public string? InformacoesComplementares { get; set; }
+
+    /// <summary>"0" a "4" com transportadora, "9" sem frete (default).</summary>
+    public string ModalidadeFrete { get; set; } = "9";
+    public string? TransportadoraNome { get; set; }
+    public string? TransportadoraDocumento { get; set; }
+    public string? TransportadoraIe { get; set; }
+    public string? TransportadoraEndereco { get; set; }
+    public string? TransportadoraMunicipio { get; set; }
+    public string? TransportadoraUf { get; set; }
+    public string? VeiculoPlaca { get; set; }
+    public string? VeiculoUf { get; set; }
+    public int? QuantidadeVolumes { get; set; }
+    public string? EspecieVolumes { get; set; }
+    public decimal? PesoBrutoKg { get; set; }
+    public decimal? PesoLiquidoKg { get; set; }
+
     public List<NotaFiscalAvulsaItemDto> Itens { get; set; } = new();
+
+    /// <summary>Vazio = remessa/devolução/brinde sem cobrança real (cai em
+    /// "90 sem pagamento"). Preenchido = venda B2B com a forma real usada.</summary>
+    public List<NotaFiscalAvulsaPagamentoDto> Pagamentos { get; set; } = new();
 }
 
 /// <summary>DTO de leitura — carregar um rascunho pra editar.</summary>

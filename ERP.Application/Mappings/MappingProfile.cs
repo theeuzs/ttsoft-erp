@@ -104,6 +104,7 @@ public class MappingProfile : Profile
                 s.Status,
                 s.Subtotal,
                 s.DiscountAmount,
+                s.ShippingValue,
                 s.Total,
                 s.Payments.Select(p => new SalePaymentDto(p.Id, p.PaymentMethod.ToString(), p.Amount)).ToList(),
                 ctx.Mapper.Map<List<SaleItemDto>>(s.Items),

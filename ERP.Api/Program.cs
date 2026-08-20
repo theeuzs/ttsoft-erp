@@ -130,6 +130,10 @@ builder.Services.AddScoped<ERP.Application.Interfaces.INfceEmissionService,
                             ERP.Application.Services.NfceEmissionService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.INfeCancellationService,
                             ERP.Application.Services.NfeCancellationService>();
+// S27 (20/08) — só estava registrado no WPF; NotaFiscalAvulsaService (API)
+// agora também precisa pra consultar status de nota "Processando".
+builder.Services.AddScoped<ERP.Application.Interfaces.INfeStatusService,
+                            ERP.Application.Services.NfeStatusService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.INfeCorrecaoService,
                             ERP.Application.Services.NfeCorrecaoService>();
 
@@ -247,6 +251,10 @@ builder.Services.AddScoped<ERP.Application.Interfaces.INfeEmissionService,
                             ERP.Application.Services.NfeEmissionService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.INfeContingencyService,
                             ERP.Application.Services.NfeContingencyService>();
+// S25 (18/08) — item pendente da auditoria de 13/08: contingência fiscal
+// agora roda dentro da própria API (todos os tenants), não só quando o
+// WPF de alguma loja está aberto. Ver ERP.Api/BackgroundServices/NfeContingencyHostedService.cs.
+builder.Services.AddHostedService<ERP.Api.BackgroundServices.NfeContingencyHostedService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IFiscalService,
                             ERP.Infrastructure.Services.FiscalService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IMotorFiscalService,

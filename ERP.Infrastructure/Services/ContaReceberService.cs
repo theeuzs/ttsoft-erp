@@ -197,7 +197,16 @@ public class ContaReceberService : IContaReceberService
                 Descricao = {descricaoComMotivo}, UpdatedAt = {agora}
             WHERE Id = {contaId} AND TenantId = {_tenant.TenantId}
               AND Status <> 'Cancelado'
-              AND ValorTotal - ValorRecebido - ValorDesconto >= {valorDesconto}");
+              -- S26 FIX (18/08): o +0 no fim força o parâmetro a passar pela
+              -- mesma coerção numérica que o lado esquerdo já sofre por causa
+              -- da subtração. Achado testando com SQLite (banco de testes):
+              -- lá, decimal é armazenado como TEXT, e comparar um valor
+              -- numérico computado direto contra um parâmetro TEXT sem
+              -- operação nenhuma sempre dá falso (SQLite trata TEXT como
+              -- maior que qualquer número, nas regras de ordenação dele). No
+              -- SQL Server (produção) decimal mais zero é literalmente um
+              -- no-op — não muda nada ali, só protege o teste.
+              AND ValorTotal - ValorRecebido - ValorDesconto >= {valorDesconto} + 0");
 
         if (linhas == 0)
             throw new InvalidOperationException(

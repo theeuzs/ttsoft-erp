@@ -34,4 +34,16 @@ public interface INotaFiscalAvulsaService
     Task<ConferenciaFiscalDto> ConferirAsync(Guid id);
 
     Task<FiscalEmissionResult> EmitirAsync(Guid id);
+
+    /// <summary>Achado da revisão de arquitetura (18/08) — nota avulsa
+    /// autorizada não tinha NENHUM jeito de cancelar em lugar nenhum do
+    /// sistema (nem essa tela, nem a tela geral de Notas Fiscais, que só
+    /// enxerga notas ligadas a uma Sale). Usa o mesmo endpoint de
+    /// cancelamento já existente, só que com a referência "avulsa-{id}".</summary>
+    Task<FiscalEmissionResult> CancelarAsync(Guid id, string justificativa);
+
+    /// <summary>Consulta o status real de uma nota "Processando" (Focus
+    /// respondeu sucesso mas a SEFAZ ainda não tinha confirmado autorização
+    /// na hora da emissão).</summary>
+    Task<FiscalEmissionResult> ConsultarStatusAsync(Guid id);
 }

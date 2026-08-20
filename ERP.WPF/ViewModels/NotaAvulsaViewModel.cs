@@ -3,6 +3,7 @@ using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using ERP.WPF.Commands;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -38,7 +39,7 @@ public static class OperacoesFiscaisPresets
         new("Remessa para conserto",                   "REMESSA PARA CONSERTO",             "S", "1", "5915", "6915"),
         new("Retorno de conserto",                     "RETORNO DE CONSERTO",               "E", "1", "5916", "6916"),
         new("Transferência entre filiais",             "TRANSFERENCIA ENTRE FILIAIS",       "S", "1", "5152", "6152"),
-        new("Devolução de compra",                     "DEVOLUCAO DE COMPRA",               "S", "1", "5202", "6202"),
+        new("Devolução de compra",                     "DEVOLUCAO DE COMPRA",               "S", "4", "5202", "6202"),
         new("Devolução de venda (entrada)",            "DEVOLUCAO DE VENDA",                "E", "4", "1202", "2202"),
         new("Simples remessa",                         "SIMPLES REMESSA",                   "S", "1", "5949", "6949"),
     };
@@ -170,6 +171,19 @@ public class ItemNotaAvulsa : BaseViewModel
     public decimal Total => Quantidade * ValorUnitario;
 }
 
+/// <summary>Uma forma de pagamento da nota — várias podem compor o mesmo
+/// total (ex: parte PIX, parte cartão).</summary>
+public class ItemPagamentoNotaAvulsa : BaseViewModel
+{
+    public string FormaPagamento { get; set; } = "17";
+    public string FormaPagamentoLabel { get; set; } = "PIX";
+    public decimal Valor { get; set; }
+}
+
+/// <summary>Uma opção do combo de forma de pagamento — classe de verdade,
+/// não tupla (WPF não lê nome de campo de ValueTuple via DisplayMemberPath).</summary>
+public record FormaPagamentoOption(string Codigo, string Label);
+
 /// <summary>
 /// Item 9 do roadmap fiscal — editor de NF-e desacoplada de venda, com
 /// rascunho ("salvar sem emitir") e conferência de impostos.
@@ -231,7 +245,13 @@ public class NotaAvulsaViewModel : BaseViewModel
     }
 
     public string TipoOperacaoEntradaSaida { get; set; } = "S";
-    public string Finalidade { get; set; } = "1";
+
+    private string _finalidade = "1";
+    public string Finalidade
+    {
+        get => _finalidade;
+        set { SetProperty(ref _finalidade, value); OnPropertyChanged(nameof(ChaveReferenciadaVisivel)); }
+    }
 
     // ── Destinatário ─────────────────────────────────────────────────────
     public string DestinatarioNome { get; set; } = string.Empty;
@@ -268,6 +288,68 @@ public class NotaAvulsaViewModel : BaseViewModel
     public string[] IndicadoresIe { get; } = { "1", "2", "9" };
     public string IndicadorIeDestinatario { get; set; } = "9";
 
+    // ── Achados da revisão de arquitetura (18/08) ──────────────────────────
+
+    /// <summary>Obrigatória quando Finalidade="4" (devolução) — chave de 44
+    /// dígitos da nota original. XAML mostra esse campo só nesse caso.</summary>
+    public string? RefNfeReferenciada { get; set; }
+    public Visibility ChaveReferenciadaVisivel => Finalidade == "4" ? Visibility.Visible : Visibility.Collapsed;
+
+    public string? InformacoesComplementares { get; set; }
+
+    public string[] ModalidadesFrete { get; } = { "9", "0", "1", "2", "3", "4" };
+    private string _modalidadeFrete = "9";
+    public string ModalidadeFrete
+    {
+        get => _modalidadeFrete;
+        set { SetProperty(ref _modalidadeFrete, value); OnPropertyChanged(nameof(TransportadoraVisivel)); }
+    }
+    /// <summary>Campos de transportadora só aparecem quando a modalidade
+    /// não é "9" (sem frete) — retirada/entrega própria não precisa disso.</summary>
+    public Visibility TransportadoraVisivel => ModalidadeFrete != "9" ? Visibility.Visible : Visibility.Collapsed;
+
+    public string? TransportadoraNome { get; set; }
+    public string? TransportadoraDocumento { get; set; }
+    public string? TransportadoraIe { get; set; }
+    public string? TransportadoraEndereco { get; set; }
+    public string? TransportadoraMunicipio { get; set; }
+    public string? TransportadoraUf { get; set; }
+    public string? VeiculoPlaca { get; set; }
+    public string? VeiculoUf { get; set; }
+    public int? QuantidadeVolumes { get; set; }
+    public string? EspecieVolumes { get; set; }
+    public decimal? PesoBrutoKg { get; set; }
+    public decimal? PesoLiquidoKg { get; set; }
+
+    // ── Pagamento — antes sempre "90 sem pagamento", mesmo em venda B2B
+    // com cobrança real (confirmado que acontece na prática). Lista vazia
+    // continua sendo válida (remessa/devolução/brinde sem cobrança).
+    // S27 correção (19/08) — era (string Codigo, string Label)[], uma tupla
+    // nomeada. WPF não sabe ler "Codigo"/"Label" de uma ValueTuple via
+    // DisplayMemberPath/SelectedValuePath — só existem em tempo de
+    // compilação, o CLR só enxerga Item1/Item2. Resultado: dropdown abria
+    // com a altura certa (9 itens) mas todo em branco. Precisa ser uma
+    // classe de verdade, com propriedades reais.
+    public FormaPagamentoOption[] FormasPagamento { get; } =
+    {
+        new("90", "Sem pagamento (remessa/devolução/brinde)"),
+        new("01", "Dinheiro"), new("03", "Cartão de Crédito"), new("04", "Cartão de Débito"),
+        new("15", "Boleto Bancário"), new("17", "PIX"), new("16", "Depósito Bancário"),
+        new("14", "Duplicata Mercantil"), new("99", "Outros"),
+    };
+    public string FormaPagamentoSelecionada { get; set; } = "17";
+    private decimal _valorPagamentoItem;
+    public decimal ValorPagamentoItem
+    {
+        get => _valorPagamentoItem;
+        set { SetProperty(ref _valorPagamentoItem, value); AdicionarPagamentoCommand?.RaiseCanExecuteChanged(); }
+    }
+    public ObservableCollection<ItemPagamentoNotaAvulsa> Pagamentos { get; } = new();
+    public decimal TotalPagamentos => Pagamentos.Sum(p => p.Valor);
+    /// <summary>Só informativo — a emissão não trava se não bater (pagamento
+    /// parcial/fiado é decisão do usuário), mas ajuda a conferir de olho.</summary>
+    public decimal DiferencaPagamentoTotal => Total - TotalPagamentos;
+
     // ── Item picker (mesmo padrão da tela de Compras) ──────────────────────
     private string _buscaProduto = string.Empty;
     public string BuscaProduto
@@ -280,12 +362,22 @@ public class NotaAvulsaViewModel : BaseViewModel
     public ProductDto? ProdutoSelecionado
     {
         get => _produtoSelecionado;
-        set { SetProperty(ref _produtoSelecionado, value); if (value != null) ValorUnitarioItem = value.SalePrice; }
+        set
+        {
+            SetProperty(ref _produtoSelecionado, value);
+            if (value != null) ValorUnitarioItem = value.SalePrice;
+            AdicionarItemCommand?.RaiseCanExecuteChanged();
+        }
     }
 
     public ObservableCollection<ProductDto> ProdutosSugestao { get; } = new();
 
-    public decimal QuantidadeItem { get; set; } = 1;
+    private decimal _quantidadeItem = 1;
+    public decimal QuantidadeItem
+    {
+        get => _quantidadeItem;
+        set { SetProperty(ref _quantidadeItem, value); AdicionarItemCommand?.RaiseCanExecuteChanged(); }
+    }
     public decimal ValorUnitarioItem { get; set; }
     public string CfopItem { get; set; } = "5102";
 
@@ -311,7 +403,7 @@ public class NotaAvulsaViewModel : BaseViewModel
     private string _autosaveStatusTexto = string.Empty;
     public string AutosaveStatusTexto { get => _autosaveStatusTexto; set => SetProperty(ref _autosaveStatusTexto, value); }
 
-    public ICommand AdicionarItemCommand { get; }
+    public RelayCommand AdicionarItemCommand { get; }
     public ICommand BuscarCnpjCommand { get; }
     public ICommand RemoverItemCommand { get; }
     public ICommand SalvarRascunhoCommand { get; }
@@ -323,6 +415,8 @@ public class NotaAvulsaViewModel : BaseViewModel
     public ICommand CopiarNotaCommand { get; }
     public ICommand ExcluirRascunhoCommand { get; }
     public ICommand AtualizarRascunhosCommand { get; }
+    public RelayCommand AdicionarPagamentoCommand { get; }
+    public ICommand RemoverPagamentoCommand { get; }
 
     public NotaAvulsaViewModel(IProductService productService, ICustomerService customerService)
     {
@@ -336,7 +430,7 @@ public class NotaAvulsaViewModel : BaseViewModel
             if (limpo.Length != 14) { MessageBox.Show("Digite um CNPJ válido (14 dígitos).", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
             await BuscarCnpjAsync(limpo);
         });
-        RemoverItemCommand   = new RelayCommand(item => { if (item is ItemNotaAvulsa i) { Itens.Remove(i); OnPropertyChanged(nameof(Total)); } });
+        RemoverItemCommand   = new RelayCommand(item => { if (item is ItemNotaAvulsa i) { Itens.Remove(i); OnPropertyChanged(nameof(Total)); OnPropertyChanged(nameof(DiferencaPagamentoTotal)); } });
         SalvarRascunhoCommand = new AsyncRelayCommand(async _ => await SalvarRascunhoAsync());
         ConferirCommand        = new AsyncRelayCommand(async _ => await ConferirAsync());
         GerarPdfEspelhoCommand = new AsyncRelayCommand(async _ => await GerarPdfEspelhoAsync());
@@ -346,9 +440,26 @@ public class NotaAvulsaViewModel : BaseViewModel
         CopiarNotaCommand = new AsyncRelayCommand(async item => { if (item is NotaFiscalAvulsaResumoDto r) await CopiarNotaAsync(r.Id); });
         ExcluirRascunhoCommand  = new AsyncRelayCommand(async item => { if (item is NotaFiscalAvulsaResumoDto r) await ExcluirRascunhoAsync(r.Id); });
         AtualizarRascunhosCommand = new AsyncRelayCommand(async _ => await CarregarRascunhosAsync());
+        AdicionarPagamentoCommand = new RelayCommand(_ => AdicionarPagamento(), _ => ValorPagamentoItem > 0);
+        RemoverPagamentoCommand   = new RelayCommand(item => { if (item is ItemPagamentoNotaAvulsa p) { Pagamentos.Remove(p); OnPropertyChanged(nameof(TotalPagamentos)); OnPropertyChanged(nameof(DiferencaPagamentoTotal)); } });
 
         _ = CarregarRascunhosAsync();
         IniciarAutosave();
+    }
+
+    private void AdicionarPagamento()
+    {
+        var label = FormasPagamento.FirstOrDefault(f => f.Codigo == FormaPagamentoSelecionada)?.Label ?? FormaPagamentoSelecionada;
+        Pagamentos.Add(new ItemPagamentoNotaAvulsa
+        {
+            FormaPagamento = FormaPagamentoSelecionada,
+            FormaPagamentoLabel = label,
+            Valor = ValorPagamentoItem,
+        });
+        ValorPagamentoItem = 0;
+        OnPropertyChanged(nameof(ValorPagamentoItem));
+        OnPropertyChanged(nameof(TotalPagamentos));
+        OnPropertyChanged(nameof(DiferencaPagamentoTotal));
     }
 
     private void IniciarAutosave()
@@ -359,9 +470,13 @@ public class NotaAvulsaViewModel : BaseViewModel
     }
 
     private string CalcularSnapshot() =>
-        $"{NaturezaOperacao}|{TipoOperacaoEntradaSaida}|{DestinatarioNome}|{DestinatarioDocumento}|{DestinatarioLogradouro}|" +
+        $"{NaturezaOperacao}|{TipoOperacaoEntradaSaida}|{Finalidade}|{DestinatarioNome}|{DestinatarioDocumento}|{DestinatarioLogradouro}|" +
         $"{DestinatarioNumero}|{DestinatarioBairro}|{DestinatarioMunicipio}|{DestinatarioUf}|{DestinatarioCep}|{DestinatarioIe}|" +
-        string.Join(",", Itens.Select(i => $"{i.ProductId}:{i.Quantidade}:{i.ValorUnitario}:{i.Cfop}"));
+        $"{RefNfeReferenciada}|{InformacoesComplementares}|{ModalidadeFrete}|{TransportadoraNome}|{TransportadoraDocumento}|" +
+        $"{TransportadoraIe}|{TransportadoraEndereco}|{TransportadoraMunicipio}|{TransportadoraUf}|" +
+        $"{VeiculoPlaca}|{VeiculoUf}|{QuantidadeVolumes}|{EspecieVolumes}|{PesoBrutoKg}|{PesoLiquidoKg}|" +
+        string.Join(",", Itens.Select(i => $"{i.ProductId}:{i.Quantidade}:{i.ValorUnitario}:{i.Cfop}")) + "|" +
+        string.Join(",", Pagamentos.Select(p => $"{p.FormaPagamento}:{p.Valor}"));
 
     /// <summary>Chamado a cada segundo. Salva sozinho depois de ~3s sem
     /// mudança no formulário — nunca interrompe o usuário, nunca mostra
@@ -392,7 +507,14 @@ public class NotaAvulsaViewModel : BaseViewModel
                 AutosaveStatusTexto = $"💾 Salvo automaticamente às {DateTime.Now:HH:mm}";
                 await CarregarRascunhosAsync();
             }
-            catch { /* autosave é best-effort — nunca deve incomodar o usuário com erro */ }
+            catch (Exception ex)
+            {
+                // Continua best-effort — nunca um popup pra isso — mas agora
+                // fica rastro real (log) e um aviso discreto na própria UI,
+                // em vez de engolir tudo (achado da revisão de código, 19/08).
+                Log.Warning(ex, "NotaAvulsaViewModel: falha no autosave");
+                AutosaveStatusTexto = "⚠️ Falha no salvamento automático — tente Salvar Rascunho manualmente.";
+            }
         }
     }
 
@@ -415,12 +537,16 @@ public class NotaAvulsaViewModel : BaseViewModel
             ProdutosSugestao.Clear();
             foreach (var p in resultado.Take(8)) ProdutosSugestao.Add(p);
         }
-        catch { ProdutosSugestao.Clear(); }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "NotaAvulsaViewModel: falha buscando produtos para \"{Termo}\"", termo);
+            ProdutosSugestao.Clear();
+        }
     }
 
     private void AdicionarItemComListener(ItemNotaAvulsa item)
     {
-        item.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ItemNotaAvulsa.Total)) OnPropertyChanged(nameof(Total)); };
+        item.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ItemNotaAvulsa.Total)) { OnPropertyChanged(nameof(Total)); OnPropertyChanged(nameof(DiferencaPagamentoTotal)); } };
         Itens.Add(item);
     }
 
@@ -436,7 +562,7 @@ public class NotaAvulsaViewModel : BaseViewModel
             ValorUnitario = ValorUnitarioItem,
             Cfop          = CfopItem,
         });
-        OnPropertyChanged(nameof(Total));
+        OnPropertyChanged(nameof(Total)); OnPropertyChanged(nameof(DiferencaPagamentoTotal));
 
         BuscaProduto = string.Empty;
         ProdutoSelecionado = null;
@@ -555,10 +681,29 @@ public class NotaAvulsaViewModel : BaseViewModel
         DestinatarioCep           = DestinatarioCep,
         DestinatarioIe            = DestinatarioIe,
         IndicadorIeDestinatario   = IndicadorIeDestinatario,
+        RefNfeReferenciada        = RefNfeReferenciada,
+        InformacoesComplementares = InformacoesComplementares,
+        ModalidadeFrete           = ModalidadeFrete,
+        TransportadoraNome        = TransportadoraNome,
+        TransportadoraDocumento   = TransportadoraDocumento,
+        TransportadoraIe          = TransportadoraIe,
+        TransportadoraEndereco    = TransportadoraEndereco,
+        TransportadoraMunicipio   = TransportadoraMunicipio,
+        TransportadoraUf          = TransportadoraUf,
+        VeiculoPlaca              = VeiculoPlaca,
+        VeiculoUf                 = VeiculoUf,
+        QuantidadeVolumes         = QuantidadeVolumes,
+        EspecieVolumes            = EspecieVolumes,
+        PesoBrutoKg               = PesoBrutoKg,
+        PesoLiquidoKg             = PesoLiquidoKg,
         Itens = Itens.Select(i => new NotaFiscalAvulsaItemDto
         {
             ProductId = i.ProductId, ProductName = i.ProductName,
             Quantidade = i.Quantidade, ValorUnitario = i.ValorUnitario, Cfop = i.Cfop,
+        }).ToList(),
+        Pagamentos = Pagamentos.Select(p => new NotaFiscalAvulsaPagamentoDto
+        {
+            FormaPagamento = p.FormaPagamento, Valor = p.Valor,
         }).ToList(),
     };
 
@@ -640,6 +785,16 @@ public class NotaAvulsaViewModel : BaseViewModel
         if (!Itens.Any())
             erros.Add("Adicione pelo menos um item.");
 
+        // Achado da revisão de código (19/08) — validação client-side, só
+        // pra UX (feedback na hora, sem round-trip); o backend continua
+        // sendo a proteção de verdade (já bloqueia isso desde o S27).
+        if (Finalidade == "4")
+        {
+            var chave = new string((RefNfeReferenciada ?? "").Where(char.IsDigit).ToArray());
+            if (chave.Length != 44)
+                erros.Add("Para devolução, informe a chave de acesso da NF-e original com 44 dígitos.");
+        }
+
         foreach (var item in Itens)
         {
             if (item.Quantidade <= 0)
@@ -706,7 +861,12 @@ public class NotaAvulsaViewModel : BaseViewModel
             Rascunhos.Clear();
             foreach (var r in lista) Rascunhos.Add(r);
         }
-        catch { /* best-effort */ }
+        catch (Exception ex)
+        {
+            // Best-effort continua (a lista lateral não pode travar o resto
+            // da tela), mas agora fica rastro real em vez de sumir sem log.
+            Log.Warning(ex, "NotaAvulsaViewModel: falha carregando a lista de rascunhos/notas");
+        }
     }
 
     private async Task CarregarRascunhoAsync(Guid id)
@@ -719,8 +879,7 @@ public class NotaAvulsaViewModel : BaseViewModel
 
             if (nota.Status != "Rascunho")
             {
-                MessageBox.Show("Essa nota já foi emitida — não é possível editar, só consultar na tela de Notas Fiscais.",
-                    "Aviso", MessageBoxButton.OK, MessageBoxImage.Information);
+                await TratarNotaJaEmitidaAsync(nota);
                 return;
             }
 
@@ -738,6 +897,21 @@ public class NotaAvulsaViewModel : BaseViewModel
             DestinatarioCep = nota.DestinatarioCep;
             DestinatarioIe = nota.DestinatarioIe;
             IndicadorIeDestinatario = nota.IndicadorIeDestinatario;
+            RefNfeReferenciada = nota.RefNfeReferenciada;
+            InformacoesComplementares = nota.InformacoesComplementares;
+            ModalidadeFrete = nota.ModalidadeFrete;
+            TransportadoraNome = nota.TransportadoraNome;
+            TransportadoraDocumento = nota.TransportadoraDocumento;
+            TransportadoraIe = nota.TransportadoraIe;
+            TransportadoraEndereco = nota.TransportadoraEndereco;
+            TransportadoraMunicipio = nota.TransportadoraMunicipio;
+            TransportadoraUf = nota.TransportadoraUf;
+            VeiculoPlaca = nota.VeiculoPlaca;
+            VeiculoUf = nota.VeiculoUf;
+            QuantidadeVolumes = nota.QuantidadeVolumes;
+            EspecieVolumes = nota.EspecieVolumes;
+            PesoBrutoKg = nota.PesoBrutoKg;
+            PesoLiquidoKg = nota.PesoLiquidoKg;
 
             Itens.Clear();
             foreach (var i in nota.Itens)
@@ -747,6 +921,15 @@ public class NotaAvulsaViewModel : BaseViewModel
                     Quantidade = i.Quantidade, ValorUnitario = i.ValorUnitario, Cfop = i.Cfop,
                 });
 
+            Pagamentos.Clear();
+            foreach (var p in nota.Pagamentos)
+                Pagamentos.Add(new ItemPagamentoNotaAvulsa
+                {
+                    FormaPagamento = p.FormaPagamento,
+                    FormaPagamentoLabel = FormasPagamento.FirstOrDefault(f => f.Codigo == p.FormaPagamento)?.Label ?? p.FormaPagamento,
+                    Valor = p.Valor,
+                });
+
             OnPropertyChanged(string.Empty); // atualiza todo o formulário de uma vez
             ResetarRastreamentoAutosave();
         }
@@ -754,6 +937,109 @@ public class NotaAvulsaViewModel : BaseViewModel
         {
             MessageBox.Show($"Erro ao carregar rascunho: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    /// <summary>Achado da revisão de arquitetura (18/08) — antes disso, uma
+    /// nota avulsa autorizada não tinha NENHUM jeito de ver o DANFE ou
+    /// cancelar em lugar nenhum do sistema (nem essa tela, nem a tela geral
+    /// de Notas Fiscais, que só enxerga nota ligada a Sale). Reaproveita o
+    /// mesmo clique que antes só mostrava "não editável".</summary>
+    /// <summary>Achado testando em homologação (19-20/08) — Focus pode
+    /// responder "sucesso" sem o DANFE pronto (SEFAZ ainda processando).
+    /// Consulta o resultado real depois, em vez de deixar a nota
+    /// silenciosamente presa em "Processando" pra sempre.</summary>
+    private async Task ConsultarStatusAsync(Guid id)
+    {
+        try
+        {
+            StatusTexto = "Consultando status na SEFAZ...";
+            var service = App.Services.GetRequiredService<INotaFiscalAvulsaService>();
+            var resultado = await service.ConsultarStatusAsync(id);
+
+            if (resultado.Status == "Autorizada")
+            {
+                MessageBox.Show($"✅ Autorizada!\n\n{resultado.Mensagem}", "Nota Autorizada", MessageBoxButton.OK, MessageBoxImage.Information);
+                if (!string.IsNullOrWhiteSpace(resultado.UrlDanfe))
+                {
+                    var abrir = MessageBox.Show("Abrir o DANFE agora?", "DANFE", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    if (abrir == MessageBoxResult.Yes)
+                        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(resultado.UrlDanfe!) { UseShellExecute = true }); }
+                        catch (Exception ex) { MessageBox.Show($"Não consegui abrir o link: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error); }
+                }
+            }
+            else if (resultado.Status == "Processando")
+            {
+                MessageBox.Show($"⏳ {resultado.Mensagem}", "Ainda Processando", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                MessageBox.Show($"❌ {resultado.Mensagem}", "Nota Rejeitada", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+
+            await CarregarRascunhosAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Erro ao consultar: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally { StatusTexto = string.Empty; }
+    }
+
+    private async Task TratarNotaJaEmitidaAsync(NotaFiscalAvulsaDto nota)
+    {
+        if (nota.Status == "Processando")
+        {
+            await ConsultarStatusAsync(nota.Id);
+            return;
+        }
+
+        if (nota.Status != "Autorizada")
+        {
+            MessageBox.Show($"Essa nota está com status \"{nota.Status}\" — não é possível editar nem cancelar.",
+                "Aviso", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var opcoes = string.IsNullOrWhiteSpace(nota.UrlDanfe)
+            ? "Essa nota já foi autorizada.\n\n(Sem link de DANFE salvo — confira direto no painel da Focus.)\n\nDeseja cancelar essa nota?"
+            : "Essa nota já foi autorizada.\n\nAbrir o DANFE agora? (Cancelar aqui pergunta separadamente.)";
+
+        if (!string.IsNullOrWhiteSpace(nota.UrlDanfe))
+        {
+            var abrirDanfe = MessageBox.Show(opcoes, "Nota Autorizada", MessageBoxButton.YesNo, MessageBoxImage.Information);
+            if (abrirDanfe == MessageBoxResult.Yes)
+            {
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(nota.UrlDanfe!) { UseShellExecute = true }); }
+                catch (Exception ex) { MessageBox.Show($"Não consegui abrir o link: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error); }
+            }
+        }
+
+        var quereCancelar = MessageBox.Show("Deseja cancelar essa nota?", "Cancelar Nota",
+            MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (quereCancelar != MessageBoxResult.Yes) return;
+
+        var justificativa = Microsoft.VisualBasic.Interaction.InputBox(
+            "Justificativa do cancelamento (mínimo 15 caracteres — exigido pela SEFAZ):",
+            "Cancelar Nota Fiscal", "");
+        if (string.IsNullOrWhiteSpace(justificativa)) return;
+
+        try
+        {
+            StatusTexto = "Cancelando...";
+            var service = App.Services.GetRequiredService<INotaFiscalAvulsaService>();
+            var resultado = await service.CancelarAsync(nota.Id, justificativa);
+
+            MessageBox.Show(resultado.Sucesso ? $"✅ {resultado.Mensagem}" : $"❌ Falha ao cancelar:\n{resultado.Mensagem}",
+                resultado.Sucesso ? "Nota Cancelada" : "Erro", MessageBoxButton.OK,
+                resultado.Sucesso ? MessageBoxImage.Information : MessageBoxImage.Error);
+
+            if (resultado.Sucesso) await CarregarRascunhosAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Erro ao cancelar: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally { StatusTexto = string.Empty; }
     }
 
     private async Task CopiarNotaAsync(Guid idOrigem)
@@ -806,7 +1092,33 @@ public class NotaAvulsaViewModel : BaseViewModel
         DestinatarioUf = null;
         DestinatarioCep = null;
         DestinatarioIe = null;
+        RefNfeReferenciada = null;
+        InformacoesComplementares = null;
+        ModalidadeFrete = "9";
+        TransportadoraNome = null;
+        TransportadoraDocumento = null;
+        TransportadoraIe = null;
+        TransportadoraEndereco = null;
+        TransportadoraMunicipio = null;
+        TransportadoraUf = null;
+        VeiculoPlaca = null;
+        VeiculoUf = null;
+        QuantidadeVolumes = null;
+        EspecieVolumes = null;
+        PesoBrutoKg = null;
+        PesoLiquidoKg = null;
+        // Achado da revisão de código (19/08) — esses ficavam com o estado
+        // da nota anterior depois de "Nova Nota".
+        BuscaProduto = string.Empty;
+        ProdutoSelecionado = null;
+        ProdutosSugestao.Clear();
+        QuantidadeItem = 1;
+        ValorUnitarioItem = 0;
+        CfopItem = "5102";
+        FormaPagamentoSelecionada = "17";
+        ValorPagamentoItem = 0;
         Itens.Clear();
+        Pagamentos.Clear();
         OnPropertyChanged(string.Empty);
         AutosaveStatusTexto = string.Empty;
         ResetarRastreamentoAutosave();

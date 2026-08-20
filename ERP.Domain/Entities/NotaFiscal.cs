@@ -68,7 +68,53 @@ public class NotaFiscal : BaseEntity
     /// clássica dependendo do destinatário.</summary>
     public string IndicadorIeDestinatario { get; set; } = "9";
 
+    // ── Achados da revisão de arquitetura (18/08) — a tela de Nota Avulsa
+    // travava origem/pagamento/transporte, impossibilitando devolução (SEFAZ
+    // exige a nota referenciada) e venda B2B real (forma de pagamento fixa
+    // em "sem pagamento"). Confirmado com o dono do sistema que os dois
+    // cenários acontecem de verdade — não é hipotético.
+
+    /// <summary>Texto livre — vira infCpl na Focus. Quase toda nota avulsa
+    /// precisa de alguma observação (motivo da devolução, dados bancários,
+    /// exigência legal do regime).</summary>
+    public string? InformacoesComplementares { get; set; }
+
+    // ── Transporte — só relevante quando a mercadoria sai por transportadora,
+    // não em retirada/entrega própria. Todos opcionais; ModalidadeFrete "9"
+    // (sem frete) é o default seguro quando nada disso se aplica.
+    public string ModalidadeFrete { get; set; } = "9";
+    public string? TransportadoraNome { get; set; }
+    public string? TransportadoraDocumento { get; set; }
+    public string? TransportadoraIe { get; set; }
+    public string? TransportadoraEndereco { get; set; }
+    public string? TransportadoraMunicipio { get; set; }
+    public string? TransportadoraUf { get; set; }
+    public string? VeiculoPlaca { get; set; }
+    public string? VeiculoUf { get; set; }
+    public int? QuantidadeVolumes { get; set; }
+    public string? EspecieVolumes { get; set; }
+    public decimal? PesoBrutoKg { get; set; }
+    public decimal? PesoLiquidoKg { get; set; }
+
     public ICollection<NotaFiscalItem> Itens { get; set; } = new List<NotaFiscalItem>();
+
+    /// <summary>Formas de pagamento da nota — vazio é válido (remessa,
+    /// devolução, brinde: "sem pagamento" de verdade). Preenchido: venda
+    /// B2B formalizada fora do PDV, com a forma real usada.</summary>
+    public ICollection<NotaFiscalPagamento> Pagamentos { get; set; } = new List<NotaFiscalPagamento>();
+}
+
+/// <summary>Uma forma de pagamento de uma nota avulsa — várias formas podem
+/// compor o mesmo total (ex: parte PIX, parte cartão).</summary>
+public class NotaFiscalPagamento : BaseEntity
+{
+    public Guid NotaFiscalId { get; set; }
+    public NotaFiscal NotaFiscal { get; set; } = null!;
+
+    /// <summary>Código Focus: "01" Dinheiro, "03" Cartão Crédito, "04" Cartão
+    /// Débito, "15" Boleto, "17" PIX, "90" Sem pagamento, etc.</summary>
+    public string FormaPagamento { get; set; } = "90";
+    public decimal Valor { get; set; }
 }
 
 /// <summary>Item de uma nota avulsa (rascunho ou já emitida) — não existe
