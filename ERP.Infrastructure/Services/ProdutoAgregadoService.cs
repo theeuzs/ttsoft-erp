@@ -14,7 +14,12 @@ namespace ERP.Infrastructure.Services;
 public class ProdutoAgregadoService : IProdutoAgregadoService
 {
     private readonly AppDbContext _ctx;
-    public ProdutoAgregadoService(AppDbContext ctx) => _ctx = ctx;
+    private readonly IRequestTenant _tenant;
+    public ProdutoAgregadoService(AppDbContext ctx, IRequestTenant tenant)
+    {
+        _ctx    = ctx;
+        _tenant = tenant;
+    }
 
     public async Task<IEnumerable<ProdutoAgregadoDto>> GetSugestoesAsync(Guid produtoPrincipalId)
     {
@@ -53,22 +58,31 @@ public class ProdutoAgregadoService : IProdutoAgregadoService
         if (lista.Any(i => i.ProdutoRelacionadoId == produtoPrincipalId))
             throw new InvalidOperationException("Um produto não pode ser agregado a si mesmo.");
 
-        var atuais    = await _ctx.ProdutosAgregados.Where(pa => pa.ProdutoPrincipalId == produtoPrincipalId).ToListAsync();
+        var atuais    = await _ctx.ProdutosAgregados.AsTracking().Where(pa => pa.ProdutoPrincipalId == produtoPrincipalId).ToListAsync();
         var novosIds  = lista.Select(i => i.ProdutoRelacionadoId).ToHashSet();
         var ateaisIds = atuais.Select(a => a.ProdutoRelacionadoId).ToHashSet();
 
         _ctx.ProdutosAgregados.RemoveRange(atuais.Where(a => !novosIds.Contains(a.ProdutoRelacionadoId)));
 
+        // Achado (10/09) — "atuais" vinha sem AsTracking() (AppDbContext é
+        // NoTracking global), então mudar Ordem numa linha existente nunca
+        // persistia. Corrigido acima, adicionando .AsTracking() na consulta.
         foreach (var atual in atuais.Where(a => novosIds.Contains(a.ProdutoRelacionadoId)))
         {
             var item = lista.First(i => i.ProdutoRelacionadoId == atual.ProdutoRelacionadoId);
             if (atual.Ordem != item.Ordem) atual.Ordem = item.Ordem;
         }
 
+        // Achado (10/09) — BUG PRINCIPAL: TenantId nunca era setado aqui.
+        // A linha nova salvava com TenantId vazio (Guid.Empty), e como toda
+        // consulta subsequente filtra por tenant (HasQueryFilter), a
+        // sugestão recém-adicionada nunca mais aparecia — parecia "sumir",
+        // mas na real ficava salva no banco, invisível pro tenant certo.
         await _ctx.ProdutosAgregados.AddRangeAsync(lista
             .Where(i => !ateaisIds.Contains(i.ProdutoRelacionadoId))
             .Select(i => new ProdutoAgregado
             {
+                TenantId             = _tenant.TenantId,
                 ProdutoPrincipalId   = produtoPrincipalId,
                 ProdutoRelacionadoId = i.ProdutoRelacionadoId,
                 Ordem                = i.Ordem

@@ -81,6 +81,8 @@ public class MappingProfile : Profile
                 s.Status,
                 string.Join(", ", s.Payments.Select(p => p.PaymentMethod.ToString())),
                 s.Total,
+                s.Subtotal,
+                s.DiscountAmount,
                 s.NfceChave,
                 s.NfceNumero,
                 s.NfceUrlDanfe,

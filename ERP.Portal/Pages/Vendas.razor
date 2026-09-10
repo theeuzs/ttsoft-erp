@@ -76,7 +76,8 @@
                                       : v.Status == "Cancelada" ? "#EF4444" : "#F59E0B";
                         var statusBg  = v.Status == "NotaEmitida" ? "#D1FAE5"
                                       : v.Status == "Cancelada" ? "#FEE2E2" : "#FEF3C7";
-                        <tr style="border-bottom:1px solid #F1F5F9;"
+                        <tr style="border-bottom:1px solid #F1F5F9; cursor:pointer;"
+                            @onclick="() => AbrirDetalheAsync(v.Id)"
                             onmouseover="this.style.background='#F8FAFC'"
                             onmouseout="this.style.background=''">
                             <td style="@Td; color:#64748B; font-size:12px;">
@@ -88,7 +89,7 @@
                             <td style="@Td; color:#64748B;">@(v.SellerName ?? "—")</td>
                             <td style="@Td; text-align:right; color:#64748B;">@v.Subtotal.ToString("C")</td>
                             <td style="@Td; text-align:right; color:#EF4444;">
-                                @((v.Subtotal - v.Total) > 0 ? $"-{(v.Subtotal - v.Total).ToString("C")}" : "—")
+                                @(v.DiscountAmount > 0 ? $"-{v.DiscountAmount.ToString("C")}" : "—")
                             </td>
                             <td style="@Td; text-align:right; font-weight:800; color:#1E293B;">
                                 @v.Total.ToString("C")
@@ -105,9 +106,126 @@
             </table>
         }
     </div>
+
+    @if (_detalheAberto)
+    {
+        <div @onclick="() => _detalheAberto = false"
+             style="position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000;
+                    display:flex; align-items:center; justify-content:center;">
+            <div @onclick:stopPropagation="true"
+                 style="background:white; border-radius:12px; width:600px; max-width:92vw;
+                        max-height:85vh; overflow-y:auto; padding:24px;">
+                @if (_loadingDetalhe)
+                {
+                    <div style="text-align:center; padding:40px; color:#94A3B8;">Carregando...</div>
+                }
+                else if (_detalhe != null)
+                {
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+                        <div>
+                            <h3 style="margin:0; color:#1E293B;">Venda @_detalhe.SaleNumber</h3>
+                            <div style="font-size:12px; color:#94A3B8; margin-top:4px;">
+                                @_detalhe.SaleDate.ToString("dd/MM/yyyy HH:mm") · @(_detalhe.CustomerName ?? "Consumidor Final")
+                            </div>
+                        </div>
+                        <button @onclick="() => _detalheAberto = false"
+                                style="background:none; border:none; font-size:20px; cursor:pointer; color:#94A3B8;">✕</button>
+                    </div>
+
+                    <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:8px;">ITENS</div>
+                    <table style="width:100%; border-collapse:collapse; margin-bottom:16px;">
+                        <thead>
+                            <tr style="border-bottom:1px solid #E2E8F0;">
+                                <th style="text-align:left; font-size:11px; color:#94A3B8; padding:6px 4px;">PRODUTO</th>
+                                <th style="text-align:right; font-size:11px; color:#94A3B8; padding:6px 4px;">QTD</th>
+                                <th style="text-align:right; font-size:11px; color:#94A3B8; padding:6px 4px;">UNIT.</th>
+                                <th style="text-align:right; font-size:11px; color:#94A3B8; padding:6px 4px;">TOTAL</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in _detalhe.Items)
+                            {
+                                <tr style="border-bottom:1px solid #F1F5F9;">
+                                    <td style="font-size:13px; padding:6px 4px;">@item.ProductName</td>
+                                    <td style="text-align:right; font-size:13px; padding:6px 4px;">@item.Quantity.ToString("0.##")</td>
+                                    <td style="text-align:right; font-size:13px; padding:6px 4px;">@item.UnitPrice.ToString("C")</td>
+                                    <td style="text-align:right; font-size:13px; font-weight:600; padding:6px 4px;">@item.TotalPrice.ToString("C")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+
+                    <div style="font-size:12px; font-weight:700; color:#64748B; margin-bottom:8px;">PAGAMENTO</div>
+                    @foreach (var pag in _detalhe.Payments)
+                    {
+                        <div style="display:flex; justify-content:space-between; font-size:13px; padding:4px 0;">
+                            <span>@pag.PaymentMethod</span>
+                            <span style="font-weight:600;">@pag.Amount.ToString("C")</span>
+                        </div>
+                    }
+
+                    <div style="border-top:1px solid #E2E8F0; margin-top:12px; padding-top:12px;">
+                        <div style="display:flex; justify-content:space-between; font-size:13px; color:#64748B;">
+                            <span>Subtotal</span><span>@_detalhe.Subtotal.ToString("C")</span>
+                        </div>
+                        @if (_detalhe.DiscountAmount > 0)
+                        {
+                            <div style="display:flex; justify-content:space-between; font-size:13px; color:#EF4444;">
+                                <span>Desconto</span><span>-@_detalhe.DiscountAmount.ToString("C")</span>
+                            </div>
+                        }
+                        <div style="display:flex; justify-content:space-between; font-size:16px; font-weight:800; color:#1E293B; margin-top:4px;">
+                            <span>Total</span><span>@_detalhe.Total.ToString("C")</span>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div style="text-align:center; padding:40px; color:#94A3B8;">Não foi possível carregar essa venda.</div>
+                }
+            </div>
+        </div>
+    }
 </div>
 
 @code {
+    private bool _detalheAberto;
+    private bool _loadingDetalhe;
+    private VendaDetalheItem? _detalhe;
+
+    private async Task AbrirDetalheAsync(Guid id)
+    {
+        _detalheAberto  = true;
+        _loadingDetalhe = true;
+        _detalhe        = await Api.GetAsync<VendaDetalheItem>($"api/Sales/{id}");
+        _loadingDetalhe = false;
+    }
+
+    public class VendaDetalheItem
+    {
+        public string SaleNumber { get; set; } = "";
+        public string? CustomerName { get; set; }
+        public DateTime SaleDate { get; set; }
+        public decimal Subtotal { get; set; }
+        public decimal DiscountAmount { get; set; }
+        public decimal Total { get; set; }
+        public List<VendaPagamentoItem> Payments { get; set; } = [];
+        public List<VendaItemDetalhe> Items { get; set; } = [];
+    }
+
+    public class VendaPagamentoItem
+    {
+        public string PaymentMethod { get; set; } = "";
+        public decimal Amount { get; set; }
+    }
+
+    public class VendaItemDetalhe
+    {
+        public string ProductName { get; set; } = "";
+        public decimal Quantity { get; set; }
+        public decimal UnitPrice { get; set; }
+        public decimal TotalPrice { get; set; }
+    }
     private VendaItem[]? _vendas;
     private DateTime _de  = DateTime.Today.AddDays(-30);
     private DateTime _ate = DateTime.Today;
@@ -146,6 +264,8 @@
 
         public decimal Subtotal { get; set; }
         public decimal ValorSubtotal { set { Subtotal = value; } }
+
+        public decimal DiscountAmount { get; set; }
 
         public string Status { get; set; } = "";
     }

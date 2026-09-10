@@ -256,7 +256,14 @@
                 new[] { 25, 20, 30, 20, 5 },
                 new[] { "#27AE60", "#1E62A6", "#8B5CF6", "#F59E0B", "#EF4444" });
         }
-        catch { /* Chart.js ainda carregando */ }
+        catch (Exception ex)
+        {
+            // Achado (09/09) — esse catch assumia sempre "Chart.js ainda
+            // carregando" e escondia qualquer outro erro real (função JS
+            // renomeada, biblioteca não carregada, formato de dado errado).
+            // Loga no console do navegador (F12) pra dar pra diagnosticar.
+            Console.WriteLine($"Dashboard: falha ao renderizar gráficos — {ex.Message}");
+        }
     }
 
     public class VendaItem
