@@ -5,25 +5,589 @@
 @inject IJSRuntime JS
 
 <style>
-    .pdv-grid { display: grid; grid-template-columns: 1fr 380px; gap: 0; height: calc(100vh - 54px); }
-    .pdv-produtos { padding: 16px; overflow-y: auto; background: #F1F5F9; }
-    .pdv-carrinho { background: white; display: flex; flex-direction: column; border-left: 1px solid #E2E8F0; }
-    .produto-card { background: white; border-radius: 10px; padding: 12px; cursor: pointer;
-                    border: 2px solid transparent; transition: all .15s; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
-    .produto-card:hover { border-color: #1E62A6; background: #EFF6FF; }
-    /* S3.5: highlight ao adicionar produto */
-    .produto-card.flash { border-color: #F59E0B !important; background: #FEF3C7 !important; }
-    .carrinho-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px;
-                     border-bottom: 1px solid #F1F5F9; }
-    /* S3.5: animação do item recém-adicionado */
-    .carrinho-item.novo { animation: item-novo .5s ease; }
-    @@keyframes item-novo { 0% { background:#FEF3C7; } 100% { background:transparent; } }
-    /* S3.5: animação do total */
-    .total-animado { transition: color .3s ease; }
-    .total-animado.mudou { color: #10B981 !important; }
+    /* =========================================================
+       PDV
+       ========================================================= */
+
+    .pdv-page {
+        height: calc(100vh - 54px);
+        overflow: hidden;
+        background: #F1F5F9;
+    }
+
+    .pdv-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 390px;
+        height: 100%;
+    }
+
+    /* =========================================================
+       PRODUTOS
+       ========================================================= */
+
+    .pdv-produtos {
+        min-width: 0;
+        padding: 18px;
+        overflow-y: auto;
+        background: #F1F5F9;
+    }
+
+    .pdv-topbar {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 16px;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .pdv-search {
+        flex: 1;
+        min-width: 0;
+        height: 48px;
+        padding: 0 16px;
+        border: 1px solid #E2E8F0;
+        border-radius: 12px;
+        background: white;
+        font-size: 15px;
+        outline: none;
+        box-shadow: 0 2px 8px rgba(15,23,42,.04);
+    }
+
+    .pdv-search:focus {
+        border-color: #1E62A6;
+        box-shadow: 0 0 0 3px rgba(30,98,166,.10);
+    }
+
+    .pdv-filter {
+        height: 48px;
+        padding: 0 15px;
+        border: 1px solid #E2E8F0;
+        border-radius: 12px;
+        background: white;
+        color: #475569;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .produtos-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+        gap: 12px;
+    }
+
+    .produto-card {
+        background: white;
+        border: 2px solid transparent;
+        border-radius: 14px;
+        padding: 14px;
+        min-height: 125px;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(15,23,42,.05);
+        transition:
+            transform .12s ease,
+            border-color .12s ease,
+            box-shadow .12s ease,
+            background .12s ease;
+        user-select: none;
+    }
+
+    .produto-card:hover {
+        border-color: #1E62A6;
+        background: #F8FBFF;
+        box-shadow: 0 5px 16px rgba(15,23,42,.08);
+    }
+
+    .produto-card:active {
+        transform: scale(.97);
+    }
+
+    .produto-card.flash {
+        border-color: #10B981 !important;
+        background: #ECFDF5 !important;
+        transform: scale(.98);
+    }
+
+    .produto-codigo {
+        font-size: 10px;
+        color: #94A3B8;
+        margin-bottom: 6px;
+        font-family: monospace;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .produto-nome {
+        font-size: 13px;
+        font-weight: 750;
+        line-height: 1.35;
+        color: #1E293B;
+        min-height: 36px;
+    }
+
+    .produto-bottom {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 12px;
+    }
+
+    .produto-preco {
+        font-size: 17px;
+        font-weight: 850;
+        color: #1E62A6;
+        white-space: nowrap;
+    }
+
+    .produto-estoque {
+        font-size: 10px;
+        font-weight: 750;
+        padding: 4px 7px;
+        border-radius: 6px;
+        white-space: nowrap;
+    }
+
+    /* =========================================================
+       CARRINHO DESKTOP
+       ========================================================= */
+
+    .pdv-carrinho {
+        background: white;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        border-left: 1px solid #E2E8F0;
+        box-shadow: -5px 0 18px rgba(15,23,42,.04);
+        z-index: 20;
+    }
+
+    .carrinho-header {
+        padding: 17px;
+        border-bottom: 1px solid #F1F5F9;
+    }
+
+    .carrinho-titulo {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .carrinho-titulo strong {
+        font-size: 17px;
+        color: #1E293B;
+    }
+
+    .limpar-btn {
+        border: 0;
+        background: transparent;
+        color: #EF4444;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .cliente-box {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+    }
+
+    .cliente-input {
+        flex: 1;
+        min-width: 0;
+        height: 40px;
+        padding: 0 11px;
+        border: 1px solid #E2E8F0;
+        border-radius: 9px;
+        font-size: 13px;
+        outline: none;
+    }
+
+    .cliente-search {
+        width: 42px;
+        border: 0;
+        border-radius: 9px;
+        background: #F1F5F9;
+        cursor: pointer;
+    }
+
+    .carrinho-lista {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+    }
+
+    .carrinho-vazio {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 30px;
+        color: #94A3B8;
+        font-size: 13px;
+    }
+
+    .carrinho-vazio-icon {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        background: #F1F5F9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        margin-bottom: 12px;
+    }
+
+    .carrinho-item {
+        display: grid;
+        grid-template-columns: minmax(0,1fr) auto;
+        gap: 8px;
+        padding: 13px 16px;
+        border-bottom: 1px solid #F1F5F9;
+    }
+
+    .item-info {
+        min-width: 0;
+    }
+
+    .item-nome {
+        font-size: 13px;
+        font-weight: 700;
+        color: #1E293B;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .item-preco {
+        margin-top: 3px;
+        color: #64748B;
+        font-size: 11px;
+    }
+
+    .item-total {
+        text-align: right;
+        font-size: 14px;
+        font-weight: 850;
+        color: #1E293B;
+    }
+
+    .item-controles {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .qtd-btn {
+        width: 34px;
+        height: 32px;
+        border: 1px solid #E2E8F0;
+        background: white;
+        border-radius: 8px;
+        font-size: 17px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .qtd-btn:active {
+        background: #F1F5F9;
+    }
+
+    .qtd {
+        min-width: 35px;
+        text-align: center;
+        font-size: 14px;
+        font-weight: 800;
+    }
+
+    .remover-btn {
+        margin-left: auto;
+        width: 32px;
+        height: 32px;
+        border: 0;
+        border-radius: 8px;
+        background: #FEF2F2;
+        color: #EF4444;
+        cursor: pointer;
+    }
+
+    /* =========================================================
+       RODAPÉ CARRINHO
+       ========================================================= */
+
+    .carrinho-footer {
+        border-top: 2px solid #E2E8F0;
+        background: #FAFAFA;
+        padding: 14px 16px;
+    }
+
+    .desconto-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .desconto-row label {
+        font-size: 12px;
+        font-weight: 700;
+        color: #64748B;
+    }
+
+    .desconto-input {
+        width: 100px;
+        height: 34px;
+        padding: 0 8px;
+        border: 1px solid #E2E8F0;
+        border-radius: 7px;
+    }
+
+    .subtotal-row,
+    .desconto-total-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        margin-bottom: 5px;
+    }
+
+    .subtotal-row {
+        color: #64748B;
+    }
+
+    .desconto-total-row {
+        color: #EF4444;
+    }
+
+    .total-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 10px 0 14px;
+    }
+
+    .total-label {
+        font-size: 18px;
+        font-weight: 850;
+        color: #1E293B;
+    }
+
+    .total-valor {
+        font-size: 25px;
+        font-weight: 900;
+        color: #1E293B;
+        transition: color .3s ease;
+    }
+
+    .total-valor.mudou {
+        color: #10B981 !important;
+    }
+
+    .pagamentos {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 7px;
+        margin-bottom: 10px;
+    }
+
+    .pagamento-btn {
+        min-height: 42px;
+        border: 2px solid #E2E8F0;
+        border-radius: 9px;
+        background: white;
+        color: #64748B;
+        font-size: 12px;
+        font-weight: 750;
+        cursor: pointer;
+    }
+
+    .pagamento-btn.ativo {
+        border-color: #1E62A6;
+        background: #EFF6FF;
+        color: #1E62A6;
+    }
+
+    .finalizar-btn {
+        width: 100%;
+        height: 52px;
+        border: 0;
+        border-radius: 11px;
+        color: white;
+        font-size: 15px;
+        font-weight: 850;
+        cursor: pointer;
+    }
+
+    /* =========================================================
+       BARRA MOBILE
+       ========================================================= */
+
+    .mobile-carrinho-bar {
+        display: none;
+    }
+
+    /* =========================================================
+       MOBILE
+       ========================================================= */
+
     @@media (max-width: 768px) {
-        .pdv-grid { grid-template-columns: 1fr; }
-        .pdv-carrinho { position: fixed; bottom: 0; left: 0; right: 0; max-height: 50vh; z-index: 50; }
+
+        .pdv-page {
+            height: calc(100vh - 54px);
+        }
+
+        .pdv-grid {
+            display: block;
+            height: 100%;
+        }
+
+        .pdv-produtos {
+            height: 100%;
+            padding: 10px 10px 85px;
+        }
+
+        .pdv-topbar {
+            margin-bottom: 10px;
+        }
+
+        .pdv-search {
+            height: 50px;
+            font-size: 16px;
+            border-radius: 13px;
+        }
+
+        .pdv-filter {
+            width: 48px;
+            padding: 0;
+            font-size: 0;
+        }
+
+        .pdv-filter::after {
+            content: "☰";
+            font-size: 19px;
+        }
+
+        .produtos-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 9px;
+        }
+
+        .produto-card {
+            padding: 12px;
+            min-height: 122px;
+            border-radius: 12px;
+        }
+
+        .produto-nome {
+            font-size: 12px;
+        }
+
+        .produto-preco {
+            font-size: 15px;
+        }
+
+        .produto-estoque {
+            display: none;
+        }
+
+        /* Carrinho vira tela inteira */
+        .pdv-carrinho {
+            position: fixed;
+            inset: 0;
+            height: 100dvh;
+            width: 100%;
+            z-index: 100;
+            border: 0;
+            transform: translateX(100%);
+            transition: transform .22s ease;
+        }
+
+        .pdv-carrinho.aberto {
+            transform: translateX(0);
+        }
+
+        .carrinho-header {
+            padding-top: max(14px, env(safe-area-inset-top));
+        }
+
+        .carrinho-voltar {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            border: 0;
+            background: transparent;
+            color: #64748B;
+            font-weight: 700;
+            margin-bottom: 8px;
+            padding: 0;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .carrinho-footer {
+            padding-bottom: max(14px, env(safe-area-inset-bottom));
+        }
+
+        /* Barra fixa inferior */
+        .mobile-carrinho-bar {
+            position: fixed;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            left: 10px;
+            right: 10px;
+            bottom: max(10px, env(safe-area-inset-bottom));
+            height: 62px;
+            padding: 7px 8px 7px 14px;
+            background: #1E293B;
+            border-radius: 15px;
+            box-shadow: 0 8px 30px rgba(15,23,42,.25);
+            z-index: 80;
+            color: white;
+        }
+
+        .mobile-carrinho-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .mobile-carrinho-qtd {
+            font-size: 11px;
+            color: #CBD5E1;
+        }
+
+        .mobile-carrinho-total {
+            font-size: 17px;
+            font-weight: 850;
+        }
+
+        .mobile-carrinho-button {
+            height: 48px;
+            padding: 0 15px;
+            border: 0;
+            border-radius: 11px;
+            background: #1E62A6;
+            color: white;
+            font-size: 12px;
+            font-weight: 850;
+            cursor: pointer;
+        }
+
+        .mobile-fechar {
+            display: block;
+        }
+    }
+
+    @@media (min-width: 769px) {
+        .carrinho-voltar,
+        .mobile-fechar {
+            display: none;
+        }
     }
 </style>
 
@@ -124,207 +688,7 @@
     </div>
 }
 
-<div class="pdv-grid">
-    <!-- Painel esquerdo: produtos -->
-    <div class="pdv-produtos">
-        <div style="display:flex; gap:10px; margin-bottom:16px;">
-            <input @bind="_busca" @bind:event="oninput" @onkeyup="BuscarProdutos"
-                   placeholder="🔍 Buscar produto, código de barras..."
-                   style="flex:1; padding:12px 16px; border:1px solid #E2E8F0; border-radius:10px;
-                   font-size:15px; background:white;"/>
-            <button @onclick="ToggleMostrarTodos"
-                    style="background:white; border:1px solid #E2E8F0; padding:10px 16px;
-                    border-radius:10px; cursor:pointer; font-size:13px; font-weight:600; color:#64748B;">
-                @(_mostrarTodos ? "⬆ Menos" : "📦 Todos")
-            </button>
-        </div>
-
-        @if (_loadingProdutos)
-        {
-            <div style="text-align:center; padding:40px; color:#94A3B8;">Carregando...</div>
-        }
-        else
-        {
-            <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px;">
-                @foreach (var p in _produtos ?? [])
-                {
-                    var flashClass = _flashProdutoId == p.Id ? "produto-card flash" : "produto-card";
-                    <div class="@flashClass" @onclick="() => AdicionarItemAsync(p)">
-                        <div style="font-size:11px; color:#94A3B8; margin-bottom:4px;
-                             font-family:monospace; overflow:hidden; text-overflow:ellipsis;">
-                            @(p.Barcode ?? p.Sku ?? "—")
-                        </div>
-                        <div style="font-size:13px; font-weight:700; color:#1E293B; margin-bottom:8px;
-                             line-height:1.3; min-height:36px;">
-                            @(p.Name.Length > 40 ? p.Name[..40] + "…" : p.Name)
-                        </div>
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span style="font-size:16px; font-weight:800; color:#1E62A6;">
-                                @p.SalePrice.ToString("C")
-                            </span>
-                            <span style="font-size:11px; color:@(p.Stock > 0 ? "#27AE60" : "#EF4444");
-                                  font-weight:700; background:@(p.Stock > 0 ? "#D1FAE5" : "#FEE2E2");
-                                  padding:2px 6px; border-radius:4px;">
-                                @(p.Stock > 0 ? $"{p.Stock:F0} {p.Unit}" : "Sem estoque")
-                            </span>
-                        </div>
-                    </div>
-                }
-            </div>
-        }
-    </div>
-
-    <!-- Painel direito: carrinho -->
-    <div class="pdv-carrinho">
-        <div style="padding:16px; border-bottom:1px solid #F1F5F9;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-weight:800; font-size:16px; color:#1E293B;">🛒 Carrinho</span>
-                @if (_itens.Any())
-                {
-                    <button @onclick="LimparCarrinho"
-                            style="background:none; border:none; color:#EF4444; cursor:pointer;
-                            font-size:12px; font-weight:600;">
-                        ✕ Limpar
-                    </button>
-                }
-            </div>
-            <div style="margin-top:10px; display:flex; gap:8px;">
-                <input @bind="_nomeCliente" placeholder="Cliente (opcional)..."
-                       style="flex:1; padding:8px 10px; border:1px solid #E2E8F0; border-radius:8px;
-                       font-size:13px;"/>
-                <button @onclick="BuscarClienteAsync"
-                        style="background:#F1F5F9; border:none; padding:8px 12px; border-radius:8px;
-                        cursor:pointer; font-size:12px; font-weight:600; color:#64748B;">
-                    🔍
-                </button>
-            </div>
-        </div>
-
-        <div style="flex:1; overflow-y:auto;">
-            @if (!_itens.Any())
-            {
-                <div style="text-align:center; padding:40px; color:#94A3B8;">
-                    <div style="font-size:32px; margin-bottom:8px;">🛒</div>
-                    Toque em um produto para adicionar
-                </div>
-            }
-            else
-            {
-                @foreach (var item in _itens)
-                {
-                    var isNovo = _ultimoItemId == item.ProdutoId;
-                    <div class="carrinho-item @(isNovo ? "novo" : "")">
-                        <div style="flex:1; min-width:0;">
-                            <div style="font-size:13px; font-weight:600; color:#1E293B;
-                                 overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                                @item.Nome
-                            </div>
-                            <div style="font-size:12px; color:#64748B;">
-                                @item.PrecoUnitario.ToString("C") × @item.Quantidade
-                            </div>
-                        </div>
-                        <div style="display:flex; align-items:center; gap:6px;">
-                            <button @onclick="() => AlterarQtd(item, -1)"
-                                    style="width:28px; height:28px; border:1px solid #E2E8F0;
-                                    border-radius:6px; background:white; cursor:pointer; font-size:16px;">
-                                −
-                            </button>
-                            <span style="font-size:14px; font-weight:700; min-width:24px; text-align:center;">
-                                @item.Quantidade
-                            </span>
-                            <button @onclick="() => AlterarQtd(item, 1)"
-                                    style="width:28px; height:28px; border:1px solid #E2E8F0;
-                                    border-radius:6px; background:white; cursor:pointer; font-size:16px;">
-                                +
-                            </button>
-                        </div>
-                        <div style="font-weight:800; color:#1E293B; min-width:70px; text-align:right;">
-                            @item.Total.ToString("C")
-                        </div>
-                        <button @onclick="() => RemoverItem(item)"
-                                style="background:none; border:none; color:#EF4444; cursor:pointer;
-                                padding:4px; font-size:16px;">✕</button>
-                    </div>
-                }
-            }
-        </div>
-
-        @if (_itens.Any())
-        {
-            <div style="padding:12px 16px; border-top:1px solid #F1F5F9; display:flex; flex-direction:column; gap:6px;">
-                <div style="display:flex; gap:8px; align-items:center;">
-                    <span style="font-size:12px; color:#64748B; font-weight:600; white-space:nowrap;">Desconto:</span>
-                    <input type="number"
-       value="@_desconto"
-       @oninput="ValidarDesconto"
-       min="0" step="0.50"
-                           style="flex:1; padding:6px 10px; border:1px solid @(_erroDesconto != null ? "#EF4444" : "#E2E8F0");
-                                  border-radius:6px; font-size:13px;"/>
-                    <span style="font-size:12px; color:#64748B;">R$</span>
-                </div>
-                <!-- S3.3: aviso de desconto excedido -->
-                @if (_erroDesconto != null)
-                {
-                    <div style="font-size:11px; color:#EF4444; font-weight:600; padding:4px 8px;
-                                background:#FEE2E2; border-radius:6px;">
-                        🚫 @_erroDesconto
-                    </div>
-                }
-                @if (_maxDesconto > 0)
-                {
-                    <div style="font-size:11px; color:#94A3B8;">
-                        Seu limite: @_maxDesconto.ToString("F0")% do subtotal
-                        (@(Subtotal * _maxDesconto / 100).ToString("C"))
-                    </div>
-                }
-            </div>
-        }
-
-        <div style="padding:16px; border-top:2px solid #E2E8F0; background:#FAFAFA;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:13px; color:#64748B;">
-                <span>Subtotal</span><span>@Subtotal.ToString("C")</span>
-            </div>
-            @if (_desconto > 0)
-            {
-                <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:13px; color:#EF4444;">
-                    <span>Desconto</span><span>-@_desconto.ToString("C")</span>
-                </div>
-            }
-            <!-- S3.5: animação do total -->
-            <div style="display:flex; justify-content:space-between; margin-bottom:16px;
-                 font-size:20px; font-weight:800;">
-                <span style="color:#1E293B;">TOTAL</span>
-                <span class="total-animado @(_totalAnimando ? "mudou" : "")"
-                      style="color:@(_totalAnimando ? "#10B981" : "#1E293B");">
-                    @Total.ToString("C")
-                </span>
-            </div>
-
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:12px;">
-                @foreach (var (forma, icone) in new[]{("Dinheiro","💵"),("Cartão Débito","💳"),("Cartão Crédito","💳"),("PIX","📲"),("Fiado","📋")})
-                {
-                    <button @onclick="@(() => _formaPagamento = forma)"
-                            style="padding:8px; border:2px solid @(_formaPagamento == forma ? "#1E62A6" : "#E2E8F0");
-                            border-radius:8px; background:@(_formaPagamento == forma ? "#EFF6FF" : "white");
-                            color:@(_formaPagamento == forma ? "#1E62A6" : "#64748B");
-                            font-size:12px; font-weight:700; cursor:pointer;">
-                        @icone @forma
-                    </button>
-                }
-            </div>
-
-            <button @onclick="AbrirModalFiscal"
-                    disabled="@(!_itens.Any() || _finalizando || _erroDesconto != null)"
-                    style="width:100%; padding:16px;
-                    background:@(!_itens.Any() || _erroDesconto != null ? "#94A3B8" : "#27AE60");
-                    color:white; border:none; border-radius:10px; font-size:16px; font-weight:800;
-                    cursor:@(!_itens.Any() || _erroDesconto != null ? "not-allowed" : "pointer");">
-                @(_finalizando ? "⏳ Finalizando..." : $"✅ Finalizar Venda — {Total.ToString("C")}")
-            </button>
-        </div>
-    </div>
-</div>
-
+<!-- ── Mensagem Toast (Sucesso/Erro) ──────────────────────────────────────── -->
 @if (_mensagem != null)
 {
     <div style="position:fixed; top:70px; left:50%; transform:translateX(-50%);
@@ -335,20 +699,242 @@
     </div>
 }
 
+<div class="pdv-page">
+    <div class="pdv-grid">
+
+        <!-- =====================================================
+             PRODUTOS
+             ===================================================== -->
+        <div class="pdv-produtos">
+            <div class="pdv-topbar">
+                <input class="pdv-search"
+                       @bind="_busca"
+                       @bind:event="oninput"
+                       @onkeyup="BuscarProdutos"
+                       placeholder="🔎 Buscar produto ou código..." />
+
+                <button class="pdv-filter" @onclick="ToggleMostrarTodos">
+                    @(_mostrarTodos ? "Menos" : "📦 Todos")
+                </button>
+            </div>
+
+            @if (_loadingProdutos)
+            {
+                <div style="text-align:center;padding:50px;color:#94A3B8;">
+                    Carregando produtos...
+                </div>
+            }
+            else
+            {
+                <div class="produtos-grid">
+                    @foreach (var p in _produtos ?? [])
+                    {
+                        var flashClass = _flashProdutoId == p.Id ? "produto-card flash" : "produto-card";
+
+                        <div class="@flashClass" @onclick="() => AdicionarItemAsync(p)">
+                            <div class="produto-codigo">
+                                @(p.Barcode ?? p.Sku ?? "Sem código")
+                            </div>
+
+                            <div class="produto-nome">
+                                @(p.Name.Length > 45 ? p.Name[..45] + "…" : p.Name)
+                            </div>
+
+                            <div class="produto-bottom">
+                                <span class="produto-preco">
+                                    @p.SalePrice.ToString("C")
+                                </span>
+
+                                <span class="produto-estoque"
+                                      style="color:@(p.Stock > 0 ? "#059669" : "#DC2626");
+                                             background:@(p.Stock > 0 ? "#D1FAE5" : "#FEE2E2");">
+                                    @(p.Stock > 0 ? $"{p.Stock:F0} {p.Unit}" : "Sem estoque")
+                                </span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- =====================================================
+             CARRINHO
+             ===================================================== -->
+        <div class="pdv-carrinho @(_carrinhoAberto ? "aberto" : "")">
+            <div class="carrinho-header">
+                <button class="carrinho-voltar" @onclick="FecharCarrinho">
+                    ← Voltar
+                </button>
+
+                <div class="carrinho-titulo">
+                    <strong>🛒 Carrinho</strong>
+                    @if (_itens.Any())
+                    {
+                        <button class="limpar-btn" @onclick="LimparCarrinho">
+                            Limpar
+                        </button>
+                    }
+                </div>
+
+                <div class="cliente-box">
+                    <input class="cliente-input"
+                           @bind="_nomeCliente"
+                           placeholder="Cliente (opcional)" />
+                    <button class="cliente-search" @onclick="BuscarClienteAsync">
+                        🔎
+                    </button>
+                </div>
+            </div>
+
+            <!-- LISTA -->
+            <div class="carrinho-lista">
+                @if (!_itens.Any())
+                {
+                    <div class="carrinho-vazio">
+                        <div class="carrinho-vazio-icon">🛒</div>
+                        <strong>Carrinho vazio</strong>
+                        <span style="margin-top:5px;">Toque em um produto para adicionar</span>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var item in _itens)
+                    {
+                        var isNovo = _ultimoItemId == item.ProdutoId;
+
+                        <div class="carrinho-item @(isNovo ? "novo" : "")">
+                            <div class="item-info">
+                                <div class="item-nome">@item.Nome</div>
+                                <div class="item-preco">
+                                    @item.PrecoUnitario.ToString("C") × @item.Quantidade
+                                </div>
+                            </div>
+                            <div class="item-total">
+                                @item.Total.ToString("C")
+                            </div>
+
+                            <div class="item-controles">
+                                <button class="qtd-btn" @onclick="() => AlterarQtd(item, -1)">−</button>
+                                <span class="qtd">@item.Quantidade</span>
+                                <button class="qtd-btn" @onclick="() => AlterarQtd(item, 1)">+</button>
+                                <button class="remover-btn" @onclick="() => RemoverItem(item)">✕</button>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <!-- =================================================
+                 FOOTER DO CARRINHO
+                 ================================================= -->
+            <div class="carrinho-footer">
+                @if (_itens.Any())
+                {
+                    <div class="desconto-row">
+                        <label>Desconto</label>
+                        <input class="desconto-input"
+                               type="number"
+                               value="@_desconto"
+                               @oninput="ValidarDesconto"
+                               min="0"
+                               step="0.50" />
+                        <span>R$</span>
+                    </div>
+
+                    @if (_erroDesconto != null)
+                    {
+                        <div style="font-size:11px; color:#DC2626; font-weight:700; background:#FEF2F2;
+                                    padding:7px 9px; border-radius:7px; margin-bottom:8px;">
+                            🚫 @_erroDesconto
+                        </div>
+                    }
+                    @if (_maxDesconto > 0 && _erroDesconto == null)
+                    {
+                        <div style="font-size:11px; color:#94A3B8; margin-bottom:8px;">
+                            Limite: @_maxDesconto.ToString("F0")% (@(Subtotal * _maxDesconto / 100).ToString("C"))
+                        </div>
+                    }
+
+                    <div class="subtotal-row">
+                        <span>Subtotal</span>
+                        <span>@Subtotal.ToString("C")</span>
+                    </div>
+
+                    @if (_desconto > 0)
+                    {
+                        <div class="desconto-total-row">
+                            <span>Desconto</span>
+                            <span>-@_desconto.ToString("C")</span>
+                        </div>
+                    }
+
+                    <div class="total-row">
+                        <span class="total-label">TOTAL</span>
+                        <span class="total-valor @(_totalAnimando ? "mudou" : "")">
+                            @Total.ToString("C")
+                        </span>
+                    </div>
+
+                    <!-- PAGAMENTOS -->
+                    <div class="pagamentos">
+                        @foreach (var (forma, icone) in new[] {
+                            ("Dinheiro","💵"), ("Cartão Débito","💳"),
+                            ("Cartão Crédito","💳"), ("PIX","📲"), ("Fiado","📋")
+                        })
+                        {
+                            <button class="pagamento-btn @(_formaPagamento == forma ? "ativo" : "")"
+                                    @onclick="@(() => _formaPagamento = forma)">
+                                @icone @forma
+                            </button>
+                        }
+                    </div>
+
+                    <button class="finalizar-btn"
+                            @onclick="AbrirModalFiscal"
+                            disabled="@(_finalizando || _erroDesconto != null)"
+                            style="background:@(_erroDesconto != null ? "#94A3B8" : "#16A34A");">
+                        @(_finalizando ? "⏳ Finalizando..." : $"✓ Finalizar Venda · {Total.ToString("C")}")
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         BARRA MOBILE INFERIOR (Aciona o Carrinho)
+         ========================================================= -->
+    @if (_itens.Any())
+    {
+        <div class="mobile-carrinho-bar">
+            <div class="mobile-carrinho-info">
+                <div class="mobile-carrinho-qtd">
+                    @QuantidadeItens @(QuantidadeItens == 1 ? "item" : "itens")
+                </div>
+                <div class="mobile-carrinho-total">
+                    @Total.ToString("C")
+                </div>
+            </div>
+            <button class="mobile-carrinho-button" @onclick="AbrirCarrinho">
+                VER CARRINHO →
+            </button>
+        </div>
+    }
+</div>
+
 @code {
     private ProdutoItem[]?     _produtos;
-    private string             _busca           = "";
-    private bool               _mostrarTodos    = false;
-    private bool               _loadingProdutos = true;
-    private List<ItemCarrinho> _itens           = new();
-    private string             _nomeCliente     = "";
+    private string             _busca            = "";
+    private bool               _mostrarTodos     = false;
+    private bool               _loadingProdutos  = true;
+    private List<ItemCarrinho> _itens            = new();
+    private string             _nomeCliente      = "";
     private Guid?              _clienteId;
-    private decimal            _desconto        = 0;
-    private string             _formaPagamento  = "Dinheiro";
-    private bool               _finalizando     = false;
+    private decimal            _desconto         = 0;
+    private string             _formaPagamento   = "Dinheiro";
+    private bool               _finalizando      = false;
     private string?            _mensagem;
-    private bool               _sucesso         = true;
-    private bool               _modalFiscal     = false;
+    private bool               _sucesso          = true;
+    private bool               _modalFiscal      = false;
 
     // S3.3: limite de desconto por cargo
     private decimal _maxDesconto  = 100; // % — padrão antes de carregar o cargo
@@ -358,20 +944,26 @@
     private Guid?  _flashProdutoId;
     private Guid?  _ultimoItemId;
     private bool   _totalAnimando = false;
-    private decimal _totalAnterior = 0;
 
     // Produtos Agregados
     private List<AgregadoItem> _agregados   = [];
     private string             _agregadoPai = "";
 
+    // Mobile UX
+    private bool _carrinhoAberto = false;
+
     private decimal Subtotal => _itens.Sum(i => i.Total);
     private decimal Total    => Math.Max(0, Subtotal - _desconto);
+    private int QuantidadeItens => (int)_itens.Sum(i => i.Quantidade);
 
     protected override async Task OnInitializedAsync()
     {
         await CarregarProdutosAsync();
         await CarregarLimiteDescontoAsync();
     }
+
+    private void AbrirCarrinho() => _carrinhoAberto = true;
+    private void FecharCarrinho() => _carrinhoAberto = false;
 
     // S3.3: carrega o MaxDiscountPercentage do cargo do usuário logado
     private async Task CarregarLimiteDescontoAsync()
@@ -385,7 +977,7 @@
             if (cargo != null)
                 _maxDesconto = cargo.MaxDiscountPercentage;
         }
-        catch (Exception ex) { Console.WriteLine($"PDV: falha ao carregar limite de desconto do cargo, usando fallback — {ex.Message}"); /* mantém _maxDesconto = 100 como fallback seguro */ }
+        catch (Exception ex) { Console.WriteLine($"PDV: falha ao carregar limite de desconto do cargo, usando fallback — {ex.Message}"); }
     }
 
     // S3.3: valida desconto ao digitar — bloqueia antes de finalizar
@@ -504,7 +1096,11 @@
     private void AlterarQtd(ItemCarrinho item, int delta)
     {
         item.Quantidade += delta;
-        if (item.Quantidade <= 0) _itens.Remove(item);
+        if (item.Quantidade <= 0)
+        {
+            _itens.Remove(item);
+            if (!_itens.Any()) FecharCarrinho(); // Fecha o carrinho no mobile se esvaziar
+        }
         ValidarDesconto(new ChangeEventArgs { Value = _desconto.ToString() });
         _ = AnimarTotal();
     }
@@ -512,6 +1108,7 @@
     private void RemoverItem(ItemCarrinho item)
     {
         _itens.Remove(item);
+        if (!_itens.Any()) FecharCarrinho(); // Fecha o carrinho no mobile se esvaziar
         ValidarDesconto(new ChangeEventArgs { Value = _desconto.ToString() });
         _ = AnimarTotal();
     }
@@ -522,6 +1119,7 @@
         _desconto     = 0;
         _clienteId    = null;
         _erroDesconto = null;
+        FecharCarrinho(); // Retorna aos produtos no mobile
     }
 
     private async Task BuscarClienteAsync()
