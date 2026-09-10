@@ -581,6 +581,14 @@
             return;
         }
 
+        // 1. Bloqueia o upload se o produto ainda não foi salvo no banco!
+        // O StorageController recusa (404) imagens para produtos inexistentes.
+        if (_editandoProdutoId == null)
+        {
+            _erroProduto = "Você precisa cadastrar e salvar o produto antes de enviar a imagem.";
+            return;
+        }
+
         _uploadingImagem = true;
         _erroProduto = "";
         StateHasChanged();
@@ -589,16 +597,23 @@
         {
             using var content = new MultipartFormDataContent();
             using var stream  = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
-            
             var fileContent = new StreamContent(stream);
-            fileContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
 
-            // A MUDANÇA ESTÁ AQUI: trocamos "arquivo" para "file", que é o padrão do IFormFile no backend
-            content.Add(fileContent, "file", file.Name);
+            // 2. Forçamos a tradução da extensão para o formato que a API aceita, 
+            // evitando que o Blazor envie "application/octet-stream" acidentalmente.
+            var ext = System.IO.Path.GetExtension(file.Name).ToLower();
+            var mime = ext switch {
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".webp" => "image/webp",
+                _ => "image/jpeg" // Fallback seguro
+            };
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue(mime);
 
-            var uploadId = _editandoProdutoId ?? Guid.NewGuid();
+            // 3. Usa "arquivo" EXATAMENTE como o StorageController está pedindo
+            content.Add(fileContent, "arquivo", file.Name);
 
-            var resp = await Api.PostAsync($"api/storage/produto/{uploadId}/imagem", content);
+            var resp = await Api.PostAsync($"api/storage/produto/{_editandoProdutoId}/imagem", content);
             
             if (resp.IsSuccessStatusCode)
             {
@@ -607,13 +622,16 @@
             }
             else
             {
-                _erroProduto = $"A API recusou o arquivo (Status: {(int)resp.StatusCode}). Verifique se o nome do parâmetro esperado é 'file'.";
+                _erroProduto = $"A API recusou a imagem (Status {(int)resp.StatusCode}). Verifique o formato.";
             }
         }
         catch (Exception ex)
         {
-            // Agora o catch captura a falha do ApiClient caso ele ainda tente ler um JSON de erro inválido
-            _erroProduto = $"Erro interno: A API barrou o upload e o erro não pôde ser lido ({ex.Message}).";
+            // 4. Captura o "pânico" do ApiClient e traduz para português claro
+            if (ex.Message.Contains("ConstructorContainsNullParameterNames"))
+                _erroProduto = "A API bloqueou a imagem (formato inválido), mas seu sistema falhou ao ler o motivo real do erro.";
+            else
+                _erroProduto = $"Erro interno: {ex.Message}";
         }
         finally
         {
