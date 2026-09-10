@@ -63,10 +63,22 @@ public class ApiClient
         catch { return default; }
     }
 
-    public async Task<HttpResponseMessage> PostAsync<T>(string url, T data)
+   public async Task<HttpResponseMessage> PostAsync<T>(string url, T data)
     {
         await PrepararHeaderAsync();
         var response = await _http.PostAsJsonAsync(url, data);
+        await TratarMustChangePasswordAsync(response);
+        return response;
+    }
+
+    /// <summary>
+    /// Envia dados no formato multipart (arquivos, imagens, etc) sem converter para JSON.
+    /// </summary>
+    public async Task<HttpResponseMessage> PostMultipartAsync(string url, MultipartFormDataContent data)
+    {
+        await PrepararHeaderAsync();
+        // Usamos PostAsync normal nativo do .NET, e NÃO o PostAsJsonAsync!
+        var response = await _http.PostAsync(url, data);
         await TratarMustChangePasswordAsync(response);
         return response;
     }

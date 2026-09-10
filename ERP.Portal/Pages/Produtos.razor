@@ -613,7 +613,7 @@
             // 3. Usa "arquivo" EXATAMENTE como o StorageController está pedindo
             content.Add(fileContent, "arquivo", file.Name);
 
-            var resp = await Api.PostAsync($"api/storage/produto/{_editandoProdutoId}/imagem", content);
+            var resp = await Api.PostMultipartAsync($"api/storage/produto/{_editandoProdutoId}/imagem", content);
             
             if (resp.IsSuccessStatusCode)
             {
