@@ -924,6 +924,10 @@
 @code {
     private ProdutoItem[]?     _produtos;
     private string             _busca            = "";
+    // Achado (10/09) — busca disparava a cada tecla, sem debounce, e sem
+    // checar se a resposta ainda correspondia ao texto atual. Respostas
+    // fora de ordem faziam a lista "mudar sozinha" enquanto digitava.
+    private int                _buscaSequencia   = 0;
     private bool               _mostrarTodos     = false;
     private bool               _loadingProdutos  = true;
     private List<ItemCarrinho> _itens            = new();
@@ -1007,8 +1011,31 @@
 
     private async Task BuscarProdutos(KeyboardEventArgs e)
     {
-        if (_busca.Length >= 2 || _busca.Length == 0)
-            await CarregarProdutosAsync(_busca);
+        if (!(_busca.Length >= 2 || _busca.Length == 0)) return;
+
+        var minhaSequencia = ++_buscaSequencia;
+        _loadingProdutos = true;
+
+        // Espera a pessoa parar de digitar (350ms sem tecla nova) antes de
+        // buscar de verdade — sem isso, cada letra digitada disparava uma
+        // chamada própria, todas competindo ao mesmo tempo.
+        await Task.Delay(350);
+        if (minhaSequencia != _buscaSequencia) return; // já tem busca mais nova, descarta essa
+
+        var termoNoMomentoDoEnvio = _busca;
+        var result = await Api.GetAsync<PagedResult<ProdutoItem>>(
+            string.IsNullOrEmpty(termoNoMomentoDoEnvio)
+                ? "api/Products?pageSize=48"
+                : $"api/Products?search={Uri.EscapeDataString(termoNoMomentoDoEnvio)}&pageSize=48");
+
+        // Se, enquanto a chamada estava no ar, o texto mudou de novo, essa
+        // resposta já está desatualizada — descarta, não deixa "piscar"
+        // um resultado de uma busca antiga por cima do que está digitado agora.
+        if (minhaSequencia != _buscaSequencia) return;
+
+        _produtos        = result?.Items ?? [];
+        _loadingProdutos = false;
+        StateHasChanged();
     }
 
     private async Task ToggleMostrarTodos()

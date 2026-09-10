@@ -28,11 +28,16 @@ public class ProductService : IProductService
         var (items, total) = await _uow.Products.GetPagedAsync(
             page:     page,
             pageSize: pageSize,
+            // Achado (10/09) — mesmo bug do ProductRepository.SearchAsync
+            // corrigido hoje mais cedo, só que essa é uma implementação
+            // separada, usada pelo Portal (WPF usa a outra). Barcode/SKU
+            // viram StartsWith — já se beneficiam dos índices TenantId+Barcode
+            // e TenantId+SKU que já existem.
             filter:   string.IsNullOrWhiteSpace(search)
                         ? null
                         : p => p.Name.Contains(search) ||
-                               (p.Barcode != null && p.Barcode.Contains(search)) ||
-                               (p.SKU     != null && p.SKU.Contains(search)),
+                               (p.Barcode != null && p.Barcode.StartsWith(search)) ||
+                               (p.SKU     != null && p.SKU.StartsWith(search)),
             orderBy:  p => p.Name);
 
         return new PagedResult<ProductDto>

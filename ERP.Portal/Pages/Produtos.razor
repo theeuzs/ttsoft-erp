@@ -618,7 +618,7 @@
             if (resp.IsSuccessStatusCode)
             {
                 var result = await resp.Content.ReadFromJsonAsync<UploadResult>();
-                _imagemUrl = !string.IsNullOrEmpty(result?.Url) ? result.Url : result?.url;
+                _imagemUrl = result?.Url;
             }
             else
             {
@@ -640,10 +640,14 @@
         }
     }
 
+    // Achado (10/09) — tinha Url E url (só a maiúscula mudava), e o
+    // System.Text.Json não aceita duas propriedades mapeando pro mesmo nome
+    // JSON, trava com SerializerPropertyNameConflict. ReadFromJsonAsync já
+    // usa comparação sem diferenciar maiúscula/minúscula por padrão, então
+    // só Url já basta pra casar com o "url" que a API devolve.
     class UploadResult 
     { 
         public string? Url { get; set; } 
-        public string? url { get; set; } 
     }
 
     private async Task SalvarProdutoAsync()
