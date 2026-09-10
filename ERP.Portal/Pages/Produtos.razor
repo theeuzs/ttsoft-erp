@@ -319,67 +319,67 @@
 
             <div style="margin-bottom:12px;">
                 <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Nome *</label>
-                <input type="text" value="@_fp.Name" @onchange="e => _fp = _fp with { Name = e.Value?.ToString() ?? string.Empty }"
+                <input type="text" @bind="_fp.Name"
                        style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
                 <div>
                     <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Código de Barras</label>
-                    <input type="text" value="@_fp.Barcode" @onchange="e => _fp = _fp with { Barcode = e.Value?.ToString() ?? string.Empty }"
+                    <input type="text" @bind="_fp.Barcode"
                            style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
                 </div>
                 <div>
                     <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">SKU</label>
-                    <input type="text" value="@_fp.Sku" @onchange="e => _fp = _fp with { Sku = e.Value?.ToString() ?? string.Empty }"
+                    <input type="text" @bind="_fp.Sku"
                            style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
                 </div>
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:12px;">
                 <div>
                     <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Preço Venda *</label>
-                    <input type="number" step="0.01" min="0" value="@_fp.SalePrice" @onchange="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _fp = _fp with { SalePrice = v }; }"
+                    <input type="number" step="0.01" min="0" @bind="_fp.SalePrice"
                            style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
                 </div>
                 <div>
                     <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Custo</label>
-                    <input type="number" step="0.01" min="0" value="@_fp.OriginalCost" @onchange="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _fp = _fp with { OriginalCost = v }; }"
+                    <input type="number" step="0.01" min="0" @bind="_fp.OriginalCost"
                            style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
                 </div>
                 <div>
                     <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Estoque</label>
-                    <input type="number" step="0.01" min="0" value="@_fp.Stock" @onchange="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _fp = _fp with { Stock = v }; }"
+                    <input type="number" step="0.01" min="0" @bind="_fp.Stock"
                            style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
                 </div>
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:12px;">
                 <div>
                     <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Preço B — Revendedor</label>
-                    <input type="number" step="0.01" min="0" value="@_fp.PrecoBRevendedor" @onchange="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _fp = _fp with { PrecoBRevendedor = v }; }"
+                    <input type="number" step="0.01" min="0" @bind="_fp.PrecoBRevendedor"
                            style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
                 </div>
                 <div>
                     <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Preço C — Atacadista</label>
-                    <input type="number" step="0.01" min="0" value="@_fp.PrecoCAtacadista" @onchange="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _fp = _fp with { PrecoCAtacadista = v }; }"
+                    <input type="number" step="0.01" min="0" @bind="_fp.PrecoCAtacadista"
                            style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
                 </div>
                 <div>
                     <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Estoque Mínimo</label>
-                    <input type="number" step="0.01" min="0" value="@_fp.MinStock" @onchange="e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) _fp = _fp with { MinStock = v }; }"
+                    <input type="number" step="0.01" min="0" @bind="_fp.MinStock"
                            style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
                 </div>
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
                 <div>
                     <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Unidade</label>
-                    <input type="text" value="@_fp.Unit" @onchange="e => _fp = _fp with { Unit = e.Value?.ToString() ?? string.Empty }"
+                    <input type="text" @bind="_fp.Unit"
                            style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px; box-sizing:border-box;"/>
                 </div>
                 <div>
                     <label style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;">Status</label>
-                    <select @onchange="SetIsActive"
+                    <select @bind="_fp.IsActive"
                             style="width:100%; padding:10px 12px; border:1px solid #E2E8F0; border-radius:8px; font-size:14px; margin-top:4px;">
-                        <option value="true" selected="@_fp.IsActive">✅ Ativo</option>
-                        <option value="false" selected="@(!_fp.IsActive)">❌ Inativo</option>
+                        <option value="True">✅ Ativo</option>
+                        <option value="False">❌ Inativo</option>
                     </select>
                 </div>
             </div>
@@ -572,9 +572,6 @@
 
     private void FecharModalProduto() => _modalProdutoAberto = false;
 
-    private void SetIsActive(ChangeEventArgs e)
-        => _fp = _fp with { IsActive = e.Value?.ToString() == "true" };
-
     private async Task UploadImagem(InputFileChangeEventArgs e)
     {
         var file = e.File;
@@ -670,19 +667,18 @@
         finally { _salvandoProduto = false; }
     }
 
-    record FormProduto
+    class FormProduto
     {
-        public string  Name             { get; init; } = "";
-        public string  Barcode          { get; init; } = "";
-        public string  Sku              { get; init; } = "";
-        public decimal SalePrice        { get; init; }
-        public decimal OriginalCost     { get; init; }
-        public decimal Stock            { get; init; }
-        public decimal MinStock         { get; init; }
-        public string  Unit             { get; init; } = "UN";
-        public bool    IsActive         { get; init; } = true;
-        public decimal PrecoBRevendedor { get; init; }
-        public decimal PrecoCAtacadista { get; init; }
+        public string  Name             { get; set; } = "";
+        public string  Barcode          { get; set; } = "";
+        public string  Sku              { get; set; } = "";
+        public decimal SalePrice        { get; set; }
+        public decimal OriginalCost     { get; set; }
+        public decimal Stock            { get; set; }
+        public decimal MinStock         { get; set; }
+        public string  Unit             { get; set; } = "UN";
+        public bool    IsActive         { get; set; } = true;
+        public decimal PrecoBRevendedor { get; set; }
+        public decimal PrecoCAtacadista { get; set; }
     }
-
 }
