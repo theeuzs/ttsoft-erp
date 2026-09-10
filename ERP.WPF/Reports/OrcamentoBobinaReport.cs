@@ -57,7 +57,7 @@ public class OrcamentoBobinaReport : IDocument
                 c.Item().AlignCenter().Text("ORÇAMENTO").FontSize(15).Black();
                 
                 c.Item().PaddingTop(8).Text($"Nº: {_orcamento.Numero}").Bold();
-                c.Item().Text($"Data: {DateTime.Now:dd/MM/yyyy HH:mm}");
+                c.Item().Text($"Data: {ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():dd/MM/yyyy HH:mm}");
                 c.Item().Text($"Cliente: {_orcamento.CustomerName ?? "Consumidor Final"}");
             });
 

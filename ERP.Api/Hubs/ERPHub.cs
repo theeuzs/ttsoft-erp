@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Serilog;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -63,7 +64,7 @@ public class ERPHub : Hub
             De       = userName,
             Mensagem = mensagem,
             FilialId = filialId,
-            Hora     = DateTime.Now.ToString("HH:mm"),
+            Hora     = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().ToString("HH:mm"),
             TenantId = tenantId
         };
 
@@ -220,7 +221,7 @@ public class ERPChatHub : Hub
             if (historico.Count > 0)
                 await Clients.Caller.SendAsync("HistoricoChat", historico);
         }
-        catch { }
+        catch (Exception ex) { Log.Warning(ex, "ERPHub: falha ao carregar histórico de chat"); }
     }
 
     public async Task EnviarMensagemChatWpf(string mensagem)
@@ -252,7 +253,7 @@ public class ERPChatHub : Hub
                 await ctx.SaveChangesAsync();
                 msgId = entity.Id;
             }
-            catch { }
+            catch (Exception ex) { Log.Warning(ex, "ERPHub: falha ao persistir mensagem de chat (mensagem ainda é enviada aos clientes conectados, só não fica no histórico)"); }
         }
 
         var payload = new
@@ -260,7 +261,7 @@ public class ERPChatHub : Hub
             Id         = msgId,
             De         = nomeUsuario,
             Mensagem   = mensagem,
-            Hora       = DateTime.Now.ToString("HH:mm"),
+            Hora       = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().ToString("HH:mm"),
             TenantId   = tenantId,
             Persistida = msgId.HasValue
         };
@@ -298,7 +299,7 @@ public class NotificacaoService
 
     public async Task NotificarTenantAsync(string tenantId, string tipo, object dados)
         => await _hub.Clients.Group($"tenant-{tenantId}")
-            .SendAsync("Notificacao", new { tipo, dados, hora = DateTime.Now });
+            .SendAsync("Notificacao", new { tipo, dados, hora = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil() });
 
     public async Task AlertaEstoqueCriticoAsync(string tenantId, string nomeProduto,
         decimal estoque, decimal minimo)

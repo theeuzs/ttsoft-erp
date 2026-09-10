@@ -64,7 +64,7 @@ public class TransferenciaService : ITransferenciaService
             OperadorNome  = dto.OperadorNome,
             Observacao    = dto.Observacao,
             Status        = StatusTransferencia.Rascunho,
-            DataTransferencia = DateTime.Now
+            DataTransferencia = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil()
         };
 
         foreach (var (prodId, qtd) in dto.Itens)

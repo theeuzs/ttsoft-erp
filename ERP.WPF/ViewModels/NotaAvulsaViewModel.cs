@@ -184,6 +184,34 @@ public class ItemPagamentoNotaAvulsa : BaseViewModel
 /// não tupla (WPF não lê nome de campo de ValueTuple via DisplayMemberPath).</summary>
 public record FormaPagamentoOption(string Codigo, string Label);
 
+/// <summary>Envolve o NotaFiscalAvulsaResumoDto pra dar um texto de status
+/// diferente na lista quando a nota parece travada.</summary>
+public class RascunhoListItem
+{
+    public Guid Id { get; init; }
+    public string NaturezaOperacao { get; init; } = "";
+    public string DestinatarioNome { get; init; } = "";
+    public decimal ValorTotal { get; init; }
+    public string Status { get; init; } = "";
+    public DateTime DataEmissao { get; init; }
+
+    /// <summary>Achado testando de verdade (20/08) — algumas notas nunca
+    /// saem de "processando" na SEFAZ de homologação, mesmo consultando
+    /// várias vezes (destinatário sem IE + Não Contribuinte parece ser um
+    /// gatilho, mas não é garantido). Sinaliza isso na própria lista em vez
+    /// de deixar o usuário sem saber se ainda vale a pena esperar.</summary>
+    public string StatusExibicao =>
+        Status == "Processando" && (ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil() - DataEmissao) > TimeSpan.FromMinutes(5)
+            ? "⚠️ Processando (travada?)"
+            : Status;
+
+    public static RascunhoListItem De(NotaFiscalAvulsaResumoDto dto) => new()
+    {
+        Id = dto.Id, NaturezaOperacao = dto.NaturezaOperacao, DestinatarioNome = dto.DestinatarioNome,
+        ValorTotal = dto.ValorTotal, Status = dto.Status, DataEmissao = dto.DataEmissao,
+    };
+}
+
 /// <summary>
 /// Item 9 do roadmap fiscal — editor de NF-e desacoplada de venda, com
 /// rascunho ("salvar sem emitir") e conferência de impostos.
@@ -385,7 +413,7 @@ public class NotaAvulsaViewModel : BaseViewModel
     public decimal Total => Itens.Sum(i => i.Total);
 
     // ── Rascunhos existentes ────────────────────────────────────────────
-    public ObservableCollection<NotaFiscalAvulsaResumoDto> Rascunhos { get; } = new();
+    public ObservableCollection<RascunhoListItem> Rascunhos { get; } = new();
 
     private string _statusTexto = string.Empty;
     public string StatusTexto { get => _statusTexto; set => SetProperty(ref _statusTexto, value); }
@@ -436,15 +464,48 @@ public class NotaAvulsaViewModel : BaseViewModel
         GerarPdfEspelhoCommand = new AsyncRelayCommand(async _ => await GerarPdfEspelhoAsync());
         EmitirCommand           = new AsyncRelayCommand(async _ => await EmitirAsync());
         NovaNotaCommand         = new RelayCommand(_ => LimparFormulario());
-        CarregarRascunhoCommand = new AsyncRelayCommand(async item => { if (item is NotaFiscalAvulsaResumoDto r) await CarregarRascunhoAsync(r.Id); });
-        CopiarNotaCommand = new AsyncRelayCommand(async item => { if (item is NotaFiscalAvulsaResumoDto r) await CopiarNotaAsync(r.Id); });
-        ExcluirRascunhoCommand  = new AsyncRelayCommand(async item => { if (item is NotaFiscalAvulsaResumoDto r) await ExcluirRascunhoAsync(r.Id); });
+        CarregarRascunhoCommand = new AsyncRelayCommand(async item => { if (item is RascunhoListItem r) await CarregarRascunhoAsync(r.Id); });
+        CopiarNotaCommand = new AsyncRelayCommand(async item => { if (item is RascunhoListItem r) await CopiarNotaAsync(r.Id); });
+        ExcluirRascunhoCommand  = new AsyncRelayCommand(async item => { if (item is RascunhoListItem r) await ExcluirRascunhoAsync(r.Id); });
         AtualizarRascunhosCommand = new AsyncRelayCommand(async _ => await CarregarRascunhosAsync());
         AdicionarPagamentoCommand = new RelayCommand(_ => AdicionarPagamento(), _ => ValorPagamentoItem > 0);
         RemoverPagamentoCommand   = new RelayCommand(item => { if (item is ItemPagamentoNotaAvulsa p) { Pagamentos.Remove(p); OnPropertyChanged(nameof(TotalPagamentos)); OnPropertyChanged(nameof(DiferencaPagamentoTotal)); } });
 
         _ = CarregarRascunhosAsync();
         IniciarAutosave();
+        IniciarConsultaAutomatica();
+    }
+
+    /// <summary>Achado testando de verdade (20/08) — a Focus não avisa
+    /// sozinha quando uma nota sai de "processando"; sem isso, o usuário
+    /// precisa lembrar de clicar manualmente. Consulta sozinho, em segundo
+    /// plano, enquanto a tela estiver aberta — silencioso quando não muda
+    /// nada, só atualiza a lista quando o status realmente resolve.</summary>
+    private void IniciarConsultaAutomatica()
+    {
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        timer.Tick += async (_, _) =>
+        {
+            var pendentes = Rascunhos.Where(r => r.Status == "Processando").Select(r => r.Id).ToList();
+            if (!pendentes.Any()) return;
+
+            try
+            {
+                var service = App.Services.GetRequiredService<INotaFiscalAvulsaService>();
+                bool mudouAlguma = false;
+                foreach (var id in pendentes)
+                {
+                    var resultado = await service.ConsultarStatusAsync(id);
+                    if (resultado.Status != "Processando") mudouAlguma = true;
+                }
+                if (mudouAlguma) await CarregarRascunhosAsync();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "NotaAvulsaViewModel: falha na consulta automática de notas Processando");
+            }
+        };
+        timer.Start();
     }
 
     private void AdicionarPagamento()
@@ -504,7 +565,7 @@ public class NotaAvulsaViewModel : BaseViewModel
                 var service = App.Services.GetRequiredService<INotaFiscalAvulsaService>();
                 _notaId = await service.SalvarRascunhoAsync(MontarDto());
                 _ultimoSnapshotSalvo = atual;
-                AutosaveStatusTexto = $"💾 Salvo automaticamente às {DateTime.Now:HH:mm}";
+                AutosaveStatusTexto = $"💾 Salvo automaticamente às {ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():HH:mm}";
                 await CarregarRascunhosAsync();
             }
             catch (Exception ex)
@@ -859,7 +920,7 @@ public class NotaAvulsaViewModel : BaseViewModel
             var service = App.Services.GetRequiredService<INotaFiscalAvulsaService>();
             var lista = await service.ListarAsync();
             Rascunhos.Clear();
-            foreach (var r in lista) Rascunhos.Add(r);
+            foreach (var r in lista) Rascunhos.Add(RascunhoListItem.De(r));
         }
         catch (Exception ex)
         {

@@ -16,7 +16,7 @@ public class TransferenciaEstoque : BaseEntity
     public Guid   DestinoId  { get; set; }
     public Branch Destino    { get; set; } = null!;
 
-    public DateTime           DataTransferencia { get; set; } = DateTime.Now;
+    public DateTime           DataTransferencia { get; set; } = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
     public StatusTransferencia Status            { get; set; } = StatusTransferencia.Rascunho;
     public string?            Observacao        { get; set; }
     public string             OperadorNome      { get; set; } = string.Empty;

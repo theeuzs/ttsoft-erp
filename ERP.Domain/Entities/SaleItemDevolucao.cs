@@ -15,5 +15,5 @@ public class SaleItemDevolucao : BaseEntity
     public decimal ValorDevolvido      { get; set; }
     public string? Motivo              { get; set; }
     public string? OperadorNome        { get; set; }
-    public DateTime DataDevolucao      { get; set; } = DateTime.Now;
+    public DateTime DataDevolucao      { get; set; } = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
 }

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 using System;
 using System.IO;
 using System.Linq;
@@ -75,7 +76,7 @@ public static class BackupService
             if (!Directory.Exists(PastaBackupLocal))
                 Directory.CreateDirectory(PastaBackupLocal);
 
-            string nomeArquivo = $"TTSoft_Backup_{DateTime.Now:yyyyMMdd_HHmmss}.bak";
+            string nomeArquivo = $"TTSoft_Backup_{ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():yyyyMMdd_HHmmss}.bak";
             caminhoArquivo     = Path.Combine(PastaBackupLocal, nomeArquivo);
 
             // Valida que o caminho não saiu da pasta esperada (path traversal)
@@ -174,9 +175,9 @@ public static class BackupService
                     AppDomain.CurrentDomain.BaseDirectory, "Logs", "backup_nuvem.log");
                 Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
                 await File.AppendAllTextAsync(logPath,
-                    $"[{DateTime.Now:dd/MM/yyyy HH:mm:ss}] ERRO OneDrive: {ex.Message}\n");
+                    $"[{ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():dd/MM/yyyy HH:mm:ss}] ERRO OneDrive: {ex.Message}\n");
             }
-            catch { }
+            catch (Exception exLog) { Log.Warning(exLog, "BackupService: falha ao escrever o log de erro do OneDrive em arquivo"); }
             return false;
         }
     }
@@ -193,7 +194,7 @@ public static class BackupService
             foreach (var arquivo in arquivos)
                 arquivo.Delete();
         }
-        catch { }
+        catch (Exception ex) { Log.Warning(ex, "BackupService: falha ao limpar backups antigos na pasta {Pasta}", pasta); }
     }
 
     public static string ObterStatusUltimoBackup()

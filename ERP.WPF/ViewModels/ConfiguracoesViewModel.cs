@@ -1,6 +1,8 @@
 using ERP.WPF.Commands;
 using ERP.WPF.Helpers;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 
@@ -62,25 +64,46 @@ public class ConfiguracoesViewModel : BaseViewModel
     /// <summary>Código morto da auditoria ativado — porta serial da balança.</summary>
     public string BalancaComPort { get => _balancaComPort; set => SetProperty(ref _balancaComPort, value); }
 
-    private string _tokenFocusNfe = string.Empty;
-    public string TokenFocusNfe 
-    { 
-        get => _tokenFocusNfe; 
-        set 
+    private string _tokenFocusNfeProducao = string.Empty;
+    public string TokenFocusNfeProducao
+    {
+        get => _tokenFocusNfeProducao;
+        set
         {
-            SetProperty(ref _tokenFocusNfe, value);
-            OnPropertyChanged(nameof(TokenMascarado)); // Atualiza a máscara em tempo real!
-        } 
+            SetProperty(ref _tokenFocusNfeProducao, value);
+            OnPropertyChanged(nameof(TokenProducaoMascarado));
+        }
+    }
+
+    private string _tokenFocusNfeHomologacao = string.Empty;
+    public string TokenFocusNfeHomologacao
+    {
+        get => _tokenFocusNfeHomologacao;
+        set
+        {
+            SetProperty(ref _tokenFocusNfeHomologacao, value);
+            OnPropertyChanged(nameof(TokenHomologacaoMascarado));
+        }
     }
 
     // 🕵️‍♂️ O GERADOR DA MÁSCARA (Ex: FWT5********0vCR)
-    public string TokenMascarado
+    public string TokenProducaoMascarado
     {
         get
         {
-            if (string.IsNullOrWhiteSpace(_tokenFocusNfe)) return string.Empty;
-            if (_tokenFocusNfe.Length <= 8) return new string('*', _tokenFocusNfe.Length);
-            return $"{_tokenFocusNfe.Substring(0, 4)}********{_tokenFocusNfe.Substring(_tokenFocusNfe.Length - 4)}";
+            if (string.IsNullOrWhiteSpace(_tokenFocusNfeProducao)) return string.Empty;
+            if (_tokenFocusNfeProducao.Length <= 8) return new string('*', _tokenFocusNfeProducao.Length);
+            return $"{_tokenFocusNfeProducao.Substring(0, 4)}********{_tokenFocusNfeProducao.Substring(_tokenFocusNfeProducao.Length - 4)}";
+        }
+    }
+
+    public string TokenHomologacaoMascarado
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_tokenFocusNfeHomologacao)) return string.Empty;
+            if (_tokenFocusNfeHomologacao.Length <= 8) return new string('*', _tokenFocusNfeHomologacao.Length);
+            return $"{_tokenFocusNfeHomologacao.Substring(0, 4)}********{_tokenFocusNfeHomologacao.Substring(_tokenFocusNfeHomologacao.Length - 4)}";
         }
     }
 
@@ -108,6 +131,7 @@ public class ConfiguracoesViewModel : BaseViewModel
         
         CaminhoLogo = config.CaminhoLogo ?? string.Empty; 
         RazaoSocial = config.RazaoSocial ?? string.Empty;
+        CnpjEmpresa = config.Cnpj ?? string.Empty;
         NomeFantasia = config.NomeFantasia ?? string.Empty;
         Telefone = config.Telefone ?? string.Empty;
         Endereco = config.Endereco ?? string.Empty;
@@ -118,7 +142,8 @@ public class ConfiguracoesViewModel : BaseViewModel
         CidadePix = config.CidadePix ?? string.Empty;
         
         // 👇 CARREGA OS DADOS DA SEFAZ 👇
-        TokenFocusNfe = config.TokenFocusNfe ?? string.Empty;
+        TokenFocusNfeProducao = config.TokenFocusNfeProducao ?? string.Empty;
+        TokenFocusNfeHomologacao = config.TokenFocusNfeHomologacao ?? string.Empty;
         UsarAmbienteProducao = config.UsarAmbienteProducao;
         BalancaComPort = config.BalancaComPort ?? "COM1";
         PixApiToken = config.PixApiToken ?? string.Empty;
@@ -127,9 +152,51 @@ public class ConfiguracoesViewModel : BaseViewModel
         SelecionarLogoCommand = new RelayCommand(_ => SelecionarLogo());
         RemoverLogoCommand = new RelayCommand(_ => CaminhoLogo = string.Empty);
         ToggleTokenCommand = new RelayCommand(_ => IsTokenVisivel = !IsTokenVisivel); // Alterna o olhinho
-        SalvarCommand = new RelayCommand(_ => Salvar());
+        SalvarCommand = new RelayCommand(async _ => await SalvarAsync());
         MigrarParaBancoCommand = new RelayCommand(async _ => await MigrarParaBancoAsync());
-        
+
+        // Achado (09/09) — Metas de Vendas/Pontos de Fidelidade sem
+        // interruptor por tenant. Carrega assíncrono (vem do banco, não do
+        // arquivo local) — não trava a tela abrindo.
+        _ = CarregarFeatureFlagsAsync();
+    }
+
+    private bool _metasVendasHabilitado;
+    public bool MetasVendasHabilitado { get => _metasVendasHabilitado; set => SetProperty(ref _metasVendasHabilitado, value); }
+
+    private bool _pontosFidelidadeHabilitado;
+    public bool PontosFidelidadeHabilitado { get => _pontosFidelidadeHabilitado; set => SetProperty(ref _pontosFidelidadeHabilitado, value); }
+
+    private async Task CarregarFeatureFlagsAsync()
+    {
+        try
+        {
+            using var scope = ERP.WPF.App.Services.CreateScope();
+            var flags = await scope.ServiceProvider
+                .GetRequiredService<ERP.Application.Interfaces.ITenantFeatureFlagsProvider>()
+                .ObterAsync();
+            MetasVendasHabilitado      = flags.MetasVendasHabilitado;
+            PontosFidelidadeHabilitado = flags.PontosFidelidadeHabilitado;
+        }
+        catch (Exception ex) { Log.Warning(ex, "ConfiguracoesViewModel: falha ao carregar feature flags do tenant"); }
+    }
+
+    private async Task SalvarAsync()
+    {
+        Salvar(); // continua salvando tudo mais no arquivo local, como sempre
+
+        try
+        {
+            using var scope = ERP.WPF.App.Services.CreateScope();
+            await scope.ServiceProvider
+                .GetRequiredService<ERP.Application.Interfaces.ITenantFeatureFlagsProvider>()
+                .SalvarAsync(new ERP.Application.Interfaces.TenantFeatureFlagsDto
+                {
+                    MetasVendasHabilitado      = MetasVendasHabilitado,
+                    PontosFidelidadeHabilitado = PontosFidelidadeHabilitado
+                });
+        }
+        catch (Exception ex) { Log.Warning(ex, "ConfiguracoesViewModel: falha ao salvar feature flags do tenant"); }
     }
 
     private async Task MigrarParaBancoAsync()
@@ -139,7 +206,8 @@ public class ConfiguracoesViewModel : BaseViewModel
         Salvar();
 
         var confirmacao = MessageBox.Show(
-            $"Isso vai copiar o token da Focus NFe atual (terminando em ...{(TokenFocusNfe.Length > 4 ? TokenFocusNfe[^4..] : TokenFocusNfe)}) " +
+            $"Isso vai copiar o token de PRODUÇÃO (...{(TokenFocusNfeProducao.Length > 4 ? TokenFocusNfeProducao[^4..] : TokenFocusNfeProducao)}) " +
+            $"e o de HOMOLOGAÇÃO (...{(TokenFocusNfeHomologacao.Length > 4 ? TokenFocusNfeHomologacao[^4..] : TokenFocusNfeHomologacao)}) " +
             $"e o ambiente ({(UsarAmbienteProducao ? "Produção" : "Homologação")}) pro banco de dados, " +
             "pra que a API (e não só esse computador) consiga emitir nota fiscal.\n\nContinuar?",
             "Migrar Configuração Fiscal", MessageBoxButton.YesNo, MessageBoxImage.Question);
@@ -154,9 +222,10 @@ public class ConfiguracoesViewModel : BaseViewModel
 
             await dbProvider.SalvarConfiguracaoAsync(new ERP.Application.Interfaces.FiscalConfiguration
             {
-                TokenFocusNfe        = TokenFocusNfe,
-                UsarAmbienteProducao = UsarAmbienteProducao,
-                Cnpj                 = CnpjEmpresa
+                TokenFocusNfeProducao    = TokenFocusNfeProducao,
+                TokenFocusNfeHomologacao = TokenFocusNfeHomologacao,
+                UsarAmbienteProducao     = UsarAmbienteProducao,
+                Cnpj                     = CnpjEmpresa
             });
 
             MessageBox.Show("✅ Configuração fiscal migrada pro banco com sucesso!", "TTSoft ERP",
@@ -174,6 +243,7 @@ public class ConfiguracoesViewModel : BaseViewModel
         {
             CaminhoLogo = this.CaminhoLogo,
             RazaoSocial = this.RazaoSocial,
+            Cnpj = this.CnpjEmpresa,
             NomeFantasia = this.NomeFantasia,
             Telefone = this.Telefone,
             Endereco = this.Endereco,
@@ -184,7 +254,8 @@ public class ConfiguracoesViewModel : BaseViewModel
             CidadePix = this.CidadePix,
             
             // 👇 SALVA OS DADOS DA SEFAZ 👇
-            TokenFocusNfe = this.TokenFocusNfe,
+            TokenFocusNfeProducao = this.TokenFocusNfeProducao,
+            TokenFocusNfeHomologacao = this.TokenFocusNfeHomologacao,
             UsarAmbienteProducao = this.UsarAmbienteProducao,
             BalancaComPort = this.BalancaComPort,
             PixApiToken = this.PixApiToken,

@@ -409,7 +409,9 @@
 
                 <StackPanel Grid.Row="1" Margin="0,5,0,0">
                     <!-- Sprint Q: Fidelidade -->
+                    <!-- Achado (09/09) — antes aparecia pra todo tenant, sem interruptor -->
                     <Button Command="{Binding AbrirFidelidadeCommand}" Height="38" Margin="0,0,0,8"
+                            Visibility="{Binding FidelidadeHabilitada, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
                             Background="#7C3AED" Foreground="White" BorderThickness="0" Cursor="Hand"
                             ToolTip="Consultar pontos e aplicar desconto de fidelidade">
                         <Button.Template>

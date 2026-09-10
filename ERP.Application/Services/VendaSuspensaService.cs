@@ -66,7 +66,7 @@ public class VendaSuspensaService : IVendaSuspensaService
         // o erro "another instance with the same key is already being tracked"
         // quando duas ações tocam o mesmo registro quase ao mesmo tempo (ex:
         // clique duplo disparando o comando duas vezes).
-        await _uow.VendasSuspensas.IniciarEdicaoAsync(id, usuarioId, nomeUsuario, DateTime.Now);
+        await _uow.VendasSuspensas.IniciarEdicaoAsync(id, usuarioId, nomeUsuario, ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil());
 
         return new VendaSuspensaDetalheDto
         {

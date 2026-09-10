@@ -31,5 +31,5 @@ public class ContaReceberEvento : BaseEntity
     /// <summary>Motivo, forma de pagamento, ou qualquer outro detalhe do evento.</summary>
     public string? Observacao { get; set; }
 
-    public DateTime DataEvento { get; set; } = DateTime.Now;
+    public DateTime DataEvento { get; set; } = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
 }

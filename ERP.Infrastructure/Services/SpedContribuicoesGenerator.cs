@@ -96,7 +96,8 @@ public class SpedContribuicoesGenerator
     public void GerarBloco1(decimal totalPis, decimal totalCofins)
     {
         Add("|1001|0|");
-        Add($"|1100|{DateTime.Now.Year}{DateTime.Now.Month:D2}|01|{totalPis:F2}|||||||||||");
+        var competencia = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
+        Add($"|1100|{competencia.Year}{competencia.Month:D2}|01|{totalPis:F2}|||||||||||");
         Add("|1990|" + ContarBloco("1") + "|");
     }
 

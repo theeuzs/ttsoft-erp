@@ -11,7 +11,7 @@ public class Sale : BaseEntity
     public Customer? Customer { get; set; }
     public string? SellerId { get; set; }
     public string? SellerName { get; set; }
-    public DateTime SaleDate { get; set; } = DateTime.Now;
+    public DateTime SaleDate { get; set; } = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
     public SaleStatus Status { get; set; } = SaleStatus.SemNota;
     public virtual ICollection<SalePayment> Payments { get; set; } = new List<SalePayment>();
     public decimal Subtotal { get; set; }
@@ -42,7 +42,7 @@ public class Sale : BaseEntity
     {
         Status = SaleStatus.Cancelada;
         CancelReason = reason;
-        CancelledAt = DateTime.Now;
+        CancelledAt = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
     }
 
     public void RecalculateTotals()

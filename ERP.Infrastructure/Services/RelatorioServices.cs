@@ -410,7 +410,7 @@ public class HaverService : IHaverService
             Valor         = valor,
             Tipo          = tipo,
             Descricao     = descricao,
-            DataMovimento = DateTime.Now,
+            DataMovimento = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
             OperadorNome  = operadorNome,
         });
 
@@ -425,7 +425,7 @@ public class HaverService : IHaverService
             Valor         = valor,
             Tipo          = tipo,
             Descricao     = descricao,
-            DataMovimento = DateTime.Now,
+            DataMovimento = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
             OperadorNome  = operadorNome,
         });
 

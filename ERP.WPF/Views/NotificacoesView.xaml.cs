@@ -1,4 +1,5 @@
 using System;
+using Serilog;
 using System.Globalization;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -28,7 +29,7 @@ public class StringToColorConverter : IValueConverter
             if (value is string hex)
                 return (Color)ColorConverter.ConvertFromString(hex);
         }
-        catch { }
+        catch (Exception ex) { Log.Debug(ex, "StringToColorConverter: valor \"{Valor}\" não é uma cor válida", value); }
         return Colors.Gray;
     }
 

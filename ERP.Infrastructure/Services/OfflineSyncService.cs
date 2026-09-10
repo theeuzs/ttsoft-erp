@@ -143,7 +143,7 @@ public class OfflineSyncService
         }
 
         tx.Commit();
-        await RegistrarLogAsync("SincProdutos", $"{produtos.Count()} produtos sincronizados em {DateTime.Now:dd/MM/yyyy HH:mm}");
+        await RegistrarLogAsync("SincProdutos", $"{produtos.Count()} produtos sincronizados em {ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():dd/MM/yyyy HH:mm}");
     }
 
     public async Task SincronizarClientesAsync(IEnumerable<object> clientes)
@@ -173,7 +173,7 @@ public class OfflineSyncService
         }
 
         tx.Commit();
-        await RegistrarLogAsync("SincClientes", $"{clientes.Count()} clientes sincronizados em {DateTime.Now:dd/MM/yyyy HH:mm}");
+        await RegistrarLogAsync("SincClientes", $"{clientes.Count()} clientes sincronizados em {ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():dd/MM/yyyy HH:mm}");
     }
 
     // ── Consulta offline ──────────────────────────────────────────────────────
@@ -222,7 +222,7 @@ public class OfflineSyncService
         try
         {
             var json = JsonSerializer.Serialize(vendaDto);
-            var agora = DateTime.Now.ToString("O");
+            var agora = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().ToString("O");
 
             using (var cmdVenda = conn.CreateCommand())
             {
@@ -278,7 +278,7 @@ public class OfflineSyncService
         await conn.OpenAsync();
         using var tx = conn.BeginTransaction();
 
-        var agora = DateTime.Now.ToString("O");
+        var agora = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().ToString("O");
 
         using (var cmd1 = conn.CreateCommand())
         {
@@ -299,7 +299,7 @@ public class OfflineSyncService
         }
 
         tx.Commit();
-        await RegistrarLogAsync("SyncSucesso", $"Venda {entidadeId} sincronizada às {DateTime.Now:HH:mm:ss}");
+        await RegistrarLogAsync("SyncSucesso", $"Venda {entidadeId} sincronizada às {ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():HH:mm:ss}");
     }
 
     public async Task RegistrarFalhaEventoAsync(string outboxId, Guid entidadeId, string erro)
@@ -370,7 +370,7 @@ public class OfflineSyncService
         cmd.CommandText = "INSERT INTO SyncLog (Tipo, Detalhes, CriadoEm) VALUES (@t, @d, @dt)";
         cmd.Parameters.AddWithValue("@t",  tipo);
         cmd.Parameters.AddWithValue("@d",  detalhes);
-        cmd.Parameters.AddWithValue("@dt", DateTime.Now.ToString("O"));
+        cmd.Parameters.AddWithValue("@dt", ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().ToString("O"));
         await cmd.ExecuteNonQueryAsync();
     }
 }

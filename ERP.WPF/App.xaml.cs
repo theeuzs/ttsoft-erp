@@ -211,7 +211,8 @@ public partial class App : System.Windows.Application
                 _ = worker.IniciarTrabalhoEmBackgroundAsync(() =>
                 {
                     var config = ConfiguracaoService.Carregar();
-                    return (config.TokenFocusNfe, config.UsarAmbienteProducao);
+                    string tokenFocus = config.UsarAmbienteProducao ? config.TokenFocusNfeProducao : config.TokenFocusNfeHomologacao;
+                    return (tokenFocus, config.UsarAmbienteProducao);
                 });
             }
             else
@@ -363,25 +364,22 @@ public partial class App : System.Windows.Application
         // instância direta, confirmado); e nenhum fluxo precisa continuar
         // local deliberadamente.
         services.AddScoped<ISaleService, ERP.WPF.Services.HttpSaleService>();
-        // ATENÇÃO — WpfEstoqueSyncService (linha abaixo) virou código morto
-        // com essa troca: só era chamado de dentro do SaleService LOCAL
-        // (ERP.Application.Services.SaleService.CreateAsync, via
-        // IEstoqueSyncService opcional no construtor), e essa classe nunca
-        // mais roda pra vendas do PDV agora. Não é regressão — a
-        // sincronização de estoque com marketplace continua funcionando,
-        // porque a API TAMBÉM registra IEstoqueSyncService (Program.cs) e é
-        // o SaleService do LADO DO SERVIDOR que passa a rodar quando a venda
-        // chega via POST /api/sales. Mantido registrado por enquanto (não
-        // quebra nada continuar existindo sem uso) — candidato a limpeza
-        // numa sessão futura, não bloqueador dessa migração.
-        services.AddScoped<ERP.Application.Interfaces.IEstoqueSyncService,
-                            ERP.WPF.Services.WpfEstoqueSyncService>();
+        // S28 FIX: removido o registro de IEstoqueSyncService/WpfEstoqueSyncService,
+        // confirmado morto desde a Fase B (comentário anterior aqui mesmo já
+        // explicava o porquê) — só era chamado pelo SaleService LOCAL, que
+        // nunca mais roda no WPF agora que ISaleService é HttpSaleService.
+        // Classe WpfEstoqueSyncService.cs preservada, só o registro saiu.
 
         // Etapa 1 da refatoração fiscal — JsonFiscalConfigurationProvider lê o
         // arquivo local de sempre; FiscalService é o mesmo (Infrastructure),
         // consumido por WPF e API igualmente.
         services.AddScoped<ERP.Application.Interfaces.IFiscalConfigurationProvider,
                             ERP.WPF.Services.JsonFiscalConfigurationProvider>();
+        // Feature flags por tenant (09/09) — usa a MESMA implementação de
+        // banco da API (não a de arquivo local), já que o WPF hoje fala com
+        // o mesmo banco compartilhado depois da Fase 4 da migração.
+        services.AddScoped<ERP.Application.Interfaces.ITenantFeatureFlagsProvider,
+                            ERP.Infrastructure.Services.TenantFeatureFlagsProvider>();
         services.AddScoped<ERP.Application.Interfaces.IFiscalService,
                             ERP.Infrastructure.Services.FiscalService>();
         services.AddScoped<ERP.Application.Interfaces.INotaFiscalAvulsaService,

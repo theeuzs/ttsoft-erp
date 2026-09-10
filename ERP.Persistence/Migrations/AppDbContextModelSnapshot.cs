@@ -664,6 +664,10 @@ namespace ERP.Persistence.Migrations
                         .IsUnique()
                         .HasFilter("[Document] IS NOT NULL");
 
+                    b.HasIndex("TenantId", "Document")
+                        .IsUnique()
+                        .HasFilter("[Document] IS NOT NULL");
+
                     b.ToTable("Customers");
                 });
 
@@ -2268,6 +2272,9 @@ namespace ERP.Persistence.Migrations
                     b.HasIndex("TenantId", "IsDeleted")
                         .HasDatabaseName("IX_Products_TenantId_IsDeleted");
 
+                    b.HasIndex("TenantId", "SKU")
+                        .HasFilter("[SKU] IS NOT NULL");
+
                     b.HasIndex("TenantId", "Name", "IsDeleted")
                         .HasDatabaseName("IX_Products_TenantId_Name_IsDeleted");
 
@@ -2906,6 +2913,35 @@ namespace ERP.Persistence.Migrations
                     b.ToTable("Suppliers");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.TenantFeatureFlags", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("MetasVendasHabilitado")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("PontosFidelidadeHabilitado")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("TenantFeatureFlags");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.TenantFiscalConfiguration", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2924,9 +2960,13 @@ namespace ERP.Persistence.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("TokenFocusNfeEncriptado")
-                        .IsRequired()
+                    b.Property<string>("TokenFocusNfeHomologacaoEncriptado")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("TokenFocusNfeProducaoEncriptado")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("TokenFocusNfeEncriptado");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");

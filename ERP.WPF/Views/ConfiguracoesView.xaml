@@ -144,20 +144,21 @@
                         <StackPanel>
                             <TextBlock Text="INTEGRAÇÃO FISCAL (SEFAZ)" FontWeight="Black" Foreground="#1E62A6" Margin="0,0,0,20"/>
 
-                            <TextBlock Text="Token de Acesso (Focus NFe)" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
-
 <TextBlock Text="CNPJ da Empresa" FontSize="12" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,4"/>
 <TextBox Text="{Binding CnpjEmpresa, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14"
          BorderBrush="{DynamicResource BordaInput}" Background="{DynamicResource CardBgAlt}" Margin="0,0,0,15"
          ToolTip="Necessário pro MD-e (recebimento automático de notas de fornecedor)"/>
 
+<!-- Achado (21/08) — a Focus tem token separado por ambiente por empresa;
+     antes só existia um campo, obrigando trocar o token na mão pra testar. -->
+<TextBlock Text="Token de Acesso — Produção (Focus NFe)" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
 <Grid Margin="0,0,0,15">
     <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*"/>
         <ColumnDefinition Width="Auto"/>
     </Grid.ColumnDefinitions>
 
-    <TextBox Text="{Binding TokenMascarado, Mode=OneWay}" IsReadOnly="True" Padding="10" FontSize="14" BorderBrush="{DynamicResource BordaInput}" Background="{DynamicResource FundoRodape}" Foreground="{DynamicResource TextMuted}" FontWeight="Bold">
+    <TextBox Text="{Binding TokenProducaoMascarado, Mode=OneWay}" IsReadOnly="True" Padding="10" FontSize="14" BorderBrush="{DynamicResource BordaInput}" Background="{DynamicResource FundoRodape}" Foreground="{DynamicResource TextMuted}" FontWeight="Bold">
         <TextBox.Style>
             <Style TargetType="TextBox">
                 <Setter Property="Visibility" Value="Visible"/>
@@ -170,7 +171,57 @@
         </TextBox.Style>
     </TextBox>
 
-    <TextBox Text="{Binding TokenFocusNfe, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14" BorderBrush="#3B82F6" Background="{DynamicResource CardBgAlt}">
+    <TextBox Text="{Binding TokenFocusNfeProducao, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14" BorderBrush="#3B82F6" Background="{DynamicResource CardBgAlt}">
+        <TextBox.Style>
+            <Style TargetType="TextBox">
+                <Setter Property="Visibility" Value="Collapsed"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsTokenVisivel}" Value="True">
+                        <Setter Property="Visibility" Value="Visible"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </TextBox.Style>
+    </TextBox>
+
+    <Button Grid.Column="1" Command="{Binding ToggleTokenCommand}" Background="#E2E8F0" Foreground="#334155" FontWeight="Bold" Margin="10,0,0,0" Padding="15,0" Cursor="Hand" BorderThickness="0">
+        <Button.Resources>
+            <Style TargetType="Border"> <Setter Property="CornerRadius" Value="6"/> </Style>
+        </Button.Resources>
+        <Button.Style>
+            <Style TargetType="Button">
+                <Setter Property="Content" Value="👁️ Mostrar"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsTokenVisivel}" Value="True">
+                        <Setter Property="Content" Value="🙈 Ocultar"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Button.Style>
+    </Button>
+</Grid>
+
+<TextBlock Text="Token de Acesso — Homologação (Focus NFe)" FontWeight="SemiBold" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,5"/>
+<Grid Margin="0,0,0,15">
+    <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+    </Grid.ColumnDefinitions>
+
+    <TextBox Text="{Binding TokenHomologacaoMascarado, Mode=OneWay}" IsReadOnly="True" Padding="10" FontSize="14" BorderBrush="{DynamicResource BordaInput}" Background="{DynamicResource FundoRodape}" Foreground="{DynamicResource TextMuted}" FontWeight="Bold">
+        <TextBox.Style>
+            <Style TargetType="TextBox">
+                <Setter Property="Visibility" Value="Visible"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsTokenVisivel}" Value="True">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </TextBox.Style>
+    </TextBox>
+
+    <TextBox Text="{Binding TokenFocusNfeHomologacao, UpdateSourceTrigger=PropertyChanged}" Padding="10" FontSize="14" BorderBrush="#3B82F6" Background="{DynamicResource CardBgAlt}">
         <TextBox.Style>
             <Style TargetType="TextBox">
                 <Setter Property="Visibility" Value="Collapsed"/>
@@ -203,6 +254,24 @@
                             <CheckBox IsChecked="{Binding UsarAmbienteProducao}" Content="Usar Ambiente de Produção (Valor Fiscal Real)" 
                                       Foreground="#DC2626" FontWeight="Bold" FontSize="14" Margin="0,5,0,0"
                                       ToolTip="Atenção: Se marcado, as notas emitidas terão validade fiscal real na Receita!"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Achado (09/09) — Metas de Vendas e Pontos de Fidelidade já
+                         existiam no sistema, mas sem interruptor por tenant: Metas
+                         aparecia de forma implícita (só se existisse dado cadastrado),
+                         e Fidelidade nunca teve controle nenhum. -->
+                    <Border Background="{DynamicResource CardBgAlt}" CornerRadius="10" Padding="20" Margin="0,0,0,20">
+                        <StackPanel>
+                            <TextBlock Text="MÓDULOS OPCIONAIS" FontWeight="Black" Foreground="#1E62A6" Margin="0,0,0,15"/>
+
+                            <CheckBox IsChecked="{Binding MetasVendasHabilitado}" Content="Metas de Vendas"
+                                      Foreground="{DynamicResource TextDark}" FontSize="14" Margin="0,0,0,10"
+                                      ToolTip="Mostra a barra de progresso da meta do dia no PDV"/>
+
+                            <CheckBox IsChecked="{Binding PontosFidelidadeHabilitado}" Content="Pontos de Fidelidade"
+                                      Foreground="{DynamicResource TextDark}" FontSize="14"
+                                      ToolTip="Mostra o botão &quot;Usar Fidelidade&quot; na tela de Finalizar Venda"/>
                         </StackPanel>
                     </Border>
 

@@ -30,5 +30,5 @@ public class NfeRecebida : BaseEntity
     /// do NfeImportService (entrada de estoque/pedido de compra).</summary>
     public bool Importada { get; set; } = false;
 
-    public DateTime DescobertaEm { get; set; } = DateTime.Now;
+    public DateTime DescobertaEm { get; set; } = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
 }

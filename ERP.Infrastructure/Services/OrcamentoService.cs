@@ -28,7 +28,7 @@ public class OrcamentoService : IOrcamentoService
         var orcamento = new Orcamento
         {
             Id = Guid.NewGuid(),
-            Numero = $"ORC{DateTime.Now:yyyyMMddHHmmss}{new Random().Next(10, 99)}", 
+            Numero = $"ORC{ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():yyyyMMddHHmmss}{new Random().Next(10, 99)}", 
             CustomerId = dto.CustomerId,
             CustomerName = dto.CustomerName,
             SellerName = dto.SellerName, 
@@ -68,7 +68,7 @@ public class OrcamentoService : IOrcamentoService
         // S17: RecalcularTotal() sempre setava 7 dias fixo — sobrescreve se o
         // usuário escolheu outra validade na tela.
         if (dto.ValidadeDias > 0)
-            orcamento.DataValidade = DateTime.Now.AddDays(dto.ValidadeDias);
+            orcamento.DataValidade = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().AddDays(dto.ValidadeDias);
 
         await _uow.Orcamentos.AddAsync(orcamento);
         await _uow.CommitAsync();
@@ -146,7 +146,7 @@ public class OrcamentoService : IOrcamentoService
 
         orc.StatusFollowUp     = dto.StatusFollowUp;
         orc.ObservacaoFollowUp = dto.ObservacaoFollowUp;
-        orc.DataUltimoContato  = DateTime.Now;
+        orc.DataUltimoContato  = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
         orc.UpdatedAt          = DateTime.UtcNow;
 
         if (dto.StatusFollowUp == StatusFollowUp.Perdido)

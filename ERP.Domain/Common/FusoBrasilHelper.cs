@@ -37,6 +37,25 @@ public static class FusoBrasilHelper
     public static DateTime AgoraNoBrasil()
         => TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, FusoBrasil);
 
+    /// <summary>Achado (09/09) — migração pra Azure revelou esse gap: campos
+    /// salvos corretamente em UTC (ex: Product.SalePriceChangedAt, via
+    /// DateTime.UtcNow) apareciam 3h adiantados na tela, porque nada convertia
+    /// de volta pro horário do Brasil na hora de EXIBIR — só existia o "agora",
+    /// não "essa data específica que já está salva". Antes da migração,
+    /// mascarado porque o WPF rodava no PC da loja com banco local, e o
+    /// "servidor" (SQL Express local) coincidentemente já estava no fuso do
+    /// Brasil.</summary>
+    public static DateTime ConverterParaBrasil(DateTime dataUtc)
+    {
+        // Se a data já veio "solta" (Kind=Unspecified, comum vindo do EF
+        // Core/SQL Server), assume que é UTC mesmo — é a convenção usada
+        // em todo o projeto (AgoraNoBrasil() também devolve Unspecified).
+        var utc = dataUtc.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(dataUtc, DateTimeKind.Utc)
+            : dataUtc.ToUniversalTime();
+        return TimeZoneInfo.ConvertTimeFromUtc(utc, FusoBrasil);
+    }
+
     /// <summary>Data/hora atual, correta pro Brasil, formatada do jeito que
     /// a Focus/SEFAZ espera (com offset explícito) — usa DateTimeOffset
     /// (carrega o offset junto do valor) em vez de DateTime+"zzz" (que pega

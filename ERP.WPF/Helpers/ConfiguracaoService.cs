@@ -15,11 +15,24 @@ public class ReciboConfig
     public string Telefone     { get; set; } = "Telefone / WhatsApp";
     public string Endereco     { get; set; } = "Endereço da Loja";
 
+    /// <summary>Achado (20/08) — o campo de CNPJ na tela de Configurações
+    /// nunca tinha correspondente aqui: preenchia, salvava, e sumia,
+    /// porque não existia onde persistir.</summary>
+    public string Cnpj { get; set; } = string.Empty;
+
     public string RodapeLinha1 { get; set; } = "Obrigado pela preferência!";
     public string RodapeLinha2 { get; set; } = "Volte sempre!";
     public string RodapeLinha3 { get; set; } = "Trocas apenas com cupom em até 7 dias.";
 
-    public string TokenFocusNfe       { get; set; } = string.Empty;
+    // Achado (21/08) — Focus NFe tem token SEPARADO por ambiente por
+    // empresa (confirmado testando de verdade: token de produção não
+    // funciona em homologacao.focusnfe.com.br). Antes só existia um campo,
+    // obrigando trocar o token na mão pra testar e trocar de volta depois.
+    // [JsonPropertyName] preserva o nome antigo no arquivo — sem isso, quem
+    // já tinha um token salvo localmente perderia ele na próxima leitura.
+    [System.Text.Json.Serialization.JsonPropertyName("TokenFocusNfe")]
+    public string TokenFocusNfeProducao { get; set; } = string.Empty;
+    public string TokenFocusNfeHomologacao { get; set; } = string.Empty;
     public bool   UsarAmbienteProducao { get; set; } = false;
     public string ChavePix  { get; set; } = string.Empty;
     public string CidadePix { get; set; } = string.Empty;
@@ -49,11 +62,16 @@ public static class ConfiguracaoService
         string json = File.ReadAllText(CaminhoArquivo);
         var config = JsonSerializer.Deserialize<ReciboConfig>(json) ?? new ReciboConfig();
 
-        // ── Descriptografar o token FocusNFe ────────────────────────────
-        if (!string.IsNullOrWhiteSpace(config.TokenFocusNfe))
+        // ── Descriptografar os tokens FocusNFe (produção e homologação) ──
+        if (!string.IsNullOrWhiteSpace(config.TokenFocusNfeProducao))
         {
-            try { config.TokenFocusNfe = CriptografiaService.Desencriptar(config.TokenFocusNfe); }
-            catch { config.TokenFocusNfe = string.Empty; } // token corrompido → limpa sem travar
+            try { config.TokenFocusNfeProducao = CriptografiaService.Desencriptar(config.TokenFocusNfeProducao); }
+            catch { config.TokenFocusNfeProducao = string.Empty; } // token corrompido → limpa sem travar
+        }
+        if (!string.IsNullOrWhiteSpace(config.TokenFocusNfeHomologacao))
+        {
+            try { config.TokenFocusNfeHomologacao = CriptografiaService.Desencriptar(config.TokenFocusNfeHomologacao); }
+            catch { config.TokenFocusNfeHomologacao = string.Empty; }
         }
 
         // ── Resolver caminho da logo ─────────────────────────────────────
@@ -69,13 +87,16 @@ public static class ConfiguracaoService
 
     public static void Salvar(ReciboConfig config)
     {
-        string tokenOriginal = config.TokenFocusNfe;
-        config.TokenFocusNfe = CriptografiaService.Encriptar(tokenOriginal);
+        string tokenProducaoOriginal     = config.TokenFocusNfeProducao;
+        string tokenHomologacaoOriginal  = config.TokenFocusNfeHomologacao;
+        config.TokenFocusNfeProducao    = CriptografiaService.Encriptar(tokenProducaoOriginal);
+        config.TokenFocusNfeHomologacao = CriptografiaService.Encriptar(tokenHomologacaoOriginal);
 
         string json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(CaminhoArquivo, json);
 
-        config.TokenFocusNfe = tokenOriginal;
+        config.TokenFocusNfeProducao    = tokenProducaoOriginal;
+        config.TokenFocusNfeHomologacao = tokenHomologacaoOriginal;
     }
 
     // ── Helper: resolve o caminho da logo de forma inteligente ───────────

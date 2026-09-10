@@ -258,6 +258,12 @@
                                                         Command="{Binding DataContext.EmitirNotaCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                         CommandParameter="{Binding}"
                                                         Background="Transparent" Foreground="{DynamicResource TextDark}" BorderThickness="0" Padding="8,6" Cursor="Hand"/>
+                                                <!-- Achado ao vivo (09/09) — pedido de 131 itens cortava no cupom
+                                                     térmico. Fica só aqui, não no fluxo normal do caixa. -->
+                                                <Button Content="🖨️ Imprimir A4" HorizontalContentAlignment="Left"
+                                                        Command="{Binding DataContext.ImprimirReciboA4Command, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        Background="Transparent" Foreground="{DynamicResource TextDark}" BorderThickness="0" Padding="8,6" Cursor="Hand"/>
                                                 <Button Content="💬 WhatsApp" HorizontalContentAlignment="Left"
                                                         Command="{Binding DataContext.EnviarWhatsAppCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                         CommandParameter="{Binding}"

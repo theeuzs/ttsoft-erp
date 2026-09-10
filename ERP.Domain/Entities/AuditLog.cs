@@ -11,7 +11,7 @@ public class AuditLog : BaseEntity
     public string? EntityType { get; set; }
     public string? EntityId { get; set; }
 
-    public DateTime Timestamp { get; set; } = DateTime.Now;
+    public DateTime Timestamp { get; set; } = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
     public string? MachineName { get; set; }
 
     public string? OldValues { get; set; }

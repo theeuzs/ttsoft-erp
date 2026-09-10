@@ -1,4 +1,5 @@
 using ERP.WPF.Services;
+using Serilog;
 using System;
 using System.Windows;
 using System.Windows.Input;
@@ -16,7 +17,7 @@ public partial class ChatPopupWindow : Window
         try { InitializeComponent(); }
         catch { return; }
 
-        try { LstMensagens.ItemsSource = _chat.Mensagens; } catch { }
+        try { LstMensagens.ItemsSource = _chat.Mensagens; } catch (Exception ex) { Log.Warning(ex, "ChatPopupWindow: falha ao vincular lista de mensagens"); }
 
         _chat.Mensagens.CollectionChanged += (_, _) =>
         {
@@ -25,7 +26,7 @@ public partial class ChatPopupWindow : Window
                 if (LstMensagens.Items.Count > 0)
                     LstMensagens.ScrollIntoView(LstMensagens.Items[^1]);
             }
-            catch { }
+            catch (Exception ex) { Log.Debug(ex, "ChatPopupWindow: falha ao rolar até a última mensagem"); }
         };
 
         if (!_chat.Conectado)
@@ -53,7 +54,7 @@ public partial class ChatPopupWindow : Window
             TxtMensagem!.Clear();
             await _chat.EnviarMensagemAsync(texto);
         }
-        catch { }
+        catch (Exception ex) { Log.Warning(ex, "ChatPopupWindow: falha ao enviar mensagem (botão)"); }
     }
 
     private async void TxtMensagem_KeyDown(object sender, KeyEventArgs e)
@@ -70,12 +71,12 @@ public partial class ChatPopupWindow : Window
                     await _chat.EnviarMensagemAsync(texto);
                 }
             }
-            catch { }
+            catch (Exception ex) { Log.Warning(ex, "ChatPopupWindow: falha ao enviar mensagem (Enter)"); }
         }
     }
 
     private void BtnFechar_Click(object sender, RoutedEventArgs e)
     {
-        try { Hide(); } catch { }
+        try { Hide(); } catch (Exception ex) { Log.Debug(ex, "ChatPopupWindow: falha ao esconder a janela"); }
     }
 }

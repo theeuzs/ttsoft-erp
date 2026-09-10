@@ -47,7 +47,7 @@ public class RecebivelOperadoraService : IRecebivelOperadoraService
             ? FormaRecebimentoOperadora.Debito
             : FormaRecebimentoOperadora.CreditoVista;
 
-        var dataVenda = DateTime.Now;
+        var dataVenda = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
 
         // A conta de taxa/prazo mora na própria Operadora (evita Modelo de
         // Domínio Anêmico) — este service só orquestra, não calcula.

@@ -46,4 +46,9 @@ public interface INotaFiscalAvulsaService
     /// respondeu sucesso mas a SEFAZ ainda não tinha confirmado autorização
     /// na hora da emissão).</summary>
     Task<FiscalEmissionResult> ConsultarStatusAsync(Guid id);
+
+    /// <summary>Histórico amplo pra tela "NF-e (Emissão)" — qualquer NF-e
+    /// A4, avulsa ou ligada a venda, com filtro opcional por período/status.</summary>
+    Task<IReadOnlyList<NfeA4HistoricoDto>> ListarHistoricoAsync(
+        DateTime? dataInicio = null, DateTime? dataFim = null, string? status = null);
 }

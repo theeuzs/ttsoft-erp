@@ -184,7 +184,32 @@ public class ErpApiFactory : WebApplicationFactory<Program>
             // Server contra SQLite (sintaxe não é 100% compatível entre os
             // dois). Só roda uma vez, no início da fábrica.
             using (var dbSetup = new AppDbContext(opcoesDb, new SimpleTenantStub(TestTenantId)))
+            {
                 dbSetup.Database.EnsureCreated();
+
+                // Achado (21/08) — FiscalController/NotasFiscaisController
+                // passaram a ler o token via IFiscalConfigurationProvider
+                // (TenantFiscalConfiguration por tenant), não mais direto do
+                // appsettings ("FocusNfe:Token" só tinha um placeholder ali
+                // mesmo, "CONFIGURADO_VIA_AZURE_APP_SERVICE"). O valor em si
+                // não importa pro teste — IFocusNfeHttpClient já é o stub
+                // acima, que devolve sucesso sem olhar o token — só precisa
+                // não estar vazio, senão o service já barra antes de chegar
+                // no stub.
+                dbSetup.TenantFiscalConfigurations.Add(new ERP.Domain.Entities.TenantFiscalConfiguration
+                {
+                    TenantId = TestTenantId,
+                    // Achado (21/08), 2ª tentativa — na primeira só tinha
+                    // preenchido o token de Produção, mas UsarAmbienteProducao
+                    // ficou false (homologação), então a resolução escolhia
+                    // o de Homologação — vazio, mesmo erro de novo. Seeda os
+                    // dois, funciona independente do ambiente escolhido.
+                    TokenFocusNfeProducaoEncriptado = ERP.Application.Helpers.TokenProtector.Proteger("token-de-teste-fake"),
+                    TokenFocusNfeHomologacaoEncriptado = ERP.Application.Helpers.TokenProtector.Proteger("token-de-teste-fake"),
+                    UsarAmbienteProducao = false,
+                });
+                dbSetup.SaveChanges();
+            }
 
             services.AddScoped<AppDbContext>(sp => new AppDbContext(
                 sp.GetRequiredService<DbContextOptions<AppDbContext>>(),

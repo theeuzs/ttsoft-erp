@@ -52,7 +52,7 @@ public class PedidoCompraRepository : Repository<PedidoCompra>, IPedidoCompraRep
 
     public async Task<string> GerarProximoNumeroAsync()
     {
-        int ano = DateTime.Now.Year;
+        int ano = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().Year;
         int count = await _ctx.PedidosCompra
             .Where(p => p.DataPedido.Year == ano)
             .CountAsync();

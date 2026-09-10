@@ -100,7 +100,8 @@ public class EntregaService : IEntregaService
 
     public async Task DeleteAsync(Guid id)
     {
-        var entrega = await _ctx.Set<Entrega>()
+        // Achado (21/08) — escapou da caçada anterior por ser multi-linha.
+        var entrega = await _ctx.Set<Entrega>().AsTracking()
             .FirstOrDefaultAsync(e => e.Id == id && !e.IsDeleted);
         if (entrega is null) return;
 
@@ -113,7 +114,8 @@ public class EntregaService : IEntregaService
 
     public async Task<EntregaDto> AtualizarStatusAsync(Guid id, AtualizarStatusEntregaDto dto)
     {
-        var entrega = await _ctx.Set<Entrega>()
+        // Mesmo achado (21/08).
+        var entrega = await _ctx.Set<Entrega>().AsTracking()
             .FirstOrDefaultAsync(e => e.Id == id && !e.IsDeleted)
             ?? throw new KeyNotFoundException($"Entrega {id} não encontrada.");
 
@@ -122,7 +124,7 @@ public class EntregaService : IEntregaService
 
         if (dto.Status == StatusEntrega.Entregue)
         {
-            entrega.DataEntrega     = DateTime.Now;
+            entrega.DataEntrega     = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
             entrega.AssinadoPor     = dto.AssinadoPor;
             entrega.FotoComprovante = dto.FotoComprovante;
         }
@@ -143,7 +145,8 @@ public class EntregaService : IEntregaService
 
     public async Task<EntregaDto> AtribuirMotoristaAsync(Guid id, AtribuirMotoristaDto dto)
     {
-        var entrega = await _ctx.Set<Entrega>()
+        // Mesmo achado (21/08).
+        var entrega = await _ctx.Set<Entrega>().AsTracking()
             .FirstOrDefaultAsync(e => e.Id == id && !e.IsDeleted)
             ?? throw new KeyNotFoundException($"Entrega {id} não encontrada.");
 
@@ -235,7 +238,10 @@ public class EntregaService : IEntregaService
 
     public async Task DeleteVeiculoAsync(Guid id)
     {
-        var v = await _ctx.Set<Veiculo>().FirstOrDefaultAsync(v => v.Id == id);
+        // Achado na caçada sistêmica do bug de tracking (21/08) — sem
+        // AsTracking(), esse soft-delete nunca persistia de verdade
+        // (AppDbContext roda NoTracking global).
+        var v = await _ctx.Set<Veiculo>().AsTracking().FirstOrDefaultAsync(v => v.Id == id);
         if (v is null) return;
         v.IsDeleted = true;
         v.IsAtivo   = false;

@@ -385,7 +385,7 @@
             if (cargo != null)
                 _maxDesconto = cargo.MaxDiscountPercentage;
         }
-        catch { /* mantém _maxDesconto = 100 como fallback seguro */ }
+        catch (Exception ex) { Console.WriteLine($"PDV: falha ao carregar limite de desconto do cargo, usando fallback — {ex.Message}"); /* mantém _maxDesconto = 100 como fallback seguro */ }
     }
 
     // S3.3: valida desconto ao digitar — bloqueia antes de finalizar
@@ -460,7 +460,7 @@
             var ags = await Api.GetAsync<AgregadoItem[]>($"api/Products/{p.Id}/sugestoes");
             if (ags?.Length > 0) { _agregados = ags.ToList(); _agregadoPai = p.Name; }
         }
-        catch { }
+        catch (Exception ex) { Console.WriteLine($"PDV: falha ao buscar produtos agregados/sugestões — {ex.Message}"); }
     }
 
     // S3.5: animação verde no total por 600ms

@@ -235,7 +235,7 @@
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { Console.WriteLine($"CatalogoPublico: falha ao montar link do WhatsApp — {ex.Message}"); }
 
         await CarregarAsync();
     }
@@ -262,7 +262,7 @@
                     .OrderBy(c => c)
                     .ToList()!;
         }
-        catch { }
+        catch (Exception ex) { Console.WriteLine($"CatalogoPublico: falha ao carregar categorias — {ex.Message}"); }
         finally { _loading = false; }
     }
 

@@ -44,7 +44,7 @@ public static class PdfReportBase
             {
                 row.RelativeItem().Text(tituloRelatorio).Bold().FontSize(14).FontColor(Colors.Blue.Darken2);
                 row.ConstantItem(200).AlignRight()
-                   .Text($"Emitido em {DateTime.Now:dd/MM/yyyy HH:mm}")
+                   .Text($"Emitido em {ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():dd/MM/yyyy HH:mm}")
                    .FontSize(10).FontColor(Colors.Grey.Medium);
             });
 
@@ -73,7 +73,7 @@ public static class PdfReportBase
                 "ERP_Relatorios");
             Directory.CreateDirectory(pasta);
 
-            string caminho = Path.Combine(pasta, $"{nomeBase}_{DateTime.Now:yyyyMMdd_HHmm}.pdf");
+            string caminho = Path.Combine(pasta, $"{nomeBase}_{ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():yyyyMMdd_HHmm}.pdf");
             documento.GeneratePdf(caminho);
 
             // Abre o PDF com o visualizador padrão do Windows

@@ -16,24 +16,21 @@ public class NotasFiscaisController : ControllerBase
     private readonly INfceEmissionService    _nfce;
     private readonly INfeCancellationService _cancel;
     private readonly IFiscalService          _fiscal;
-    private readonly IConfiguration         _config;
+    private readonly IFiscalConfigurationProvider _configProvider;
 
     public NotasFiscaisController(
         INotasFiscaisService    notasService,
         INfceEmissionService    nfce,
         INfeCancellationService cancel,
         IFiscalService          fiscal,
-        IConfiguration          config)
+        IFiscalConfigurationProvider configProvider)
     {
-        _notasService = notasService;
-        _nfce         = nfce;
-        _cancel       = cancel;
-        _fiscal       = fiscal;
-        _config       = config;
+        _notasService   = notasService;
+        _nfce           = nfce;
+        _cancel         = cancel;
+        _fiscal         = fiscal;
+        _configProvider = configProvider;
     }
-
-    private string Token      => _config["FocusNfe:Token"] ?? "";
-    private bool   IsProducao => _config.GetValue<bool>("FocusNfe:IsProducao");
 
     /// <summary>Lista as notas fiscais emitidas, paginadas por data de emissão decrescente.</summary>
     [HttpGet]
@@ -48,8 +45,12 @@ public class NotasFiscaisController : ControllerBase
     [HttpPost("nfce/emitir")]
     public async Task<IActionResult> EmitirNfce([FromBody] EmitirNfceRequest req)
     {
-        if (string.IsNullOrEmpty(Token))
-            return BadRequest(new { erro = "Token FocusNFe não configurado em FocusNfe:Token." });
+        // Achado (21/08) — token global do appsettings, ignorava
+        // TenantFiscalConfiguration por completo; num cenário com mais de
+        // um tenant, todo mundo emitiria com o MESMO token, sempre.
+        var config = await _configProvider.ObterConfiguracaoAsync();
+        if (string.IsNullOrEmpty(config.TokenFocusNfe))
+            return BadRequest(new { erro = "Token FocusNFe não configurado — vá em Configurações → Empresa e Fiscal." });
 
         var formaPgto = req.FormaPagamento switch
         {
@@ -62,7 +63,10 @@ public class NotasFiscaisController : ControllerBase
         var focusReq = new FocusNfceRequest
         {
             NaturezaOperacao = "Venda ao Consumidor",
-            DataEmissao      = DateTime.Now.ToString("yyyy-MM-dd'T'HH:mm:sszzz"),
+            // Achado (21/08) — mesmo bug do S21 (DateTime.Now+zzz depende do
+            // fuso AMBIENTE do servidor), nunca corrigido nesse endpoint
+            // específico quando foi corrigido em FiscalService.cs.
+            DataEmissao      = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasilComOffset(),
             CpfCnpj          = req.CpfCnpjConsumidor,
             Itens            = req.Itens.Select(i => new FocusItemRequest
             {
@@ -89,7 +93,7 @@ public class NotasFiscaisController : ControllerBase
 
         var referencia = $"venda-{req.VendaId ?? Guid.NewGuid()}";
         var (sucesso, mensagem, urlDanfe, urlXml) = await _nfce.EmitirNfceAsync(
-            referencia, focusReq, Token, IsProducao);
+            referencia, focusReq, config.TokenFocusNfe, config.UsarAmbienteProducao);
 
         if (!sucesso)
             return BadRequest(new { erro = mensagem });
@@ -141,8 +145,9 @@ public class NotasFiscaisController : ControllerBase
         if (string.IsNullOrEmpty(req.Justificativa) || req.Justificativa.Length < 15)
             return BadRequest(new { erro = "Justificativa deve ter no mínimo 15 caracteres." });
 
+        var config = await _configProvider.ObterConfiguracaoAsync();
         var (sucesso, mensagem) = await _cancel.CancelarNotaAsync(
-            referencia, req.Justificativa, Token, IsProducao, req.TipoDocumento);
+            referencia, req.Justificativa, config.TokenFocusNfe, config.UsarAmbienteProducao, req.TipoDocumento);
 
         return sucesso
             ? Ok(new { Sucesso = true, Mensagem = mensagem })
@@ -151,15 +156,18 @@ public class NotasFiscaisController : ControllerBase
 
     /// <summary>Retorna URL de consulta de uma nota pelo número de referência.</summary>
     [HttpGet("{referencia}/status")]
-    public IActionResult ConsultarStatus(string referencia)
-        => Ok(new
+    public async Task<IActionResult> ConsultarStatus(string referencia)
+    {
+        var config = await _configProvider.ObterConfiguracaoAsync();
+        return Ok(new
         {
             Referencia  = referencia,
-            UrlConsulta = IsProducao
+            UrlConsulta = config.UsarAmbienteProducao
                 ? $"https://api.focusnfe.com.br/v2/nfce/{referencia}"
                 : $"https://homologacao.focusnfe.com.br/v2/nfce/{referencia}",
-            Ambiente = IsProducao ? "Produção" : "Homologação"
+            Ambiente = config.UsarAmbienteProducao ? "Produção" : "Homologação"
         });
+    }
 }
 
 public class EmitirNfceRequest

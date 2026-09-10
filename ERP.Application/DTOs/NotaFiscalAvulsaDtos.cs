@@ -91,6 +91,15 @@ public record NotaFiscalAvulsaResumoDto(
     Guid Id, string NaturezaOperacao, string DestinatarioNome,
     decimal ValorTotal, string Status, DateTime DataEmissao);
 
+/// <summary>Tela "NF-e (Emissão)" — histórico amplo, qualquer NF-e A4 (não
+/// só as avulsas, também as ligadas a uma venda, se algum dia existirem).
+/// `EhAvulsa` distingue a origem só pra exibição — as ações (cancelar,
+/// copiar) funcionam igual pras duas.</summary>
+public record NfeA4HistoricoDto(
+    Guid Id, string NaturezaOperacao, string DestinatarioNome,
+    decimal ValorTotal, string Status, DateTime DataEmissao,
+    bool EhAvulsa, string? UrlDanfe);
+
 // ── Conferência (item 4/9 — "pré-visualizar" honesto: mostra os impostos
 // calculados pelo MotorFiscal antes de transmitir, sem fingir renderizar
 // um DANFE que só a SEFAZ pode gerar de verdade) ──────────────────────────

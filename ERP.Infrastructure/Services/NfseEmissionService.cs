@@ -49,7 +49,7 @@ public class NfseEmissionService : INfseEmissionService
         // Payload para a FocusNFe (NFS-e nacional padrão)
         var payload = new
         {
-            data_emissao        = DateTime.Now.ToString("yyyy-MM-dd"),
+            data_emissao        = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().ToString("yyyy-MM-dd"),
             natureza_operacao   = 1, // 1 = Tributação no município
             optante_simples_nacional = 1,
             prestador = new

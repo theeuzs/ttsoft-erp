@@ -247,7 +247,7 @@ public class OrcamentosViewModel : BaseViewModel
     {
         TotalOrcamentosAbertos = orcamentos.Where(o => o.Status.ToString() == "Aberto").Sum(o => o.ValorTotal);
         QtdOrcamentosAbertos = orcamentos.Count(o => o.Status.ToString() == "Aberto");
-        QtdOrcamentosAprovados = orcamentos.Count(o => o.Status.ToString() == "Vendido" && o.DataEmissao.Month == DateTime.Now.Month);
+        QtdOrcamentosAprovados = orcamentos.Count(o => o.Status.ToString() == "Vendido" && o.DataEmissao.Month == ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().Month);
     }
 
     // 👇 Transformamos em "async Task" para poder usar o banco de dados

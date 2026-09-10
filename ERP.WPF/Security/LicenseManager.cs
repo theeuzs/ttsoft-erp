@@ -66,7 +66,7 @@ public static class LicenseManager
                     if (doc.RootElement.TryGetProperty("motivo", out var m))
                         motivo = m.GetString() ?? motivo;
                 }
-                catch { }
+                catch (Exception ex) { Log.Warning(ex, "Não consegui ler o motivo detalhado da licença inválida — mensagem genérica será usada"); }
 
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
@@ -100,11 +100,11 @@ public static class LicenseManager
                 cnpj,
                 machineId,
                 vencimento = vencimento.ToString("O"),
-                salvoEm    = DateTime.Now.ToString("O")
+                salvoEm    = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().ToString("O")
             };
             File.WriteAllText(CacheFile, JsonSerializer.Serialize(dados));
         }
-        catch { }
+        catch (Exception ex) { Log.Warning(ex, "Não consegui salvar o cache offline da licença — validação offline não vai funcionar até o próximo login online"); }
     }
 
     private static (bool IsValid, DateTime DataVencimento) VerificarCacheOffline(string cnpj, string machineId)
@@ -132,7 +132,7 @@ public static class LicenseManager
                 return (false, DateTime.MinValue);
             }
 
-            int diasSemInternet = (DateTime.Now - salvoEm).Days;
+            int diasSemInternet = (ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil() - salvoEm).Days;
             if (diasSemInternet > GracePeriodDias)
             {
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
@@ -146,7 +146,7 @@ public static class LicenseManager
                 return (false, DateTime.MinValue);
             }
 
-            if (vencimento.Date < DateTime.Now.Date)
+            if (vencimento.Date < ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().Date)
             {
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
@@ -161,7 +161,7 @@ public static class LicenseManager
 
             DataVencimento = vencimento;
             StatusAtual    = "Ativo (Offline)";
-            DiasRestantes  = (vencimento.Date - DateTime.Now.Date).Days;
+            DiasRestantes  = (vencimento.Date - ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().Date).Days;
 
             // ← Sem MessageBox no modo offline — só registra no log
             Log.Warning("Licença verificada em modo OFFLINE. Dias sem internet: {Dias}/{Max}. Vencimento: {Vencimento}",

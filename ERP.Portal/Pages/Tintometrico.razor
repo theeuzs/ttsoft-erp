@@ -463,7 +463,7 @@
             await Api.DeleteAsync($"api/Tintometrico/produto/{f.ProductId}");
             await CarregarAsync();
         }
-        catch { }
+        catch (Exception ex) { Console.WriteLine($"Tintometrico: falha ao excluir fórmula — {ex.Message}"); }
     }
 
     // ── Modal Calcular ────────────────────────────────────────────────────────
@@ -482,7 +482,7 @@
             _calcResultado = await Api.GetAsync<CalcResultado>(
                 $"api/Tintometrico/calcular/{_calcFormula!.ProductId}?areaM2={_calcArea}&demaos={_calcDemaos}");
         }
-        catch { }
+        catch (Exception ex) { Console.WriteLine($"Tintometrico: falha ao calcular — {ex.Message}"); }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

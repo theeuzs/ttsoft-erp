@@ -51,7 +51,7 @@ public class CaixaService : ICaixaService
             NumeroCaixa   = _rng.Value!.Next(100, 999),
             UsuarioId     = dto.UsuarioId,
             OperadorNome  = dto.OperadorNome ?? "Operador",
-            DataAbertura  = DateTime.Now,
+            DataAbertura  = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
             ValorAbertura = dto.ValorAbertura,
             Status        = StatusCaixa.Aberto
         };
@@ -61,7 +61,7 @@ public class CaixaService : ICaixaService
             Tipo      = TipoMovimentoCaixa.Abertura,
             Descricao = "TROCO INICIAL (ABERTURA)",
             Valor     = dto.ValorAbertura,
-            DataHora  = DateTime.Now
+            DataHora  = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil()
         });
 
         await _uow.Caixas.AddAsync(novoCaixa);
@@ -108,7 +108,7 @@ public class CaixaService : ICaixaService
             Descricao      = descricao,
             FormaPagamento = formaPagamento,
             Tipo           = tipo,
-            DataHora       = DateTime.Now,
+            DataHora       = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
             VendaId        = vendaId,
             SalePaymentId  = salePaymentId
         };
@@ -128,7 +128,7 @@ public class CaixaService : ICaixaService
         if (caixaAberto != null)
         {
             caixaAberto.Status = StatusCaixa.Fechado;
-            caixaAberto.DataFechamento = DateTime.Now;
+            caixaAberto.DataFechamento = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
 
             _uow.Caixas.Update(caixaAberto);
             await _uow.CommitAsync();

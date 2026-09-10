@@ -46,7 +46,7 @@ public class NfeContingencyService : INfeContingencyService
             TipoNota = tipoNota,
             PayloadJson = payloadJson,
             Referencia = vendaId.ToString(),
-            DataFalha = DateTime.Now,
+            DataFalha = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
             Tentativas = 0
         };
 

@@ -80,7 +80,7 @@ public class PortalChatService : IAsyncDisposable
                 });
                 OnMensagemNova?.Invoke();
             }
-            catch { }
+            catch (Exception ex) { Console.WriteLine($"PortalChatService: falha ao processar mensagem recebida — {ex.Message}"); }
         });
 
         // Sprint 3C: histórico persistido recebido ao conectar
@@ -117,7 +117,7 @@ public class PortalChatService : IAsyncDisposable
                 Mensagens.InsertRange(0, new[] { separador }.Concat(msgs));
                 OnMensagemNova?.Invoke();
             }
-            catch { }
+            catch (Exception ex) { Console.WriteLine($"PortalChatService: falha ao processar histórico de chat — {ex.Message}"); }
         });
 
         // S10 FIX: refresh do chatToken no Closed — token de 5 min pode ter expirado.
@@ -129,7 +129,7 @@ public class PortalChatService : IAsyncDisposable
         };
 
         try { await _connection.StartAsync(); }
-        catch { }
+        catch (Exception ex) { Console.WriteLine($"PortalChatService: falha ao conectar — {ex.Message}"); }
     }
 
     public async Task EnviarAsync(string mensagem)

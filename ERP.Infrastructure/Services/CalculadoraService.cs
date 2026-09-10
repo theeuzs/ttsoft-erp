@@ -360,7 +360,7 @@ public class CalculadoraService : ICalculadoraService
             .Select(m => new Application.Interfaces.MaterialItem(m.Nome, m.Quantidade, m.Unidade, m.Observacao))
             .ToList();
 
-        return new CalcResultado(template, t.Nome, materiais, materiais.Count, DateTime.Now);
+        return new CalcResultado(template, t.Nome, materiais, materiais.Count, ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil());
     }
 
     public async Task<CalcComEstoqueResultado> CalcularComEstoqueAsync(
@@ -395,7 +395,7 @@ public class CalculadoraService : ICalculadoraService
             .Where(r => r.ProdutoEstoque != null)
             .Sum(r => r.ProdutoEstoque!.TotalEstimado);
 
-        return new CalcComEstoqueResultado(t.Nome, resultado, totalEstimado, DateTime.Now);
+        return new CalcComEstoqueResultado(t.Nome, resultado, totalEstimado, ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil());
     }
 
     public async Task<OrcamentoGeradoResultado> GerarOrcamentoAsync(

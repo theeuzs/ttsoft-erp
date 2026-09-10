@@ -228,9 +228,9 @@ else
             var tema = await JS.InvokeAsync<string>("initTheme");
             _darkMode = tema == "dark";
         }
-        catch { }
+        catch (Exception ex) { Console.WriteLine($"MainLayout: falha ao carregar preferência de tema — {ex.Message}"); }
     }
- 
+
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
         VerificarMustChange();

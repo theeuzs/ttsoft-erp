@@ -16,16 +16,29 @@ public class JsonFiscalConfigurationProvider : IFiscalConfigurationProvider
         var config = ERP.WPF.Helpers.ConfiguracaoService.Carregar();
         return Task.FromResult(new FiscalConfiguration
         {
-            TokenFocusNfe        = config.TokenFocusNfe,
-            UsarAmbienteProducao = config.UsarAmbienteProducao
+            // Achado (21/08) — Focus tem token separado por ambiente por
+            // empresa; resolve aqui sozinho, quem consome não precisa saber.
+            TokenFocusNfe            = config.UsarAmbienteProducao
+                ? config.TokenFocusNfeProducao
+                : config.TokenFocusNfeHomologacao,
+            UsarAmbienteProducao     = config.UsarAmbienteProducao,
+            // Achado (20/08) — faltava aqui, mesmo já existindo no arquivo
+            // local desde a correção anterior. MD-e (NfeRecebidaService) e
+            // qualquer outro consumidor de IFiscalConfigurationProvider
+            // nunca recebiam o CNPJ, mesmo com ele salvo certinho.
+            Cnpj                     = config.Cnpj,
+            TokenFocusNfeProducao    = config.TokenFocusNfeProducao,
+            TokenFocusNfeHomologacao = config.TokenFocusNfeHomologacao,
         });
     }
 
     public Task SalvarConfiguracaoAsync(FiscalConfiguration config)
     {
         var reciboConfig = ERP.WPF.Helpers.ConfiguracaoService.Carregar();
-        reciboConfig.TokenFocusNfe        = config.TokenFocusNfe;
-        reciboConfig.UsarAmbienteProducao = config.UsarAmbienteProducao;
+        reciboConfig.TokenFocusNfeProducao    = config.TokenFocusNfeProducao ?? string.Empty;
+        reciboConfig.TokenFocusNfeHomologacao = config.TokenFocusNfeHomologacao ?? string.Empty;
+        reciboConfig.UsarAmbienteProducao     = config.UsarAmbienteProducao;
+        reciboConfig.Cnpj                     = config.Cnpj;
         ERP.WPF.Helpers.ConfiguracaoService.Salvar(reciboConfig);
         return Task.CompletedTask;
     }

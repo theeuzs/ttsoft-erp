@@ -203,7 +203,7 @@ public class EntregasController : ControllerBase
     </div>
     <div style="text-align:right;">
       <div style="font-size:10px;color:#94A3B8;font-weight:600;">EMITIDO EM</div>
-      <div style="font-size:13px;font-weight:700;">{{DateTime.Now:dd/MM/yyyy HH:mm}}</div>
+      <div style="font-size:13px;font-weight:700;">{{ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():dd/MM/yyyy HH:mm}}</div>
     </div>
   </div>
 

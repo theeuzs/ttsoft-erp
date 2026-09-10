@@ -85,7 +85,7 @@ public class ContaBancariaService : IContaBancariaService
             Valor           = valor,
             Descricao       = string.IsNullOrWhiteSpace(descricao) ? "Lançamento manual" : descricao.Trim(),
             Tipo            = tipo,
-            DataHora        = DateTime.Now,
+            DataHora        = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
             OrigemTipo      = origemTipo,
             OrigemId        = origemId
         };
@@ -240,7 +240,7 @@ public class ContaBancariaService : IContaBancariaService
             OrigemId        = vendaId,
             SalePaymentId   = salePaymentId,
             Tipo            = TipoMovimentoContaBancaria.Entrada,
-            DataHora        = DateTime.Now
+            DataHora        = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil()
         });
         await _uow.CommitAsync();
     }
@@ -264,7 +264,7 @@ public class ContaBancariaService : IContaBancariaService
             OrigemId        = vendaId,
             SalePaymentId   = salePaymentId,
             Tipo            = TipoMovimentoContaBancaria.Saida,
-            DataHora        = DateTime.Now
+            DataHora        = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil()
         });
         await _uow.CommitAsync();
     }

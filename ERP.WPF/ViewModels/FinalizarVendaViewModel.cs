@@ -3,6 +3,7 @@ using ERP.Application.DTOs.FocusNfe;
 using ERP.Application.Interfaces;
 using ERP.Domain.Enums;
 using ERP.WPF.Commands;
+using Serilog;
 using System.Collections.ObjectModel;
 using System.Data.SqlClient;
 using Dapper; 
@@ -205,7 +206,7 @@ public class FinalizarVendaViewModel : BaseViewModel
                }
            }
        }
-       catch { }
+       catch (Exception ex) { Log.Warning(ex, "FinalizarVendaViewModel: falha ao carregar lista de clientes"); }
    }
 
     private async Task CarregarDadosIniciaisAsync(Guid? clienteIdSelecionado)
@@ -213,6 +214,25 @@ public class FinalizarVendaViewModel : BaseViewModel
         await LoadCustomersAsync(clienteIdSelecionado);
         await CarregarVendedoresAsync();
         await CarregarOperadoraPadraoAsync();
+        await CarregarFeatureFlagsAsync();
+    }
+
+    // Achado (09/09) — o botão "Usar Fidelidade" sempre aparecia, pra todo
+    // tenant, mesmo sem essa feature nunca ter sido oferecida a eles.
+    private bool _fidelidadeHabilitada;
+    public bool FidelidadeHabilitada { get => _fidelidadeHabilitada; set => SetProperty(ref _fidelidadeHabilitada, value); }
+
+    private async Task CarregarFeatureFlagsAsync()
+    {
+        try
+        {
+            using var scope = ERP.WPF.App.Services.CreateScope();
+            var flags = await scope.ServiceProvider
+                .GetRequiredService<ERP.Application.Interfaces.ITenantFeatureFlagsProvider>()
+                .ObterAsync();
+            FidelidadeHabilitada = flags.PontosFidelidadeHabilitado;
+        }
+        catch (Exception ex) { Log.Warning(ex, "FinalizarVendaViewModel: falha ao carregar feature flags do tenant"); }
     }
 
     // ── Item 2.3 (Comercial) — taxa de operadora informativa no PDV.
@@ -555,7 +575,7 @@ public class FinalizarVendaViewModel : BaseViewModel
                 var config = ERP.WPF.Helpers.ConfiguracaoService.Carregar();
                 if (!string.IsNullOrWhiteSpace(config.ChavePix))
                 {
-                    string txid = $"ERP{DateTime.Now:yyyyMMddHHmmss}";
+                    string txid = $"ERP{ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():yyyyMMddHHmmss}";
                     var pixView = new ERP.WPF.Views.PixQrCodeView(
                         valor:            pagamentoPix.Valor,
                         chavePix:         config.ChavePix,
@@ -751,7 +771,7 @@ public class FinalizarVendaViewModel : BaseViewModel
             // o número real da venda só existe depois de sincronizar.
             var vendaProvisoria = new SaleDto(
                 dto.Id.Value, $"OFFLINE-{dto.Id.Value.ToString()[..8].ToUpper()}",
-                nomeCliente, nomeVendedor, DateTime.Now,
+                nomeCliente, nomeVendedor, ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
                 ERP.Domain.Enums.SaleStatus.SemNota, "Offline", totalVenda);
 
             return (vendaProvisoria, true);

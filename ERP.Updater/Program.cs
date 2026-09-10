@@ -21,7 +21,8 @@ try
     string sha256Esperado = args[3];
 
     Console.WriteLine("Aguardando o ERP fechar...");
-    try { Process.GetProcessById(pidErp).WaitForExit(10000); } catch { }
+    try { Process.GetProcessById(pidErp).WaitForExit(10000); }
+    catch (Exception ex) { Console.WriteLine($"Aviso: não consegui esperar o processo do ERP fechar ({ex.Message}) — seguindo mesmo assim."); }
     
     Console.WriteLine("Sucesso!");
     Thread.Sleep(5000);

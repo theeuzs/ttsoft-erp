@@ -31,7 +31,7 @@ public class RecebivelOperadora : BaseEntity
     public decimal ValorTaxa    { get; set; } // taxa da operadora, calculada na criação
     public decimal ValorLiquido { get; set; } // ValorBruto - ValorTaxa — o que deve cair no banco
 
-    public DateTime  DataVenda              { get; set; } = DateTime.Now;
+    public DateTime  DataVenda              { get; set; } = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
     public DateTime  DataPrevistaLiquidacao { get; set; }
 
     public StatusRecebivel Status         { get; set; } = StatusRecebivel.Pendente;

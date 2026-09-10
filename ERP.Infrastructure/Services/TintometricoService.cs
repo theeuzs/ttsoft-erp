@@ -54,7 +54,10 @@ public class TintometricoService : ITintometricoService
         if (!produtoExiste)
             throw new KeyNotFoundException($"Produto {dto.ProductId} não encontrado.");
 
-        var existente = await _ctx.FormulasTintometricas
+        // Achado (21/08) — escapou da caçada anterior por ser multi-linha.
+        // Sem AsTracking(), as 8 propriedades mutadas no else abaixo não
+        // seriam persistidas (AppDbContext roda NoTracking global).
+        var existente = await _ctx.FormulasTintometricas.AsTracking()
             .Where(f => f.ProductId == dto.ProductId)
             .FirstOrDefaultAsync(ct);
 
@@ -94,7 +97,8 @@ public class TintometricoService : ITintometricoService
 
     public async Task<bool> DeleteAsync(Guid productId, CancellationToken ct = default)
     {
-        var f = await _ctx.FormulasTintometricas
+        // Mesmo achado (21/08) — soft-delete que nunca persistia.
+        var f = await _ctx.FormulasTintometricas.AsTracking()
             .Where(f => f.ProductId == productId)
             .FirstOrDefaultAsync(ct);
 

@@ -13,7 +13,7 @@ public class ContaPagar : BaseEntity
     // Categoria para os gráficos (Ex: "Fornecedor", "Imposto", "Despesa Fixa")
     public string Categoria { get; set; } = string.Empty;
 
-    public DateTime DataEmissao { get; set; } = DateTime.Now;
+    public DateTime DataEmissao { get; set; } = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
     public DateTime DataVencimento { get; set; }
     public DateTime? DataPagamento { get; set; }
 

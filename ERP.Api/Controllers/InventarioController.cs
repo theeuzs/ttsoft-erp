@@ -114,7 +114,7 @@ public class InventarioController : ControllerBase
         {
             Ajustados  = dto.Itens.Count,
             Mensagem   = $"{dto.Itens.Count} produto(s) ajustado(s).",
-            AplicadoEm = DateTime.Now
+            AplicadoEm = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil()
         });
     }
 
@@ -163,7 +163,7 @@ public class InventarioController : ControllerBase
             TotalSobras   = divergencias.Count(d => d.Status == "Sobra"),
             TotalFaltas   = divergencias.Count(d => d.Status == "Falta"),
             Divergencias  = divergencias,
-            GeradoEm      = DateTime.Now
+            GeradoEm      = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil()
         });
     }
 }

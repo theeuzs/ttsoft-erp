@@ -1,4 +1,5 @@
 using System;
+using Serilog;
 using System.IO;
 using System.IO.Packaging;
 using System.Windows.Documents;
@@ -31,7 +32,7 @@ public static class OrcamentoPdfExporter
         finally
         {
             if (File.Exists(xpsTemp))
-                try { File.Delete(xpsTemp); } catch { }
+                try { File.Delete(xpsTemp); } catch (Exception ex) { Log.Debug(ex, "OrcamentoPdfExporter: falha ao apagar o XPS temporário {Arquivo}", xpsTemp); }
         }
     }
 

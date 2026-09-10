@@ -106,7 +106,7 @@ namespace ERP.Application.Services
                     FornecedorCnpj = emit?.Elements().FirstOrDefault(x => x.Name.LocalName == "CNPJ")?.Value ?? "",
                     
                     DataEmissao = DateTime.TryParse(ide?.Elements().FirstOrDefault(x => x.Name.LocalName == "dhEmi")?.Value, out DateTime data) 
-                        ? data : DateTime.Now,
+                        ? data : ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
                         
                     ValorTotal = decimal.TryParse(vNF, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal v) ? v : 0,
                     TotalProdutosXml = decimal.TryParse(vProd, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal vp) ? vp : 0,
@@ -128,7 +128,7 @@ namespace ERP.Application.Services
                         nfeDto.Duplicatas.Add(new NfeDuplicataDto
                         {
                             Numero = nDup,
-                            DataVencimento = DateTime.TryParse(dVenc, out DateTime venc) ? venc : DateTime.Now,
+                            DataVencimento = DateTime.TryParse(dVenc, out DateTime venc) ? venc : ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
                             Valor = decimal.TryParse(vDup, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal vlrDup) ? vlrDup : 0
                         });
                     }
@@ -311,14 +311,14 @@ namespace ERP.Application.Services
             }
 
             // 2. Cria o PedidoCompra vinculado a esta NF-e
-            var numero = $"NF-{notaFiscal.NumeroNota}-{DateTime.Now:yyyyMMddHHmm}";
+            var numero = $"NF-{notaFiscal.NumeroNota}-{ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():yyyyMMddHHmm}";
             var pedido = new ERP.Domain.Entities.PedidoCompra
             {
                 Numero         = numero,
                 SupplierId     = fornecedor.Id,
                 FornecedorNome = notaFiscal.FornecedorNome,
                 DataPedido     = notaFiscal.DataEmissao,
-                DataRecebimento = DateTime.Now,
+                DataRecebimento = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
                 Status         = ERP.Domain.Enums.StatusPedidoCompra.Recebido,
                 Observacoes    = $"Importado automaticamente do XML NF-e {notaFiscal.NumeroNota} " +
                                  $"(Chave: {notaFiscal.ChaveAcesso})",
@@ -402,7 +402,7 @@ namespace ERP.Application.Services
                     Descricao      = $"NF {notaFiscal.NumeroNota} - {notaFiscal.FornecedorNome}",
                     Categoria      = "Fornecedores",
                     Valor          = notaFiscal.ValorTotal,
-                    DataVencimento = DateTime.Now.AddDays(30),
+                    DataVencimento = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().AddDays(30),
                     DataEmissao    = notaFiscal.DataEmissao
                 });
             }

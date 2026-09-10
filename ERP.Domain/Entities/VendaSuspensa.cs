@@ -12,7 +12,7 @@ namespace ERP.Domain.Entities;
 /// </summary>
 public class VendaSuspensa : BaseEntity
 {
-    public DateTime DataSuspensao { get; set; } = DateTime.Now;
+    public DateTime DataSuspensao { get; set; } = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
 
     public Guid?  ClienteId   { get; set; }
     public string ClienteNome { get; set; } = "Sem cliente";

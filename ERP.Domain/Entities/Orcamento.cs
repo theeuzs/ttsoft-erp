@@ -75,7 +75,7 @@ public class Orcamento : BaseEntity   // ← era: public class Orcamento (sem he
 
     public Orcamento()
     {
-        DataEmissao  = DateTime.Now;
-        DataValidade = DateTime.Now.AddDays(7);
+        DataEmissao  = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
+        DataValidade = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().AddDays(7);
     }
 }

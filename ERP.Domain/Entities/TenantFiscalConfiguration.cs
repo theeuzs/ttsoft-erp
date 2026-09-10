@@ -12,8 +12,15 @@ namespace ERP.Domain.Entities;
 public class TenantFiscalConfiguration : BaseEntity
 {
     /// <summary>Criptografado com TokenProtector (AES portátil — não DPAPI,
-    /// que só funciona no Windows/usuário local e não seria legível pela API).</summary>
-    public string TokenFocusNfeEncriptado { get; set; } = string.Empty;
+    /// que só funciona no Windows/usuário local e não seria legível pela API).
+    /// Achado (21/08) — Focus tem token separado por ambiente por empresa
+    /// (confirmado testando: token de produção não funciona em homologação).
+    /// O nome da coluna no banco continua "TokenFocusNfeEncriptado" (mapeado
+    /// via Fluent API no AppDbContext) — renomear a coluna de verdade exigiria
+    /// migração de rename, desnecessário só pra deixar o nome C# mais claro.</summary>
+    public string TokenFocusNfeProducaoEncriptado { get; set; } = string.Empty;
+
+    public string? TokenFocusNfeHomologacaoEncriptado { get; set; }
 
     public bool UsarAmbienteProducao { get; set; } = false;
 

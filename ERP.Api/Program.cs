@@ -208,6 +208,8 @@ builder.Services.AddHttpClient<BrasilApiService>(client =>
 
 // S13: Cleanup de cadastros pendentes expirados (roda a cada 6h)
 builder.Services.AddHostedService<ERP.Api.Services.CleanupCadastrosExpiradosService>();
+// Plano de 30 dias, item 4/4 — sem isso, AuditLogs cresce pra sempre.
+builder.Services.AddHostedService<ERP.Api.Services.AuditLogRetentionService>();
 
 // ── Fase 2 ────────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<ERP.Infrastructure.Services.ITransferenciaService,
@@ -215,7 +217,13 @@ builder.Services.AddScoped<ERP.Infrastructure.Services.ITransferenciaService,
 builder.Services.AddScoped<ERP.Application.Interfaces.INfseEmissionService,
                             ERP.Infrastructure.Services.NfseEmissionService>();
 builder.Services.AddSingleton<ERP.Domain.Services.Fiscal.ICMSSTCalculator>();
-builder.Services.AddSingleton<ERP.Infrastructure.Services.OfflineSyncService>();
+// S28 FIX: removido AddSingleton<OfflineSyncService> — zero consumidores
+// na API (confirmado, só existia o registro). Essa classe é o banco SQLite
+// LOCAL do terminal offline-first (Fase 1, docs/OFFLINE_FIRST_ARCHITECTURE.md),
+// consumida pelo SyncEngineService que só existe no WPF. Registrada aqui,
+// o construtor (dbPath=null) cria pasta+arquivo .db de verdade em
+// LocalApplicationData a cada start da API — I/O e artefato sem propósito
+// nenhum num servidor stateless. Classe preservada, só o registro morto saiu.
 builder.Services.AddSingleton<ERP.Infrastructure.Services.SpedEfdGenerator>();
 builder.Services.AddSingleton<ERP.Infrastructure.Services.SpedContribuicoesGenerator>();
 // S15 FIX: removido registro duplicado de ContaReceberService sem interface
@@ -247,6 +255,11 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IEstoqueSyncService,
 // banco (não tem arquivo local nenhum pra ler).
 builder.Services.AddScoped<ERP.Application.Interfaces.IFiscalConfigurationProvider,
                             ERP.Infrastructure.Services.DatabaseFiscalConfigurationProvider>();
+// Feature flags por tenant (09/09) — mesmo provider dos dois lados (WPF e
+// API), diferente do fiscal — não tem arquivo local de sentido nenhum aqui,
+// é sempre estado de banco por tenant.
+builder.Services.AddScoped<ERP.Application.Interfaces.ITenantFeatureFlagsProvider,
+                            ERP.Infrastructure.Services.TenantFeatureFlagsProvider>();
 builder.Services.AddScoped<ERP.Application.Interfaces.INfeEmissionService,
                             ERP.Application.Services.NfeEmissionService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.INfeContingencyService,

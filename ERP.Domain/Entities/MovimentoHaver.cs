@@ -14,7 +14,7 @@ public class MovimentoHaver : BaseEntity
 
     public string Descricao { get; set; } = string.Empty;
 
-    public DateTime DataMovimento { get; set; } = DateTime.Now;
+    public DateTime DataMovimento { get; set; } = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
 
     /// <summary>Venda relacionada (opcional)</summary>
     public Guid? SaleId { get; set; }

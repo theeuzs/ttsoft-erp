@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR.Client;
+using Serilog;
 using System;
 using System.Collections.ObjectModel;
 using System.Text.Json.Serialization; 
@@ -105,7 +106,7 @@ public class ChatService
                         MensagemRecebida?.Invoke(msg);
                     });
                 }
-                catch { }
+                catch (Exception ex) { Log.Warning(ex, "ChatService: falha ao processar mensagem recebida"); }
             });
 
             await _connection.StartAsync();
@@ -176,7 +177,7 @@ public class ChatService
     {
         if (_connection != null)
         {
-            try { await _connection.StopAsync(); } catch { }
+            try { await _connection.StopAsync(); } catch (Exception ex) { Log.Debug(ex, "ChatService: falha ao desconectar (best-effort, app já está fechando)"); }
         }
     }
 

@@ -116,11 +116,14 @@ public class NotasFiscaisViewModel : BaseViewModel
             if (notasProcessando.Any())
             {
                 var config = ERP.WPF.Helpers.ConfiguracaoService.Carregar();
+                // Achado (21/08) — ReciboConfig.TokenFocusNfe virou dois campos
+                // (Producao/Homologacao); resolve o certo aqui, direto.
+                string tokenFocus = config.UsarAmbienteProducao ? config.TokenFocusNfeProducao : config.TokenFocusNfeHomologacao;
                 var statusService = ERP.WPF.App.Services.GetRequiredService<INfeStatusService>();
 
                 foreach (var pendente in notasProcessando)
                 {
-                    var (sucesso, statusSefaz, urlDanfe) = await statusService.ConsultarStatusNotaAsync(pendente.NfceReferencia, config.TokenFocusNfe, config.UsarAmbienteProducao);
+                    var (sucesso, statusSefaz, urlDanfe) = await statusService.ConsultarStatusNotaAsync(pendente.NfceReferencia, tokenFocus, config.UsarAmbienteProducao);
                     
                     if (sucesso && statusSefaz != "processando_autorizacao")
                     {
@@ -286,10 +289,11 @@ public class NotasFiscaisViewModel : BaseViewModel
         {
             string justificativa = "Cancelamento solicitado pelo cliente apos a emissao."; 
             var config = ERP.WPF.Helpers.ConfiguracaoService.Carregar();
+            string tokenFocus = config.UsarAmbienteProducao ? config.TokenFocusNfeProducao : config.TokenFocusNfeHomologacao;
             // 👇 Pega o Exterminador (Cancelamento Service)
             var cancelService = ERP.WPF.App.Services.GetRequiredService<INfeCancellationService>();
 
-            var (sucesso, mensagem) = await cancelService.CancelarNotaAsync(refNota, justificativa, config.TokenFocusNfe, config.UsarAmbienteProducao, notaSelecionada.Tipo);
+            var (sucesso, mensagem) = await cancelService.CancelarNotaAsync(refNota, justificativa, tokenFocus, config.UsarAmbienteProducao, notaSelecionada.Tipo);
 
             if (sucesso)
             {
@@ -351,10 +355,11 @@ public class NotasFiscaisViewModel : BaseViewModel
         try
         {
             var config = ERP.WPF.Helpers.ConfiguracaoService.Carregar();
+            string tokenFocus = config.UsarAmbienteProducao ? config.TokenFocusNfeProducao : config.TokenFocusNfeHomologacao;
             var correcaoService = ERP.WPF.App.Services.GetRequiredService<INfeCorrecaoService>();
 
             var (sucesso, mensagem, urlPdf) = await correcaoService.EmitirCartaCorrecaoAsync(
-                refNota, texto, config.TokenFocusNfe, config.UsarAmbienteProducao);
+                refNota, texto, tokenFocus, config.UsarAmbienteProducao);
 
             if (sucesso)
             {
@@ -384,10 +389,11 @@ public class NotasFiscaisViewModel : BaseViewModel
         try
         {
             var config = ERP.WPF.Helpers.ConfiguracaoService.Carregar();
+            string tokenFocus = config.UsarAmbienteProducao ? config.TokenFocusNfeProducao : config.TokenFocusNfeHomologacao;
             // 👇 Pega o Fofoqueiro da Sefaz
             var statusService = ERP.WPF.App.Services.GetRequiredService<INfeStatusService>();
 
-            string motivo = await statusService.ConsultarMotivoRejeicaoAsync(refNota, config.TokenFocusNfe, config.UsarAmbienteProducao);
+            string motivo = await statusService.ConsultarMotivoRejeicaoAsync(refNota, tokenFocus, config.UsarAmbienteProducao);
 
             MessageBox.Show($"O motivo da rejeição foi:\n\n{motivo}\n\n💡 Dica: Corrija os dados no cadastro do cliente (F4) ou do produto (F3), vá no PDV e tente emitir a nota novamente.", 
                 "Detetive SEFAZ", MessageBoxButton.OK, MessageBoxImage.Warning);

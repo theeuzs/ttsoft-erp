@@ -68,7 +68,12 @@ public class NfeRecebidaViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Erro ao buscar notas: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+            // Achado (21/08) — o popup só mostrava ex.Message, que pra
+            // DbUpdateException é só o envelope genérico ("An error
+            // occurred while saving..."); a causa real do SQL Server fica
+            // em InnerException, nunca aparecia.
+            var detalhe = ex.InnerException != null ? $"\n\nDetalhe: {ex.InnerException.Message}" : "";
+            MessageBox.Show($"Erro ao buscar notas: {ex.Message}{detalhe}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally { StatusTexto = string.Empty; }
     }

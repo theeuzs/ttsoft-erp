@@ -482,8 +482,15 @@ public class ProductViewModel : BaseViewModel
         PrecoBRevendedor = dto.PrecoBRevendedor;
         PrecoCAtacadista = dto.PrecoCAtacadista;
         NCM = dto.NCM; CEST = dto.CEST; CFOPPadrao = dto.CFOPPadrao; CSOSN = dto.CSOSN;
-        SalePriceChangedAt = dto.SalePriceChangedAt; SalePriceChangedBy = dto.SalePriceChangedBy;
-        CostPriceChangedAt = dto.CostPriceChangedAt; CostPriceChangedBy = dto.CostPriceChangedBy;
+        // Achado (09/09) — datas salvas em UTC (correto) mas exibidas cruas,
+        // sem converter pro horário do Brasil. Só ficou visível depois da
+        // migração pra Azure (antes, banco local mascarava o problema).
+        SalePriceChangedAt = dto.SalePriceChangedAt.HasValue
+            ? ERP.Domain.Common.FusoBrasilHelper.ConverterParaBrasil(dto.SalePriceChangedAt.Value) : null;
+        SalePriceChangedBy = dto.SalePriceChangedBy;
+        CostPriceChangedAt = dto.CostPriceChangedAt.HasValue
+            ? ERP.Domain.Common.FusoBrasilHelper.ConverterParaBrasil(dto.CostPriceChangedAt.Value) : null;
+        CostPriceChangedBy = dto.CostPriceChangedBy;
         UnidadeEstoque = dto.UnidadeEstoque; UnidadeVenda = dto.UnidadeVenda;
         FatorConversao = dto.FatorConversao > 0 ? dto.FatorConversao : 1m;
         OnPropertyChanged(nameof(FatorConversaoTexto));
@@ -638,7 +645,7 @@ public class ProductViewModel : BaseViewModel
         var dialog = new Microsoft.Win32.SaveFileDialog
         {
             Filter   = "Arquivo CSV (*.csv)|*.csv",
-            FileName = $"Produtos_{DateTime.Now:yyyyMMdd_HHmm}.csv",
+            FileName = $"Produtos_{ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():yyyyMMdd_HHmm}.csv",
             Title    = "Salvar planilha de produtos"
         };
         if (dialog.ShowDialog() != true) return;

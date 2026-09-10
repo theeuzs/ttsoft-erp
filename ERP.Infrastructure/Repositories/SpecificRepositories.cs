@@ -71,12 +71,20 @@ public class ProductRepository : Repository<Product>, IProductRepository
 
         var words = term.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
+        // Achado (09/09) — busca lenta do PDV. Contains() vira LIKE '%x%',
+        // nunca usa índice, força varredura completa da tabela toda vez.
+        // Nome continua Contains (as pessoas digitam qualquer pedaço do
+        // nome do produto, isso é real e vale manter). Código de barras e
+        // SKU viram StartsWith (LIKE 'x%') — ninguém busca "o meio" de um
+        // código de barras, sempre é digitado/escaneado do início, e isso
+        // sim consegue usar o índice (TenantId+Barcode já existia,
+        // TenantId+SKU foi adicionado agora).
         foreach (var word in words)
         {
             query = query.Where(p =>
                 p.Name.Contains(word) ||
-                (p.Barcode != null && p.Barcode.Contains(word)) ||
-                (p.SKU     != null && p.SKU.Contains(word)));
+                (p.Barcode != null && p.Barcode.StartsWith(word)) ||
+                (p.SKU     != null && p.SKU.StartsWith(word)));
         }
 
         return await query
@@ -109,10 +117,15 @@ public class CustomerRepository : Repository<Customer>, ICustomerRepository
 
     public async Task<IEnumerable<Customer>> SearchAsync(string term)
     {
+        // Mesmo achado (09/09) da busca de Products — Document vira
+        // StartsWith (aproveita o índice TenantId+Document já existente
+        // desde a correção do CPF duplicado), Nome e Telefone continuam
+        // Contains — telefone às vezes é buscado pelos últimos dígitos, e a
+        // tabela de clientes é bem menor que a de produtos, custo aceitável.
         return await _ctx.Customers
             .AsNoTracking()
             .Where(c => c.Name.Contains(term) ||
-                        c.Document.Contains(term) ||
+                        c.Document.StartsWith(term) ||
                         (c.Phone != null && c.Phone.Contains(term)))
             .Take(50)
             .ToListAsync();

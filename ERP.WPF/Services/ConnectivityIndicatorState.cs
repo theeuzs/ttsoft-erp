@@ -54,6 +54,6 @@ public static class ConnectivityIndicatorState
     {
         Online = sucesso;
         VendasPendentes = vendasPendentes;
-        if (sucesso) UltimaSincronizacaoOk = DateTime.Now;
+        if (sucesso) UltimaSincronizacaoOk = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
     }
 }

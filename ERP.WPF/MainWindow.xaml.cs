@@ -19,7 +19,7 @@ public partial class MainWindow : Window
     private DispatcherTimer _timerBackup;
     private DispatcherTimer _timerSyncOutbox;
     private DispatcherTimer _timerSyncCatalogo;
-    private DateTime _ultimaAtividade = DateTime.Now;
+    private DateTime _ultimaAtividade = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
     private const int MinutosInatividade = 59;
     
     // Variável para evitar que o evento Closing entre em loop
@@ -134,7 +134,7 @@ public partial class MainWindow : Window
         _timerInatividade.Interval = TimeSpan.FromMinutes(1);
         _timerInatividade.Tick += (s, e) =>
         {
-            if ((DateTime.Now - _ultimaAtividade).TotalMinutes >= MinutosInatividade)
+            if ((ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil() - _ultimaAtividade).TotalMinutes >= MinutosInatividade)
             {
                 _timerInatividade.Stop();
                 MessageBox.Show("Sessão encerrada por inatividade.", "TTSoft ERP",
@@ -144,8 +144,8 @@ public partial class MainWindow : Window
         };
         _timerInatividade.Start();
 
-        this.PreviewMouseMove += (s, e) => _ultimaAtividade = DateTime.Now;
-        this.PreviewKeyDown   += (s, e) => _ultimaAtividade = DateTime.Now;
+        this.PreviewMouseMove += (s, e) => _ultimaAtividade = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
+        this.PreviewKeyDown   += (s, e) => _ultimaAtividade = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
     }
 
     private void IniciarTimerBackup()
@@ -155,7 +155,7 @@ public partial class MainWindow : Window
         _timerBackup.Tick += async (s, e) =>
         {
             // Só roda entre 2h e 3h da manhã
-            if (DateTime.Now.Hour == 2)
+            if (ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().Hour == 2)
             {
                 // Verifica se já fez backup hoje
                 string pasta = @"C:\TTSoft_Backups";
@@ -376,6 +376,10 @@ public partial class MainWindow : Window
             "importXml"   => CreateView<NfeImportView, NfeImportViewModel>(),
             "sped"        => CreateView<SpedView, SpedViewModel>(),
             "nfce"        => CreateView<NotasFiscaisView, NotasFiscaisViewModel>(),
+            // Botão existia há muito tempo sem nenhum case aqui — sempre caía
+            // no placeholder genérico "Em desenvolvimento...". Repropósito
+            // pedido pelo usuário (20/08): histórico de qualquer NF-e A4.
+            "nfe"         => new NfeHistoricoView(),
             "auditoria"   => CreateView<AuditLogView, AuditLogViewModel>(),
             "compras"     => CreateView<ComprasView, ComprasViewModel>(),
             "historicocompras" => CreateView<HistoricoComprasView, HistoricoComprasViewModel>(),
@@ -526,6 +530,6 @@ public partial class MainWindow : Window
     private bool VerificarSeVenceuNoBancoLocal()
     {
         DateTime dataVencimento = ERP.WPF.State.AppSession.DataVencimentoLicenca;
-        return DateTime.Now > dataVencimento;
+        return ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil() > dataVencimento;
     }
 }

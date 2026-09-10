@@ -30,7 +30,7 @@ public class ContaReceber : BaseEntity
     public string? MotivoCancelamento { get; set; }
 
     // Datas importantes para cobrança
-    public DateTime DataEmissao { get; set; } = DateTime.Now;
+    public DateTime DataEmissao { get; set; } = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
     public DateTime DataVencimento { get; set; }
     public DateTime? DataPagamento { get; set; }
 

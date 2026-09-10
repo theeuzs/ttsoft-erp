@@ -294,7 +294,7 @@
             var lista = await Http.GetFromJsonAsync<TemplateDto[]>("api/Calculadora/templates");
             _templates = lista?.ToList() ?? [];
         }
-        catch { }
+        catch (Exception ex) { Console.WriteLine($"CalculadoraPublica: falha ao carregar templates — {ex.Message}"); }
 
         // Config pública da loja (telefone para WhatsApp)
         try
@@ -310,7 +310,7 @@
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { Console.WriteLine($"CalculadoraPublica: falha ao montar link do WhatsApp — {ex.Message}"); }
 
         _loadingTemplates = false;
     }

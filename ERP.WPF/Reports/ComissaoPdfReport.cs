@@ -63,7 +63,7 @@ public class ComissaoPdfReport : IDocument
                 {
                     row.RelativeItem().Text($"Percentual de Comissão: {_percentual:N1}%").Bold();
                     row.ConstantItem(200).AlignRight()
-                       .Text($"Emitido em {DateTime.Now:dd/MM/yyyy HH:mm}")
+                       .Text($"Emitido em {ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():dd/MM/yyyy HH:mm}")
                        .FontSize(10).FontColor(Colors.Grey.Medium);
                 });
 

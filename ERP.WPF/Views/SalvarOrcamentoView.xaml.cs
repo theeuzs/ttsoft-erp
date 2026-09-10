@@ -161,8 +161,8 @@ public partial class SalvarOrcamentoView : Window
 
             var rascunho = new Helpers.OrcamentoPrinter.OrcamentoParaImprimir(
                 Numero: "RASCUNHO (ainda não salvo)",
-                DataEmissao: DateTime.Now,
-                DataValidade: DateTime.Now.AddDays(ObterValidadeDiasSelecionada()),
+                DataEmissao: ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
+                DataValidade: ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().AddDays(ObterValidadeDiasSelecionada()),
                 ClienteNome: ClienteNomeEscolhido ?? "Consumidor Final",
                 ClienteTelefone: null,
                 ClienteEmail: null,

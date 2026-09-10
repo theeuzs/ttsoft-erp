@@ -407,7 +407,7 @@ public class FinanceiroViewModel : BaseViewModel
             doc.Blocks.Add(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run("COMPROVANTE DE PAGAMENTO")) { TextAlignment = TextAlignment.Center });
             doc.Blocks.Add(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run("-----------------------------------------")) { TextAlignment = TextAlignment.Center });
 
-            doc.Blocks.Add(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run($"DATA: {DateTime.Now:dd/MM/yyyy HH:mm}")));
+            doc.Blocks.Add(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run($"DATA: {ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():dd/MM/yyyy HH:mm}")));
             doc.Blocks.Add(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run($"CLIENTE: {conta.Customer?.Name}")));
             doc.Blocks.Add(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run($"REF: {conta.Descricao}")));
             

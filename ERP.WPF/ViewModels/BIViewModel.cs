@@ -71,7 +71,7 @@ public class BIViewModel : BaseViewModel
             PrevisaoDemanda.Clear();
             foreach (var p in prev)      PrevisaoDemanda.Add(p);
 
-            StatusMessage = $"Atualizado em {DateTime.Now:HH:mm:ss}";
+            StatusMessage = $"Atualizado em {ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():HH:mm:ss}";
         }
         catch (Exception ex)
         {

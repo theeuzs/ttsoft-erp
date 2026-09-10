@@ -598,7 +598,7 @@ public class PdvViewModel : BaseViewModel
                 System.Windows.Application.Current?.Dispatcher.Invoke(() => item.HasSuggestions = true);
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warning(ex, "Falha ao verificar sugestões silenciosas para produto {Id}", item.ProductId); }
     }
 
     private void AdicionarSugestaoAoCarrinho(ProdutoAgregadoDto? sugestao)
@@ -818,7 +818,7 @@ public class PdvViewModel : BaseViewModel
                 }
             }
         }
-        catch (Exception) { }
+        catch (Exception ex) { Log.Warning(ex, "SearchProductAsync: falha ao buscar produtos por \"{Termo}\"", SearchTerm); }
     }
 
     private void AddToCart(ProductDto? product)
@@ -1086,7 +1086,7 @@ public class PdvViewModel : BaseViewModel
                     enderecoCompleto = $"{rua}{numero}{bairro}";
                 }
             }
-            catch (Exception) { }
+            catch (Exception ex) { Log.Warning(ex, "FinalizeSaleAsync: falha ao montar endereço do cliente pro recibo"); }
         }
 
         var finalizarVm = new FinalizarVendaViewModel(
@@ -1107,13 +1107,13 @@ public class PdvViewModel : BaseViewModel
                 if (_orcamentoCarregadoId.HasValue)
                 {
                     try { await _orcamentoService.MarcarComoVendidoAsync(_orcamentoCarregadoId.Value); }
-                    catch { } 
+                    catch (Exception ex) { Log.Warning(ex, "FinalizeSaleAsync: falha ao marcar orçamento {Id} como vendido", _orcamentoCarregadoId.Value); }
                 }
 
                 if (_vendaSuspensaEmEdicaoId.HasValue && vendaGeradaId != Guid.Empty)
                 {
                     try { await _vendaSuspensaService.FinalizarAsync(_vendaSuspensaEmEdicaoId.Value, vendaGeradaId); }
-                    catch { }
+                    catch (Exception ex) { Log.Warning(ex, "FinalizeSaleAsync: falha ao finalizar venda suspensa {Id}", _vendaSuspensaEmEdicaoId.Value); }
                     _vendaSuspensaEmEdicaoId = null;
                 }
 
@@ -1173,7 +1173,7 @@ public class PdvViewModel : BaseViewModel
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warning(ex, "AtualizarBotaoVerdeAsync: falha ao atualizar valor do caixa"); }
     }
 
     private async Task SalvarOrcamentoAsync()
@@ -1278,7 +1278,7 @@ public class PdvViewModel : BaseViewModel
                 SelectedCustomerName = orcamento.CustomerName ?? "Consumidor Final";
             }
 
-            var orcamentoVencido = orcamento.DataValidade.Date < DateTime.Now.Date;
+            var orcamentoVencido = orcamento.DataValidade.Date < ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().Date;
             var mudancasDePreco = new List<string>();
 
             if (orcamento.Itens != null)
@@ -1395,7 +1395,7 @@ public class PdvViewModel : BaseViewModel
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { Log.Warning(ex, "SearchCustomerListAsync: falha ao buscar clientes por \"{Termo}\"", CustomerSearchTerm); }
     }
 
     private void SelectCustomer(CustomerDto? customer)
@@ -1480,7 +1480,7 @@ public class PdvViewModel : BaseViewModel
                     });
                 }
             }
-            catch { }
+            catch (Exception ex) { Log.Debug(ex, "IniciarRadarSefazAsync: falha checando conectividade SEFAZ (loop de 30s, blip ocasional é esperado)"); }
             
             await Task.Delay(30000); 
         }
@@ -1624,6 +1624,23 @@ public class PdvViewModel : BaseViewModel
         try
         {
             using var scope = _sp.CreateScope();
+
+            // Achado (09/09) — Metas de Vendas aparecia de forma IMPLÍCITA
+            // (só se existisse linha em MetasVendas), sem interruptor por
+            // tenant. Agora checa a flag primeiro — desligada, nem consulta.
+            var flags = await scope.ServiceProvider
+                .GetRequiredService<ERP.Application.Interfaces.ITenantFeatureFlagsProvider>()
+                .ObterAsync();
+            if (!flags.MetasVendasHabilitado)
+            {
+                System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+                {
+                    MetaDia     = 0;
+                    VendidoHoje = 0;
+                });
+                return;
+            }
+
             var ctx = scope.ServiceProvider.GetRequiredService<ERP.Persistence.Context.AppDbContext>();
 
             var hoje    = DateTime.Today;

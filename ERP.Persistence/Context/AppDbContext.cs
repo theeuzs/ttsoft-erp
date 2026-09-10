@@ -1,8 +1,10 @@
+using ERP.Application.Helpers;
 using ERP.Application.Interfaces;
 using ERP.Domain.Common;
 using ERP.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using System.Text.Json;
 
 namespace ERP.Persistence.Context;
@@ -164,6 +166,7 @@ public class AppDbContext : DbContext
     public DbSet<ContaReceber>         ContasReceber       { get; set; }
     public DbSet<ContaReceberEvento>   ContaReceberEventos { get; set; }
     public DbSet<TenantFiscalConfiguration> TenantFiscalConfigurations { get; set; }
+    public DbSet<TenantFeatureFlags>        TenantFeatureFlags         { get; set; }
     public DbSet<NotaFiscal> NotasFiscais { get; set; }
     public DbSet<NotaFiscalItem> NotaFiscalItens { get; set; }
     public DbSet<NotaFiscalPagamento> NotaFiscalPagamentos { get; set; }
@@ -240,8 +243,27 @@ public class AppDbContext : DbContext
         // ── Entidades com IsDeleted + TenantId ────────────────────────
         modelBuilder.Entity<Product>().HasQueryFilter(
             p => !p.IsDeleted && p.TenantId == this.CurrentFilterTenantId);
+        // Achado (09/09) — busca lenta do PDV: Barcode já tinha índice
+        // (TenantId+Barcode), mas SKU não tinha nenhum. Sem isso, trocar
+        // Contains por StartsWith na busca não ganharia nada — o índice é o
+        // que realmente permite o SQL Server não varrer a tabela toda.
+        modelBuilder.Entity<Product>()
+            .HasIndex(p => new { p.TenantId, p.SKU })
+            .HasFilter("[SKU] IS NOT NULL");
         modelBuilder.Entity<Customer>().HasQueryFilter(
             c => !c.IsDeleted && c.TenantId == this.CurrentFilterTenantId);
+        // Achado (08/09) durante a migração real da Vila Verde — o índice
+        // único de Document não tinha TenantId, impedindo dois tenants
+        // DIFERENTES de terem cliente com o mesmo CPF/CNPJ (cenário real:
+        // a mesma pessoa pode ser cliente de duas empresas sem relação
+        // nenhuma entre si). Confirmado com dado real do próprio Matheus
+        // colidindo entre dois tenants de teste. Índice antigo
+        // (IX_Customers_Document, só em Document) precisa ser substituído
+        // por este, composto — dotnet ef migrations add gera o DROP+CREATE.
+        modelBuilder.Entity<Customer>()
+            .HasIndex(c => new { c.TenantId, c.Document })
+            .IsUnique()
+            .HasFilter("[Document] IS NOT NULL");
         modelBuilder.Entity<Sale>().HasQueryFilter(
             s => !s.IsDeleted && s.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<Caixa>().HasQueryFilter(
@@ -379,6 +401,15 @@ public class AppDbContext : DbContext
             e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<TenantFiscalConfiguration>().HasQueryFilter(
             e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
+        modelBuilder.Entity<TenantFeatureFlags>().HasQueryFilter(
+            e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
+        // S28 (21/08) — propriedade C# renomeada pra "Producao" (deixa claro
+        // que existe uma segunda, "Homologacao"), mas a coluna do banco
+        // continua com o nome antigo — evita migração de rename e qualquer
+        // risco de perder o token de produção que já está salvo.
+        modelBuilder.Entity<TenantFiscalConfiguration>()
+            .Property(c => c.TokenFocusNfeProducaoEncriptado)
+            .HasColumnName("TokenFocusNfeEncriptado");
         modelBuilder.Entity<NotaFiscal>().HasQueryFilter(
             e => !e.IsDeleted && e.TenantId == this.CurrentFilterTenantId);
         modelBuilder.Entity<NotaFiscalItem>().HasQueryFilter(
@@ -447,6 +478,27 @@ public class AppDbContext : DbContext
             .WithMany()
             .HasForeignKey(s => s.ClienteRepasseId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // Achado (plano de 30 dias, item 3) — AccessToken/RefreshToken do
+        // Mercado Livre ficavam em texto puro no banco. ValueConverter em
+        // vez de criptografar na entidade: MercadoLivreAuthService mantém o
+        // token em memória (plaintext) pra reusar na mesma requisição, logo
+        // depois de trocar com a API do ML — criptografar direto na
+        // entidade misturaria texto puro (recém-obtido) com cifrado (vindo
+        // do banco) no mesmo campo, dependendo de onde o valor veio. O
+        // converter resolve isso na fronteira certa: todo código que já
+        // existe (auth service, dispatcher, controllers, repository) nunca
+        // vê texto cifrado — só o que realmente vai pro disco muda.
+        var tokenConverter = new ValueConverter<string?, string?>(
+            v => v == null ? null : TokenProtector.Proteger(v),
+            v => v == null ? null : TokenProtector.Desproteger(v));
+
+        modelBuilder.Entity<SalesChannel>()
+            .Property(s => s.AccessToken)
+            .HasConversion(tokenConverter);
+        modelBuilder.Entity<SalesChannel>()
+            .Property(s => s.RefreshToken)
+            .HasConversion(tokenConverter);
 
         modelBuilder.Entity<SkuMapping>(e =>
         {
@@ -691,7 +743,12 @@ public class AppDbContext : DbContext
                 Action      = acao,
                 EntityType  = entry.Entity.GetType().Name,
                 EntityId    = entityId,
-                Timestamp   = DateTime.Now,
+                // Achado (21/08) — mesmo padrão de bug do S21 (DateTime.Now
+                // depende do fuso AMBIENTE do servidor, já causou rejeição
+                // real de SEFAZ em outro lugar). Aqui a consequência é menor
+                // (só o horário exibido no log de auditoria), mas corrigido
+                // já que estava na mesma linha de código.
+                Timestamp   = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
                 MachineName = Environment.MachineName,
                 OldValues   = oldValues,
                 NewValues   = newValues,

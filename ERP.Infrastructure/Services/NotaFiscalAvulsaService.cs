@@ -67,7 +67,7 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
                 _ctx.NotaFiscalPagamentos.RemoveRange(notaExistente.Pagamentos);
             await _ctx.SaveChangesAsync();
 
-            nota = await _ctx.NotasFiscais.FirstAsync(n => n.Id == dto.Id.Value);
+            nota = await _ctx.NotasFiscais.AsTracking().FirstAsync(n => n.Id == dto.Id.Value);
         }
         else
         {
@@ -324,7 +324,16 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
 
     public async Task<FiscalEmissionResult> EmitirAsync(Guid id)
     {
-        var nota = await _ctx.NotasFiscais.Include(n => n.Itens).Include(n => n.Pagamentos)
+        // S27 correção (20/08) — achado com evidência direta no banco
+        // (UpdatedAt ficava NULL mesmo depois do "sucesso"): AppDbContext
+        // roda com QueryTrackingBehavior.NoTracking GLOBAL (WPF e API, ver
+        // App.xaml.cs/Program.cs). Sem .AsTracking() aqui, `nota.Status =
+        // "..."` mais embaixo simplesmente não é rastreado — SaveChangesAsync
+        // "funciona" mas não salva nada, porque não tem o que salvar. Só
+        // Add()/Remove()/RemoveRange() explícitos escapam disso (marcam o
+        // estado na mão), por isso os Itens/Pagamentos sempre gravaram
+        // certo enquanto o Status da própria nota nunca gravava.
+        var nota = await _ctx.NotasFiscais.AsTracking().Include(n => n.Itens).Include(n => n.Pagamentos)
             .FirstOrDefaultAsync(n => n.Id == id)
             ?? throw new KeyNotFoundException("Nota não encontrada.");
 
@@ -551,8 +560,16 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
         // arriscando reenvio duplicado ou perder o resultado real.
         if (sucesso)
         {
-            nota.Status   = "Processando";
-            nota.Ambiente = ambienteSefaz;
+            nota.Status      = "Processando";
+            nota.Ambiente    = ambienteSefaz;
+            // Achado testando de verdade (20/08) — algumas combinações
+            // (ex: destinatário sem IE + "Não contribuinte") parecem nunca
+            // sair de "processando_autorizacao" na SEFAZ de homologação,
+            // mesmo consultando várias vezes. Guardar quando entrou em
+            // Processando é o que permite o sistema se defender sozinho
+            // (avisar "travada" depois de um tempo) em vez de ficar
+            // dependendo só do usuário lembrar de checar.
+            nota.DataEmissao = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
             await _ctx.SaveChangesAsync();
 
             return new FiscalEmissionResult
@@ -566,7 +583,9 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
 
     public async Task<FiscalEmissionResult> CancelarAsync(Guid id, string justificativa)
     {
-        var nota = await _ctx.NotasFiscais.FirstOrDefaultAsync(n => n.Id == id)
+        // Mesmo achado do EmitirAsync (S27, 20/08) — precisa de AsTracking()
+        // pra Status/MotivoCancelamento gravarem de verdade.
+        var nota = await _ctx.NotasFiscais.AsTracking().FirstOrDefaultAsync(n => n.Id == id)
             ?? throw new KeyNotFoundException("Nota não encontrada.");
 
         if (nota.Status != "Autorizada")
@@ -602,7 +621,8 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
     /// Fiscais já usa.</summary>
     public async Task<FiscalEmissionResult> ConsultarStatusAsync(Guid id)
     {
-        var nota = await _ctx.NotasFiscais.FirstOrDefaultAsync(n => n.Id == id)
+        // Mesmo achado do EmitirAsync (S27, 20/08).
+        var nota = await _ctx.NotasFiscais.AsTracking().FirstOrDefaultAsync(n => n.Id == id)
             ?? throw new KeyNotFoundException("Nota não encontrada.");
 
         if (nota.Status != "Processando")
@@ -637,5 +657,23 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
         nota.Status = "Rejeitada";
         await _ctx.SaveChangesAsync();
         return new FiscalEmissionResult { Sucesso = false, Mensagem = $"Status: {statusFocus}. {motivo}", Status = "Rejeitada" };
+    }
+
+    public async Task<IReadOnlyList<NfeA4HistoricoDto>> ListarHistoricoAsync(
+        DateTime? dataInicio = null, DateTime? dataFim = null, string? status = null)
+    {
+        var query = _ctx.NotasFiscais.AsNoTracking().Include(n => n.Itens)
+            .Where(n => n.Tipo == "NFE"); // qualquer NF-e A4 — avulsa ou ligada a venda
+
+        if (dataInicio.HasValue) query = query.Where(n => n.DataEmissao >= dataInicio.Value);
+        if (dataFim.HasValue) query = query.Where(n => n.DataEmissao <= dataFim.Value.AddDays(1).AddTicks(-1));
+        if (!string.IsNullOrWhiteSpace(status)) query = query.Where(n => n.Status == status);
+
+        var notas = await query.OrderByDescending(n => n.DataEmissao).ToListAsync();
+
+        return notas.Select(n => new NfeA4HistoricoDto(
+            n.Id, n.NaturezaOperacao ?? "", n.DestinatarioNome ?? "",
+            n.Itens.Sum(i => i.Quantidade * i.ValorUnitario),
+            n.Status, n.DataEmissao, n.VendaId == null, n.UrlDanfe)).ToList();
     }
 }

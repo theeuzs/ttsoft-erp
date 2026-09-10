@@ -86,7 +86,7 @@ public class DevolucaoService : IDevolucaoService
                 ValorDevolvido      = valorItem,     // ← preço autoritativo
                 Motivo              = dto.Motivo,
                 OperadorNome        = operadorNome,  // ← JWT
-                DataDevolucao       = DateTime.Now,
+                DataDevolucao       = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
             });
         }
 

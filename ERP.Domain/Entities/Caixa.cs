@@ -13,7 +13,7 @@ public class Caixa : BaseEntity
     public Guid UsuarioId { get; set; } // ID de quem abriu o caixa
     public string OperadorNome { get; set; } = string.Empty; // Nome de quem abriu
     
-    public DateTime DataAbertura { get; set; } = DateTime.Now;
+    public DateTime DataAbertura { get; set; } = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
     public DateTime? DataFechamento { get; set; }
     public decimal ValorAbertura { get; set; }
     public StatusCaixa Status { get; set; } = StatusCaixa.Aberto;

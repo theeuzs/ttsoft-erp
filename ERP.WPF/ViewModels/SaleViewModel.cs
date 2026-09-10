@@ -56,6 +56,7 @@ public class SaleViewModel : BaseViewModel
     public ICommand FilterCommand          { get; }
     public ICommand VisualizarReciboCommand { get; }
     public ICommand ReimprimirReciboCommand { get; }
+    public ICommand ImprimirReciboA4Command { get; }
     public ICommand CancelarVendaCommand   { get; }
     public ICommand DevolverItensCommand   { get; }
     public ICommand EnviarWhatsAppCommand  { get; }
@@ -82,6 +83,10 @@ public class SaleViewModel : BaseViewModel
         FilterCommand           = new RelayCommand(async (_) => await LoadSalesAsync());
         VisualizarReciboCommand = new AsyncRelayCommand(async v => await AbrirPreview(v as SaleDto));
         ReimprimirReciboCommand = new AsyncRelayCommand(async v => await MandarImprimir(v as SaleDto));
+        // Achado ao vivo (09/09) — pedido de 131 itens cortava no cupom
+        // térmico; opção A4 fica só aqui (menu "mais ações"), não no fluxo
+        // normal do caixa.
+        ImprimirReciboA4Command = new AsyncRelayCommand(async v => await MandarImprimirA4(v as SaleDto));
         CancelarVendaCommand    = new AsyncRelayCommand(async v => await CancelarVendaAsync(v as SaleDto));
         DevolverItensCommand    = new AsyncRelayCommand(async v => await AbrirDevolucaoAsync(v as SaleDto));
         EnviarWhatsAppCommand   = new AsyncRelayCommand(async v => await MandarWhatsApp(v as SaleDto));
@@ -404,6 +409,40 @@ public class SaleViewModel : BaseViewModel
         catch (Exception ex) { MessageBox.Show($"Erro:\n{ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error); }
     }
 
+    private async Task MandarImprimirA4(SaleDto vendaListagem)
+    {
+        if (vendaListagem == null) return;
+        try
+        {
+            var detalhesVenda = await ExecuteWithFreshSaleServiceAsync(s => s.GetDetailAsync(vendaListagem.Id));
+            if (detalhesVenda == null) return;
+
+            var itensParaImprimir = detalhesVenda.Items.Select(item => new ViewModels.CartItem
+            {
+                ProductName       = item.ProductName,
+                Quantity          = item.Quantity,
+                UnitPrice         = item.UnitPrice,
+                NormalUnitPrice   = item.UnitPrice,
+                DiscountPercent   = item.DiscountPercent,
+                LabelUnidadeVenda = item.LabelUnidadeVenda,
+                UnidadeEstoque    = item.UnidadeEstoque ?? string.Empty,
+                FatorConversao    = item.FatorConversao,
+                TotalSalvo        = item.TotalPrice,
+            }).ToList();
+
+            var pagamentosParaImprimir = detalhesVenda.Payments.Select(pag => (pag.PaymentMethod, pag.Amount)).ToList();
+
+            Helpers.ReciboPrinter.ImprimirA4(
+                detalhesVenda.Id, itensParaImprimir, detalhesVenda.Total, detalhesVenda.DiscountAmount,
+                detalhesVenda.CustomerName ?? "Consumidor Final",
+                detalhesVenda.SellerName ?? "Balcão",
+                pagamentosParaImprimir, 0, detalhesVenda.Observation ?? "",
+                dataVenda:   detalhesVenda.SaleDate,
+                numeroVenda: detalhesVenda.SaleNumber);
+        }
+        catch (Exception ex) { MessageBox.Show($"Erro:\n{ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error); }
+    }
+
     private async Task MandarWhatsApp(SaleDto vendaListagem)
     {
         if (vendaListagem == null) return;
@@ -510,7 +549,7 @@ public class SaleViewModel : BaseViewModel
                     Helpers.ReciboPrinter.Imprimir(
                         venda.Id, itensDevolvidos, resultado.ValorTotalDevolvido, 0,
                         resultado.NomeCliente, ERP.WPF.State.AppSession.UserName ?? "",
-                        pagamentos, 0, obs, "DEVOLUÇÃO", DateTime.Now, resultado.NumeroVendaOriginal);
+                        pagamentos, 0, obs, "DEVOLUÇÃO", ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(), resultado.NumeroVendaOriginal);
                 }
 
                 _ = LoadSalesAsync();

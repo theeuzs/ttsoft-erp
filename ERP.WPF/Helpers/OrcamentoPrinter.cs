@@ -1,4 +1,5 @@
 using System;
+using Serilog;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -125,7 +126,7 @@ public static class OrcamentoPrinter
                 };
                 sec.Blocks.Add(new BlockUIContainer(img) { Margin = new Thickness(0, 0, 0, 6) });
             }
-            catch { }
+            catch (Exception ex) { Log.Warning(ex, "OrcamentoPrinter: falha ao carregar o logo da empresa"); }
         }
         sec.Blocks.Add(P(cfg.NomeFantasia, 18, FontWeights.Black, CorPrimaria));
         sec.Blocks.Add(P(cfg.RazaoSocial,  10, FontWeights.Normal, Colors.Gray));

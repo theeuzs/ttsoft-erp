@@ -37,7 +37,7 @@ public class NotaFiscal : BaseEntity
     public string? UrlDanfe { get; set; }
     public string? XmlUrl { get; set; }
     public string Ambiente { get; set; } = string.Empty;
-    public DateTime DataEmissao { get; set; } = DateTime.Now;
+    public DateTime DataEmissao { get; set; } = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
     public string? MotivoCancelamento { get; set; }
 
     /// <summary>Nome do destinatário — preenchido tanto pra nota de venda

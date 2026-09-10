@@ -41,52 +41,97 @@ public class NfeRecebidaService : INfeRecebidaService
         _httpClient.SetApiToken(config.TokenFocusNfe);
         string baseServidor = config.UsarAmbienteProducao ? "https://api.focusnfe.com.br" : "https://homologacao.focusnfe.com.br";
 
-        var ultimaVersao = await _ctx.NfesRecebidas.AsNoTracking()
+        var versaoAtual = await _ctx.NfesRecebidas.AsNoTracking()
             .OrderByDescending(n => n.Versao)
             .Select(n => (long?)n.Versao)
             .FirstOrDefaultAsync() ?? 0;
 
-        string endpoint = $"{baseServidor}/v2/nfes_recebidas?cnpj={config.Cnpj}&versao={ultimaVersao}";
-        var resultado = await _httpClient.GetAsync(endpoint);
-
-        if (resultado.IsFailed)
-            throw new InvalidOperationException($"Erro ao consultar notas recebidas: {resultado.Errors[0].Message}");
-
         int novasOuAtualizadas = 0;
-        using var doc = JsonDocument.Parse(resultado.Value);
 
-        if (doc.RootElement.ValueKind != JsonValueKind.Array) return 0;
-
-        foreach (var item in doc.RootElement.EnumerateArray())
+        // Achado testando com dado real (21/08) — a Focus devolve só os 100
+        // primeiros registros por chamada (confirmado na doc oficial, no
+        // endpoint irmão de CT-es recebidos, que usa o mesmo mecanismo de
+        // versao). Sem repetir a chamada, parava sempre no mesmo ponto (no
+        // caso real, ficou preso em março mesmo já estando em agosto). O
+        // cliente HTTP desse projeto só devolve o corpo da resposta, não os
+        // headers — não dá pra ler X-Max-Version como a doc recomenda, então
+        // uso a maior versao vista no próprio lote como cursor da próxima
+        // chamada, parando quando vier menos de 100 (sinal de última página).
+        const int tamanhoPagina = 100;
+        while (true)
         {
-            string? chave = ObterString(item, "chave_nfe", "chave");
-            if (string.IsNullOrWhiteSpace(chave)) continue;
+            string endpoint = $"{baseServidor}/v2/nfes_recebidas?cnpj={config.Cnpj}&versao={versaoAtual}";
+            var resultado = await _httpClient.GetAsync(endpoint);
 
-            long versao = ObterLong(item, "versao") ?? 0;
+            if (resultado.IsFailed)
+                throw new InvalidOperationException($"Erro ao consultar notas recebidas: {resultado.Errors[0].Message}");
 
-            var existente = await _ctx.NfesRecebidas.FirstOrDefaultAsync(n => n.Chave == chave);
-            if (existente is null)
+            using var doc = JsonDocument.Parse(resultado.Value);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) break;
+
+            int itensNestaPagina = 0;
+            long maiorVersaoNesteLote = versaoAtual;
+
+            // Achado testando de verdade com dado real (21/08) — a Focus pode
+            // devolver a MESMA chave duas vezes na mesma resposta (ex: um
+            // evento de "descoberta" e um de "manifestação mudou" pra mesma
+            // nota, ambos mais novos que a última versão vista). Sem isso, a
+            // segunda ocorrência não encontrava a primeira (ainda não
+            // commitada, só existe em memória) e tentava Add() de novo — vira
+            // "duplicate key" no unique index de Chave.
+            var jaProcessadasNesteLote = new Dictionary<string, Domain.Entities.NfeRecebida>();
+
+            foreach (var item in doc.RootElement.EnumerateArray())
             {
-                _ctx.NfesRecebidas.Add(new Domain.Entities.NfeRecebida
+                itensNestaPagina++;
+                string? chave = ObterString(item, "chave_nfe", "chave");
+                if (string.IsNullOrWhiteSpace(chave)) continue;
+
+                long versao = ObterLong(item, "versao") ?? 0;
+                if (versao > maiorVersaoNesteLote) maiorVersaoNesteLote = versao;
+
+                if (jaProcessadasNesteLote.TryGetValue(chave, out var jaAdicionada))
                 {
-                    Chave         = chave,
-                    CnpjEmitente  = ObterString(item, "cnpj_emitente"),
-                    NomeEmitente  = ObterString(item, "nome_emitente", "razao_social_emitente"),
-                    DataEmissao   = ObterData(item, "data_emissao"),
-                    ValorTotal    = ObterDecimal(item, "valor_nota_fiscal", "valor_total"),
-                    Versao        = versao,
-                    DescobertaEm  = DateTime.Now,
-                });
-                novasOuAtualizadas++;
+                    jaAdicionada.Versao = versao; // segunda ocorrência da mesma nota neste lote — só atualiza a versão
+                    continue;
+                }
+
+                // Mesmo achado do NotaFiscalAvulsaService (S27, 20/08) — sem
+                // AsTracking(), `existente.Versao = versao` mais embaixo não
+                // seria rastreado (AppDbContext roda NoTracking global).
+                var existente = await _ctx.NfesRecebidas.AsTracking().FirstOrDefaultAsync(n => n.Chave == chave);
+                if (existente is null)
+                {
+                    var nova = new Domain.Entities.NfeRecebida
+                    {
+                        Chave         = chave,
+                        CnpjEmitente  = ObterString(item, "cnpj_emitente"),
+                        NomeEmitente  = ObterString(item, "nome_emitente", "razao_social_emitente"),
+                        DataEmissao   = ObterData(item, "data_emissao"),
+                        ValorTotal    = ObterDecimal(item, "valor_nota_fiscal", "valor_total"),
+                        Versao        = versao,
+                        DescobertaEm  = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
+                    };
+                    _ctx.NfesRecebidas.Add(nova);
+                    jaProcessadasNesteLote[chave] = nova;
+                    novasOuAtualizadas++;
+                }
+                else
+                {
+                    jaProcessadasNesteLote[chave] = existente;
+                    existente.Versao = versao;
+                    novasOuAtualizadas++;
+                }
             }
-            else
-            {
-                existente.Versao = versao;
-                novasOuAtualizadas++;
-            }
+
+            await _ctx.SaveChangesAsync();
+
+            if (itensNestaPagina < tamanhoPagina || maiorVersaoNesteLote == versaoAtual)
+                break; // última página (veio menos que o limite, ou não avançou — evita laço infinito)
+
+            versaoAtual = maiorVersaoNesteLote;
         }
 
-        await _ctx.SaveChangesAsync();
         return novasOuAtualizadas;
     }
 
@@ -103,7 +148,9 @@ public class NfeRecebidaService : INfeRecebidaService
 
     public async Task ManifestarAsync(Guid id, string tipo, string? justificativa = null)
     {
-        var nota = await _ctx.NfesRecebidas.FirstOrDefaultAsync(n => n.Id == id)
+        // Mesmo achado do S27 — sem AsTracking(), StatusManifestacao não
+        // seria persistido (AppDbContext roda NoTracking global).
+        var nota = await _ctx.NfesRecebidas.AsTracking().FirstOrDefaultAsync(n => n.Id == id)
             ?? throw new KeyNotFoundException("Nota não encontrada.");
 
         if (tipo == "nao_realizada" && (string.IsNullOrWhiteSpace(justificativa) || justificativa.Length < 15))
@@ -135,7 +182,9 @@ public class NfeRecebidaService : INfeRecebidaService
 
     public async Task<string> BaixarXmlParaImportacaoAsync(Guid id)
     {
-        var nota = await _ctx.NfesRecebidas.FirstOrDefaultAsync(n => n.Id == id)
+        // Mesmo achado do S27 — sem AsTracking(), Importada=true não seria
+        // persistido (AppDbContext roda NoTracking global).
+        var nota = await _ctx.NfesRecebidas.AsTracking().FirstOrDefaultAsync(n => n.Id == id)
             ?? throw new KeyNotFoundException("Nota não encontrada.");
 
         if (nota.StatusManifestacao == "Nenhuma")

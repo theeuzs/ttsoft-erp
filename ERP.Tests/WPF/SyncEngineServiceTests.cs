@@ -8,7 +8,9 @@ using ERP.WPF.Services;
 using FluentAssertions;
 using Moq;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Net.Http;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -160,5 +162,149 @@ public class SyncEngineServiceTests : IDisposable
 
         _saleServiceMock.Verify(s => s.CreateAsync(It.IsAny<CreateSaleDto>()), Times.Exactly(2),
             "erro de negócio comum não pode travar as outras vendas da fila — só SessaoExpiradaException faz isso");
+    }
+
+    // ── Caminho feliz — não existia teste nenhum pra isso (motor "crítico" com 0% do fluxo normal coberto) ──
+
+    [Fact(DisplayName = "Sincronização bem-sucedida: chama Motor Financeiro com os dados certos e marca como sincronizada")]
+    public async Task ProcessarOutbox_Sucesso_ChamaMotorFinanceiroEMarcaSincronizada()
+    {
+        var vendaId = Guid.NewGuid();
+        var clienteId = Guid.NewGuid();
+        var dto = DtoDeTeste(vendaId);
+        dto.CustomerId = clienteId;
+        await _offlineDb.SalvarVendaOfflineComOutboxAsync(vendaId, dto);
+
+        _saleServiceMock.Setup(s => s.CreateAsync(It.IsAny<CreateSaleDto>()))
+            .ReturnsAsync(new SaleDto(vendaId, "PDV-001", "Cliente", "Vendedor", DateTime.Now, SaleStatus.SemNota, "Dinheiro", 100m));
+        _customerServiceMock.Setup(c => c.GetByIdAsync(clienteId))
+            .ReturnsAsync(new CustomerDto(Id: clienteId, Document: "12345678900", Name: "Cliente Teste", Phone: null, City: null, HaverBalance: 0m));
+
+        var sucessos = await _engine.ProcessarOutboxAsync();
+
+        sucessos.Should().Be(1);
+        _motorFinanceiroMock.Verify(m => m.ProcessarRecebimentoVendaAsync(
+            vendaId, dto.UsuarioId, clienteId, "Cliente Teste", It.IsAny<string>(), "Sync Automático",
+            dto.Troco, It.IsAny<System.Collections.Generic.IEnumerable<(Guid, PaymentMethod, decimal)>>()),
+            Times.Once);
+
+        var pendentes = await _offlineDb.GetEventosPendentesAsync();
+        pendentes.Should().BeEmpty("depois de sincronizar com sucesso, o evento não pode continuar pendente");
+    }
+
+    [Fact(DisplayName = "Cliente sem CustomerId — usa \"Consumidor Final\", não quebra por causa disso")]
+    public async Task ProcessarOutbox_SemCliente_UsaConsumidorFinal()
+    {
+        var vendaId = Guid.NewGuid();
+        var dto = DtoDeTeste(vendaId); // CustomerId nulo, o default do DtoDeTeste
+        await _offlineDb.SalvarVendaOfflineComOutboxAsync(vendaId, dto);
+
+        _saleServiceMock.Setup(s => s.CreateAsync(It.IsAny<CreateSaleDto>()))
+            .ReturnsAsync(new SaleDto(vendaId, "PDV-001", null, "Vendedor", DateTime.Now, SaleStatus.SemNota, "Dinheiro", 100m));
+
+        await _engine.ProcessarOutboxAsync();
+
+        _motorFinanceiroMock.Verify(m => m.ProcessarRecebimentoVendaAsync(
+            vendaId, dto.UsuarioId, null, "Consumidor Final", It.IsAny<string>(), "Sync Automático",
+            dto.Troco, It.IsAny<System.Collections.Generic.IEnumerable<(Guid, PaymentMethod, decimal)>>()),
+            Times.Once);
+        _customerServiceMock.Verify(c => c.GetByIdAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact(DisplayName = "CRÍTICO: pagamento sem Id lança exceção antes de chamar o Motor Financeiro (idempotência granular quebraria)")]
+    public async Task ProcessarOutbox_PagamentoSemId_NaoChamaMotorFinanceiro()
+    {
+        var vendaId = Guid.NewGuid();
+        var dto = DtoDeTeste(vendaId);
+        dto.Payments[0].Id = null; // simula payload antigo/malformado sem a chave de idempotência
+
+        await _offlineDb.SalvarVendaOfflineComOutboxAsync(vendaId, dto);
+        _saleServiceMock.Setup(s => s.CreateAsync(It.IsAny<CreateSaleDto>()))
+            .ReturnsAsync(new SaleDto(vendaId, "PDV-001", null, "Vendedor", DateTime.Now, SaleStatus.SemNota, "Dinheiro", 100m));
+
+        await _engine.ProcessarOutboxAsync();
+
+        _motorFinanceiroMock.Verify(m => m.ProcessarRecebimentoVendaAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<string>(), It.IsAny<decimal>(),
+            It.IsAny<System.Collections.Generic.IEnumerable<(Guid, PaymentMethod, decimal)>>()),
+            Times.Never, "sem Id em cada pagamento, ProcessarRecebimentoVendaAsync não tem como ser idempotente — melhor falhar alto");
+    }
+
+    [Fact(DisplayName = "Erro de negócio comum registra a falha no evento certo (achado real: JSON usa \"Id\" PascalCase, não \"id\")")]
+    public async Task ProcessarOutbox_ErroComum_RegistraFalhaComEntidadeIdCorreta()
+    {
+        var vendaId = Guid.NewGuid();
+        await _offlineDb.SalvarVendaOfflineComOutboxAsync(vendaId, DtoDeTeste(vendaId));
+
+        _saleServiceMock.Setup(s => s.CreateAsync(It.IsAny<CreateSaleDto>()))
+            .ThrowsAsync(new InvalidOperationException("produto não existe mais"));
+
+        await _engine.ProcessarOutboxAsync();
+
+        var pendentes = await _offlineDb.GetEventosPendentesAsync();
+        pendentes.Should().ContainSingle().Which.Tentativas.Should().Be(1,
+            "ExtrairEntidadeId precisa achar o Id (PascalCase) no JSON pra RegistrarFalhaEventoAsync rodar de verdade");
+    }
+
+    // ── SincronizarCatalogoAsync — nenhum teste existia pra esse método inteiro ──
+
+    [Fact(DisplayName = "Sincronizar catálogo: produtos e clientes com sucesso — retorna true")]
+    public async Task SincronizarCatalogo_TudoComSucesso_RetornaTrue()
+    {
+        _productServiceMock.Setup(p => p.GetAllAsync()).ReturnsAsync(new List<ProductDto>());
+        _customerServiceMock.Setup(c => c.GetAllAsync()).ReturnsAsync(new List<CustomerDto>());
+
+        var resultado = await _engine.SincronizarCatalogoAsync();
+
+        resultado.Should().BeTrue();
+    }
+
+    [Fact(DisplayName = "Sincronizar catálogo: falha em produtos — retorna false")]
+    public async Task SincronizarCatalogo_FalhaEmProdutos_RetornaFalse()
+    {
+        _productServiceMock.Setup(p => p.GetAllAsync()).ThrowsAsync(new HttpRequestException("offline"));
+        _customerServiceMock.Setup(c => c.GetAllAsync()).ReturnsAsync(new List<CustomerDto>());
+
+        var resultado = await _engine.SincronizarCatalogoAsync();
+
+        resultado.Should().BeFalse();
+    }
+
+    [Fact(DisplayName = "CRÍTICO (achado de auditoria, 24/08): falha só em clientes também tem que dar false — antes só olhava produtos, indicador de conectividade mentia \"online\" com catálogo de clientes desatualizado")]
+    public async Task SincronizarCatalogo_FalhaEmClientes_RetornaFalse()
+    {
+        _productServiceMock.Setup(p => p.GetAllAsync()).ReturnsAsync(new List<ProductDto>());
+        _customerServiceMock.Setup(c => c.GetAllAsync()).ThrowsAsync(new HttpRequestException("offline"));
+
+        var resultado = await _engine.SincronizarCatalogoAsync();
+
+        resultado.Should().BeFalse("produtos sincronizar sozinho não é suficiente — clientes desatualizado também é catálogo desatualizado");
+    }
+
+    [Fact(DisplayName = "Sincronizar catálogo: produtos e clientes rodam em paralelo, não em sequência (os dois GetAllAsync são chamados mesmo se um demorar)")]
+    public async Task SincronizarCatalogo_ProdutosEClientes_RodamEmParalelo()
+    {
+        var produtosChamado = new TaskCompletionSource<bool>();
+        var clientesChamado = new TaskCompletionSource<bool>();
+
+        _productServiceMock.Setup(p => p.GetAllAsync()).Returns(async () =>
+        {
+            produtosChamado.TrySetResult(true);
+            await clientesChamado.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            return new List<ProductDto>();
+        });
+        _customerServiceMock.Setup(c => c.GetAllAsync()).Returns(async () =>
+        {
+            clientesChamado.TrySetResult(true);
+            await produtosChamado.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            return new List<CustomerDto>();
+        });
+
+        // Se rodassem em sequência, um dos dois nunca teria seu sinal disparado
+        // a tempo do outro — isso trava em deadlock/timeout se não for paralelo.
+        var resultado = await _engine.SincronizarCatalogoAsync().WaitAsync(TimeSpan.FromSeconds(3));
+
+        resultado.Should().BeTrue();
     }
 }

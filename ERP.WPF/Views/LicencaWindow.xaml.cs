@@ -18,7 +18,7 @@ namespace ERP.WPF.Views // Adapte para o namespace real do seu projeto
             txtMachineId.Text = MachineFingerprint.GetMachineId();
 
             // Calcula os dias restantes
-            int diasRestantes = (LicenseManager.DataVencimento - DateTime.Now).Days;
+            int diasRestantes = (LicenseManager.DataVencimento - ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil()).Days;
 
             // Preenche os textos na tela XAML
             txtStatus.Text = LicenseManager.StatusAtual.ToUpper();

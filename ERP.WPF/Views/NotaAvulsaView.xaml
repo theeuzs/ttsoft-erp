@@ -428,7 +428,7 @@
                                         <TextBlock Text="{Binding NaturezaOperacao}" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
                                         <Grid Margin="0,4,0,6">
                                             <TextBlock Text="{Binding ValorTotal, StringFormat='R$ {0:N2}'}" FontSize="12" FontWeight="Bold"/>
-                                            <TextBlock Text="{Binding Status}" FontSize="11" HorizontalAlignment="Right" Foreground="#3B82F6"/>
+                                            <TextBlock Text="{Binding StatusExibicao}" FontSize="11" HorizontalAlignment="Right" Foreground="#3B82F6"/>
                                         </Grid>
                                         <StackPanel Orientation="Horizontal">
                                             <Button Content="Abrir" FontSize="11" Padding="8,4" Margin="0,0,6,0"

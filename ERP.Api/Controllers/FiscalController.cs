@@ -16,20 +16,20 @@ public class FiscalController : ControllerBase
     private readonly INfseEmissionService         _nfse;
     private readonly SpedEfdGenerator             _sped;
     private readonly SpedContribuicoesGenerator   _spedContrib;
-    private readonly IConfiguration               _config;
+    private readonly IFiscalConfigurationProvider _configProvider;
 
     public FiscalController(
         ICMSSTCalculator st,
         INfseEmissionService nfse,
         SpedEfdGenerator sped,
         SpedContribuicoesGenerator spedContrib,
-        IConfiguration config)
+        IFiscalConfigurationProvider configProvider)
     {
-        _st          = st;
-        _nfse        = nfse;
-        _sped        = sped;
-        _spedContrib = spedContrib;
-        _config      = config;
+        _st             = st;
+        _nfse           = nfse;
+        _sped           = sped;
+        _spedContrib    = spedContrib;
+        _configProvider = configProvider;
     }
 
     // ── ICMS-ST ──────────────────────────────────────────────────────────────
@@ -62,10 +62,11 @@ public class FiscalController : ControllerBase
     [HttpPost("nfse/emitir")]
     public async Task<IActionResult> EmitirNfse([FromBody] EmitirNfseDto dto)
     {
-        var token     = _config["FocusNfe:Token"] ?? string.Empty;
-        var producao  = bool.Parse(_config["FocusNfe:IsProducao"] ?? "false");
+        // Achado (21/08) — token global do appsettings, ignorava
+        // TenantFiscalConfiguration por completo.
+        var config = await _configProvider.ObterConfiguracaoAsync();
 
-        var (sucesso, msg, nfse) = await _nfse.EmitirAsync(dto, token, producao);
+        var (sucesso, msg, nfse) = await _nfse.EmitirAsync(dto, config.TokenFocusNfe, config.UsarAmbienteProducao);
 
         if (!sucesso)
             return BadRequest(new { erro = msg, referencia = nfse?.ReferenciaNfse });
@@ -86,10 +87,9 @@ public class FiscalController : ControllerBase
     [HttpDelete("nfse/{referencia}/cancelar")]
     public async Task<IActionResult> CancelarNfse(string referencia, [FromBody] string motivo)
     {
-        var token    = _config["FocusNfe:Token"] ?? string.Empty;
-        var producao = bool.Parse(_config["FocusNfe:IsProducao"] ?? "false");
+        var config = await _configProvider.ObterConfiguracaoAsync();
 
-        var (sucesso, msg) = await _nfse.CancelarAsync(referencia, motivo, token, producao);
+        var (sucesso, msg) = await _nfse.CancelarAsync(referencia, motivo, config.TokenFocusNfe, config.UsarAmbienteProducao);
         return sucesso ? NoContent() : BadRequest(new { erro = msg });
     }
 

@@ -146,7 +146,7 @@ public class FiscalService : IFiscalService
         string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
 
         var request = MontarRequestNfeDevolucao(sale, itensDevolvidos, motivo);
-        var referenciaDevolucao = $"devolucao-{vendaId}-{DateTime.Now:yyyyMMddHHmmss}";
+        var referenciaDevolucao = $"devolucao-{vendaId}-{ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():yyyyMMddHHmmss}";
 
         var (sucesso, mensagem, urlDanfe, urlXml) = await _nfeService.EmitirNfeA4Async(
             referenciaDevolucao, request, config.TokenFocusNfe, config.UsarAmbienteProducao);
@@ -194,7 +194,12 @@ public class FiscalService : IFiscalService
         string? ieLimpa = null;
         if (!string.IsNullOrWhiteSpace(customer?.StateRegistration))
             ieLimpa = new string(customer.StateRegistration.Where(char.IsDigit).ToArray());
-        else if (cpfCnpjLimpo?.Length > 11) ieLimpa = "ISENTO";
+        // Achado (26/08), incidente real Vila Verde — "ISENTO" nunca deveria
+        // ter sido usado como VALOR do campo de IE. SEFAZ rejeita isso com
+        // "IE do destinatario nao informada" (código 232): o campo espera
+        // ou um número de IE real, ou vazio. A condição de isento/não-
+        // contribuinte se comunica pelo indicador (campo separado), nunca
+        // escrevendo a palavra no lugar do número.
 
         var itensRequest = itens.Select((item, index) => new FocusItemRequest
         {
@@ -253,7 +258,10 @@ public class FiscalService : IFiscalService
     private async Task RegistrarNotaFiscalAsync(
         Guid vendaId, Domain.Entities.Sale sale, string tipoDocumento, string status, string? urlDanfe, string ambiente, string? urlXml)
     {
-        var existente = await _ctx.NotasFiscais
+        // Achado (21/08) — escapou da caçada anterior por ser multi-linha.
+        // Sem AsTracking(), o upsert do else abaixo (reemissão) não
+        // persistia — Status/UrlDanfe/Ambiente ficavam desatualizados.
+        var existente = await _ctx.NotasFiscais.AsTracking()
             .FirstOrDefaultAsync(n => n.VendaId == vendaId && n.Tipo == tipoDocumento);
 
         if (existente is null)
@@ -417,14 +425,17 @@ public class FiscalService : IFiscalService
         string? ieLimpa = null;
         if (!string.IsNullOrWhiteSpace(customer?.StateRegistration))
             ieLimpa = new string(customer.StateRegistration.Where(char.IsDigit).ToArray());
-        else if (cpfCnpjLimpo?.Length > 11) ieLimpa = "ISENTO";
+        // Achado (26/08), incidente real Vila Verde — mesmo motivo do outro
+        // bloco (ver comentário acima na função anterior): "ISENTO" nunca
+        // deveria virar o VALOR do campo de IE. SEFAZ rejeita com "IE do
+        // destinatario nao informada" (código 232).
 
         // S20 FIX (13/08) — mesmo campo faltando aqui: "1" = Contribuinte
         // ICMS quando existe IE de verdade cadastrada; "9" = Não
         // Contribuinte pros demais casos (pessoa física ou empresa isenta).
         string? indicadorIe = string.IsNullOrWhiteSpace(cpfCnpjLimpo)
             ? null
-            : (!string.IsNullOrWhiteSpace(ieLimpa) && ieLimpa != "ISENTO" ? "1" : "9");
+            : (!string.IsNullOrWhiteSpace(ieLimpa) ? "1" : "9");
 
         // S24 (17/08) — frete real da venda (ex: marketplace com entrega).
         // Modalidade "1" = por conta do destinatário, o caso comum quando o

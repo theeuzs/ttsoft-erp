@@ -199,7 +199,13 @@ public class SyncEngineService
         var tarefaClientes = SincronizarClientesComResultadoAsync();
         await Task.WhenAll(tarefaProdutos, tarefaClientes);
 
-        return tarefaProdutos.Result;
+        // Achado de auditoria (24/08) — antes só devolvia o resultado de
+        // produtos, ignorando clientes por completo. Se produtos sincronizava
+        // e clientes falhava, o indicador de conectividade acendia "online"
+        // mesmo com metade do catálogo local desatualizado — sinal mentindo
+        // pro operador, sem gerar nenhum aviso. Combinado: só é "online" de
+        // verdade se os dois sincronizaram.
+        return tarefaProdutos.Result && tarefaClientes.Result;
     }
 
     private async Task<bool> SincronizarProdutosComResultadoAsync()
@@ -217,16 +223,18 @@ public class SyncEngineService
         }
     }
 
-    private async Task SincronizarClientesComResultadoAsync()
+    private async Task<bool> SincronizarClientesComResultadoAsync()
     {
         try
         {
             var clientes = await _customerService.GetAllAsync();
             await _offlineDb.SincronizarClientesAsync(clientes.Cast<object>());
+            return true;
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "SyncEngine: falha ao sincronizar catálogo de clientes");
+            return false;
         }
     }
 }

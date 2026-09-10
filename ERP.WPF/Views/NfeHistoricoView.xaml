@@ -1,0 +1,86 @@
+<UserControl x:Class="ERP.WPF.Views.NfeHistoricoView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource CardBgAlt}">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="📄 NF-e (Emissão)" FontSize="24" FontWeight="Bold"/>
+        </StackPanel>
+        <TextBlock Grid.Row="0" Text="Histórico de qualquer NF-e A4 emitida — avulsa ou ligada a uma venda."
+                   FontSize="12" Foreground="{DynamicResource TextMuted}" Margin="0,34,0,0"/>
+
+        <!-- Filtros -->
+        <Border Grid.Row="1" Background="{DynamicResource CardBg}" CornerRadius="10" Padding="16" Margin="0,16,0,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="160"/>
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="160"/>
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="De" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                    <DatePicker SelectedDate="{Binding DataInicio}" Margin="0,4,0,0"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="Até" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                    <DatePicker SelectedDate="{Binding DataFim}" Margin="0,4,0,0"/>
+                </StackPanel>
+                <StackPanel Grid.Column="4">
+                    <TextBlock Text="Status" FontSize="11" Foreground="{DynamicResource TextMuted}"/>
+                    <ComboBox ItemsSource="{Binding StatusFiltro}" SelectedItem="{Binding StatusSelecionado}" Padding="8" Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <Button Grid.Column="6" Content="↻ Atualizar" Command="{Binding AtualizarCommand}"
+                        VerticalAlignment="Bottom" Background="{DynamicResource CorAcento}" Foreground="White"
+                        Padding="14,8" BorderThickness="0" Cursor="Hand">
+                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Grade -->
+        <Border Grid.Row="2" Background="{DynamicResource CardBg}" CornerRadius="10" Padding="8">
+            <DataGrid ItemsSource="{Binding Notas}" AutoGenerateColumns="False" IsReadOnly="True"
+                      HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeight="36"
+                      CanUserAddRows="False" CanUserDeleteRows="False" Background="Transparent" BorderThickness="0">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Emissão" Binding="{Binding DataEmissao, StringFormat='dd/MM/yyyy HH:mm'}" Width="140"/>
+                    <DataGridTextColumn Header="Natureza" Binding="{Binding NaturezaOperacao}" Width="180"/>
+                    <DataGridTextColumn Header="Destinatário" Binding="{Binding DestinatarioNome}" Width="*"/>
+                    <DataGridTextColumn Header="Valor" Binding="{Binding ValorTotal, StringFormat='R$ {0:N2}'}" Width="110"/>
+                    <DataGridCheckBoxColumn Header="Avulsa?" Binding="{Binding EhAvulsa}" Width="70"/>
+                    <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="110"/>
+                    <DataGridTemplateColumn Header="Ações" Width="220">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="DANFE" Margin="2" Padding="8,2"
+                                            Command="{Binding DataContext.VerDanfeCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                            CommandParameter="{Binding}"/>
+                                    <Button Content="Cancelar" Margin="2" Padding="8,2"
+                                            Command="{Binding DataContext.CancelarCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                            CommandParameter="{Binding}"/>
+                                    <Button Content="Copiar" Margin="2" Padding="8,2"
+                                            Command="{Binding DataContext.CopiarParaNotaAvulsaCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                            CommandParameter="{Binding}"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+    </Grid>
+</UserControl>

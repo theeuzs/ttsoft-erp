@@ -45,7 +45,7 @@ public class ApiClient
                 return true;
             }
         }
-        catch { /* corpo vazio ou não-JSON — ignora, não é o caso que tratamos aqui */ }
+        catch (Exception ex) { Console.WriteLine($"ApiClient: corpo da resposta vazio ou não-JSON ao checar mustChangePassword — {ex.Message}"); /* ignora, não é o caso que tratamos aqui */ }
 
         return false;
     }

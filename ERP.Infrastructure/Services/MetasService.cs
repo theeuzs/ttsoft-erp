@@ -124,7 +124,8 @@ public class MetasService : IMetasService
     {
         // HasQueryFilter garante isolamento de tenant — só encontra metas do tenant atual.
         // Soft delete via EF Core (compatível com InMemory e SQL Server).
-        var meta = await _ctx.MetasVendas
+        // Achado (21/08) — escapou da caçada anterior por ser multi-linha.
+        var meta = await _ctx.MetasVendas.AsTracking()
             .Where(m => m.Id == id)
             .FirstOrDefaultAsync(ct);
 

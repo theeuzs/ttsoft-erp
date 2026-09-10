@@ -97,7 +97,11 @@ public class UserRepository : IUserRepository
                 $"UpdateLoginAttemptAsync chamado sem tenantId (userId={userId}). " +
                 "Brute-force lockout não pode ser registrado sem tenant definido.");
 
-        var user = await _context.Users
+        // Achado (21/08), grave — escapou da caçada anterior por ser
+        // multi-linha. Sem AsTracking(), FailedLoginAttempts/LockoutEndUtc
+        // nunca persistiam: a proteção contra força bruta era inofensiva na
+        // prática, o contador nunca acumulava de verdade entre tentativas.
+        var user = await _context.Users.AsTracking()
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == tenantId && !u.IsDeleted);
 
@@ -121,7 +125,9 @@ public class UserRepository : IUserRepository
                 $"UpdatePasswordAsync chamado sem tenantId (userId={userId}). " +
                 "Senha não pode ser atualizada sem tenant definido.");
 
-        var user = await _context.Users
+        // Mesmo achado (21/08), ainda mais grave aqui — troca de senha
+        // nunca persistia sem AsTracking().
+        var user = await _context.Users.AsTracking()
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == tenantId && !u.IsDeleted);
 

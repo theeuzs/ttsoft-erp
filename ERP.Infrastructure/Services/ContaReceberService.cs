@@ -44,7 +44,7 @@ public class ContaReceberService : IContaReceberService
             UsuarioNome    = string.IsNullOrEmpty(_tenant.UserName) ? null : _tenant.UserName,
             Valor          = valor,
             Observacao     = observacao,
-            DataEvento     = DateTime.Now
+            DataEvento     = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil()
         });
         await _ctx.SaveChangesAsync();
     }
@@ -58,8 +58,8 @@ public class ContaReceberService : IContaReceberService
             SalePaymentId  = salePaymentId,
             ValorTotal     = valor,
             ValorRecebido  = 0,
-            DataEmissao    = DateTime.Now,
-            DataVencimento = DateTime.Now.AddDays(30),
+            DataEmissao    = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
+            DataVencimento = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().AddDays(30),
             Status         = "Pendente",
             Descricao      = descricao
         };
@@ -100,7 +100,7 @@ public class ContaReceberService : IContaReceberService
     {
         var tenantId = _tenant.TenantId;
         var agora    = DateTime.UtcNow;
-        var dataPag  = DateTime.Now;
+        var dataPag  = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
 
         // Atômico: soma relativa (ValorRecebido = ValorRecebido + X) direto no
         // SQL, não Math.Min(conta.ValorRecebido + X, ...) calculado em C# a
@@ -140,7 +140,7 @@ public class ContaReceberService : IContaReceberService
             ?? throw new KeyNotFoundException("Conta não encontrada.");
 
         await _ctx.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE ContasReceber SET ValorRecebido={conta.ValorTotal}, Status={"Pago"}, DataPagamento={DateTime.Now}, UpdatedAt={DateTime.UtcNow} WHERE Id={contaId} AND TenantId={_tenant.TenantId}");
+            $"UPDATE ContasReceber SET ValorRecebido={conta.ValorTotal}, Status={"Pago"}, DataPagamento={ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil()}, UpdatedAt={DateTime.UtcNow} WHERE Id={contaId} AND TenantId={_tenant.TenantId}");
 
         await RegistrarEventoAsync(contaId, "Pagamento", conta.ValorTotal - conta.ValorRecebido, "Baixa total");
     }
@@ -180,7 +180,7 @@ public class ContaReceberService : IContaReceberService
                 $"Desconto de {valorDesconto:C} maior que o saldo devido ({saldoAtual:C}).");
 
         var descricaoComMotivo = $"{conta.Descricao} [Desconto de {valorDesconto:C}: {motivo}]";
-        var dataPag = DateTime.Now;
+        var dataPag = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
         var agora   = DateTime.UtcNow;
 
         var linhas = await _ctx.Database.ExecuteSqlInterpolatedAsync($@"
@@ -245,7 +245,7 @@ public class ContaReceberService : IContaReceberService
             descontoDaConta = Math.Min(descontoDaConta, saldoConta);
 
             var pagamentoDaConta = Math.Max(0, Math.Min(restanteAPagar, saldoConta - descontoDaConta));
-            var dataPag = DateTime.Now;
+            var dataPag = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
             var agora   = DateTime.UtcNow;
 
             // Atômico igual DarBaixaParcialAsync — soma relativa no SQL, não
@@ -324,7 +324,7 @@ public class ContaReceberService : IContaReceberService
             SaleId         = dto.SaleId,
             ValorTotal     = i == dto.NumeroParcelas ? valorParcela + resto : valorParcela,
             ValorRecebido  = 0m,
-            DataEmissao    = DateTime.Now,
+            DataEmissao    = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
             DataVencimento = dto.PrimeiroVencimento.AddDays(dto.IntervalosDias * (i - 1)),
             Status         = "Pendente",
             NumeroParcela  = i,
@@ -384,7 +384,11 @@ public class ContaReceberService : IContaReceberService
                 GerarBoletoStatus.AsaasIndisponivel,
                 Erro: "Geração de boleto não está disponível neste ambiente.");
 
-        var conta = await _ctx.ContasReceber
+        // Achado (21/08) — escapou da caçada anterior por ser multi-linha.
+        // Sério: sem AsTracking(), os IDs do boleto (AsaasPaymentId etc.)
+        // nunca persistiam — a checagem "já tem boleto?" ficava sempre
+        // vazia, deixando gerar boleto DUPLICADO no Asaas a cada tentativa.
+        var conta = await _ctx.ContasReceber.AsTracking()
             .Include(c => c.Customer)
             .Where(c => c.Id == contaId)
             .FirstOrDefaultAsync();

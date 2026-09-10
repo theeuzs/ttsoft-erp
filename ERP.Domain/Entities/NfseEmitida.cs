@@ -9,7 +9,7 @@ public class NfseEmitida : BaseEntity
 {
     public string?     NumeroNfse      { get; set; }
     public string      ReferenciaNfse  { get; set; } = string.Empty; // Ref. interna FocusNFe
-    public DateTime    DataEmissao     { get; set; } = DateTime.Now;
+    public DateTime    DataEmissao     { get; set; } = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
     public StatusNfse  Status          { get; set; } = StatusNfse.Pendente;
 
     // Tomador (cliente)

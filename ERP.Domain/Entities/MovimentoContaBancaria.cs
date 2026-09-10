@@ -14,7 +14,7 @@ public class MovimentoContaBancaria : BaseEntity
     public Guid           ContaBancariaId { get; set; }
     public ContaBancaria? ContaBancaria   { get; set; }
 
-    public DateTime                     DataHora  { get; set; } = DateTime.Now;
+    public DateTime                     DataHora  { get; set; } = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
     public TipoMovimentoContaBancaria    Tipo      { get; set; }
     public string                       Descricao { get; set; } = string.Empty;
     public decimal                      Valor     { get; set; }
