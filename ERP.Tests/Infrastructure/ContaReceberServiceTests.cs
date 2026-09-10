@@ -412,7 +412,7 @@ public class ContaReceberServiceTests
             conta.ValorTotal.Should().Be(49.89m);
             conta.SaleId.Should().Be(vendaId);
             conta.Status.Should().Be("Pendente");
-            conta.DataVencimento.Should().BeCloseTo(DateTime.Now.AddDays(30), TimeSpan.FromMinutes(1));
+            conta.DataVencimento.Should().BeCloseTo(ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().AddDays(30), TimeSpan.FromMinutes(1));
         }
     }
 }
