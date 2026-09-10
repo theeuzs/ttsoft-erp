@@ -593,8 +593,8 @@
             var fileContent = new StreamContent(stream);
             fileContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
 
-            // Mantive o nome "arquivo" que a sua API já espera
-            content.Add(fileContent, "arquivo", file.Name);
+            // A MUDANÇA ESTÁ AQUI: trocamos "arquivo" para "file", que é o padrão do IFormFile no backend
+            content.Add(fileContent, "file", file.Name);
 
             var uploadId = _editandoProdutoId ?? Guid.NewGuid();
 
@@ -607,12 +607,13 @@
             }
             else
             {
-                _erroProduto = $"A API recusou o arquivo (Status: {(int)resp.StatusCode}).";
+                _erroProduto = $"A API recusou o arquivo (Status: {(int)resp.StatusCode}). Verifique se o nome do parâmetro esperado é 'file'.";
             }
         }
         catch (Exception ex)
         {
-            _erroProduto = $"Erro interno: {ex.Message}";
+            // Agora o catch captura a falha do ApiClient caso ele ainda tente ler um JSON de erro inválido
+            _erroProduto = $"Erro interno: A API barrou o upload e o erro não pôde ser lido ({ex.Message}).";
         }
         finally
         {
