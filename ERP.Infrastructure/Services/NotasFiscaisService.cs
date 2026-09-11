@@ -33,34 +33,85 @@ public class NotasFiscaisService : INotasFiscaisService
 
         var tenantId = _tenant.TenantId;
 
-        IQueryable<NfseEmitida> query = _ctx.NfseEmitidas
+        // Achado (10/09) — esse endpoint só consultava NfseEmitidas (nota de
+        // SERVIÇO). Uma loja de material de construção nunca emite isso —
+        // as notas de verdade (NF-e/NFC-e) ficam em NotasFiscais, uma tabela
+        // completamente diferente, nunca consultada aqui. Por isso "não
+        // aparece nenhuma emitida" mesmo com notas reais no banco.
+        //
+        // Tentei unir as duas fontes com Concat() ainda como IQueryable
+        // (traduzido pro SQL do banco), mas isso esbarrou em duas
+        // incompatibilidades reais entre SQL Server (produção) e SQLite
+        // (testes): Sum() de decimal em subconsulta, e depois Concat() após
+        // um .ToString() de enum na projeção. Em vez de caçar
+        // incompatibilidade por incompatibilidade, busca cada fonte
+        // separada (com WHERE TenantId, então não é a tabela toda), monta o
+        // DTO já em memória (LINQ to Objects — sempre funciona igual em
+        // qualquer banco), e combina/pagina em C#. Volume de nota fiscal de
+        // uma loja pequena/média nunca chega perto de pesar isso.
+        var notasServico = await _ctx.NfseEmitidas
             .AsNoTracking()
-            .Where(n => n.TenantId == tenantId);
-
-        var total = await query.CountAsync(ct);
-
-        var items = await query
-            .OrderByDescending(n => n.DataEmissao)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(n => new NotaFiscalDto
-            {
-                Id               = n.Id,
-                NumeroNfse       = n.NumeroNfse,
-                ReferenciaNfse   = n.ReferenciaNfse,
-                DataEmissao      = n.DataEmissao,
-                Status           = n.Status.ToString(),
-                TomadorNome      = n.TomadorNome,
-                TomadorCpfCnpj   = n.TomadorCpfCnpj,
-                DescricaoServico = n.DescricaoServico,
-                ValorServico     = n.ValorServico,
-                ValorISS         = n.ValorISS,
-                ValorLiquido     = n.ValorLiquido,
-                UrlDanfse        = n.UrlDanfse,
-                MensagemErro     = n.MensagemErro,
-                VendaId          = n.VendaId
-            })
+            .Where(n => n.TenantId == tenantId)
             .ToListAsync(ct);
+
+        var notasMercadoria = await _ctx.NotasFiscais
+            .AsNoTracking()
+            .Where(n => n.TenantId == tenantId)
+            .ToListAsync(ct);
+
+        var idsNotaFiscal = notasMercadoria.Select(n => n.Id).ToList();
+        var totaisPorNota = idsNotaFiscal.Count == 0
+            ? new Dictionary<Guid, decimal>()
+            : (await _ctx.NotaFiscalItens
+                    .AsNoTracking()
+                    .Where(i => idsNotaFiscal.Contains(i.NotaFiscalId))
+                    .Select(i => new { i.NotaFiscalId, i.Quantidade, i.ValorUnitario })
+                    .ToListAsync(ct))
+                .GroupBy(i => i.NotaFiscalId)
+                .ToDictionary(g => g.Key, g => g.Sum(i => i.Quantidade * i.ValorUnitario));
+
+        var itensServico = notasServico.Select(n => new NotaFiscalDto
+        {
+            Id               = n.Id,
+            NumeroNfse       = n.NumeroNfse,
+            ReferenciaNfse   = n.ReferenciaNfse,
+            DataEmissao      = n.DataEmissao,
+            Status           = n.Status.ToString(),
+            TomadorNome      = n.TomadorNome,
+            TomadorCpfCnpj   = n.TomadorCpfCnpj,
+            DescricaoServico = n.DescricaoServico,
+            ValorServico     = n.ValorServico,
+            ValorISS         = n.ValorISS,
+            ValorLiquido     = n.ValorLiquido,
+            UrlDanfse        = n.UrlDanfse,
+            MensagemErro     = n.MensagemErro,
+            VendaId          = n.VendaId
+        });
+
+        var itensMercadoria = notasMercadoria.Select(n => new NotaFiscalDto
+        {
+            Id               = n.Id,
+            NumeroNfse       = n.Numero,
+            ReferenciaNfse   = n.Chave ?? n.RefNFe,
+            DataEmissao      = n.DataEmissao,
+            Status           = n.Status,
+            TomadorNome      = n.DestinatarioNome ?? "Consumidor Final",
+            TomadorCpfCnpj   = n.DestinatarioDocumento,
+            DescricaoServico = n.Tipo, // "NFE"/"NFCE" — reaproveita o campo pra diferenciar visualmente
+            ValorServico     = 0,
+            ValorISS         = 0,
+            ValorLiquido     = totaisPorNota.TryGetValue(n.Id, out var t) ? t : 0,
+            UrlDanfse        = n.UrlDanfe,
+            MensagemErro     = n.MotivoCancelamento,
+            VendaId          = n.VendaId
+        });
+
+        var todas = itensServico.Concat(itensMercadoria)
+            .OrderByDescending(n => n.DataEmissao)
+            .ToList();
+
+        var total = todas.Count;
+        var items = todas.Skip((page - 1) * pageSize).Take(pageSize).ToList();
 
         return new PagedResult<NotaFiscalDto>
         {

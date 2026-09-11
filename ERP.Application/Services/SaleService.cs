@@ -326,6 +326,14 @@ public class SaleService : ISaleService
         venda.NfceStatusFocus = status;
         venda.NfceAmbiente = ambiente;
         venda.NfceReferencia = referencia;
+
+        // Achado (10/09) — venda.Status nunca transicionava pra NotaEmitida
+        // em lugar nenhum do código. A nota era emitida com sucesso de
+        // verdade na SEFAZ (NfceStatusFocus virava "Autorizada" certinho),
+        // mas o histórico de venda (WPF e Portal) sempre mostrava "Sem
+        // Nota", porque é esse campo que as telas realmente checam.
+        if (status == "Autorizada")
+            venda.Status = Domain.Enums.SaleStatus.NotaEmitida;
         
         _uow.Sales.Update(venda);
         await _uow.CommitAsync();

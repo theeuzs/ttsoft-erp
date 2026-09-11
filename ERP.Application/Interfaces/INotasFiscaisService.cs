@@ -33,7 +33,7 @@ public class NotaFiscalDto
     public string   DescricaoServico { get; init; } = string.Empty;
     public decimal  ValorServico      { get; init; }
     public decimal  ValorISS          { get; init; }
-    public decimal  ValorLiquido      { get; init; }
+    public decimal  ValorLiquido      { get; set; }
     public string?  UrlDanfse         { get; init; }
     public string?  MensagemErro      { get; init; }
     public Guid?    VendaId           { get; init; }
