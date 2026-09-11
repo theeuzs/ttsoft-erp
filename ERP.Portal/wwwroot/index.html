@@ -5,6 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>TTSoft ERP — Portal Gerencial</title>
     <base href="/" />
+
+    <!-- Achado (11/09) — não existia PWA de verdade nenhuma. O que parecia
+         "tela cheia" no Dashboard mas voltava com barra do navegador em
+         qualquer outra tela era só o Safari escondendo a barra sozinho ao
+         rolar, comportamento inconsistente entre páginas. O manifest.json
+         com "scope": "/" resolve isso pra valer — TODA rota do domínio
+         passa a contar como "dentro do app" instalado, não só a inicial. -->
+    <link rel="manifest" href="manifest.json" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="TTSoft ERP" />
+    <meta name="theme-color" content="#1E293B" />
+
     <link rel="stylesheet" href="css/app.css" />
     <style>
         :root {
