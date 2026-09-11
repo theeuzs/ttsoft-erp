@@ -3,6 +3,7 @@
 @inject ApiClient Api
 @inject AuthService Auth
 @inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <style>
     /* =========================================================
@@ -713,6 +714,11 @@
                        @onkeyup="BuscarProdutos"
                        placeholder="🔎 Buscar produto ou código..." />
 
+                <button class="pdv-filter" @onclick="AbrirScanner" title="Ler código de barras pela câmera"
+                        style="padding:8px 12px;">
+                    📷
+                </button>
+
                 <button class="pdv-filter" @onclick="ToggleMostrarTodos">
                     @(_mostrarTodos ? "Menos" : "📦 Todos")
                 </button>
@@ -934,7 +940,89 @@
     }
 </div>
 
+@if (_scannerAberto)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:2000;
+                display:flex; flex-direction:column; align-items:center; justify-content:center;">
+        <div style="color:white; font-weight:700; margin-bottom:12px;">
+            📷 Aponte a câmera pro código de barras
+        </div>
+        <video id="video-scanner" style="width:90%; max-width:480px; border-radius:12px;
+               background:black;" muted playsinline></video>
+        @if (_erroScanner != null)
+        {
+            <div style="color:#FCA5A5; background:#7F1D1D; padding:10px 16px; border-radius:8px;
+                        margin-top:12px; max-width:90%; text-align:center; font-size:13px;">
+                ⚠ @_erroScanner
+            </div>
+        }
+        <button @onclick="FecharScanner"
+                style="margin-top:20px; background:#EF4444; color:white; border:none;
+                       padding:12px 28px; border-radius:8px; font-weight:700; cursor:pointer;">
+            Cancelar
+        </button>
+    </div>
+}
+
+<script src="lib/zxing.min.js"></script>
+<script src="js/barcode-scanner.js"></script>
+
 @code {
+    // ── Leitor de código de barras via câmera ───────────────────────────────
+    private bool                             _scannerAberto;
+    private string?                          _erroScanner;
+    private DotNetObjectReference<PDV>?      _scannerRef;
+
+    private async Task AbrirScanner()
+    {
+        _erroScanner    = null;
+        _scannerAberto  = true;
+        StateHasChanged();
+
+        // Espera o <video> existir no DOM antes de pedir a câmera pra ele.
+        await Task.Delay(50);
+
+        _scannerRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("iniciarScannerCodigoBarras", "video-scanner", _scannerRef);
+    }
+
+    private async Task FecharScanner()
+    {
+        await JS.InvokeVoidAsync("pararScannerCodigoBarras");
+        _scannerRef?.Dispose();
+        _scannerRef    = null;
+        _scannerAberto = false;
+        _erroScanner   = null;
+    }
+
+    [JSInvokable]
+    public async Task OnCodigoLido(string codigo)
+    {
+        await FecharScanner();
+        _busca = codigo;
+        await CarregarProdutosAsync(codigo);
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnErroScanner(string mensagem)
+    {
+        _erroScanner = mensagem.Contains("Permission", StringComparison.OrdinalIgnoreCase)
+            ? "Permissão de câmera negada. Habilite o acesso à câmera nas configurações do navegador."
+            : $"Não foi possível acessar a câmera: {mensagem}";
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_scannerAberto)
+        {
+            try { await JS.InvokeVoidAsync("pararScannerCodigoBarras"); }
+            catch (Exception ex) { Console.WriteLine($"PDV: falha ao parar scanner no dispose — {ex.Message}"); }
+        }
+        _scannerRef?.Dispose();
+    }
+
     private ProdutoItem[]?     _produtos;
     private string             _busca            = "";
     // Achado (10/09) — busca disparava a cada tecla, sem debounce, e sem
