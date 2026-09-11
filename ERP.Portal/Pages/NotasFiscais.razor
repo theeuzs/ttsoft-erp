@@ -103,10 +103,11 @@
                 style="padding:9px 14px; border:1px solid #E2E8F0; border-radius:8px;
                        font-size:13px; background:white; min-width:140px;">
             <option value="">Todos os status</option>
-            <option value="Autorizado">✅ Autorizado</option>
+            <option value="Autorizada">✅ Autorizada</option>
             <option value="Pendente">⏳ Pendente</option>
-            <option value="Cancelado">❌ Cancelado</option>
-            <option value="Erro">⚠ Erro</option>
+            <option value="Cancelada">❌ Cancelada</option>
+            <option value="Rejeitada">❌ Rejeitada</option>
+            <option value="Contingência">📡 Contingência</option>
         </select>
         <input type="date" @bind="_filtroDe"
                style="padding:9px 14px; border:1px solid #E2E8F0; border-radius:8px; font-size:13px;"/>
@@ -151,12 +152,20 @@
                 <tbody>
                     @foreach (var nota in NotasFiltradas)
                     {
+                        // Achado (10/09) — nenhum desses valores batia com o
+                        // que o backend realmente grava ("Autorizado" vs
+                        // "Autorizada", "Cancelado" vs "Cancelada", faltava
+                        // "Contingência" e "Rejeitada" por completo). Toda
+                        // nota de verdade caía no caso padrão "Pendente",
+                        // mesmo já autorizada de verdade na SEFAZ.
                         var (bgStatus, corStatus, txStatus) = nota.Status switch
                         {
-                            "Autorizado" => ("#D1FAE5", "#065F46", "✅ Autorizado"),
-                            "Cancelado"  => ("#FEE2E2", "#991B1B", "❌ Cancelado"),
-                            "Erro"       => ("#FEF3C7", "#92400E", "⚠ Erro"),
-                            _            => ("#EFF6FF", "#1E40AF", "⏳ Pendente")
+                            "Autorizada"    => ("#D1FAE5", "#065F46", "✅ Autorizada"),
+                            "Cancelada"     => ("#FEE2E2", "#991B1B", "❌ Cancelada"),
+                            "Rejeitada"     => ("#FEE2E2", "#991B1B", "❌ Rejeitada"),
+                            "Contingência"  => ("#FEF3C7", "#92400E", "📡 Contingência"),
+                            "Erro"          => ("#FEF3C7", "#92400E", "⚠ Erro"),
+                            _               => ("#EFF6FF", "#1E40AF", "⏳ Pendente")
                         };
 
                         <tr style="border-bottom:1px solid #F1F5F9;"
