@@ -59,6 +59,22 @@ public class NotasFiscaisService : INotasFiscaisService
             .Where(n => n.TenantId == tenantId)
             .ToListAsync(ct);
 
+        // Achado (10/09) — Número, Valor e Tomador sempre vinham vazios/zero
+        // na tela. Causa: RegistrarNotaFiscalAsync (FiscalService) nunca
+        // grava Numero/Chave na NotaFiscal (só na Sale), e nunca cria
+        // NotaFiscalItens (só Nota Avulsa faz isso, que tem gestão de item
+        // própria). O dado certo pra nota ligada a venda vive na Sale, não
+        // teria como somar item nenhum porque nenhum item foi salvo aqui.
+        var idsVenda = notasMercadoria.Where(n => n.VendaId.HasValue).Select(n => n.VendaId!.Value).ToList();
+        var vendasPorId = idsVenda.Count == 0
+            ? new Dictionary<Guid, (string? Numero, string? Chave, string? Cliente, decimal Total)>()
+            : (await _ctx.Sales
+                    .AsNoTracking()
+                    .Where(s => idsVenda.Contains(s.Id))
+                    .Select(s => new { s.Id, s.NfceNumero, s.NfceChave, Nome = s.Customer != null ? s.Customer.Name : null, s.Total })
+                    .ToListAsync(ct))
+                .ToDictionary(s => s.Id, s => (Numero: s.NfceNumero, Chave: s.NfceChave, Cliente: s.Nome, s.Total));
+
         var idsNotaFiscal = notasMercadoria.Select(n => n.Id).ToList();
         var totaisPorNota = idsNotaFiscal.Count == 0
             ? new Dictionary<Guid, decimal>()
@@ -88,22 +104,28 @@ public class NotasFiscaisService : INotasFiscaisService
             VendaId          = n.VendaId
         });
 
-        var itensMercadoria = notasMercadoria.Select(n => new NotaFiscalDto
+        var itensMercadoria = notasMercadoria.Select(n =>
         {
-            Id               = n.Id,
-            NumeroNfse       = n.Numero,
-            ReferenciaNfse   = n.Chave ?? n.RefNFe,
-            DataEmissao      = n.DataEmissao,
-            Status           = n.Status,
-            TomadorNome      = n.DestinatarioNome ?? "Consumidor Final",
-            TomadorCpfCnpj   = n.DestinatarioDocumento,
-            DescricaoServico = n.Tipo, // "NFE"/"NFCE" — reaproveita o campo pra diferenciar visualmente
-            ValorServico     = 0,
-            ValorISS         = 0,
-            ValorLiquido     = totaisPorNota.TryGetValue(n.Id, out var t) ? t : 0,
-            UrlDanfse        = n.UrlDanfe,
-            MensagemErro     = n.MotivoCancelamento,
-            VendaId          = n.VendaId
+            vendasPorId.TryGetValue(n.VendaId ?? Guid.Empty, out var venda);
+            var valorItens = totaisPorNota.TryGetValue(n.Id, out var t) ? t : 0;
+
+            return new NotaFiscalDto
+            {
+                Id               = n.Id,
+                NumeroNfse       = venda.Numero ?? n.Numero,
+                ReferenciaNfse   = venda.Chave ?? n.Chave ?? n.RefNFe,
+                DataEmissao      = n.DataEmissao,
+                Status           = n.Status,
+                TomadorNome      = venda.Cliente ?? n.DestinatarioNome ?? "Consumidor Final",
+                TomadorCpfCnpj   = n.DestinatarioDocumento,
+                DescricaoServico = n.Tipo, // "NFE"/"NFCE" — reaproveita o campo pra diferenciar visualmente
+                ValorServico     = 0,
+                ValorISS         = 0,
+                ValorLiquido     = valorItens > 0 ? valorItens : venda.Total,
+                UrlDanfse        = n.UrlDanfe,
+                MensagemErro     = n.MotivoCancelamento,
+                VendaId          = n.VendaId
+            };
         });
 
         var todas = itensServico.Concat(itensMercadoria)

@@ -2,9 +2,14 @@
 @using ERP.Portal.Services
 @inject PortalChatService _chatSvc
 @inject AuthService Auth
+@inject NavigationManager Nav
 @implements IAsyncDisposable
 
 <!-- Botão flutuante fixo no canto inferior direito -->
+<!-- Achado (10/09) — atrapalhava o uso do PDV no celular, sobrepondo os
+     controles da tela. Escondido especificamente na rota do PDV. -->
+@if (!EstaNoPdv)
+{
 <div style="position:fixed; bottom:24px; right:24px; z-index:1000;">
 
     @if (_aberto)
@@ -116,6 +121,7 @@
         </button>
     </div>
 </div>
+}
 
 @code {
     private bool   _aberto     = false;
@@ -127,8 +133,18 @@
     private int MensagensReais =>
         _chatSvc.Mensagens.Count(m => !m.IsSistema);
 
+    // Achado (10/09) — sem isso, navegar pro PDV via SPA (sem recarregar a
+    // página) não escondia o botão, já que Blazor não re-renderiza sozinho
+    // só porque a URL mudou.
+    private bool EstaNoPdv => Nav.Uri.Contains("/pdv", StringComparison.OrdinalIgnoreCase);
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+        => InvokeAsync(StateHasChanged);
+
     protected override async Task OnInitializedAsync()
     {
+        Nav.LocationChanged += OnLocationChanged;
+
         if (!_chatSvc.Conectado && Auth.LoggedIn)
             await _chatSvc.ConectarAsync(Auth.Usuario ?? "Portal", Auth.TenantId ?? "default", Auth.Token ?? "");
 
@@ -178,6 +194,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        Nav.LocationChanged -= OnLocationChanged;
         _chatSvc.OnMensagemNova -= OnNovaMensagem;
         await _chatSvc.DisposeAsync();
     }

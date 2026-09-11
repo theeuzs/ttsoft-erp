@@ -192,6 +192,13 @@ public class ProductsController : ControllerBase
 }
 
 
+// Achado (10/09) — faltava [ApiController]/[Route] nessa classe. Os métodos
+// abaixo usavam rota relativa ("{id:guid}/agregados"), que sem um prefixo de
+// controller nunca resolve pro caminho real chamado pelo Portal/WPF
+// ("api/products/{id}/agregados") — sempre dava 404, mesmo com a lógica de
+// serviço correta por trás.
+[ApiController]
+[Route("api/products")]
 public class ProdutosAgregadosController : ControllerBase
 {
     private readonly IProdutoAgregadoService _agregados;
