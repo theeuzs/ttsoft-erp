@@ -1004,8 +1004,21 @@
         <div style="color:white; font-weight:700; margin-bottom:12px;">
             📷 Aponte a câmera pro código de barras
         </div>
-        <video id="video-scanner" style="width:90%; max-width:480px; border-radius:12px;
-               background:black;" muted playsinline></video>
+        <div style="position:relative; width:90%; max-width:480px;">
+            <video id="video-scanner"
+                   style="width:100%; aspect-ratio:2.2/1; object-fit:cover;
+                          border-radius:12px; background:black; display:block;"
+                   muted playsinline></video>
+
+            <!-- Achado (11/09) — pedido de faixa retangular pra ler só
+                 código de barras (não precisa de quadrado tipo QR). O
+                 aspect-ratio acima já corta o vídeo nesse formato; essa
+                 faixa é só o guia visual pra pessoa saber onde alinhar. -->
+            <div style="position:absolute; inset:0; pointer-events:none;
+                        display:flex; align-items:center; justify-content:center;">
+                <div style="width:85%; height:2px; background:#EF4444; box-shadow:0 0 6px #EF4444;"></div>
+            </div>
+        </div>
         @if (_erroScanner != null)
         {
             <div style="color:#FCA5A5; background:#7F1D1D; padding:10px 16px; border-radius:8px;
@@ -1446,11 +1459,17 @@
 
         try
         {
-            var clientes = await Api.GetAsync<ClienteItem[]>(
+            // Achado (11/09) — a API devolve PagedResult<CustomerDto> (um
+            // objeto com .Items dentro), não um array direto. Lendo como
+            // array puro, a desserialização sempre falhava silenciosamente
+            // — por isso NENHUMA busca de cliente jamais funcionou, desde
+            // sempre (bug herdado do código original, não só da minha
+            // correção anterior).
+            var resultado = await Api.GetAsync<PagedResult<ClienteItem>>(
                 $"api/Customers?search={Uri.EscapeDataString(_nomeCliente)}&pageSize=8");
             if (minhaSeq != _buscaClienteSeq) return; // resposta atrasada, descarta
 
-            _clientesBusca = clientes?.ToList() ?? [];
+            _clientesBusca = resultado?.Items?.ToList() ?? [];
             StateHasChanged();
         }
         catch (Exception ex) { Console.WriteLine($"PDV: falha ao buscar cliente — {ex.Message}"); }
