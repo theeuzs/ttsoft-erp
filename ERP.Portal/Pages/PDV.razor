@@ -513,7 +513,11 @@
         }
 
         .carrinho-header {
-            padding-top: max(14px, env(safe-area-inset-top));
+            /* Achado (11/09) — o topbar do app (.topbar, 54px, z-index:200)
+               cobria o cabeçalho do carrinho (z-index:100) no celular,
+               tampando o botão "← Voltar". Soma a altura do topbar ao
+               respiro de notch que já existia. */
+            padding-top: calc(54px + max(14px, env(safe-area-inset-top)));
         }
 
         .carrinho-voltar {
@@ -715,8 +719,12 @@
                        placeholder="🔎 Buscar produto ou código..." />
 
                 <button class="pdv-filter" @onclick="AbrirScanner" title="Ler código de barras pela câmera"
-                        style="padding:8px 12px;">
-                    📷
+                        style="padding:8px 12px; display:flex; align-items:center; justify-content:center;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M4 8a2 2 0 0 1 2-2h1.17a2 2 0 0 0 1.6-.8l.5-.67A2 2 0 0 1 10.87 4h2.26a2 2 0 0 1 1.6.8l.5.67a2 2 0 0 0 1.6.8H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"
+                              stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                        <circle cx="12" cy="13" r="3.3" stroke="currentColor" stroke-width="1.8"/>
+                    </svg>
                 </button>
 
                 <button class="pdv-filter" @onclick="ToggleMostrarTodos">
@@ -737,7 +745,10 @@
                     {
                         var flashClass = _flashProdutoId == p.Id ? "produto-card flash" : "produto-card";
 
-                        <div class="@flashClass" @onclick="() => AdicionarItemAsync(p)">
+                        <div class="@flashClass"
+                             @onpointerdown="() => IniciarPressao(p)"
+                             @onpointerup="() => FinalizarPressao(p)"
+                             @onpointerleave="CancelarPressao">
                             @if (!string.IsNullOrWhiteSpace(p.ImageUrl))
                             {
                                 <img src="@p.ImageUrl" alt="@p.Name"
@@ -795,13 +806,29 @@
                     }
                 </div>
 
-                <div class="cliente-box">
+                <div class="cliente-box" style="position:relative;">
                     <input class="cliente-input"
                            @bind="_nomeCliente"
-                           placeholder="Cliente (opcional)" />
-                    <button class="cliente-search" @onclick="BuscarClienteAsync">
-                        🔎
-                    </button>
+                           @bind:event="oninput"
+                           @onkeyup="BuscarClienteAsync"
+                           placeholder="Cliente (opcional)"
+                           autocomplete="off" />
+
+                    @if (_clientesBusca.Count > 0)
+                    {
+                        <div style="position:absolute; top:100%; left:0; right:0; z-index:50;
+                                    background:white; border:1px solid #E2E8F0; border-radius:8px;
+                                    box-shadow:0 4px 12px rgba(0,0,0,.15); max-height:220px; overflow-y:auto; margin-top:4px;">
+                            @foreach (var c in _clientesBusca)
+                            {
+                                <div @onclick="() => SelecionarCliente(c)"
+                                     style="padding:8px 12px; cursor:pointer; font-size:13px; border-bottom:1px solid #F1F5F9;"
+                                     onmouseover="this.style.background='#F8FAFC'" onmouseout="this.style.background='white'">
+                                    @c.Name
+                                </div>
+                            }
+                        </div>
+                    }
                 </div>
             </div>
 
@@ -853,7 +880,7 @@
                         <label>Desconto</label>
                         <input class="desconto-input"
                                type="number"
-                               value="@_desconto"
+                               value="@_desconto.ToString(System.Globalization.CultureInfo.InvariantCulture)"
                                @oninput="ValidarDesconto"
                                min="0"
                                step="0.50" />
@@ -870,7 +897,7 @@
                     @if (_maxDesconto > 0 && _erroDesconto == null)
                     {
                         <div style="font-size:11px; color:#94A3B8; margin-bottom:8px;">
-                            Limite: @_maxDesconto.ToString("F0")% (@(Subtotal * _maxDesconto / 100).ToString("C"))
+                            Limite: @_maxDesconto.ToString("F0")% (@LimiteDescontoValor.ToString("C"))
                         </div>
                     }
 
@@ -940,6 +967,36 @@
     }
 </div>
 
+@if (_popupQtdProduto != null)
+{
+    <div @onclick="CancelarPopupQuantidade"
+         style="position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1500;
+                display:flex; align-items:center; justify-content:center;">
+        <div @onclick:stopPropagation="true"
+             style="background:white; border-radius:12px; padding:24px; width:280px; max-width:90vw;">
+            <div style="font-weight:700; color:#1E293B; margin-bottom:4px;">@_popupQtdProduto.Name</div>
+            <div style="font-size:12px; color:#94A3B8; margin-bottom:16px;">Quantidade a adicionar</div>
+
+            <input type="number" min="0.01" step="1"
+                   value="@_popupQtdValor.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                   @oninput="@(e => { if (decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v)) _popupQtdValor = v; })"
+                   style="width:100%; padding:10px; font-size:18px; text-align:center; border:1px solid #E2E8F0; border-radius:8px; margin-bottom:16px;"
+                   autofocus />
+
+            <div style="display:flex; gap:8px;">
+                <button @onclick="CancelarPopupQuantidade"
+                        style="flex:1; padding:10px; background:#F1F5F9; border:none; border-radius:8px; font-weight:600; cursor:pointer;">
+                    Cancelar
+                </button>
+                <button @onclick="ConfirmarPopupQuantidadeAsync"
+                        style="flex:1; padding:10px; background:#1E62A6; color:white; border:none; border-radius:8px; font-weight:700; cursor:pointer;">
+                    Adicionar
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 @if (_scannerAberto)
 {
     <div style="position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:2000;
@@ -966,6 +1023,7 @@
 
 <script src="lib/zxing.min.js"></script>
 <script src="js/barcode-scanner.js"></script>
+<script src="js/pdv-storage.js"></script>
 
 @code {
     // ── Leitor de código de barras via câmera ───────────────────────────────
@@ -1059,12 +1117,70 @@
 
     private decimal Subtotal => _itens.Sum(i => i.Total);
     private decimal Total    => Math.Max(0, Subtotal - _desconto);
+    private decimal LimiteDescontoValor => Subtotal * _maxDesconto / 100;
     private int QuantidadeItens => (int)_itens.Sum(i => i.Quantidade);
 
     protected override async Task OnInitializedAsync()
     {
         await CarregarProdutosAsync();
         await CarregarLimiteDescontoAsync();
+        await RestaurarCarrinhoAsync();
+    }
+
+    // Achado (11/09) — o carrinho inteiro se perdia ao navegar pra outra
+    // página (Produtos, Vendas) e voltar pro PDV, já que o componente
+    // Blazor recomeça do zero. Salva/restaura via sessionStorage — sobrevive
+    // à navegação, mas some sozinho se a aba fechar (não é persistência
+    // permanente, é só "não perder a venda no meio").
+    private class CarrinhoSnapshot
+    {
+        public List<ItemCarrinho> Itens          { get; set; } = [];
+        public Guid?              ClienteId      { get; set; }
+        public string             NomeCliente    { get; set; } = "";
+        public string             FormaPagamento { get; set; } = "Dinheiro";
+        public decimal            Desconto       { get; set; }
+    }
+
+    private async Task SalvarCarrinhoAsync()
+    {
+        try
+        {
+            var snap = new CarrinhoSnapshot
+            {
+                Itens          = _itens,
+                ClienteId      = _clienteId,
+                NomeCliente    = _nomeCliente,
+                FormaPagamento = _formaPagamento,
+                Desconto       = _desconto
+            };
+            await JS.InvokeVoidAsync("salvarCarrinhoPdv", System.Text.Json.JsonSerializer.Serialize(snap));
+        }
+        catch (Exception ex) { Console.WriteLine($"PDV: falha ao salvar carrinho — {ex.Message}"); }
+    }
+
+    private async Task RestaurarCarrinhoAsync()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("carregarCarrinhoPdv");
+            if (string.IsNullOrWhiteSpace(json)) return;
+
+            var snap = System.Text.Json.JsonSerializer.Deserialize<CarrinhoSnapshot>(json);
+            if (snap == null || snap.Itens.Count == 0) return;
+
+            _itens          = snap.Itens;
+            _clienteId      = snap.ClienteId;
+            _nomeCliente    = snap.NomeCliente;
+            _formaPagamento = snap.FormaPagamento;
+            _desconto       = snap.Desconto;
+        }
+        catch (Exception ex) { Console.WriteLine($"PDV: falha ao restaurar carrinho — {ex.Message}"); }
+    }
+
+    private async Task LimparCarrinhoStorageAsync()
+    {
+        try { await JS.InvokeVoidAsync("limparCarrinhoPdvStorage"); }
+        catch (Exception ex) { Console.WriteLine($"PDV: falha ao limpar carrinho salvo — {ex.Message}"); }
     }
 
     private void AbrirCarrinho() => _carrinhoAberto = true;
@@ -1145,24 +1261,25 @@
         await CarregarProdutosAsync();
     }
 
-    private async Task AdicionarItemAsync(ProdutoItem p)
+    private async Task AdicionarItemAsync(ProdutoItem p, decimal quantidade = 1)
     {
         var existente = _itens.FirstOrDefault(i => i.ProdutoId == p.Id);
         if (existente != null)
-            existente.Quantidade++;
+            existente.Quantidade += quantidade;
         else
             _itens.Add(new ItemCarrinho
             {
                 ProdutoId     = p.Id,
                 Nome          = p.Name,
                 PrecoUnitario = p.SalePrice,
-                Quantidade    = 1
+                Quantidade    = quantidade
             });
 
         // S3.5: highlight do card + animação do item + animação do total
         _flashProdutoId = p.Id;
         _ultimoItemId   = p.Id;
         await AnimarTotal();
+        await SalvarCarrinhoAsync();
         StateHasChanged();
 
         // Remove highlight após 400ms
@@ -1182,6 +1299,60 @@
         }
         catch (Exception ex) { Console.WriteLine($"PDV: falha ao buscar produtos agregados/sugestões — {ex.Message}"); }
     }
+
+    // Achado (11/09) — clique rápido adiciona 1 direto (fluxo rápido de
+    // quem já sabe o que quer / bipagem); segurar ~500ms abre popup pra
+    // digitar a quantidade. Um só CancellationTokenSource compartilhado
+    // basta, porque só é fisicamente possível pressionar um card por vez.
+    private CancellationTokenSource? _pressaoCts;
+    private bool                     _pressaoLongaDisparada;
+
+    private void IniciarPressao(ProdutoItem p)
+    {
+        _pressaoLongaDisparada = false;
+        _pressaoCts?.Cancel();
+        var cts = _pressaoCts = new CancellationTokenSource();
+        _ = DispararPressaoLongaAsync(p, cts.Token);
+    }
+
+    private async Task DispararPressaoLongaAsync(ProdutoItem p, CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(500, ct);
+            _pressaoLongaDisparada = true;
+            AbrirPopupQuantidade(p);
+        }
+        catch (TaskCanceledException) { /* soltou antes de 500ms — vira clique normal */ }
+    }
+
+    private async Task FinalizarPressao(ProdutoItem p)
+    {
+        _pressaoCts?.Cancel();
+        if (!_pressaoLongaDisparada)
+            await AdicionarItemAsync(p);
+    }
+
+    private void CancelarPressao() => _pressaoCts?.Cancel();
+
+    private ProdutoItem? _popupQtdProduto;
+    private decimal      _popupQtdValor = 1;
+
+    private void AbrirPopupQuantidade(ProdutoItem p)
+    {
+        _popupQtdProduto = p;
+        _popupQtdValor   = 1;
+        StateHasChanged();
+    }
+
+    private async Task ConfirmarPopupQuantidadeAsync()
+    {
+        if (_popupQtdProduto != null && _popupQtdValor > 0)
+            await AdicionarItemAsync(_popupQtdProduto, _popupQtdValor);
+        _popupQtdProduto = null;
+    }
+
+    private void CancelarPopupQuantidade() => _popupQtdProduto = null;
 
     // S3.5: animação verde no total por 600ms
     private async Task AnimarTotal()
@@ -1221,7 +1392,7 @@
     private Task ConfirmarNfe()     => ConfirmarVendaAsync("nfe");
     private Task ConfirmarSemNota() => ConfirmarVendaAsync("sem_nota");
 
-    private void AlterarQtd(ItemCarrinho item, int delta)
+    private async Task AlterarQtd(ItemCarrinho item, int delta)
     {
         item.Quantidade += delta;
         if (item.Quantidade <= 0)
@@ -1230,36 +1401,66 @@
             if (!_itens.Any()) FecharCarrinho(); // Fecha o carrinho no mobile se esvaziar
         }
         ValidarDesconto(new ChangeEventArgs { Value = _desconto.ToString() });
+        await SalvarCarrinhoAsync();
         _ = AnimarTotal();
     }
 
-    private void RemoverItem(ItemCarrinho item)
+    private async Task RemoverItem(ItemCarrinho item)
     {
         _itens.Remove(item);
         if (!_itens.Any()) FecharCarrinho(); // Fecha o carrinho no mobile se esvaziar
         ValidarDesconto(new ChangeEventArgs { Value = _desconto.ToString() });
+        await SalvarCarrinhoAsync();
         _ = AnimarTotal();
     }
 
-    private void LimparCarrinho()
+    private async Task LimparCarrinho()
     {
         _itens.Clear();
         _desconto     = 0;
         _clienteId    = null;
+        _nomeCliente  = "";
         _erroDesconto = null;
+        await LimparCarrinhoStorageAsync();
         FecharCarrinho(); // Retorna aos produtos no mobile
     }
 
-    private async Task BuscarClienteAsync()
+    // Achado (11/09) — campo usava @bind sem "oninput", só atualizava ao
+    // perder foco; e a busca antiga só rodava com clique explícito, sem
+    // debounce, sem lista — auto-selecionava o primeiro resultado sem
+    // deixar escolher. Reescrito no mesmo padrão da busca de produto.
+    private List<ClienteItem> _clientesBusca      = [];
+    private int               _buscaClienteSeq    = 0;
+
+    private async Task BuscarClienteAsync(KeyboardEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(_nomeCliente)) return;
-        var clientes = await Api.GetAsync<ClienteItem[]>(
-            $"api/Customers?search={Uri.EscapeDataString(_nomeCliente)}&pageSize=1");
-        if (clientes?.Length > 0)
+        if (string.IsNullOrWhiteSpace(_nomeCliente) || _nomeCliente.Length < 2)
         {
-            _nomeCliente = clientes[0].Name;
-            _clienteId   = clientes[0].Id;
+            _clientesBusca = [];
+            return;
         }
+
+        var minhaSeq = ++_buscaClienteSeq;
+        await Task.Delay(350);
+        if (minhaSeq != _buscaClienteSeq) return;
+
+        try
+        {
+            var clientes = await Api.GetAsync<ClienteItem[]>(
+                $"api/Customers?search={Uri.EscapeDataString(_nomeCliente)}&pageSize=8");
+            if (minhaSeq != _buscaClienteSeq) return; // resposta atrasada, descarta
+
+            _clientesBusca = clientes?.ToList() ?? [];
+            StateHasChanged();
+        }
+        catch (Exception ex) { Console.WriteLine($"PDV: falha ao buscar cliente — {ex.Message}"); }
+    }
+
+    private void SelecionarCliente(ClienteItem c)
+    {
+        _nomeCliente   = c.Name;
+        _clienteId     = c.Id;
+        _clientesBusca = [];
     }
 
     private async Task ConfirmarVendaAsync(string tipoNota)
@@ -1269,6 +1470,19 @@
         {
             _sucesso  = false;
             _mensagem = $"❌ {_erroDesconto}";
+            await Task.Delay(3000);
+            _mensagem = null;
+            return;
+        }
+
+        // Achado (11/09) — Fiado sem cliente selecionado conseguia finalizar
+        // (dinheiro sem dono virando venda a prazo sem ninguém pra cobrar).
+        // No WPF isso já é bloqueado; o Portal nunca teve essa mesma trava.
+        if (_formaPagamento == "Fiado" && _clienteId == null)
+        {
+            _modalFiscal = false;
+            _sucesso  = false;
+            _mensagem = "❌ Venda fiado precisa de um cliente selecionado.";
             await Task.Delay(3000);
             _mensagem = null;
             return;
@@ -1321,7 +1535,7 @@
                     _mensagem += " (⚠ Nota não emitida — verifique o módulo Fiscal)";
             }
 
-            LimparCarrinho();
+            await LimparCarrinho();
             _nomeCliente = "";
             await Task.Delay(4000);
             _mensagem = null;

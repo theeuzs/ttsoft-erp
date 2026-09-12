@@ -4,6 +4,7 @@ using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Domain.Interfaces;
 using FluentValidation;
+using System.Linq.Expressions;
 
 namespace ERP.Application.Services;
 
@@ -28,16 +29,17 @@ public class ProductService : IProductService
         var (items, total) = await _uow.Products.GetPagedAsync(
             page:     page,
             pageSize: pageSize,
-            // Achado (10/09) — mesmo bug do ProductRepository.SearchAsync
-            // corrigido hoje mais cedo, só que essa é uma implementação
-            // separada, usada pelo Portal (WPF usa a outra). Barcode/SKU
-            // viram StartsWith — já se beneficiam dos índices TenantId+Barcode
-            // e TenantId+SKU que já existem.
+            // Achado (11/09) — buscava a frase inteira como um bloco só
+            // (Contains(search)), diferente do WPF (que já divide em
+            // palavras e exige todas, em qualquer ordem/lugar). Uma
+            // vendedora buscou "não mais pregos" e só achou o produto cujo
+            // nome começa exatamente assim — "CASCOLA NAO MAIS PREGOS 85G"
+            // não batia, porque a frase inteira não aparecia como bloco
+            // contíguo depois de "CASCOLA ". Agora usa a mesma lógica
+            // palavra-por-palavra do ProductRepository.SearchAsync (WPF).
             filter:   string.IsNullOrWhiteSpace(search)
                         ? null
-                        : p => p.Name.Contains(search) ||
-                               (p.Barcode != null && p.Barcode.StartsWith(search)) ||
-                               (p.SKU     != null && p.SKU.StartsWith(search)),
+                        : ConstruirFiltroBuscaPorPalavras(search),
             orderBy:  p => p.Name);
 
         return new PagedResult<ProductDto>
@@ -47,6 +49,40 @@ public class ProductService : IProductService
             Page       = page,
             PageSize   = pageSize
         };
+    }
+
+    /// <summary>Monta, em árvore de expressão, o mesmo filtro "E de cada
+    /// palavra" que o ProductRepository.SearchAsync (WPF) usa — cada palavra
+    /// precisa bater em Nome (substring) OU Barcode/SKU (começa com),
+    /// combinadas com E entre si. Construído manualmente porque
+    /// GetPagedAsync só aceita UM filtro — isso vira um filtro só, com N
+    /// condições ANDadas dentro.</summary>
+    private static Expression<Func<Product, bool>> ConstruirFiltroBuscaPorPalavras(string search)
+    {
+        var palavras  = search.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var parametro = Expression.Parameter(typeof(Product), "p");
+        Expression? corpo = null;
+
+        var nomeProp    = Expression.Property(parametro, nameof(Product.Name));
+        var barcodeProp = Expression.Property(parametro, nameof(Product.Barcode));
+        var skuProp     = Expression.Property(parametro, nameof(Product.SKU));
+        var nulo        = Expression.Constant(null, typeof(string));
+        var containsMi  = typeof(string).GetMethod(nameof(string.Contains), [typeof(string)])!;
+        var startsMi    = typeof(string).GetMethod(nameof(string.StartsWith), [typeof(string)])!;
+
+        foreach (var palavra in palavras)
+        {
+            var valor = Expression.Constant(palavra);
+
+            var nomeContem     = Expression.Call(nomeProp, containsMi, valor);
+            var barcodeComeca  = Expression.AndAlso(Expression.NotEqual(barcodeProp, nulo), Expression.Call(barcodeProp, startsMi, valor));
+            var skuComeca      = Expression.AndAlso(Expression.NotEqual(skuProp, nulo), Expression.Call(skuProp, startsMi, valor));
+
+            var condicaoPalavra = Expression.OrElse(Expression.OrElse(nomeContem, barcodeComeca), skuComeca);
+            corpo = corpo == null ? condicaoPalavra : Expression.AndAlso(corpo, condicaoPalavra);
+        }
+
+        return Expression.Lambda<Func<Product, bool>>(corpo!, parametro);
     }
 
     public async Task<ProductDto?> GetByIdAsync(Guid id)
