@@ -187,6 +187,13 @@
                         </Grid>
                     </Border>
 
+                    <Border Background="#FEF3C7" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="8"
+                            Padding="10,6" Margin="0,8,0,0"
+                            Visibility="{Binding StatusMensagem, Converter={StaticResource StringVazioParaVisibilityConverter}}">
+                        <TextBlock Text="{Binding StatusMensagem}" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="#92400E" TextWrapping="Wrap"/>
+                    </Border>
+
                     <Border Grid.Row="3" Background="{DynamicResource CardBg}" CornerRadius="12" Effect="{DynamicResource CardShadow}">
                         <Grid>
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6" IsHitTestVisible="False">

@@ -426,6 +426,34 @@ public async Task<IEnumerable<SalesReportItemDto>> GetSalesReportAsync(DateTime 
             }
         }
 
+        // 2.1. Achado (11/09) — cancelar venda nunca revertia o movimento de
+        // CAIXA: o dinheiro/cartão continuava contando no "Resumo Financeiro"
+        // mesmo com a venda cancelada. Pra cada forma de pagamento (menos
+        // Haver, já revertido acima), acha o lançamento original e cria um
+        // estorno com valor negativo — o Tipo CancelamentoVenda já existia no
+        // enum, previsto, mas nunca usado em lugar nenhum antes desse fix.
+        if (sale.Payments != null)
+        {
+            foreach (var pagamento in sale.Payments.Where(p => p.PaymentMethod != Domain.Enums.PaymentMethod.Haver))
+            {
+                var movimentoOriginal = await _uow.Caixas.ObterMovimentoOriginalAsync(pagamento.Id);
+                if (movimentoOriginal == null) continue; // venda antiga, sem lançamento de caixa — nada a estornar
+
+                await _uow.Caixas.AddMovimentoAsync(new Domain.Entities.CaixaMovimento
+                {
+                    Id             = Guid.NewGuid(),
+                    CaixaId        = movimentoOriginal.CaixaId,
+                    Valor          = -pagamento.Amount,
+                    Descricao      = $"Estorno de Cancelamento - Venda {(string.IsNullOrWhiteSpace(sale.SaleNumber) ? sale.Id.ToString().Substring(0, 8).ToUpper() : sale.SaleNumber)}",
+                    FormaPagamento = pagamento.PaymentMethod,
+                    Tipo           = Domain.Enums.TipoMovimentoCaixa.CancelamentoVenda,
+                    DataHora       = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
+                    VendaId        = sale.Id,
+                    SalePaymentId  = pagamento.Id
+                });
+            }
+        }
+
         // 3. CANCELA CONTAS A RECEBER VINCULADAS À VENDA
         var contasReceber = await _uow.ContasReceber.GetBySaleIdAsync(id)?? new List<ContaReceber>();
         foreach (var conta in contasReceber.Where(c => c.Status == "Pendente"))

@@ -429,6 +429,15 @@ public class PdvViewModel : BaseViewModel
     public ObservableCollection<ProductDto> SearchResults { get; } = new();
     public ObservableCollection<CustomerDto> CustomerSearchResults { get; } = new();
 
+    // Achado (11/09) — aviso visível quando a busca cai pro catálogo local
+    // (sem internet), pra não passar confiança de dado em tempo real.
+    private string? _statusMensagem;
+    public string? StatusMensagem
+    {
+        get => _statusMensagem;
+        set => SetProperty(ref _statusMensagem, value);
+    }
+
     public ICommand SelectCustomerCommand { get; }
     public ICommand LimparClienteCommand { get; }
     public ICommand IncreaseQtyCommand { get; }
@@ -818,8 +827,50 @@ public class PdvViewModel : BaseViewModel
                 }
             }
         }
-        catch (Exception ex) { Log.Warning(ex, "SearchProductAsync: falha ao buscar produtos por \"{Termo}\"", SearchTerm); }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "SearchProductAsync: falha ao buscar produtos por \"{Termo}\" — tentando catálogo local", SearchTerm);
+            await BuscarNoCatalogoLocalAsync(SearchTerm);
+        }
     }
+
+    // Achado (11/09) — quando a consulta direta ao banco falha (sem
+    // internet), a busca ficava vazia sem aviso nenhum pro operador. O
+    // catálogo local já existe e sincroniza sozinho a cada minuto — só
+    // ninguém nunca escreveu o lado de consultar ele de volta. Preço e
+    // estoque aqui podem estar até 1 minuto desatualizados; por isso o aviso
+    // visível (StatusMensagem), pra não passar confiança de dado em tempo real.
+    private async Task BuscarNoCatalogoLocalAsync(string termo)
+    {
+        try
+        {
+            using var scope = ERP.WPF.App.Services.CreateScope();
+            var offlineDb = scope.ServiceProvider.GetRequiredService<ERP.Infrastructure.Services.OfflineSyncService>();
+
+            var porCodigo = await offlineDb.BuscarProdutoPorCodigoBarrasCacheAsync(termo);
+            if (porCodigo != null)
+            {
+                AddToCart(porCodigo);
+                SearchTerm = string.Empty;
+                StatusMensagem = "📴 Sem internet — item adicionado do catálogo local (pode estar levemente desatualizado)";
+                return;
+            }
+
+            var resultadosCache = await offlineDb.BuscarProdutosCacheAsync(termo);
+            SearchResults.Clear();
+            foreach (var p in resultadosCache) SearchResults.Add(p);
+
+            StatusMensagem = resultadosCache.Count > 0
+                ? "📴 Sem internet — mostrando catálogo local (pode estar levemente desatualizado)"
+                : "📴 Sem internet — nada encontrado, nem no catálogo local";
+        }
+        catch (Exception exCache)
+        {
+            Log.Warning(exCache, "BuscarNoCatalogoLocalAsync: falha ao consultar catálogo local");
+            StatusMensagem = "📴 Sem internet, e o catálogo local também falhou.";
+        }
+    }
+
 
     private void AddToCart(ProductDto? product)
     {

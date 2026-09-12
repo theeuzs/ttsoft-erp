@@ -33,6 +33,11 @@ public interface ICaixaRepository
     /// não por venda inteira (uma venda pode ter várias linhas legítimas).</summary>
     Task<bool> ExisteMovimentoParaSalePaymentAsync(Guid salePaymentId);
 
+    /// <summary>Achado (11/09) — cancelar venda nunca revertia o movimento de
+    /// caixa: precisa achar o lançamento original (por linha de pagamento)
+    /// pra saber em qual Caixa lançar o estorno.</summary>
+    Task<ERP.Domain.Entities.CaixaMovimento?> ObterMovimentoOriginalAsync(Guid salePaymentId);
+
     // S8: saldo em dinheiro para validação de sangria (Abertura + Suprimento + VendaDinheiro − Sangria)
     Task<decimal> GetSaldoDinheiroAsync(Guid caixaId);
 
