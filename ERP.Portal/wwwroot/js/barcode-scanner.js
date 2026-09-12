@@ -29,7 +29,6 @@ window.iniciarScannerCodigoBarras = async function (videoElementId, dotNetHelper
             ZXing.BarcodeFormat.CODE_39,
             ZXing.BarcodeFormat.ITF
         ]);
-        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
 
         _leitor = new ZXing.BrowserMultiFormatReader(hints);
 
@@ -39,8 +38,8 @@ window.iniciarScannerCodigoBarras = async function (videoElementId, dotNetHelper
             {
                 video: {
                     facingMode: { ideal: 'environment' },
-                    width:  { ideal: 1920 },
-                    height: { ideal: 1080 }
+                    width:  { ideal: 1280 },
+                    height: { ideal: 720 }
                 }
             },
             video,
