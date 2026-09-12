@@ -812,7 +812,18 @@
                            @bind:event="oninput"
                            @onkeyup="BuscarClienteAsync"
                            placeholder="Cliente (opcional)"
-                           autocomplete="off" />
+                           autocomplete="off"
+                           style="@(_clienteId != null ? "padding-right:28px;" : "")" />
+
+                    @if (_clienteId != null)
+                    {
+                        <button @onclick="LimparClienteSelecionado" title="Remover cliente"
+                                style="position:absolute; right:6px; top:50%; transform:translateY(-50%);
+                                       background:none; border:none; color:#94A3B8; font-size:16px;
+                                       cursor:pointer; padding:2px 6px; line-height:1;">
+                            ✕
+                        </button>
+                    }
 
                     @if (_clientesBusca.Count > 0)
                     {
@@ -1479,6 +1490,13 @@
     {
         _nomeCliente   = c.Name;
         _clienteId     = c.Id;
+        _clientesBusca = [];
+    }
+
+    private void LimparClienteSelecionado()
+    {
+        _nomeCliente   = "";
+        _clienteId     = null;
         _clientesBusca = [];
     }
 
