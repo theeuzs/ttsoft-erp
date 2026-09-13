@@ -488,12 +488,21 @@
             font-size: 12px;
         }
 
+        .produto-bottom {
+            flex-wrap: wrap;
+            row-gap: 4px;
+        }
+
         .produto-preco {
             font-size: 15px;
         }
 
+        /* Achado (11/09) — estava escondido no celular (display:none), que
+           é justamente onde o Matheus mais precisa ver, pra não vender algo
+           sem estoque. Reduzido em vez de escondido. */
         .produto-estoque {
-            display: none;
+            font-size: 9px;
+            padding: 3px 5px;
         }
 
         /* Carrinho vira tela inteira */
@@ -933,23 +942,90 @@
                     </div>
 
                     <!-- PAGAMENTOS -->
-                    <div class="pagamentos">
-                        @foreach (var (forma, icone) in new[] {
-                            ("Dinheiro","💵"), ("Cartão Débito","💳"),
-                            ("Cartão Crédito","💳"), ("PIX","📲"), ("Fiado","📋")
-                        })
+                    @if (_pagamentos.Count > 0)
+                    {
+                        <div style="margin-bottom:8px;">
+                            @foreach (var p in _pagamentos)
+                            {
+                                <div style="display:flex; justify-content:space-between; align-items:center;
+                                            font-size:12px; padding:4px 0;">
+                                    <span>@p.Forma: <strong>@p.Valor.ToString("C")</strong></span>
+                                    <button @onclick="() => RemoverPagamento(p)"
+                                            style="background:none; border:none; color:#DC2626; cursor:pointer;">✕</button>
+                                </div>
+                            }
+                            @if (_trocoTotal > 0)
+                            {
+                                <div style="font-size:12px; color:#059669; font-weight:700;">
+                                    Troco a devolver: @_trocoTotal.ToString("C")
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (FaltaPagar > 0.005m)
+                    {
+                        <div style="font-size:13px; font-weight:700; color:#DC2626; margin-bottom:6px;">
+                            Falta: @FaltaPagar.ToString("C")
+                        </div>
+
+                        <div class="pagamentos">
+                            @foreach (var (forma, icone) in new[] {
+                                ("Dinheiro","💵"), ("Cartão Débito","💳"),
+                                ("Cartão Crédito","💳"), ("PIX","📲"), ("A PRAZO","📋")
+                            })
+                            {
+                                <button class="pagamento-btn @(_formaAbrindo == forma ? "ativo" : "")"
+                                        @onclick="() => AbrirFormaPagamento(forma)">
+                                    @icone @forma
+                                </button>
+                            }
+                        </div>
+
+                        @if (_formaAbrindo != null)
                         {
-                            <button class="pagamento-btn @(_formaPagamento == forma ? "ativo" : "")"
-                                    @onclick="@(() => _formaPagamento = forma)">
-                                @icone @forma
-                            </button>
+                            <div style="background:#F8FAFC; border-radius:8px; padding:10px; margin-top:8px;">
+                                <div style="font-size:11px; color:#64748B; margin-bottom:4px;">
+                                    @(_formaAbrindo == "Dinheiro" ? "Valor recebido do cliente" : $"Valor em {_formaAbrindo}")
+                                </div>
+                                <div style="display:flex; gap:8px;">
+                                    <input type="number" min="0" step="0.50"
+                                           value="@_valorDigitado.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                           @oninput="OnValorPagamentoInput"
+                                           style="flex:1; padding:8px; border:1px solid #E2E8F0; border-radius:6px;" />
+                                    <button @onclick="ConfirmarPagamentoLinha"
+                                            style="background:#1E62A6; color:white; border:none; border-radius:6px; padding:8px 16px; font-weight:700; cursor:pointer;">
+                                        Adicionar
+                                    </button>
+                                </div>
+                                @if (_formaAbrindo == "Dinheiro" && TrocoPreview > 0)
+                                {
+                                    <div style="font-size:13px; color:#059669; font-weight:700; margin-top:6px;">
+                                        Troco: @TrocoPreview.ToString("C")
+                                    </div>
+                                }
+                            </div>
                         }
-                    </div>
+                    }
+                    else if (_pagamentos.Count > 0)
+                    {
+                        <div style="font-size:13px; color:#059669; font-weight:700; text-align:center; margin-bottom:8px;">
+                            ✓ Pagamento completo
+                        </div>
+                    }
+
+                    @if (_clienteId != null)
+                    {
+                        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#475569; margin:8px 0; cursor:pointer;">
+                            <input type="checkbox" @bind="_entregarNoEndereco" />
+                            🚚 Entregar no endereço do cliente (sai na nota)
+                        </label>
+                    }
 
                     <button class="finalizar-btn"
                             @onclick="AbrirModalFiscal"
-                            disabled="@(_finalizando || _erroDesconto != null)"
-                            style="background:@(_erroDesconto != null ? "#94A3B8" : "#16A34A");">
+                            disabled="@(_finalizando || _erroDesconto != null || FaltaPagar > 0.005m)"
+                            style="background:@(_erroDesconto != null || FaltaPagar > 0.005m ? "#94A3B8" : "#16A34A");">
                         @(_finalizando ? "⏳ Finalizando..." : $"✓ Finalizar Venda · {Total.ToString("C")}")
                     </button>
                 }
@@ -1117,7 +1193,29 @@
     private string             _nomeCliente      = "";
     private Guid?              _clienteId;
     private decimal            _desconto         = 0;
-    private string             _formaPagamento   = "Dinheiro";
+    // Achado (11/09) — Portal só aceitava UMA forma de pagamento por venda;
+    // WPF já suporta dividir (dinheiro + cartão, etc.) e calcular troco.
+    // Trazido pro mesmo padrão: Payments[i].Amount de Dinheiro carrega o
+    // valor BRUTO recebido (não o líquido já descontado o troco) — é assim
+    // que o Sync Engine sabe quanto lançar de verdade no Caixa depois
+    // (mesmo comentário existente no CreateSaleDto, do lado da API).
+    private class PagamentoLinha
+    {
+        public string  Forma { get; set; } = "";
+        public decimal Valor { get; set; } // bruto — pra Dinheiro, inclui o que vira troco
+    }
+
+    private List<PagamentoLinha> _pagamentos      = [];
+    private string?              _formaAbrindo;    // qual botão está com o campo de valor aberto
+    private decimal              _valorDigitado    = 0;
+    private decimal              _trocoTotal       = 0;
+
+    private decimal TotalPago    => _pagamentos.Sum(p => p.Valor) - _trocoTotal;
+    private decimal FaltaPagar   => Math.Max(0, Total - TotalPago);
+    private decimal TrocoPreview => _formaAbrindo == "Dinheiro" ? Math.Max(0, _valorDigitado - FaltaPagar) : 0;
+
+    private bool                 _entregarNoEndereco;
+    private ClienteItem?         _clienteCompleto; // guarda endereço pra montar a nota, quando marcado
     private bool               _finalizando      = false;
     private string?            _mensagem;
     private bool               _sucesso          = true;
@@ -1158,11 +1256,13 @@
     // permanente, é só "não perder a venda no meio").
     private class CarrinhoSnapshot
     {
-        public List<ItemCarrinho> Itens          { get; set; } = [];
-        public Guid?              ClienteId      { get; set; }
-        public string             NomeCliente    { get; set; } = "";
-        public string             FormaPagamento { get; set; } = "Dinheiro";
-        public decimal            Desconto       { get; set; }
+        public List<ItemCarrinho>    Itens               { get; set; } = [];
+        public Guid?                 ClienteId           { get; set; }
+        public string                NomeCliente         { get; set; } = "";
+        public List<PagamentoLinha>  Pagamentos          { get; set; } = [];
+        public decimal               TrocoTotal          { get; set; }
+        public bool                  EntregarNoEndereco  { get; set; }
+        public decimal               Desconto            { get; set; }
     }
 
     private async Task SalvarCarrinhoAsync()
@@ -1171,11 +1271,13 @@
         {
             var snap = new CarrinhoSnapshot
             {
-                Itens          = _itens,
-                ClienteId      = _clienteId,
-                NomeCliente    = _nomeCliente,
-                FormaPagamento = _formaPagamento,
-                Desconto       = _desconto
+                Itens              = _itens,
+                ClienteId          = _clienteId,
+                NomeCliente        = _nomeCliente,
+                Pagamentos         = _pagamentos,
+                TrocoTotal         = _trocoTotal,
+                EntregarNoEndereco = _entregarNoEndereco,
+                Desconto           = _desconto
             };
             await JS.InvokeVoidAsync("salvarCarrinhoPdv", System.Text.Json.JsonSerializer.Serialize(snap));
         }
@@ -1192,11 +1294,13 @@
             var snap = System.Text.Json.JsonSerializer.Deserialize<CarrinhoSnapshot>(json);
             if (snap == null || snap.Itens.Count == 0) return;
 
-            _itens          = snap.Itens;
-            _clienteId      = snap.ClienteId;
-            _nomeCliente    = snap.NomeCliente;
-            _formaPagamento = snap.FormaPagamento;
-            _desconto       = snap.Desconto;
+            _itens               = snap.Itens;
+            _clienteId           = snap.ClienteId;
+            _nomeCliente         = snap.NomeCliente;
+            _pagamentos          = snap.Pagamentos;
+            _trocoTotal          = snap.TrocoTotal;
+            _entregarNoEndereco  = snap.EntregarNoEndereco;
+            _desconto            = snap.Desconto;
         }
         catch (Exception ex) { Console.WriteLine($"PDV: falha ao restaurar carrinho — {ex.Message}"); }
     }
@@ -1226,6 +1330,63 @@
     }
 
     // S3.3: valida desconto ao digitar — bloqueia antes de finalizar
+    // Achado (11/09) — controle do pagamento dividido + troco ao vivo.
+    private void AbrirFormaPagamento(string forma)
+    {
+        _formaAbrindo  = forma;
+        _valorDigitado = FaltaPagar; // já sugere o valor que falta, ajustável
+    }
+
+    private void OnValorPagamentoInput(ChangeEventArgs e)
+    {
+        if (decimal.TryParse(e.Value?.ToString()?.Replace(",", "."),
+            System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out var v))
+            _valorDigitado = Math.Max(0, v);
+    }
+
+    private async Task ConfirmarPagamentoLinha()
+    {
+        if (_formaAbrindo == null || _valorDigitado <= 0) return;
+
+        _pagamentos.Add(new PagamentoLinha { Forma = _formaAbrindo, Valor = _valorDigitado });
+        RecalcularTroco();
+        _formaAbrindo  = null;
+        _valorDigitado = 0;
+        await SalvarCarrinhoAsync();
+    }
+
+    private async Task RemoverPagamento(PagamentoLinha p)
+    {
+        _pagamentos.Remove(p);
+        RecalcularTroco();
+        await SalvarCarrinhoAsync();
+    }
+
+    // Achado (11/09) — refaz a conta do zero simulando a ordem de entrada de
+    // cada linha, em vez de tentar ajustar incrementalmente. Mais simples de
+    // acompanhar e sempre correto, mesmo removendo uma linha do meio da lista.
+    // Payments[i].Amount de Dinheiro carrega o valor BRUTO recebido (mesmo
+    // padrão do WPF/API) — o troco é rastreado à parte (_trocoTotal).
+    private void RecalcularTroco()
+    {
+        _trocoTotal = 0;
+        var restante = Total;
+        foreach (var linha in _pagamentos)
+        {
+            if (linha.Forma == "Dinheiro")
+            {
+                var trocoDestaLinha = Math.Max(0, linha.Valor - Math.Max(0, restante));
+                _trocoTotal += trocoDestaLinha;
+                restante -= (linha.Valor - trocoDestaLinha);
+            }
+            else
+            {
+                restante -= linha.Valor;
+            }
+        }
+    }
+
     private void ValidarDesconto(ChangeEventArgs e)
     {
         if (decimal.TryParse(e.Value?.ToString()?.Replace(",", "."),
@@ -1441,10 +1602,16 @@
     private async Task LimparCarrinho()
     {
         _itens.Clear();
-        _desconto     = 0;
-        _clienteId    = null;
-        _nomeCliente  = "";
-        _erroDesconto = null;
+        _desconto            = 0;
+        _clienteId           = null;
+        _nomeCliente         = "";
+        _erroDesconto        = null;
+        _pagamentos.Clear();
+        _trocoTotal          = 0;
+        _formaAbrindo        = null;
+        _valorDigitado       = 0;
+        _entregarNoEndereco  = false;
+        _clienteCompleto     = null;
         await LimparCarrinhoStorageAsync();
         FecharCarrinho(); // Retorna aos produtos no mobile
     }
@@ -1488,16 +1655,19 @@
 
     private void SelecionarCliente(ClienteItem c)
     {
-        _nomeCliente   = c.Name;
-        _clienteId     = c.Id;
-        _clientesBusca = [];
+        _nomeCliente     = c.Name;
+        _clienteId       = c.Id;
+        _clienteCompleto = c;
+        _clientesBusca   = [];
     }
 
     private void LimparClienteSelecionado()
     {
-        _nomeCliente   = "";
-        _clienteId     = null;
-        _clientesBusca = [];
+        _nomeCliente        = "";
+        _clienteId          = null;
+        _clienteCompleto    = null;
+        _entregarNoEndereco = false;
+        _clientesBusca      = [];
     }
 
     private async Task ConfirmarVendaAsync(string tipoNota)
@@ -1512,14 +1682,16 @@
             return;
         }
 
-        // Achado (11/09) — Fiado sem cliente selecionado conseguia finalizar
-        // (dinheiro sem dono virando venda a prazo sem ninguém pra cobrar).
-        // No WPF isso já é bloqueado; o Portal nunca teve essa mesma trava.
-        if (_formaPagamento == "Fiado" && _clienteId == null)
+        // Achado (11/09) — A Prazo sem cliente selecionado conseguia
+        // finalizar (dinheiro sem dono virando venda a prazo sem ninguém
+        // pra cobrar). No WPF isso já é bloqueado; o Portal nunca teve essa
+        // mesma trava. Agora checa a LISTA de pagamentos, já que a venda
+        // pode ter mais de uma forma.
+        if (_pagamentos.Any(p => p.Forma == "A PRAZO") && _clienteId == null)
         {
             _modalFiscal = false;
             _sucesso  = false;
-            _mensagem = "❌ Venda fiado precisa de um cliente selecionado.";
+            _mensagem = "❌ Venda a prazo precisa de um cliente selecionado.";
             await Task.Delay(3000);
             _mensagem = null;
             return;
@@ -1528,22 +1700,34 @@
         _modalFiscal = false;
         _finalizando = true;
 
-        var metodoPagamento = _formaPagamento switch
+        string MapearForma(string forma) => forma switch
         {
             "Cartão Débito"  => "CartaoDebito",
             "Cartão Crédito" => "CartaoCredito",
             "PIX"            => "Pix",
-            "Fiado"          => "APrazo",
+            "A PRAZO"        => "APrazo",
             _                => "Dinheiro"
         };
+
+        // Achado (11/09) — monta o endereço de entrega igual o WPF faz
+        // (EnderecoEntrega), colado nas observações da venda, já que não
+        // existe campo próprio de endereço de entrega na venda em si.
+        var partesNota = new List<string>();
+        if (tipoNota != "sem_nota") partesNota.Add($"Nota: {tipoNota.ToUpper()}");
+        if (_entregarNoEndereco && _clienteCompleto != null)
+        {
+            var endereco = $"{_clienteCompleto.Street}, {_clienteCompleto.Number} - {_clienteCompleto.Neighborhood}, {_clienteCompleto.City}/{_clienteCompleto.State}";
+            partesNota.Add($"ENTREGA: {endereco}");
+        }
 
         var payload = new
         {
             CustomerName   = string.IsNullOrWhiteSpace(_nomeCliente) ? (string?)null : _nomeCliente,
             CustomerId     = _clienteId,
             DiscountAmount = _desconto,
-            Notes          = tipoNota != "sem_nota" ? $"Nota: {tipoNota.ToUpper()}" : null,
-            Payments       = new[] { new { PaymentMethod = metodoPagamento, Amount = Total } },
+            Notes          = partesNota.Count > 0 ? string.Join(" | ", partesNota) : null,
+            Troco          = _trocoTotal,
+            Payments       = _pagamentos.Select(p => new { PaymentMethod = MapearForma(p.Forma), Amount = p.Valor }).ToList(),
             Items = _itens.Select(i => new
             {
                 ProductId       = i.ProdutoId,
@@ -1591,7 +1775,8 @@
     // ── DTOs locais ───────────────────────────────────────────────────────────
     record ProdutoItem(Guid Id, string Name, string? Sku, string? Barcode,
         string Unit, decimal SalePrice, decimal Stock, string? ImageUrl = null);
-    record ClienteItem(Guid Id, string Name);
+    record ClienteItem(Guid Id, string Name, string? Street = null, string? Number = null,
+        string? Neighborhood = null, string? City = null, string? State = null);
     record AgregadoItem(Guid Id, Guid ProdutoRelacionadoId, string Nome,
         string? Barcode, string Unit, decimal Preco, decimal Stock, int Ordem);
     record VendaCriadaDto(Guid Id, string SaleNumber);
