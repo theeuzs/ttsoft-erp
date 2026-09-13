@@ -82,6 +82,14 @@
         </div>
     </div>
 
+    @if (_erroRelatorio != null)
+    {
+        <div style="margin-top:16px; background:#FEF2F2; border:1px solid #FCA5A5; border-radius:8px;
+                    padding:14px 18px; color:#991B1B; font-size:13px;">
+            ⚠ @_erroRelatorio
+        </div>
+    }
+
     @if (!string.IsNullOrEmpty(_htmlRelatorio))
     {
         <div style="margin-top:24px; background:white; border-radius:12px; padding:0; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden;">
@@ -118,7 +126,8 @@
     private DateTime _spedDe   = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
     private DateTime _spedAte  = DateTime.Today;
 
-    private string _htmlRelatorio = "";
+    private string  _htmlRelatorio = "";
+    private string? _erroRelatorio;
     private bool   _gerando       = false;
 
     private const string BtnStyle = "width:100%; background:#1E62A6; color:white; border:none; padding:10px; border-radius:8px; font-weight:700; cursor:pointer; font-size:14px;";
@@ -242,12 +251,22 @@
 
     private async Task GerarRelatorioABC()
     {
-        // 👇 Correção Fuso Horário 👇
-        var ateCorrigido = _abcAte.AddDays(1);
-        var abc = await Api.GetAsync<AbcItem[]>($"api/Bi/abc?inicio={_abcDe:yyyy-MM-dd}&fim={ateCorrigido:yyyy-MM-dd}") ?? [];
+        _erroRelatorio = null;
+        try
+        {
+            // 👇 Correção Fuso Horário 👇
+            var ateCorrigido = _abcAte.AddDays(1);
+            var abc = await Api.GetAsync<AbcItem[]>($"api/Bi/abc?inicio={_abcDe:yyyy-MM-dd}&fim={ateCorrigido:yyyy-MM-dd}") ?? [];
 
-        var sb = new StringBuilder();
-        sb.Append("<h2 style='color:#1E293B;'>Curva ABC de Produtos</h2>");
+            if (abc.Length == 0)
+            {
+                _erroRelatorio = "Nenhum dado encontrado nesse período (ou a busca falhou — veja o console, F12, pra detalhe).";
+                _htmlRelatorio = "";
+                return;
+            }
+
+            var sb = new StringBuilder();
+            sb.Append("<h2 style='color:#1E293B;'>Curva ABC de Produtos</h2>");
         sb.Append($"<p style='color:#94A3B8;'>Período: {_abcDe:dd/MM/yyyy} a {_abcAte:dd/MM/yyyy}</p>");
         sb.Append("<table style='width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;'>");
         sb.Append("<thead><tr style='background:#F8FAFC;'>");
@@ -274,6 +293,13 @@
 
         sb.Append("</tbody></table>");
         _htmlRelatorio = sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Relatorios: falha ao gerar Curva ABC — {ex.Message}");
+            _erroRelatorio = $"Falha ao gerar o relatório: {ex.Message}";
+            _htmlRelatorio = "";
+        }
     }
 
     private async Task GerarRelatorioInadimplencia()

@@ -57,10 +57,19 @@ public class ApiClient
         {
             var response = await _http.GetAsync(url);
             if (await TratarMustChangePasswordAsync(response)) return default;
-            if (!response.IsSuccessStatusCode) return default;
+            if (!response.IsSuccessStatusCode)
+            {
+                // Achado (13/09) — sem isso, QUALQUER chamada que falhasse
+                // (403, 404, 500...) devolvia "nada" silenciosamente, em
+                // qualquer tela do Portal que usa esse método genérico.
+                // Foi assim que a Curva ABC ficou em branco sem erro nenhum.
+                var corpo = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"ApiClient.GetAsync: {url} respondeu {(int)response.StatusCode} {response.StatusCode} — {corpo}");
+                return default;
+            }
             return await response.Content.ReadFromJsonAsync<T>();
         }
-        catch { return default; }
+        catch (Exception ex) { Console.WriteLine($"ApiClient.GetAsync: falha em {url} — {ex.Message}"); return default; }
     }
 
    public async Task<HttpResponseMessage> PostAsync<T>(string url, T data)
@@ -201,8 +210,9 @@ public class AuthService
 
             return (tenantId, mustChange);
         }
-        catch
+        catch (Exception ex)
         {
+            Console.WriteLine($"ApiClient: falha ao decodificar token JWT — {ex.Message}");
             return (null, false);
         }
     }
