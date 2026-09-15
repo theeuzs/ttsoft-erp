@@ -242,6 +242,12 @@ public static class DbSeeder
             ["users.view"]         = "Gestão de usuários (F7)",
             ["config.view"]        = "Configurações do sistema",
             ["role.manage"]        = "Criar e editar cargos e permissões",
+            // Achado (14/09) — essas 2 nunca foram adicionadas aqui, então
+            // nunca eram criadas/concedidas automaticamente pro Admin no
+            // "autocura" do seeder — só apareciam se alguém inserisse na
+            // mão via SQL, tenant por tenant.
+            ["legacyimport.view"]  = "Importar histórico de vendas do sistema antigo",
+            ["importacao.view"]    = "Importar produtos e clientes (CSV)",
         };
 
         var todasPerms = context.Permissions.IgnoreQueryFilters()
