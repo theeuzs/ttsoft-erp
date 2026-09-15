@@ -60,7 +60,16 @@ public class BIService : IBIService
                 Nome       = g.Key.ProductName,
                 Quantidade = g.Sum(i => i.Quantity),
                 Total      = g.Sum(i => i.TotalItem),
-                CustoMedio = g.Average(i => i.Product != null ? i.Product.OriginalCost : 0m),
+                // Achado (14/09) — "Nullable object must have a value" na
+                // produção. Average() sobre uma expressão condicional pode
+                // traduzir pro SQL Server como um AVG() que devolve NULL de
+                // verdade (não 0) em certos casos (ex.: grupo cujo produto
+                // foi excluído e a navegação nunca resolve). O shaper do EF
+                // esperava decimal não-anulável e quebrava lendo esse NULL.
+                // Corrigido: força decimal? na projeção (deixa o SQL
+                // realmente devolver NULL sem quebrar a leitura) e trata o
+                // null com "?? 0m" já em C#, depois de materializar.
+                CustoMedio = (decimal?)g.Average(i => i.Product != null ? (decimal?)i.Product.OriginalCost : null),
                 SKU        = g.Select(i => i.Product != null ? i.Product.SKU : "").FirstOrDefault() ?? ""
             })
             .OrderByDescending(x => x.Total)
@@ -73,10 +82,11 @@ public class BIService : IBIService
         return itens.Select(i =>
         {
             rank++;
+            var custoMedio = i.CustoMedio ?? 0m; // trata o NULL que o SQL pode devolver
             acumulado += totalGeral > 0 ? i.Total / totalGeral * 100 : 0;
             var classe = acumulado <= 80 ? "A" : acumulado <= 95 ? "B" : "C";
-            var margem = i.Total > 0 && i.CustoMedio > 0
-                ? (i.Total - i.CustoMedio * i.Quantidade) / i.Total * 100
+            var margem = i.Total > 0 && custoMedio > 0
+                ? (i.Total - custoMedio * i.Quantidade) / i.Total * 100
                 : 0;
 
             return new AbcAvancadoDto(

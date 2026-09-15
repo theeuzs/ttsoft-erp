@@ -397,6 +397,8 @@ public partial class App : System.Windows.Application
         services.AddScoped<IOrcamentoService, OrcamentoService>();
         services.AddScoped<IContaPagarService, ContaPagarService>();
         services.AddScoped<IContaReceberService, ContaReceberService>();
+        services.AddScoped<ERP.Application.Interfaces.IImportacaoService,
+                            ERP.Infrastructure.Services.ImportacaoService>();
         services.AddScoped<INfeImportService, NfeImportService>();
         services.AddScoped<ISpedService, SpedService>();
         services.AddScoped<INfceEmissionService, NfceEmissionService>();

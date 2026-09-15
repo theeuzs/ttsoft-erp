@@ -21,7 +21,7 @@
             <conv:EqualConverter          x:Key="EqualConverter"/>
             <conv:PercentToColorConverter x:Key="PercentToColorConverter"/>
             <conv:PercentToWidthConverter x:Key="PercentToWidthConverter"/>
-            <conv:StringVazioParaVisibilityConverter x:Key="StringVazioParaVisibilityConverter"/>
+            <conv:EnumToBoolConverter     x:Key="EnumToBoolConverter"/>
             <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
             <!-- Defaults de tema (modo claro) — sobrescritos pelo ThemeService em runtime -->

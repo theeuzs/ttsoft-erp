@@ -335,6 +335,7 @@ public partial class MainWindow : Window
         ["nferecebida"] = ERP.WPF.State.PermissionChecker.NfeRecebidaView,
         ["nfse"] = ERP.WPF.State.PermissionChecker.NfseView,
         ["legacyimport"] = ERP.WPF.State.PermissionChecker.LegacyImportView,
+        ["importacao"]   = ERP.WPF.State.PermissionChecker.ImportacaoView,
         ["syncdiagnostico"] = ERP.WPF.State.PermissionChecker.SincronizacaoDiagnosticoView,
         ["inventario"]   = ERP.WPF.State.PermissionChecker.InventarioView,
         ["fluxocaixa"]   = ERP.WPF.State.PermissionChecker.FluxoCaixaView,
@@ -374,6 +375,7 @@ public partial class MainWindow : Window
             "contaspagar" => CreateView<ContaPagarView, ContaPagarViewModel>(),
             "contasbancarias" => CreateView<ContaBancariaView, ContaBancariaViewModel>(),
             "importXml"   => CreateView<NfeImportView, NfeImportViewModel>(),
+            "importacao"  => CreateView<ImportacaoView, ImportacaoViewModel>(),
             "sped"        => CreateView<SpedView, SpedViewModel>(),
             "nfce"        => CreateView<NotasFiscaisView, NotasFiscaisViewModel>(),
             // Botão existia há muito tempo sem nenhum case aqui — sempre caía
