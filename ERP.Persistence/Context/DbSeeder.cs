@@ -264,14 +264,29 @@ public static class DbSeeder
         }
         context.SaveChanges();
 
+        // Achado (14/09) — a concessão via role.Permissions.Add(perm) +
+        // SaveChanges() nunca persistia o vínculo de verdade pra permissões
+        // adicionadas depois da criação inicial do tenant (7 códigos
+        // afetados, confirmado com consulta direta na tabela PermissionRole
+        // — 0 linhas pra qualquer um deles, em qualquer cargo). Causa exata
+        // não identificada com certeza (suspeita: alguma interação entre o
+        // tracking do EF nas duas queries separadas que carregam Permission
+        // — dbRoles.Include(Permissions) e todasPerms). Trocado por INSERT
+        // direto, idempotente (só insere se ainda não existir) — mesmo
+        // padrão já usado em Caixa/ContaReceber pra escrita atômica e
+        // confiável, sem depender do tracking de navegação do EF aqui.
         void AddPermSeFaltando(Role? role, string code)
         {
             if (role == null) return;
-            if (!role.Permissions.Any(p => p.Code == code))
-            {
-                var perm = todasPerms.FirstOrDefault(p => p.Code == code);
-                if (perm != null) role.Permissions.Add(perm);
-            }
+            var perm = todasPerms.FirstOrDefault(p => p.Code == code);
+            if (perm == null) return;
+
+            context.Database.ExecuteSqlInterpolated($@"
+                INSERT INTO PermissionRole (PermissionsId, RolesId)
+                SELECT {perm.Id}, {role.Id}
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM PermissionRole
+                    WHERE PermissionsId = {perm.Id} AND RolesId = {role.Id})");
         }
 
         // Admin: todas as permissões
@@ -295,7 +310,5 @@ public static class DbSeeder
         // Vendedor: desconto + criar/editar clientes (sem orcamento.manage)
         foreach (var code in new[] { "sale.discount", "customers.edit" })
             AddPermSeFaltando(dbVendedor, code);
-
-        context.SaveChanges();
     }
 }
