@@ -6,6 +6,7 @@ using ERP.Domain.Enums;
 using ERP.Infrastructure.Services;
 using ERP.WPF.Services;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using System;
 using System.Collections.Generic;
@@ -48,10 +49,26 @@ public class SyncEngineServiceTests : IDisposable
         _customerServiceMock = new Mock<ICustomerService>();
         _motorFinanceiroMock = new Mock<IMotorFinanceiroService>();
 
+        // Achado (15/09) — SyncEngineService passou a abrir um escopo de DI
+        // próprio dentro de cada chamada de sincronização (corrige DbContext
+        // compartilhado entre as duas tarefas paralelas). Pro teste continuar
+        // valendo, o escopo fake precisa devolver os MESMOS mocks que o
+        // teste já usa e verifica — senão a chamada real bateria num
+        // ServiceProvider vazio, não nos mocks configurados aqui.
+        var scopedProvider = new Mock<IServiceProvider>();
+        scopedProvider.Setup(p => p.GetService(typeof(IProductService))).Returns(_productServiceMock.Object);
+        scopedProvider.Setup(p => p.GetService(typeof(ICustomerService))).Returns(_customerServiceMock.Object);
+
+        var scope = new Mock<IServiceScope>();
+        scope.Setup(s => s.ServiceProvider).Returns(scopedProvider.Object);
+
+        var scopeFactory = new Mock<IServiceScopeFactory>();
+        scopeFactory.Setup(f => f.CreateScope()).Returns(scope.Object);
+
         _engine = new SyncEngineService(
             _offlineDb, _saleServiceMock.Object,
             _productServiceMock.Object, _customerServiceMock.Object,
-            _motorFinanceiroMock.Object);
+            _motorFinanceiroMock.Object, scopeFactory.Object);
     }
 
     public void Dispose()

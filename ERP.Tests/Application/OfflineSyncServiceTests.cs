@@ -13,6 +13,7 @@ using ERP.Domain.Interfaces;
 using ERP.Infrastructure.Services;
 using ERP.WPF.Services;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using FluentValidation;
 using FluentValidation.Results;
 using Moq;
@@ -164,8 +165,12 @@ namespace ERP.Tests.Application.Services
             var productServiceMock  = new Mock<IProductService>();
             var customerServiceMock = new Mock<ICustomerService>();
             var motorFinanceiroMock = new Mock<IMotorFinanceiroService>();
+            // Só satisfaz o construtor — este teste exercita apenas
+            // ProcessarOutboxAsync, que nunca abre escopo/usa produto ou
+            // cliente, então o fake não precisa resolver nada de verdade.
+            var scopeFactoryMock = new Mock<IServiceScopeFactory>();
 
-            var engine = new SyncEngineService(_offlineDb, saleServiceMock.Object, productServiceMock.Object, customerServiceMock.Object, motorFinanceiroMock.Object);
+            var engine = new SyncEngineService(_offlineDb, saleServiceMock.Object, productServiceMock.Object, customerServiceMock.Object, motorFinanceiroMock.Object, scopeFactoryMock.Object);
             var sincronizados = await engine.ProcessarOutboxAsync();
 
             sincronizados.Should().Be(1, "só a venda sem erro deve contar como sincronizada nessa passada");

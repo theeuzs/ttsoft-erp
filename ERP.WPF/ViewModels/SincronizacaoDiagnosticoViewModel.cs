@@ -48,13 +48,8 @@ public class SincronizacaoDiagnosticoViewModel : BaseViewModel
         ResultadoTexto = "Processando...";
         try
         {
-            var offlineDb   = App.Services.GetRequiredService<OfflineSyncService>();
-            var saleService = App.Services.GetRequiredService<ISaleService>();
-            var productService  = App.Services.GetRequiredService<IProductService>();
-            var customerService = App.Services.GetRequiredService<ICustomerService>();
-            var motorFinanceiro  = App.Services.GetRequiredService<IMotorFinanceiroService>();
-
-            var engine = new SyncEngineService(offlineDb, saleService, productService, customerService, motorFinanceiro);
+            var offlineDb = App.Services.GetRequiredService<OfflineSyncService>();
+            var engine    = App.Services.GetRequiredService<SyncEngineService>();
             var sincronizados = await engine.ProcessarOutboxAsync();
 
             var status = await offlineDb.GetStatusAsync();
@@ -78,13 +73,8 @@ public class SincronizacaoDiagnosticoViewModel : BaseViewModel
         Processando = true;
         try
         {
-            var offlineDb   = App.Services.GetRequiredService<OfflineSyncService>();
-            var saleService = App.Services.GetRequiredService<ISaleService>();
-            var productService  = App.Services.GetRequiredService<IProductService>();
-            var customerService = App.Services.GetRequiredService<ICustomerService>();
-            var motorFinanceiro  = App.Services.GetRequiredService<IMotorFinanceiroService>();
-
-            var engine = new SyncEngineService(offlineDb, saleService, productService, customerService, motorFinanceiro);
+            var offlineDb = App.Services.GetRequiredService<OfflineSyncService>();
+            var engine    = App.Services.GetRequiredService<SyncEngineService>();
             bool alcancouRede = await engine.SincronizarCatalogoAsync();
 
             var status = await offlineDb.GetStatusAsync();

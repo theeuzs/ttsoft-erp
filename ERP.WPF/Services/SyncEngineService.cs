@@ -2,6 +2,7 @@
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using ERP.Infrastructure.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using System.Linq;
 using System.Text.Json;
@@ -31,17 +32,19 @@ public class SyncEngineService
     private readonly IProductService _productService;
     private readonly ICustomerService _customerService;
     private readonly IMotorFinanceiroService _motorFinanceiro;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     public SyncEngineService(
         OfflineSyncService offlineDb, ISaleService saleService,
         IProductService productService, ICustomerService customerService,
-        IMotorFinanceiroService motorFinanceiro)
+        IMotorFinanceiroService motorFinanceiro, IServiceScopeFactory scopeFactory)
     {
         _offlineDb       = offlineDb;
         _saleService     = saleService;
         _productService  = productService;
         _customerService = customerService;
         _motorFinanceiro = motorFinanceiro;
+        _scopeFactory    = scopeFactory;
     }
 
     /// <summary>Grava uma venda offline (SQLite + Outbox, numa transação só —
@@ -212,7 +215,20 @@ public class SyncEngineService
     {
         try
         {
-            var produtos = await _productService.GetAllAsync();
+            // Achado (15/09) — "A second operation was started on this
+            // context instance" em produção. _productService/_customerService
+            // vêm do MESMO escopo de DI (um por tick do timer), e portanto
+            // compartilham o MESMO AppDbContext — rodar os dois em paralelo
+            // (Task.WhenAll, ver comentário acima) é exatamente o cenário que
+            // o EF Core proíbe (DbContext não é thread-safe). Corrigido
+            // abrindo um escopo próprio aqui dentro, só pra esta chamada —
+            // cada uma das duas tarefas paralelas agora tem seu próprio
+            // AppDbContext, sem perder o paralelismo que existe por um
+          // motivo real (fast-fail quando offline).
+            using var scope = _scopeFactory.CreateScope();
+            var productService = scope.ServiceProvider.GetRequiredService<IProductService>();
+
+            var produtos = await productService.GetAllAsync();
             await _offlineDb.SincronizarProdutosAsync(produtos.Cast<object>());
             return true;
         }
@@ -227,7 +243,13 @@ public class SyncEngineService
     {
         try
         {
-            var clientes = await _customerService.GetAllAsync();
+            // Achado (15/09) — mesmo motivo do método de produtos acima:
+            // escopo próprio evita compartilhar AppDbContext entre as duas
+            // tarefas rodando em paralelo.
+            using var scope = _scopeFactory.CreateScope();
+            var customerService = scope.ServiceProvider.GetRequiredService<ICustomerService>();
+
+            var clientes = await customerService.GetAllAsync();
             await _offlineDb.SincronizarClientesAsync(clientes.Cast<object>());
             return true;
         }

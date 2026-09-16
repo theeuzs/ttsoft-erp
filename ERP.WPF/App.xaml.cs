@@ -519,6 +519,7 @@ public partial class App : System.Windows.Application
         services.AddTransient<ContaPagarViewModel>();
         services.AddTransient<ContaBancariaViewModel>();
         services.AddTransient<NfeImportViewModel>();
+        services.AddTransient<ImportacaoViewModel>();
         services.AddTransient<SpedViewModel>();
         services.AddTransient<NotasFiscaisViewModel>();
         services.AddTransient<AuditLogViewModel>();

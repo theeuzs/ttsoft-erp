@@ -16,6 +16,19 @@ public class OfflineSyncService
 {
     private readonly string _dbPath;
 
+    // Achado (15/09) — Serialize(produto)/Serialize(cliente) rodavam sem
+    // opções, então saíam em PascalCase ("Id", "SalePrice" — o padrão do C#),
+    // mas o código logo abaixo lia de volta em camelCase ("id", "salePrice").
+    // GetProperty("id") contra uma chave "Id" no JSON gerado —
+    // KeyNotFoundException toda vez, silenciosamente derrubando a
+    // sincronização inteira daquele catálogo (produto sempre falhava;
+    // cliente também falharia, só nunca chegava a rodar por causa do bug
+    // separado do DbContext concorrente, corrigido junto).
+    private static readonly JsonSerializerOptions _jsonCamelCase = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     /// <param name="dbPath">Testabilidade — igual ao padrão já usado em
     /// PixPollingService (S15 FIX): default preserva o comportamento de
     /// produção exatamente como era (caminho fixo em LocalApplicationData);
@@ -115,7 +128,7 @@ public class OfflineSyncService
 
         foreach (var produto in produtos)
         {
-            var json = JsonSerializer.Serialize(produto);
+            var json = JsonSerializer.Serialize(produto, _jsonCamelCase);
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
@@ -146,57 +159,6 @@ public class OfflineSyncService
         await RegistrarLogAsync("SincProdutos", $"{produtos.Count()} produtos sincronizados em {ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():dd/MM/yyyy HH:mm}");
     }
 
-    // Achado (11/09) — só a gravação desse cache tinha sido construída
-    // (SincronizarProdutosAsync acima); ninguém nunca escreveu o lado de
-    // LER de volta. Por isso, quando a internet cai, a busca de produto no
-    // PDV fica vazia — o catálogo local existe e está atualizado (sincroniza
-    // sozinho a cada minuto), só nunca era consultado. `DadosJson` guarda o
-    // ProductDto inteiro serializado, então a busca aqui devolve os mesmos
-    // objetos que a tela já sabe usar, sem precisar mudar mais nada.
-    public async Task<List<ERP.Application.DTOs.ProductDto>> BuscarProdutosCacheAsync(string termo, int limite = 30)
-    {
-        var resultado = new List<ERP.Application.DTOs.ProductDto>();
-        using var conn = Abrir();
-        await conn.OpenAsync();
-
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = @"
-            SELECT DadosJson FROM ProdutosCache
-            WHERE Nome LIKE @termo OR Barcode LIKE @termo
-            ORDER BY Nome
-            LIMIT @limite";
-        cmd.Parameters.AddWithValue("@termo", $"%{termo}%");
-        cmd.Parameters.AddWithValue("@limite", limite);
-
-        var opcoes = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            var json = reader.GetString(0);
-            var dto  = JsonSerializer.Deserialize<ERP.Application.DTOs.ProductDto>(json, opcoes);
-            if (dto != null) resultado.Add(dto);
-        }
-        return resultado;
-    }
-
-    /// <summary>Busca exata por código de barras no cache local — usado quando
-    /// o "bip inteligente" do PDV não alcança a rede pra consultar direto.</summary>
-    public async Task<ERP.Application.DTOs.ProductDto?> BuscarProdutoPorCodigoBarrasCacheAsync(string codigoBarras)
-    {
-        using var conn = Abrir();
-        await conn.OpenAsync();
-
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT DadosJson FROM ProdutosCache WHERE Barcode = @codigo LIMIT 1";
-        cmd.Parameters.AddWithValue("@codigo", codigoBarras);
-
-        var resultado = await cmd.ExecuteScalarAsync();
-        if (resultado is not string json) return null;
-
-        var opcoes = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        return JsonSerializer.Deserialize<ERP.Application.DTOs.ProductDto>(json, opcoes);
-    }
-
     public async Task SincronizarClientesAsync(IEnumerable<object> clientes)
     {
         using var conn = Abrir();
@@ -205,7 +167,7 @@ public class OfflineSyncService
 
         foreach (var cliente in clientes)
         {
-            var json = JsonSerializer.Serialize(cliente);
+            var json = JsonSerializer.Serialize(cliente, _jsonCamelCase);
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
