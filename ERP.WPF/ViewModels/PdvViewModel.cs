@@ -2,6 +2,7 @@ using ERP.WPF.Helpers;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using ERP.Domain.Enums;
+using ERP.Infrastructure.Services;
 using ERP.WPF.Commands;
 using ERP.WPF.State; 
 using System.Collections.ObjectModel;
@@ -169,6 +170,17 @@ public class CartItem : BaseViewModel
 public class PdvViewModel : BaseViewModel
 {
     private readonly IProductService _productService;
+    private readonly OfflineSyncService _offlineDb;
+
+    // Achado (16/09) — banner "catálogo local" visível quando a busca cai
+    // pro fallback offline, pro operador saber que os dados podem estar
+    // até 1 minuto desatualizados (intervalo do sync automático).
+    private string _statusMensagem = "";
+    public string StatusMensagem
+    {
+        get => _statusMensagem;
+        set => SetProperty(ref _statusMensagem, value);
+    }
     private readonly ISaleService _saleService;
     private readonly ICustomerService _customerService; 
     private readonly ICaixaService _caixaService;
@@ -334,8 +346,9 @@ public class PdvViewModel : BaseViewModel
         finally { _dbGateInicializacao.Release(); }
     }
 
-    public PdvViewModel(IProductService productService, ISaleService saleService, ICustomerService customerService, ICaixaService caixaService, IOrcamentoService orcamentoService, IMotorFiscalService motorFiscal, IProdutoAgregadoService produtoAgregadoService, IVendaSuspensaService vendaSuspensaService)
-    {        _productService = productService;
+    public PdvViewModel(IProductService productService, ISaleService saleService, ICustomerService customerService, ICaixaService caixaService, IOrcamentoService orcamentoService, IMotorFiscalService motorFiscal, IProdutoAgregadoService produtoAgregadoService, IVendaSuspensaService vendaSuspensaService, OfflineSyncService offlineDb)
+    {
+        _offlineDb = offlineDb;        _productService = productService;
         _vendaSuspensaService = vendaSuspensaService;
         _saleService = saleService;
         _customerService = customerService; 
@@ -826,6 +839,7 @@ public class PdvViewModel : BaseViewModel
                 {
                     AddToCart(byBarcode);
                     SearchTerm = string.Empty;
+                    StatusMensagem = "";
                     return;
                 }
 
@@ -839,9 +853,45 @@ public class PdvViewModel : BaseViewModel
                         SearchResults.Add(p);
                     }
                 }
+                StatusMensagem = "";
             }
         }
-        catch (Exception ex) { Log.Warning(ex, "SearchProductAsync: falha ao buscar produtos por \"{Termo}\"", SearchTerm); }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "SearchProductAsync: falha ao buscar produtos por \"{Termo}\" — tentando catálogo local", SearchTerm);
+
+            // Achado (16/09) — metade que faltava do offline-first: até aqui,
+            // uma falha na busca online deixava a tela vazia sem alternativa
+            // nenhuma, apesar do catálogo local (sincronizado sozinho a cada
+            // minuto) estar disponível e atualizado. Fallback pro cache
+            // SQLite local, com aviso visível — dado pode estar até 1 minuto
+            // desatualizado, o operador precisa saber disso, não é
+            // transparente feito o resto do sistema.
+            try
+            {
+                var porCodigoBarras = await _offlineDb.BuscarProdutoPorCodigoBarrasCacheAsync(SearchTerm);
+                if (porCodigoBarras != null)
+                {
+                    AddToCart(porCodigoBarras);
+                    SearchTerm = string.Empty;
+                    StatusMensagem = "📴 Sem internet — item adicionado do catálogo local (pode estar desatualizado)";
+                    return;
+                }
+
+                var resultadosLocais = await _offlineDb.BuscarProdutosCacheAsync(SearchTerm);
+                SearchResults.Clear();
+                foreach (var p in resultadosLocais) SearchResults.Add(p);
+
+                StatusMensagem = resultadosLocais.Count > 0
+                    ? "📴 Sem internet — mostrando catálogo local (pode estar desatualizado)"
+                    : "📴 Sem internet e nada encontrado no catálogo local pra esse termo.";
+            }
+            catch (Exception exOffline)
+            {
+                Log.Warning(exOffline, "SearchProductAsync: fallback offline também falhou pra \"{Termo}\"", SearchTerm);
+                StatusMensagem = "❌ Sem internet e não foi possível ler o catálogo local.";
+            }
+        }
     }
 
     private void AddToCart(ProductDto? product)

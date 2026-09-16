@@ -156,7 +156,18 @@
                         </Grid>
                     </Border>
 
-                    <Border Grid.Row="2" Background="{DynamicResource CardBg}" CornerRadius="12" Margin="0,0,0,24" Effect="{DynamicResource CardShadow}">
+                    <StackPanel Grid.Row="2">
+                        <!-- Achado (16/09) — banner do fallback offline de busca. Só
+                             aparece quando StatusMensagem tem texto (fallback ativo ou
+                             erro); fica invisível e não ocupa espaço no uso normal. -->
+                        <Border Background="#FEF3C7" BorderBrush="#F59E0B" BorderThickness="1"
+                                CornerRadius="8" Padding="10,6" Margin="0,0,0,8"
+                                Visibility="{Binding StatusMensagem, Converter={StaticResource StringVazioParaVisibilityConverter}}">
+                            <TextBlock Text="{Binding StatusMensagem}" FontSize="12" FontWeight="SemiBold"
+                                       Foreground="#92400E" TextWrapping="Wrap"/>
+                        </Border>
+
+                        <Border Background="{DynamicResource CardBg}" CornerRadius="12" Margin="0,0,0,24" Effect="{DynamicResource CardShadow}">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/> <ColumnDefinition Width="Auto"/> <ColumnDefinition Width="Auto"/> 
@@ -186,13 +197,7 @@
                             <Button Grid.Column="2" Content="BUSCAR" Command="{Binding SearchProductCommand}" Style="{StaticResource PrimaryButton}" Width="100" Height="40" TabIndex="3"/>
                         </Grid>
                     </Border>
-
-                    <Border Background="#FEF3C7" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="8"
-                            Padding="10,6" Margin="0,8,0,0"
-                            Visibility="{Binding StatusMensagem, Converter={StaticResource StringVazioParaVisibilityConverter}}">
-                        <TextBlock Text="{Binding StatusMensagem}" FontSize="12" FontWeight="SemiBold"
-                                   Foreground="#92400E" TextWrapping="Wrap"/>
-                    </Border>
+                    </StackPanel>
 
                     <Border Grid.Row="3" Background="{DynamicResource CardBg}" CornerRadius="12" Effect="{DynamicResource CardShadow}">
                         <Grid>

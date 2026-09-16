@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using System.Text.Json;
+using ERP.Application.DTOs;
 
 namespace ERP.Infrastructure.Services;
 
@@ -157,6 +158,73 @@ public class OfflineSyncService
 
         tx.Commit();
         await RegistrarLogAsync("SincProdutos", $"{produtos.Count()} produtos sincronizados em {ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():dd/MM/yyyy HH:mm}");
+    }
+
+    // Achado (16/09) — a metade que faltava da arquitetura offline-first
+    // (§8/§16.5 do documento): o catálogo local já é escrito sozinho a cada
+    // minuto (SincronizarProdutosAsync acima), mas nunca existia um jeito de
+    // LER esse cache de volta. Sem isso, quando a internet cai, a busca do
+    // PDV simplesmente falha e fica vazia — apesar do catálogo estar salvo
+    // localmente, atualizado, esperando.
+    //
+    // Reconstrói o ProductDto a partir do DadosJson (o produto inteiro, não
+    // só as colunas resumidas da tabela) — assim o resultado do fallback
+    // tem os mesmos campos que a busca online devolveria (preço de atacado,
+    // categoria, etc.), não uma versão capada.
+
+    /// <summary>Busca por nome (LIKE, mesmo comportamento de sempre) OU por
+    /// código de barras/SKU (prefixo) no catálogo local — espelha
+    /// IProductService.SearchAsync, só que lendo do SQLite em vez do Azure.</summary>
+    public async Task<List<ProductDto>> BuscarProdutosCacheAsync(string termo, int limite = 30)
+    {
+        var resultado = new List<ProductDto>();
+        using var conn = Abrir();
+        await conn.OpenAsync();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT DadosJson FROM ProdutosCache
+            WHERE Nome LIKE @termo OR Barcode LIKE @prefixo
+            ORDER BY Nome
+            LIMIT @limite";
+        cmd.Parameters.AddWithValue("@termo",   $"%{termo}%");
+        cmd.Parameters.AddWithValue("@prefixo", $"{termo}%");
+        cmd.Parameters.AddWithValue("@limite",  limite);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            var produto = DesserializarProdutoCache(reader.GetString(0));
+            if (produto != null) resultado.Add(produto);
+        }
+        return resultado;
+    }
+
+    /// <summary>Espelha IProductService.GetByBarcodeAsync — busca EXATA por
+    /// código de barras (bipagem), não prefixo.</summary>
+    public async Task<ProductDto?> BuscarProdutoPorCodigoBarrasCacheAsync(string barcode)
+    {
+        using var conn = Abrir();
+        await conn.OpenAsync();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT DadosJson FROM ProdutosCache WHERE Barcode = @barcode LIMIT 1";
+        cmd.Parameters.AddWithValue("@barcode", barcode);
+
+        var dadosJson = await cmd.ExecuteScalarAsync() as string;
+        return dadosJson == null ? null : DesserializarProdutoCache(dadosJson);
+    }
+
+    private static ProductDto? DesserializarProdutoCache(string dadosJson)
+    {
+        try { return JsonSerializer.Deserialize<ProductDto>(dadosJson); }
+        catch (Exception ex)
+        {
+            // Não devolve exceção pro chamador — um produto com cache
+            // corrompido não pode derrubar a busca inteira dos outros.
+            System.Diagnostics.Debug.WriteLine($"OfflineSyncService: falha ao ler produto do cache — {ex.Message}");
+            return null;
+        }
     }
 
     public async Task SincronizarClientesAsync(IEnumerable<object> clientes)
