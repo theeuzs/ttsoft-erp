@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Linq;
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using Microsoft.Extensions.DependencyInjection; 
@@ -315,9 +316,26 @@ public class PdvViewModel : BaseViewModel
     // ==========================================
     // --- CONSTRUTOR --- 
     // ==========================================
-    public PdvViewModel(IProductService productService, ISaleService saleService, ICustomerService customerService, ICaixaService caixaService, IOrcamentoService orcamentoService, IMotorFiscalService motorFiscal, IProdutoAgregadoService produtoAgregadoService, IVendaSuspensaService vendaSuspensaService)
+    // Achado (15/09) — o construtor dispara várias tarefas "dispara e
+    // esquece" ao mesmo tempo (carrega campanha, vendas suspensas, caixa
+    // aberto, orçamento pendente, radar SEFAZ, meta do dia...), todas usando
+    // serviços do MESMO escopo de DI — logo o MESMO AppDbContext, que não é
+    // thread-safe pra chamadas concorrentes. Duas delas rodando ao mesmo
+    // tempo derrubava "A second operation was started on this context
+    // instance...". Esse semáforo serializa só o ACESSO AO BANCO entre
+    // essas tarefas de início — continuam todas "dispara e esquece" do
+    // ponto de vista de quem chama, só não pisam mais uma na outra.
+    private readonly SemaphoreSlim _dbGateInicializacao = new(1, 1);
+
+    private async Task ComDbGateAsync(Func<Task> acao)
     {
-        _productService = productService;
+        await _dbGateInicializacao.WaitAsync();
+        try { await acao(); }
+        finally { _dbGateInicializacao.Release(); }
+    }
+
+    public PdvViewModel(IProductService productService, ISaleService saleService, ICustomerService customerService, ICaixaService caixaService, IOrcamentoService orcamentoService, IMotorFiscalService motorFiscal, IProdutoAgregadoService produtoAgregadoService, IVendaSuspensaService vendaSuspensaService)
+    {        _productService = productService;
         _vendaSuspensaService = vendaSuspensaService;
         _saleService = saleService;
         _customerService = customerService; 
@@ -333,7 +351,7 @@ public class PdvViewModel : BaseViewModel
         ERP.WPF.Services.ConnectivityIndicatorState.Changed += AtualizarIndicadorConectividade;
 
         SearchProductCommand = new AsyncRelayCommand(_ => SearchProductAsync());
-        CarregarProdutosCampanhaAsync().SafeFireAndForgetSilentAsync("PDV-Campanha");
+        ComDbGateAsync(CarregarProdutosCampanhaAsync).SafeFireAndForgetSilentAsync("PDV-Campanha");
         AddToCartCommand = new RelayCommand(p => AddToCart(p as ProductDto), p => p is ProductDto);
         RemoveFromCartCommand = new RelayCommand(p => RemoveFromCart(p as CartItem), p => p is CartItem);
         FinalizeSaleCommand = new AsyncRelayCommand(async _ => await FinalizeSaleAsync(), _ => CartItems.Any());
@@ -347,7 +365,7 @@ public class PdvViewModel : BaseViewModel
         // no finalizador da GC (péssimo pra depurar, e em certas configs
         // pode até derrubar o processo). Mesmo padrão já usado 2 linhas
         // acima (CarregarProdutosCampanhaAsync), pra consistência.
-        AtualizarIndicadorVendasSuspensasAsync().SafeFireAndForgetSilentAsync("PDV-VendasSuspensas");
+        ComDbGateAsync(AtualizarIndicadorVendasSuspensasAsync).SafeFireAndForgetSilentAsync("PDV-VendasSuspensas");
         SearchCustomerCommand = new AsyncRelayCommand(_ => SearchCustomerAsync());
         SalvarOrcamentoCommand = new AsyncRelayCommand(async _ => await SalvarOrcamentoAsync(), _ => CartItems.Any());
         ToggleViewCommand = new RelayCommand(_ => IsGridView = !IsGridView);
@@ -374,21 +392,21 @@ public class PdvViewModel : BaseViewModel
         NotificacaoCaixaAlterado -= EscutarRadio;
         NotificacaoCaixaAlterado += EscutarRadio;
 
-        _ = VerificarCaixaAbertoAsync(); 
-        
+        ComDbGateAsync(VerificarCaixaAbertoAsync).SafeFireAndForgetSilentAsync("PDV-CaixaAberto");
+
         RestaurarEstadoCarrinho();
-        
-        _ = VerificarOrcamentoPendenteAsync();
-        _ = IniciarRadarSefazAsync();
+
+        ComDbGateAsync(VerificarOrcamentoPendenteAsync).SafeFireAndForgetSilentAsync("PDV-OrcamentoPendente");
+        ComDbGateAsync(IniciarRadarSefazAsync).SafeFireAndForgetSilentAsync("PDV-RadarSefaz");
 
         // Sprint 5: carrega meta do dia e vendas em background
-        _ = CarregarMetaEVendasAsync();
+        ComDbGateAsync(CarregarMetaEVendasAsync).SafeFireAndForgetSilentAsync("PDV-MetaVendas");
         AtualizarClientesFrequentes();
     }
 
     private void EscutarRadio()
     {
-        _ = AtualizarBotaoVerdeAsync();
+        ComDbGateAsync(AtualizarBotaoVerdeAsync).SafeFireAndForgetSilentAsync("PDV-BotaoVerde");
     }
 
     private string _customerSearchTerm = string.Empty;
