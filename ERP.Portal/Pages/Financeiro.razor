@@ -39,78 +39,34 @@
         }
         else
         {
+            <!-- Achado (16/09) — antes era uma linha por CONTA, repetindo o
+                 nome do cliente várias vezes (16 contas em aberto = 16 linhas
+                 "João da Silva"). Agrupado por cliente, igual o WPF já faz —
+                 uma linha por pessoa, clica em "Ver Contas" pra abrir o
+                 detalhe. -->
             <table style="width:100%; border-collapse:collapse;">
                 <thead>
                     <tr style="background:#F8FAFC;">
                         <th style="@Th">Cliente</th>
-                        <th style="@Th">Descrição</th>
-                        <th style="@Th; text-align:right;">Valor</th>
-                        <th style="@Th; text-align:right;">Recebido</th>
-                        <th style="@Th">Vencimento</th>
-                        <th style="@Th">Parcela</th>
+                        <th style="@Th; text-align:center;">Qtd. Contas</th>
+                        <th style="@Th; text-align:right;">Total Devendo</th>
                         <th style="@Th; text-align:center;">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var c in _contas ?? [])
+                    @foreach (var g in AgruparPorCliente())
                     {
-                        var saldo = c.ValorTotal - c.ValorRecebido;
-                        var vencido = c.DataVencimento < DateTime.Today && c.Status == "Pendente";
-                        <tr style="border-top:1px solid #F1F5F9; background:@(vencido ? "#FFF8F8" : "white");">
-                            <td style="@Td; font-weight:600;">@(c.Customer?.Name ?? "—")</td>
-                            <td style="@Td; color:#64748B; font-size:12px;">@c.Descricao</td>
-                            <td style="@Td; text-align:right; font-weight:700; color:#1E293B;">@c.ValorTotal.ToString("C")</td>
-                            <td style="@Td; text-align:right;">
-                                @if (c.ValorRecebido > 0)
-                                {
-                                    <span style="color:#16A34A; font-weight:600;">@c.ValorRecebido.ToString("C")</span>
-                                } else {
-                                    <span style="color:#94A3B8;">—</span>
-                                }
-                            </td>
-                            <td style="@Td; color:@(vencido ? "#EF4444" : "#1E293B"); font-weight:@(vencido ? "700" : "400");">
-                                @c.DataVencimento.ToString("dd/MM/yyyy")
-                                @if (vencido) { <span style="font-size:10px;"> ⚠️</span> }
-                            </td>
-                            <td style="@Td; text-align:center; color:#64748B;">
-                                @if (c.TotalParcelas > 1)
-                                {
-                                    <span>@c.NumeroParcela/@c.TotalParcelas</span>
-                                } else {
-                                    <span style="color:#94A3B8;">—</span>
-                                }
-                            </td>
+                        <tr style="border-top:1px solid #F1F5F9;">
+                            <td style="@Td; font-weight:600;">@g.Nome</td>
+                            <td style="@Td; text-align:center; color:#64748B;">@g.QtdContas</td>
+                            <td style="@Td; text-align:right; font-weight:700; color:#DC2626;">@g.TotalDevendo.ToString("C")</td>
                             <td style="@Td; text-align:center;">
-                                <div style="display:flex; gap:4px; justify-content:center; flex-wrap:wrap;">
-                                    <button @onclick="() => DarBaixaTotal(c.Id)"
-                                            style="background:#D1FAE5; color:#065F46; border:none;
-                                                   padding:4px 8px; border-radius:6px; font-size:11px;
-                                                   font-weight:700; cursor:pointer;"
-                                            title="Quitar parcela">✓ Pago</button>
-                                    <button @onclick="() => CobrarWhatsApp(c)"
-                                            style="background:#D1FAE5; color:#128C7E; border:none;
-                                                   padding:4px 8px; border-radius:6px; font-size:11px;
-                                                   font-weight:700; cursor:pointer;"
-                                            title="Cobrar via WhatsApp Web">💬</button>
-                                    @if (!string.IsNullOrEmpty(c.BoletoUrl))
-                                    {
-                                        <a href="@c.BoletoUrl" target="_blank"
-                                           style="background:#EFF6FF; color:#1E62A6; border:none;
-                                                  padding:4px 8px; border-radius:6px; font-size:11px;
-                                                  font-weight:700; cursor:pointer; text-decoration:none;"
-                                           title="Abrir boleto">🎫 Ver</a>
-                                    }
-                                    else
-                                    {
-                                        <button @onclick="() => GerarBoletoAsync(c.Id)"
-                                                disabled="@_gerandoBoleto"
-                                                style="background:#FEF3C7; color:#92400E; border:none;
-                                                       padding:4px 8px; border-radius:6px; font-size:11px;
-                                                       font-weight:700; cursor:pointer;
-                                                       opacity:@(_gerandoBoleto ? "0.5" : "1")"
-                                                title="Gerar boleto via Asaas">🎫 Boleto</button>
-                                    }
-                                </div>
+                                <button @onclick="() => _clienteSelecionado = g"
+                                        style="background:#1E62A6; color:white; border:none;
+                                               padding:6px 14px; border-radius:6px; font-size:12px;
+                                               font-weight:700; cursor:pointer;">
+                                    📂 Ver Contas
+                                </button>
                             </td>
                         </tr>
                     }
@@ -120,15 +76,134 @@
     </div>
 </div>
 
+@if (_clienteSelecionado != null)
+{
+    <div style="position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000;
+                display:flex; align-items:center; justify-content:center;"
+         @onclick="() => _clienteSelecionado = null">
+        <div @onclick:stopPropagation="true"
+             style="background:white; border-radius:12px; width:90%; max-width:900px;
+                    max-height:80vh; overflow:hidden; display:flex; flex-direction:column;">
+            <div style="display:flex; justify-content:space-between; align-items:center;
+                        padding:16px 24px; border-bottom:1px solid #F1F5F9;">
+                <span style="font-weight:800; font-size:16px; color:#1E293B;">
+                    @_clienteSelecionado.Nome — @_clienteSelecionado.TotalDevendo.ToString("C") em aberto
+                </span>
+                <button @onclick="() => _clienteSelecionado = null"
+                        style="background:none; border:none; font-size:20px; cursor:pointer; color:#94A3B8;">✕</button>
+            </div>
+
+            <div style="overflow-y:auto;">
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#F8FAFC;">
+                            <th style="@Th">Descrição</th>
+                            <th style="@Th; text-align:right;">Valor</th>
+                            <th style="@Th; text-align:right;">Recebido</th>
+                            <th style="@Th">Vencimento</th>
+                            <th style="@Th">Parcela</th>
+                            <th style="@Th; text-align:center;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in _clienteSelecionado.Contas)
+                        {
+                            var vencido = c.DataVencimento < DateTime.Today && c.Status == "Pendente";
+                            <tr style="border-top:1px solid #F1F5F9; background:@(vencido ? "#FFF8F8" : "white");">
+                                <td style="@Td; color:#64748B; font-size:12px;">@c.Descricao</td>
+                                <td style="@Td; text-align:right; font-weight:700; color:#1E293B;">@c.ValorTotal.ToString("C")</td>
+                                <td style="@Td; text-align:right;">
+                                    @if (c.ValorRecebido > 0)
+                                    {
+                                        <span style="color:#16A34A; font-weight:600;">@c.ValorRecebido.ToString("C")</span>
+                                    } else {
+                                        <span style="color:#94A3B8;">—</span>
+                                    }
+                                </td>
+                                <td style="@Td; color:@(vencido ? "#EF4444" : "#1E293B"); font-weight:@(vencido ? "700" : "400");">
+                                    @c.DataVencimento.ToString("dd/MM/yyyy")
+                                    @if (vencido) { <span style="font-size:10px;"> ⚠️</span> }
+                                </td>
+                                <td style="@Td; text-align:center; color:#64748B;">
+                                    @if (c.TotalParcelas > 1)
+                                    {
+                                        <span>@c.NumeroParcela/@c.TotalParcelas</span>
+                                    } else {
+                                        <span style="color:#94A3B8;">—</span>
+                                    }
+                                </td>
+                                <td style="@Td; text-align:center;">
+                                    <div style="display:flex; gap:4px; justify-content:center; flex-wrap:wrap;">
+                                        <button @onclick="() => DarBaixaTotal(c.Id)"
+                                                style="background:#D1FAE5; color:#065F46; border:none;
+                                                       padding:4px 8px; border-radius:6px; font-size:11px;
+                                                       font-weight:700; cursor:pointer;"
+                                                title="Quitar parcela">✓ Pago</button>
+                                        <button @onclick="() => CobrarWhatsApp(c)"
+                                                style="background:#D1FAE5; color:#128C7E; border:none;
+                                                       padding:4px 8px; border-radius:6px; font-size:11px;
+                                                       font-weight:700; cursor:pointer;"
+                                                title="Cobrar via WhatsApp Web">💬</button>
+                                        @if (!string.IsNullOrEmpty(c.BoletoUrl))
+                                        {
+                                            <a href="@c.BoletoUrl" target="_blank"
+                                               style="background:#EFF6FF; color:#1E62A6; border:none;
+                                                      padding:4px 8px; border-radius:6px; font-size:11px;
+                                                      font-weight:700; cursor:pointer; text-decoration:none;"
+                                               title="Abrir boleto">🎫 Ver</a>
+                                        }
+                                        else
+                                        {
+                                            <button @onclick="() => GerarBoletoAsync(c.Id)"
+                                                    disabled="@_gerandoBoleto"
+                                                    style="background:#FEF3C7; color:#92400E; border:none;
+                                                           padding:4px 8px; border-radius:6px; font-size:11px;
+                                                           font-weight:700; cursor:pointer;
+                                                           opacity:@(_gerandoBoleto ? "0.5" : "1")"
+                                                    title="Gerar boleto via Asaas">🎫 Boleto</button>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private ContaItem[]?      _contas;
     private ResumoFinanceiro? _resumo;
     private string            _tab      = "pendentes";
     private bool              _loading  = true;
     private bool              _gerandoBoleto = false;
+    private GrupoCliente?     _clienteSelecionado;
 
     private const string Th = "padding:12px 16px; font-size:11px; font-weight:700; color:#64748B; text-align:left;";
     private const string Td = "padding:12px 16px; font-size:13px;";
+
+    // Achado (16/09) — agrupa a lista plana de contas (uma por transação)
+    // por cliente, igual o WPF já faz. Recalcula a cada render em vez de
+    // cachear — lista é pequena (contas em aberto de uma loja), não vale a
+    // complexidade de invalidar cache toda hora que _contas muda.
+    private List<GrupoCliente> AgruparPorCliente()
+    {
+        if (_contas == null || _contas.Length == 0) return [];
+        return _contas
+            .GroupBy(c => c.CustomerId)
+            .Select(g => new GrupoCliente
+            {
+                CustomerId   = g.Key,
+                Nome         = g.First().Customer?.Name ?? "—",
+                QtdContas    = g.Count(),
+                TotalDevendo = g.Sum(c => c.ValorTotal - c.ValorRecebido),
+                Contas       = g.OrderBy(c => c.DataVencimento).ToList()
+            })
+            .OrderByDescending(g => g.TotalDevendo)
+            .ToList();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -136,7 +211,7 @@
         await CarregarContasAsync();
     }
 
-    private async Task MudarTab(string tab) { _tab = tab; await CarregarContasAsync(); }
+    private async Task MudarTab(string tab) { _tab = tab; _clienteSelecionado = null; await CarregarContasAsync(); }
 
     private async Task CarregarContasAsync()
     {
@@ -156,7 +231,20 @@
         {
             _resumo = await Api.GetAsync<ResumoFinanceiro>("api/contas-receber/resumo");
             await CarregarContasAsync();
+            AtualizarModalAberto();
         }
+    }
+
+    // Achado (16/09) — depois de dar baixa/gerar boleto, _contas é
+    // recarregado, mas _clienteSelecionado (o modal aberto) é uma cópia de
+    // ANTES do reload — ficaria mostrando saldo/status velho até fechar e
+    // reabrir. Re-busca o grupo atualizado do mesmo cliente, se o modal
+    // ainda estiver aberto.
+    private void AtualizarModalAberto()
+    {
+        if (_clienteSelecionado == null) return;
+        _clienteSelecionado = AgruparPorCliente()
+            .FirstOrDefault(g => g.CustomerId == _clienteSelecionado.CustomerId);
     }
 
     // ── Gerar boleto via Asaas ────────────────────────────────────────────────
@@ -169,6 +257,7 @@
             if (resultado.IsSuccessStatusCode)
             {
                 await CarregarContasAsync();
+                AtualizarModalAberto();
                 await JS.InvokeVoidAsync("alert", "✅ Boleto gerado! Clique em 🎫 Ver para abrir.");
             }
             else
@@ -236,5 +325,14 @@
     {
         public string  Name  { get; set; } = "";
         public string? Phone { get; set; }
+    }
+
+    class GrupoCliente
+    {
+        public Guid CustomerId { get; set; }
+        public string Nome { get; set; } = "";
+        public int QtdContas { get; set; }
+        public decimal TotalDevendo { get; set; }
+        public List<ContaItem> Contas { get; set; } = [];
     }
 }
