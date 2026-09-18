@@ -36,4 +36,13 @@ public class User : BaseEntity
     // NOVO RBAC: Substitui o antigo Enum
     public Guid? RoleId { get; set; }
     public Role? Role { get; set; } = null!;
+
+    // ── Controle de versão de sessão (16/09) ──────────────────────────────
+    /// <summary>Incrementado a cada revogação de sessão (logout, troca de
+    /// senha, desativação da conta). O JWT carrega a versão vigente no
+    /// momento do login como claim "token_version" — se não bater mais com
+    /// esse valor, o token é rejeitado mesmo sem ter expirado ainda.
+    /// Global por usuário, de propósito: revogar derruba TODOS os
+    /// aparelhos/sessões daquela pessoa de uma vez, não só um específico.</summary>
+    public int TokenVersion { get; set; } = 1;
 }

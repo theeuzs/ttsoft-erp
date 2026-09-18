@@ -9,6 +9,8 @@ using ERP.Infrastructure.Repositories;
 using ERP.Infrastructure.Services;
 using ERP.Infrastructure.UnitOfWork;
 using ERP.Persistence.Context;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using AspNetCoreRateLimit;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -335,6 +337,49 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                      path.StartsWithSegments("/hubs/erp-chat")))
                     ctx.Token = token;
                 return Task.CompletedTask;
+            },
+
+            // Achado (16/09) — controle de versão de sessão. Roda DEPOIS da
+            // validação criptográfica do token (assinatura/expiração já
+            // conferidas nesse ponto) — só checa se a versão que o token
+            // carrega ainda bate com a versão atual do usuário no banco.
+            // Se não bater (logout, troca de senha, conta desativada desde
+            // que esse token foi emitido), rejeita com 401 mesmo o token
+            // sendo criptograficamente válido e ainda não expirado.
+            OnTokenValidated = async ctx =>
+            {
+                var principal = ctx.Principal;
+                var tokenVersionClaim = principal?.FindFirst("token_version")?.Value;
+
+                // Achado (16/09) — só aplica a checagem quando o token TEM a
+                // claim. Sem isso: (a) todo o parque de testes de integração
+                // (452 testes) gera token sintético sem usuário real no banco
+                // — quebraria tudo; (b) qualquer token emitido nos segundos
+                // antes desse deploy também não teria a claim ainda — forçar
+                // logout de todo mundo no exato momento do deploy seria pior
+                // experiência que só deixar esses expirarem sozinhos, como
+                // sempre funcionou (a claim nova só passa a existir pra
+                // login feito DEPOIS do deploy — daí sim protegido de verdade).
+                if (string.IsNullOrEmpty(tokenVersionClaim)) return;
+
+                var userIdClaim = principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+                                ?? principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                if (!Guid.TryParse(userIdClaim, out var userId) ||
+                    !int.TryParse(tokenVersionClaim, out var tokenVersion))
+                {
+                    ctx.Fail("Token com claim de versão de sessão inválida.");
+                    return;
+                }
+
+                var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                var atual = await db.Users.IgnoreQueryFilters().AsNoTracking()
+                    .Where(u => u.Id == userId)
+                    .Select(u => new { u.TokenVersion, u.IsActive })
+                    .FirstOrDefaultAsync();
+
+                if (atual == null || !atual.IsActive || atual.TokenVersion != tokenVersion)
+                    ctx.Fail("Sessão revogada — faça login novamente.");
             }
         };
     });

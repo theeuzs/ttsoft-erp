@@ -216,11 +216,8 @@ public record SaleDto(
     SaleStatus Status,
     string PaymentMethods,
     decimal Total,
-    // Achado (10/09) — Portal (Vendas.razor) mostrava Subtotal sempre R$0,00
-    // e Desconto sempre "—", porque esses campos nunca existiam aqui. Não
-    // era bug de leitura do Portal, era a API nunca mandando o dado.
-    decimal Subtotal = 0,
-    decimal DiscountAmount = 0,
+    decimal Subtotal = 0m,
+    decimal DiscountAmount = 0m,
     string? NfceChave = null,
     string? NfceNumero = null,
     string? NfceUrlDanfe = null,
@@ -294,6 +291,7 @@ public class UserDto
     public List<string> Permissions { get; set; } = new();
     public decimal MaxDiscountPercentage { get; set; }
     public decimal MaxSangriaValue { get; set; }
+    public int TokenVersion { get; set; } = 1;
     public UserDto() { }
 }
 

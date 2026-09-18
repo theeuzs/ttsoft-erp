@@ -238,6 +238,27 @@ public class ResumoCaixaViewModel : BaseViewModel
                         Despesas += Math.Abs(mov.Valor);
                         Extrato.Add($"{textoDescricao}\t\t - R$ {Math.Abs(mov.Valor):N2}");
                     }
+                    else if (mov.Tipo == TipoMovimentoCaixa.CancelamentoVenda)
+                    {
+                        // Achado (17/09) — cancelar venda já cria o estorno certo no
+                        // banco (SaleService.CancelAsync, valor negativo), mas essa
+                        // tela nunca sabia reconhecer TipoMovimentoCaixa.
+                        // CancelamentoVenda — só tratava estorno quando vinha como
+                        // Sangria com "estorno" no texto (padrão mais antigo). Sem
+                        // um branch próprio, caía no "senão" genérico lá embaixo, que
+                        // só escreve no extrato mas não desconta de nenhum total —
+                        // por isso "o dinheiro continua no caixa" mesmo com a venda
+                        // cancelada. Usa += (não -=) porque mov.Valor aqui JÁ vem
+                        // negativo — subtrair de novo inverteria o sinal errado.
+                        if (mov.FormaPagamento == PaymentMethod.Dinheiro) VendasDinheiro += mov.Valor;
+                        else if (mov.FormaPagamento == PaymentMethod.Pix) VendasPix += mov.Valor;
+                        else if (mov.FormaPagamento == PaymentMethod.CartaoDebito) VendasCartaoDebito += mov.Valor;
+                        else if (mov.FormaPagamento == PaymentMethod.CartaoCredito) VendasCartaoCredito += mov.Valor;
+                        else if (mov.FormaPagamento == PaymentMethod.Haver) VendasHaver += mov.Valor;
+                        else VendasAPrazo += mov.Valor;
+
+                        Extrato.Add($"ESTORNO ({mov.FormaPagamento})\t\t - R$ {Math.Abs(mov.Valor):N2}");
+                    }
                     else if (!string.IsNullOrWhiteSpace(textoDescricao))
                     {
                         // Defesa: qualquer TipoMovimentoCaixa futuro que apareça aqui sem

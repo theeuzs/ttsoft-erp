@@ -145,4 +145,17 @@ public class UserRepository : IUserRepository
         => await _context.Users
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(u => u.Id == userId && !u.IsDeleted);
+
+    public async Task RevokeSessionsAsync(Guid userId)
+    {
+        var user = await _context.Users.AsTracking()
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.Id == userId);
+
+        if (user == null) return; // usuário já não existe — nada a revogar
+
+        user.TokenVersion++;
+        user.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+    }
 }

@@ -26,4 +26,10 @@ public interface IUserRepository
     Task UpdateLoginAttemptAsync(Guid userId, Guid tenantId, int failedAttempts, DateTime? lockoutEndUtc);
     Task<User?> GetByIdAsync(Guid userId);
     Task UpdatePasswordAsync(Guid userId, Guid tenantId, string newPasswordHash, bool mustChangePassword);
+
+    /// <summary>Controle de versão de sessão (16/09) — incrementa TokenVersion,
+    /// invalidando todo token já emitido pra esse usuário (logout, troca de
+    /// senha, desativação de conta). Global por usuário: derruba todos os
+    /// aparelhos/sessões da pessoa de uma vez, de propósito.</summary>
+    Task RevokeSessionsAsync(Guid userId);
 }

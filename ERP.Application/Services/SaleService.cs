@@ -62,13 +62,6 @@ public class SaleService : ISaleService
     {
         await _validator.ValidateAndThrowAsync(dto);
 
-        // Fase 1 do Offline-First — idempotência (§7 do OFFLINE_FIRST_ARCHITECTURE.md).
-        // Cenário: PDV envia a venda, servidor grava com sucesso, mas a resposta
-        // se perde (queda de rede bem nesse instante) — o PDV, achando que
-        // falhou, tenta de novo. Sem essa checagem, isso duplicaria a venda.
-        // dto.Id só vem preenchido em sincronização offline; venda online
-        // normal nunca manda esse campo, então esse bloco não muda nada do
-        // comportamento existente pra elas.
         if (dto.Id.HasValue)
         {
             var existente = await _uow.Sales.GetByIdAsync(dto.Id.Value);
@@ -76,10 +69,6 @@ public class SaleService : ISaleService
                 return _mapper.Map<SaleDto>(existente);
         }
 
-        // Regra de caixa é por SaleOrigin agora (ver ISalePolicyService) — PDV continua
-        // exigindo, Marketplace nunca passa pelo caixa físico. _salePolicy null (DI
-        // não configurado em algum caller antigo) cai no default seguro: exige caixa,
-        // igual o comportamento de sempre.
         var exigeCaixa = _salePolicy?.RequerCaixaAberto(dto.Origem) ?? true;
         if (exigeCaixa)
         {
@@ -110,39 +99,16 @@ public class SaleService : ISaleService
             }).ToList()
         };
 
-        // ── FASE 0 FIX: Transação única para baixa de estoque + criação da venda ──
-        // Antes: BaixarEstoqueAtomico tinha commit próprio e _uow.CommitAsync()
-        // vinha depois sem transação envolvendo os dois. Se o segundo commit falhasse
-        // (queda de rede, constraint violation, etc.), o estoque já havia sido baixado
-        // sem a venda correspondente → estoque fantasma garantido.
-        //
-        // Agora: ambas as operações estão dentro de uma única ITransaction.
-        // Se qualquer parte falhar, o RollbackAsync desfaz tudo — incluindo o UPDATE
-        // SQL do BaixarEstoqueAtomico, que usa a mesma conexão/transação do DbContext.
-        //
-        // NOTA para testes com InMemory: ITransaction/EfTransaction em InMemory é um no-op
-        // (não há rollback real), mas o comportamento de negócio permanece correto.
-        // Para testes de rollback real, use SQLite in-process (ver SaleServiceTests).
-
         var produtosComEstoqueAlterado = new HashSet<Guid>();
 
-        // FIX (EnableRetryOnFailure): transação manual + retry automático do EF
-        // exigem executar via "execution strategy" — sem isso, BeginTransactionAsync
-        // lança "does not support user-initiated transactions". BeginTransactionAsync
-        // TEM que ficar dentro do delegate: se uma falha transitória acontecer, o EF
-        // reexecuta o delegate inteiro do zero, e cada tentativa precisa da sua
-        // própria transação nova — por isso produtosComEstoqueAlterado.Clear()
-        // também no início, pra não acumular de uma tentativa anterior que falhou.
         await _uow.ExecuteInTransactionAsync(async () =>
         {
             produtosComEstoqueAlterado.Clear();
-            sale.Items.Clear(); // idem: sale é construído fora do delegate, retry não pode duplicar itens
+            sale.Items.Clear();
             await using var tx = await _uow.BeginTransactionAsync();
             try
             {
-                // S8 FIX: busca GrupoPreco do cliente para aplicar tabela de preço correta no servidor.
-                // Antes: UnitPrice vinha inteiramente do cliente → subfaturamento arbitrário contornando qualquer política.
-                var grupoPreco = ERP.Domain.Enums.GrupoPreco.A; // default varejo
+                var grupoPreco = ERP.Domain.Enums.GrupoPreco.A;
                 if (dto.CustomerId.HasValue)
                 {
                     var clienteGrupo = await _uow.Customers.GetByIdAsync(dto.CustomerId.Value);
@@ -150,7 +116,6 @@ public class SaleService : ISaleService
                         grupoPreco = clienteGrupo.GrupoPreco;
                 }
 
-                // 2. Baixa de Estoque (atômica — segura em multi-terminal)
                 foreach (var itemDto in dto.Items)
                 {
                     var product = await _uow.Products.GetByIdAsync(itemDto.ProductId)
@@ -186,14 +151,12 @@ public class SaleService : ISaleService
                             $"(necessário: {qtdEstoque:N2}, disponível no estoque). " +
                             $"Outro terminal pode ter vendido o último item agora mesmo.");
 
-                    // S13: validação de desconto via DescontoPolicy (antes inline — S9)
                     var (descontoOk, descontoErro) = ERP.Application.Helpers.DescontoPolicy.Validar(
                         itemDto.DiscountPercent,
                         _tenant.MaxDiscountPercentage,
                         product.Name);
                     if (!descontoOk) throw new InvalidOperationException(descontoErro!);
 
-                    // S8 FIX: UnitPrice sempre do servidor (Product.GetPrecoParaGrupo), nunca do cliente.
                     var unitPriceNormal = product.GetPrecoParaGrupo(grupoPreco);
 
                     bool ehAtacado = product.WholesalePrice.HasValue
@@ -205,16 +168,6 @@ public class SaleService : ISaleService
 
                     if (ehAtacado)
                     {
-                        // S18 FIX (13/08, incidente real Vila Verde + confirmado com o
-                        // dono do sistema): WholesalePrice é preço do PACOTE/barra
-                        // inteira fechada, não preço por unidade. O código antigo fazia
-                        // `unitPrice = product.WholesalePrice.Value` e multiplicava por
-                        // Quantity inteira — cobrava 6 barras de R$59,90 como
-                        // 6 × R$59,90 = R$359,40 em vez de R$59,90 pela barra de 6m.
-                        // Agora replica a mesma fórmula que o WPF já usa (CartItem.Total,
-                        // PdvViewModel.cs) — pacotes fechados × preço do pacote + sobra
-                        // fracionária × preço normal — pra servidor e tela nunca mais
-                        // divergirem em qual é o valor real da venda.
                         var (totalAtacado, precoEquivalente) = ERP.Application.Helpers.DescontoPolicy.CalcularTotalAtacado(
                             itemDto.Quantity, product.WholesaleMinQuantity!.Value, product.WholesalePrice!.Value,
                             unitPriceNormal, itemDto.DiscountPercent);
@@ -236,19 +189,14 @@ public class SaleService : ISaleService
                         ProductId       = product.Id,
                         ProductName     = product.Name,
                         Quantity        = qtdEstoque,
-                        UnitPrice       = unitPrice,            // ← servidor
+                        UnitPrice       = unitPrice,
                         DiscountPercent = itemDto.DiscountPercent,
-                        TotalItem       = totalItem             // ← recomputado
+                        TotalItem       = totalItem
                     });
                 }
 
                 sale.RecalculateTotals();
 
-                // 5. Limite de crédito (venda A Prazo) — bloqueia de verdade, não só avisa.
-                // Customer.SaldoDevedor nunca é atualizado em lugar nenhum do sistema
-                // (nem aqui, nem na baixa/cancelamento de ContaReceber) — usá-lo pra
-                // decidir qualquer coisa sempre daria "tudo liberado", então a dívida
-                // é somada ao vivo direto das ContasReceber pendentes do cliente.
                 var valorAPrazo = dto.Payments
                     .Where(p => p.PaymentMethod == Domain.Enums.PaymentMethod.APrazo)
                     .Sum(p => p.Amount);
@@ -265,10 +213,6 @@ public class SaleService : ISaleService
                     }
                 }
 
-                // 3. Saldo em Haver — atômico (mesmo padrão do estoque). Antes: lia
-                // customer.HaverBalance, subtraía em C#, e gravava via _uow.Customers.Update
-                // (SaveChanges absoluto) — lost-update clássico se duas vendas debitassem
-                // o mesmo cliente quase ao mesmo tempo.
                 var pagamentoHaver = dto.Payments.FirstOrDefault(p => p.PaymentMethod == Domain.Enums.PaymentMethod.Haver);
                 if (pagamentoHaver != null && dto.CustomerId.HasValue)
                 {
@@ -280,21 +224,17 @@ public class SaleService : ISaleService
                             "Saldo haver insuficiente (ou outra operação debitou o saldo agora mesmo).");
                 }
 
-                // 4. Persiste venda — dentro da mesma transação da baixa de estoque
                 await _uow.Sales.AddAsync(sale);
                 await _uow.CommitAsync();
                 await tx.CommitAsync();
             }
             catch (Exception ex)
             {
-                // RollbackAsync desfaz tanto o CommitAsync do EF quanto o UPDATE SQL
-                // do BaixarEstoqueAtomico — os dois estão na mesma transação.
                 await tx.RollbackAsync();
                 throw new Exception($"ERRO NA VENDA (revertido): {ex.InnerException?.Message ?? ex.Message}", ex);
             }
         });
         
-        // Sprint Q: acumular pontos de fidelidade se tiver cliente
         if (sale.CustomerId.HasValue && _fidelidade != null)
         {
             try { await _fidelidade.AcumularPontosAsync(sale.CustomerId.Value, sale.Id, sale.Total); }
@@ -305,10 +245,6 @@ public class SaleService : ISaleService
             }
         }
 
-        // Estoque → marketplace: avisa qualquer canal onde os produtos vendidos
-        // estão anunciados, pra não vender lá um item que já zerou aqui. Depois
-        // do commit (a venda já está garantida) e best-effort (EstoqueSyncService
-        // nunca lança — Mercado Livre fora do ar não pode derrubar uma venda no PDV).
         if (_estoqueSync != null)
             foreach (var productId in produtosComEstoqueAlterado)
                 await _estoqueSync.SincronizarProdutoAsync(productId);
@@ -317,7 +253,6 @@ public class SaleService : ISaleService
     }
     public async Task AtualizarDadosNfceAsync(Guid vendaId, string urlDanfe, string status, string ambiente, string referencia)
 {
-    // 👇 Mudamos de _repository para _uow.Sales 👇
     var venda = await _uow.Sales.GetByIdAsync(vendaId); 
     
     if (venda != null)
@@ -327,11 +262,6 @@ public class SaleService : ISaleService
         venda.NfceAmbiente = ambiente;
         venda.NfceReferencia = referencia;
 
-        // Achado (10/09) — venda.Status nunca transicionava pra NotaEmitida
-        // em lugar nenhum do código. A nota era emitida com sucesso de
-        // verdade na SEFAZ (NfceStatusFocus virava "Autorizada" certinho),
-        // mas o histórico de venda (WPF e Portal) sempre mostrava "Sem
-        // Nota", porque é esse campo que as telas realmente checam.
         if (status == "Autorizada")
             venda.Status = Domain.Enums.SaleStatus.NotaEmitida;
         
@@ -342,7 +272,6 @@ public class SaleService : ISaleService
 
 public async Task<IEnumerable<SalesReportItemDto>> GetSalesReportAsync(DateTime startDate, DateTime endDate, string? sellerName = null)
     {
-        // 1. Agora o banco já nos entrega tudo mastigado, cruzado e super rápido!
         var sales = await _uow.Sales.GetSalesByPeriodAsync(startDate, endDate);
 
         var query = sales.AsEnumerable();
@@ -358,7 +287,6 @@ public async Task<IEnumerable<SalesReportItemDto>> GetSalesReportAsync(DateTime 
             
             if (s.Payments != null && s.Payments.Any())
             {
-                // Como agora o banco trouxe os pagamentos de verdade, isso aqui vai funcionar 100% das vezes
                 pagamentoStr = s.Payments.First().PaymentMethod.ToString();
             }
 
@@ -366,10 +294,7 @@ public async Task<IEnumerable<SalesReportItemDto>> GetSalesReportAsync(DateTime 
             {
                 DataVenda = s.SaleDate, 
                 NumeroRecibo = s.SaleNumber ?? s.Id.ToString().Substring(0, 8).ToUpper(), 
-                
-                // O Include já conectou o cliente, não precisamos mais cruzar listas!
                 ClienteNome = s.Customer?.Name ?? "Consumidor Final", 
-                
                 VendedorNome = s.SellerName ?? "Desconhecido",
                 FormaPagamento = pagamentoStr, 
                 ValorTotal = s.Total 
@@ -387,7 +312,6 @@ public async Task<IEnumerable<SalesReportItemDto>> GetSalesReportAsync(DateTime 
         if (sale.Status == Domain.Enums.SaleStatus.Cancelada)
             throw new InvalidOperationException("Venda já está cancelada.");
 
-        // 1. DEVOLVE OS PRODUTOS PARA O ESTOQUE (Agrupado para evitar erro de Tracking)
         var itensAgrupados = sale.Items.GroupBy(i => i.ProductId);
         
         foreach (var grupo in itensAgrupados)
@@ -398,12 +322,10 @@ public async Task<IEnumerable<SalesReportItemDto>> GetSalesReportAsync(DateTime 
                 decimal quantidadeTotalDevolvida = grupo.Sum(i => i.Quantity);
                 product.Stock += quantidadeTotalDevolvida;
                 
-                _uow.Products.Update(product); // 👈 Rastreado na mão direita do EF
+                _uow.Products.Update(product);
             }
         }
 
-        // 2. DEVOLVE O SALDO "HAVER" DO CLIENTE E GERA O HISTÓRICO
-        // 👇 Colocamos a interrogação (?) caso o EF não tenha carregado os pagamentos
         var pagamentoHaver = sale.Payments?.FirstOrDefault(p => p.PaymentMethod == Domain.Enums.PaymentMethod.Haver);
         
         if (pagamentoHaver != null && sale.CustomerId.HasValue)
@@ -414,7 +336,6 @@ public async Task<IEnumerable<SalesReportItemDto>> GetSalesReportAsync(DateTime 
                 customer.HaverBalance += pagamentoHaver.Amount;
                 _uow.Customers.Update(customer); 
 
-                // 👇 Verificação de segurança para a injeção de dependência
                 if (_haverService == null)
                 {
                     throw new Exception("Ei! O _haverService está nulo. Verifique se você colocou '_haverService = haverService;' dentro do construtor do SaleService.");
@@ -426,18 +347,30 @@ public async Task<IEnumerable<SalesReportItemDto>> GetSalesReportAsync(DateTime 
             }
         }
 
-        // 2.1. Achado (11/09) — cancelar venda nunca revertia o movimento de
-        // CAIXA: o dinheiro/cartão continuava contando no "Resumo Financeiro"
-        // mesmo com a venda cancelada. Pra cada forma de pagamento (menos
-        // Haver, já revertido acima), acha o lançamento original e cria um
-        // estorno com valor negativo — o Tipo CancelamentoVenda já existia no
-        // enum, previsto, mas nunca usado em lugar nenhum antes desse fix.
+        // Achado (11/09) — cancelar venda nunca revertia o movimento de
+        // CAIXA. Pra cada forma de pagamento (menos Haver, já revertido
+        // acima), acha o lançamento original e cria um estorno com valor
+        // negativo.
+        //
+        // Achado (17/09) — bug real, achado num cancelamento de verdade na
+        // Vila Verde: "Cannot insert duplicate key row... unique index
+        // 'IX_CaixaMovimentos_SalePaymentId'". SalePaymentId = pagamento.Id
+        // reusava o MESMO id que o lançamento ORIGINAL (feito na hora da
+        // venda) já ocupa nesse índice único — a inserção do estorno sempre
+        // colidia, pra QUALQUER venda com pagamento não-Haver, não só essa.
+        // Esse índice existe pra impedir cobrar o MESMO pagamento duas vezes
+        // (idempotência da cobrança original) — o estorno é um evento
+        // diferente, não uma cobrança repetida, então não deveria competir
+        // por aquele valor. SalePaymentId aqui vira null (coluna aceita,
+        // índice único do SQL Server permite múltiplos null sem conflito) —
+        // a rastreabilidade não se perde: Descricao e VendaId já deixam
+        // claro o que está sendo estornado.
         if (sale.Payments != null)
         {
             foreach (var pagamento in sale.Payments.Where(p => p.PaymentMethod != Domain.Enums.PaymentMethod.Haver))
             {
                 var movimentoOriginal = await _uow.Caixas.ObterMovimentoOriginalAsync(pagamento.Id);
-                if (movimentoOriginal == null) continue; // venda antiga, sem lançamento de caixa — nada a estornar
+                if (movimentoOriginal == null) continue;
 
                 await _uow.Caixas.AddMovimentoAsync(new Domain.Entities.CaixaMovimento
                 {
@@ -449,12 +382,11 @@ public async Task<IEnumerable<SalesReportItemDto>> GetSalesReportAsync(DateTime 
                     Tipo           = Domain.Enums.TipoMovimentoCaixa.CancelamentoVenda,
                     DataHora       = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
                     VendaId        = sale.Id,
-                    SalePaymentId  = pagamento.Id
+                    SalePaymentId  = null
                 });
             }
         }
 
-        // 3. CANCELA CONTAS A RECEBER VINCULADAS À VENDA
         var contasReceber = await _uow.ContasReceber.GetBySaleIdAsync(id)?? new List<ContaReceber>();
         foreach (var conta in contasReceber.Where(c => c.Status == "Pendente"))
         {
@@ -463,23 +395,19 @@ public async Task<IEnumerable<SalesReportItemDto>> GetSalesReportAsync(DateTime 
             _uow.ContasReceber.Update(conta);
         }
 
-        // 4. CANCELA A VENDA NO BANCO
         sale.Cancel(reason);
         sale.Status = Domain.Enums.SaleStatus.Cancelada;
         
-        // 👇 O SEGREDO ANTI-TRACKING 👇
         sale.Customer = null; 
         foreach (var item in sale.Items)
         {
             item.Product = null;
         }
         
-        _uow.Sales.Update(sale); // 👈 Agora o EF atualiza só a venda sem puxar os penduricalhos!
+        _uow.Sales.Update(sale);
         
         await _uow.CommitAsync();
     }
-    // S8 FIX: new Random() sem seed explícito → colisão em chamadas concorrentes dentro de ~15ms (seed = TickCount).
-    // ThreadLocal garante instância isolada por thread com seed por GUID → zero colisão.
     private static readonly ThreadLocal<Random> _rng =
         new(() => new Random(Guid.NewGuid().GetHashCode()));
 

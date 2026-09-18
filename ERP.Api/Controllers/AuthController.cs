@@ -66,6 +66,27 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Controle de versão de sessão (16/09) — incrementa TokenVersion do
+    /// usuário autenticado, invalidando IMEDIATAMENTE qualquer token já
+    /// emitido pra ele (esse incluído), mesmo antes de expirar sozinho.
+    /// Global por usuário: derruba todos os aparelhos/sessões da pessoa de
+    /// uma vez, de propósito — não é logout "só desse dispositivo".
+    /// </summary>
+    [HttpPost("logout")]
+    [Authorize]
+    public async Task<IActionResult> Logout()
+    {
+        var userIdClaim = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+                       ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        if (!Guid.TryParse(userIdClaim, out var userId))
+            return Unauthorized(new { erro = "Token inválido." });
+
+        await _uow.Users.RevokeSessionsAsync(userId);
+        return Ok(new { mensagem = "Sessão encerrada em todos os dispositivos." });
+    }
+
+    /// <summary>
     /// Troca a senha do usuário autenticado (1.7.4 — MustChangePassword enforcement).
     /// Obrigatório quando JWT contém claim "must_change_password: true".
     /// Após a troca, faça login novamente para obter um token sem a restrição.
@@ -354,6 +375,13 @@ public class AuthController : ControllerBase
             new(JwtRegisteredClaimNames.Jti,  Guid.NewGuid().ToString()),
             new("tenant_id",                  tenantId.ToString()),
             new("role_name",                  user.RoleName),
+            // Achado (16/09) — controle de versão de sessão: se essa versão
+            // não bater mais com User.TokenVersion no banco no momento da
+            // requisição, o token é rejeitado mesmo sem ter expirado ainda
+            // (logout, troca de senha, desativação da conta incrementam a
+            // versão). Global por usuário — revoga TODOS os aparelhos/
+            // sessões daquela pessoa de uma vez, de propósito.
+            new("token_version",              user.TokenVersion.ToString()),
             // S9: limite de desconto da role no token — lido pelo TenantMiddleware → IRequestTenant.
             // Evita lookup no DB por venda; Admin=100, Gerente=30, Supervisor=15, Vendedor=5.
             new("max_discount", user.MaxDiscountPercentage.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)),

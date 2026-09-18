@@ -84,7 +84,8 @@ public class AuthService : IAuthService
             RoleName              = user.Role?.Name ?? "Sem Perfil",
             Permissions           = user.Role?.Permissions.Select(p => p.Code).ToList() ?? new List<string>(),
             MaxDiscountPercentage = user.Role?.MaxDiscountPercentage ?? 0m,
-            MaxSangriaValue       = user.Role?.MaxSangriaValue ?? 0m
+            MaxSangriaValue       = user.Role?.MaxSangriaValue ?? 0m,
+            TokenVersion          = user.TokenVersion
         }, mustChangePassword: user.MustChangePassword);
     }
 
@@ -112,6 +113,11 @@ public class AuthService : IAuthService
 
         // S12 FIX: passa user.TenantId explicitamente (S10 N1 pattern)
         await _userRepository.UpdatePasswordAsync(userId, user.TenantId, hash, mustChangePassword: false);
+
+        // Achado (16/09) — controle de versão de sessão: troca de senha
+        // precisa invalidar qualquer token já emitido, senão alguém com o
+        // token antigo continua com acesso mesmo depois da troca.
+        await _userRepository.RevokeSessionsAsync(userId);
 
         Log.Information("Senha alterada com sucesso para usuário {UserId}", userId);
     }
