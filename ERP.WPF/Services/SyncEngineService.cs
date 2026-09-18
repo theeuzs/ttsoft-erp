@@ -70,6 +70,11 @@ public class SyncEngineService
     /// <returns>Quantos eventos foram sincronizados com sucesso nessa passada.</returns>
     public async Task<int> ProcessarOutboxAsync()
     {
+        // Achado (17/09) — recupera vendas presas em VendasOffline sem par
+        // na SyncOutbox antes de processar, senão ficam pendentes pra
+        // sempre sem chance de sincronizar (ver comentário no método).
+        await _offlineDb.ReconciliarVendasOfflineOrfasAsync();
+
         var pendentes = await _offlineDb.GetEventosPendentesAsync();
         int sucessos = 0;
 

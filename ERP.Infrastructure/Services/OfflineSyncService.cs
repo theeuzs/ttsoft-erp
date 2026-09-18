@@ -353,6 +353,58 @@ public class OfflineSyncService
         return lista;
     }
 
+    // Achado (17/09) — venda pendente vista no diagnóstico ("Vendas
+    // pendentes: 1"), mas "Processar Outbox Agora" sempre achava 0 eventos.
+    // VendasOffline e SyncOutbox são gravadas juntas, na mesma transação,
+    // desde que SalvarVendaOfflineComOutboxAsync existe — mas essa venda
+    // específica é mais antiga que essa gravação dupla (de antes da
+    // SyncOutbox genérica existir, ou de um caminho de código anterior que
+    // só gravava em VendasOffline). Fica pendente pra sempre em VendasOffline,
+    // órfã, sem chance de ser pega por ProcessarOutboxAsync, que só lê
+    // SyncOutbox. Chamado no início de ProcessarOutboxAsync — encontra
+    // qualquer venda pendente em VendasOffline sem par correspondente em
+    // SyncOutbox e cria o par que falta, pra ela voltar a ser processável.
+    // Autocura pra esse caso específico, não só um remendo manual único.
+    public async Task<int> ReconciliarVendasOfflineOrfasAsync()
+    {
+        using var conn = Abrir();
+        await conn.OpenAsync();
+
+        var orfas = new List<(string Id, string Json)>();
+        using (var cmdBusca = conn.CreateCommand())
+        {
+            cmdBusca.CommandText = @"
+                SELECT vo.Id, vo.DadosJson FROM VendasOffline vo
+                WHERE vo.Status = 'Pendente'
+                AND NOT EXISTS (SELECT 1 FROM SyncOutbox so WHERE so.EntidadeId = vo.Id)";
+            using var reader = await cmdBusca.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                orfas.Add((reader.GetString(0), reader.GetString(1)));
+        }
+
+        if (orfas.Count == 0) return 0;
+
+        var agora = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().ToString("O");
+        using var tx = conn.BeginTransaction();
+        foreach (var (id, json) in orfas)
+        {
+            using var cmdInsert = conn.CreateCommand();
+            cmdInsert.Transaction = tx;
+            cmdInsert.CommandText = @"
+                INSERT INTO SyncOutbox (Id, TipoEvento, EntidadeId, PayloadJson, CriadoEm, Tentativas, Status)
+                VALUES (@id, 'SALE_CREATED', @entidadeId, @json, @dt, 0, 'Pendente')";
+            cmdInsert.Parameters.AddWithValue("@id",         Guid.NewGuid().ToString());
+            cmdInsert.Parameters.AddWithValue("@entidadeId", id);
+            cmdInsert.Parameters.AddWithValue("@json",       json);
+            cmdInsert.Parameters.AddWithValue("@dt",         agora);
+            await cmdInsert.ExecuteNonQueryAsync();
+        }
+        tx.Commit();
+
+        await RegistrarLogAsync("ReconciliacaoOutbox", $"{orfas.Count} venda(s) órfã(s) reincluída(s) na fila de sincronização.");
+        return orfas.Count;
+    }
+
     public async Task MarcarEventoSincronizadoAsync(string outboxId, Guid entidadeId)
     {
         using var conn = Abrir();
