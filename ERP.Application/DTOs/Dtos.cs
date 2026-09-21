@@ -141,7 +141,11 @@ public record CustomerDto(
     string? Email         = null,
     int     GrupoPreco    = 0,
     decimal LimiteCredito = 0,
-    decimal SaldoDevedor  = 0
+    decimal SaldoDevedor  = 0,
+    // S{N} FIX (Fase C): Complement nunca era exposto — CustomerViewModel
+    // não tinha de onde ler e mandava "" no save, apagando o complemento a
+    // cada edição. Opcional no FIM pra não quebrar chamadas posicionais.
+    string? Complement    = null
 );
 
 // ── Sale ──────────────────────────────────────────────────

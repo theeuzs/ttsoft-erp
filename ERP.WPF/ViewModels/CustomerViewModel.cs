@@ -212,12 +212,14 @@ public class CustomerViewModel : BaseViewModel
         GrupoPreco         = (GrupoPreco)c.GrupoPreco;
         LimiteCredito      = c.LimiteCredito;
         SaldoDevedor       = c.SaldoDevedor;
-        Email              = string.Empty;
+        // S{N} FIX (Fase C): era string.Empty fixo — o save seguinte apagava o
+        // e-mail do cliente no banco (mapper copia "" por cima). Mesmo caso do Complement.
+        Email              = c.Email        ?? string.Empty;
         StateRegistration  = c.Ie           ?? string.Empty;
         ZipCode            = c.ZipCode      ?? string.Empty;
         Street             = c.Street       ?? string.Empty;
         Number             = c.Number       ?? string.Empty;
-        Complement         = string.Empty;
+        Complement         = c.Complement   ?? string.Empty;
         Neighborhood       = c.Neighborhood ?? string.Empty;
         City               = c.City         ?? string.Empty;
         State              = c.State        ?? string.Empty;

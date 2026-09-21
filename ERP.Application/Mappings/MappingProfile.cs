@@ -65,7 +65,8 @@ public class MappingProfile : Profile
                 c.Email,
                 (int)c.GrupoPreco,
                 c.LimiteCredito,
-                c.SaldoDevedor
+                c.SaldoDevedor,
+                c.Complement
             ));
             
         CreateMap<CreateCustomerDto, Customer>();

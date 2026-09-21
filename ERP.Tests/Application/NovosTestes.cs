@@ -201,6 +201,28 @@ public class CustomerServiceTests
         await Assert.ThrowsAsync<KeyNotFoundException>(
             () => svc.UpdateAsync(Guid.NewGuid(), new CreateCustomerDto { Name = "X" }));
     }
+
+    [Fact(DisplayName = "Fase C — UpdateAsync com Document vazio grava null (índice único filtra só IS NOT NULL)")]
+    public async Task UpdateAsync_DocumentVazio_GravaNull()
+    {
+        var cliente = new Customer { Id = Guid.NewGuid(), Name = "Sem CPF", Document = "" };
+
+        var uow  = new Mock<IUnitOfWork>();
+        var repo = new Mock<ICustomerRepository>();
+        repo.Setup(r => r.GetByIdTrackedAsync(cliente.Id)).ReturnsAsync(cliente);
+        uow.Setup(u => u.Customers).Returns(repo.Object);
+        uow.Setup(u => u.CommitAsync()).ReturnsAsync(1);
+
+        var svc = new CustomerService(uow.Object,
+            new Mock<AutoMapper.IMapper>().Object,
+            new Mock<FluentValidation.IValidator<CreateCustomerDto>>().Object);
+
+        await svc.UpdateAsync(cliente.Id, new CreateCustomerDto { Name = "Sem CPF", Document = "" });
+
+        cliente.Document.Should().BeNull(
+            "\"\" colidiria em IX_Customers_TenantId_Document no 2º cliente sem CPF do tenant");
+        uow.Verify(u => u.CommitAsync(), Times.Once);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

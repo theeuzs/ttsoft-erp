@@ -816,6 +816,16 @@ public class PdvViewModel : BaseViewModel
         catch (Exception ex) { MessageBox.Show($"Erro ao buscar cliente: {ex.Message}"); }
     }
 
+    // Achado (17/09) — sem isso, digitar rápido (ex: "PARAFUSO PH") podia
+    // disparar duas buscas em sequência (uma por "PARAFUSO", outra pela
+    // frase completa), e se a resposta da busca MAIS CURTA chegasse DEPOIS
+    // da mais completa (rede varia, GetByBarcodeAsync + SearchAsync são 2
+    // idas ao Azure SQL por chamada), ela sobrescrevia o resultado certo —
+    // às vezes com uma lista errada, às vezes esvaziando tudo, sem erro
+    // nenhum aparecer. Mesmo padrão de "descarta resposta atrasada" já
+    // usado na busca de cliente do PDV Portal.
+    private int _buscaProdutoSeq = 0;
+
     private async Task SearchProductAsync()
     {
         if (string.IsNullOrWhiteSpace(SearchTerm)) 
@@ -823,6 +833,8 @@ public class PdvViewModel : BaseViewModel
             SearchResults.Clear();
             return;
         }
+
+        var minhaSeq = ++_buscaProdutoSeq;
 
         try 
         {
@@ -834,7 +846,8 @@ public class PdvViewModel : BaseViewModel
                 var freshProductService = scope.ServiceProvider.GetRequiredService<IProductService>();
 
                 var byBarcode = await freshProductService.GetByBarcodeAsync(SearchTerm);
-                
+                if (minhaSeq != _buscaProdutoSeq) return; // resposta atrasada, descarta
+
                 if (byBarcode != null)
                 {
                     AddToCart(byBarcode);
@@ -844,7 +857,8 @@ public class PdvViewModel : BaseViewModel
                 }
 
                 var results = await freshProductService.SearchAsync(SearchTerm);
-                
+                if (minhaSeq != _buscaProdutoSeq) return; // resposta atrasada, descarta
+
                 SearchResults.Clear();
                 if (results != null)
                 {
@@ -870,6 +884,8 @@ public class PdvViewModel : BaseViewModel
             try
             {
                 var porCodigoBarras = await _offlineDb.BuscarProdutoPorCodigoBarrasCacheAsync(SearchTerm);
+                if (minhaSeq != _buscaProdutoSeq) return; // resposta atrasada, descarta
+
                 if (porCodigoBarras != null)
                 {
                     AddToCart(porCodigoBarras);
@@ -879,6 +895,8 @@ public class PdvViewModel : BaseViewModel
                 }
 
                 var resultadosLocais = await _offlineDb.BuscarProdutosCacheAsync(SearchTerm);
+                if (minhaSeq != _buscaProdutoSeq) return; // resposta atrasada, descarta
+
                 SearchResults.Clear();
                 foreach (var p in resultadosLocais) SearchResults.Add(p);
 
@@ -1448,8 +1466,18 @@ public class PdvViewModel : BaseViewModel
         return product;
     }
 
+    // S{N} FIX (Fase C): mesmo padrão do _buscaProdutoSeq. CustomerSearchTerm
+    // dispara busca a cada tecla; com SearchAsync virando HTTP (Fase C,
+    // módulo Cliente) a resposta de "JO" pode chegar depois da de "JOAO" e
+    // sobrescrever a lista. Também invalidado quando o termo é limpo e no
+    // SelectCustomer — senão uma resposta atrasada reabre o dropdown
+    // depois que o operador já escolheu o cliente.
+    private int _buscaClienteSeq = 0;
+
     private async Task SearchCustomerListAsync()
     {
+        var minhaSeq = ++_buscaClienteSeq;
+
         if (string.IsNullOrWhiteSpace(CustomerSearchTerm)) 
         {
             CustomerSearchResults.Clear();
@@ -1459,6 +1487,7 @@ public class PdvViewModel : BaseViewModel
         try 
         {
             var results = await _customerService.SearchAsync(CustomerSearchTerm);
+            if (minhaSeq != _buscaClienteSeq) return; // resposta atrasada, descarta
             CustomerSearchResults.Clear();
             if (results != null)
             {
@@ -1475,6 +1504,7 @@ public class PdvViewModel : BaseViewModel
     {
         if (customer != null)
         {
+            ++_buscaClienteSeq; // invalida qualquer busca de cliente ainda em voo
             _selectedCustomerId  = customer.Id;
             SelectedCustomerName = customer.Name;
             _customerSearchTerm  = string.Empty;

@@ -352,7 +352,13 @@ public partial class App : System.Windows.Application
         services.AddScoped<IBrandService,     BrandService>();
         services.AddScoped<IUserQueryService, UserQueryService>();
         services.AddScoped<IAuditLogService,  AuditLogService>();
-        services.AddScoped<ICustomerService, CustomerService>();
+        // Fase C, módulo 1 (09/2026) — HttpCustomerService no lugar do
+        // CustomerService local. Mesmo checklist da Fase B: 12 consumidores,
+        // todos via esta raiz de DI ou App.Services.CreateScope(); nenhum
+        // checa tipo concreto. REQUER a API com GET /api/customers/busca e
+        // /todos já publicada ANTES de instalar este WPF na loja.
+        // Rollback: voltar esta linha para CustomerService.
+        services.AddScoped<ICustomerService, ERP.WPF.Services.HttpCustomerService>();
         // Fase B da migração WPF→API (08/2026) — HttpSaleService no lugar do
         // SaleService local. Checklist de segurança feito antes da troca
         // (revisão cruzada com GPT): os 11 consumidores de ISaleService no

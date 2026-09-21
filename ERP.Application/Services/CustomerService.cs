@@ -105,6 +105,16 @@ public class CustomerService : ICustomerService
         // 2. Mapper injeta novos valores na entidade rastreada — ChangeTracker detecta mutação
         // 3. NÃO chamar Update() — sobrescreveria OriginalValues e quebraria auditoria
         _mapper.Map(dto, existente);
+
+        // S{N} FIX (Fase C): mesma normalização que o CreateAsync já fazia.
+        // IX_Customers_TenantId_Document é UNIQUE com filtro
+        // "[Document] IS NOT NULL" — string vazia NÃO é null, então o 2º
+        // cliente sem CPF editado com Document = "" colidia no índice.
+        // Latente no Portal; ficaria constante com o WPF via API (o
+        // HttpCustomerService manda "" em vez de null, ver comentário lá).
+        if (string.IsNullOrWhiteSpace(dto.Document))
+            existente.Document = null!;
+
         existente.UpdatedAt = DateTime.UtcNow;
 
         // 4. Commit — EF salva apenas o que mudou via ChangeTracker

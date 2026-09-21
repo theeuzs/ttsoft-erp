@@ -44,6 +44,32 @@ public class CustomersController : ControllerBase
     }
 
     /// <summary>
+    /// Fase C (migração WPF→API) — expõe ICustomerService.SearchAsync como está.
+    /// NÃO é o mesmo que GET /api/customers?search=: aquele usa
+    /// Document.Contains + ordena por nome (GetPagedAsync); este usa
+    /// Document.StartsWith (índice TenantId+Document) + Take(50), que é o que o
+    /// PDV/NotaAvulsa/Devolução do WPF sempre usaram. Paridade de resultado
+    /// importa mais que ter um endpoint só.
+    /// </summary>
+    [HttpGet("busca")]
+    [ProducesResponseType(typeof(IEnumerable<CustomerDto>), 200)]
+    public async Task<IActionResult> Search([FromQuery] string? term = null)
+        => Ok(await _service.SearchAsync(term ?? string.Empty));
+
+    /// <summary>
+    /// Fase C — expõe ICustomerService.GetAllAsync (base inteira do tenant,
+    /// sem paginação). Usado pelo SyncEngine do WPF (cache offline de clientes)
+    /// e pela tela de Finalizar Venda. Não abre PII nova: GET /api/customers
+    /// já aceita pageSize arbitrário com o mesmo [Authorize].
+    /// Paginar do lado do cliente foi descartado: ordena só por Name (sem
+    /// desempate), então nomes repetidos podiam pular/duplicar entre páginas.
+    /// </summary>
+    [HttpGet("todos")]
+    [ProducesResponseType(typeof(IEnumerable<CustomerDto>), 200)]
+    public async Task<IActionResult> GetAllSemPaginacao()
+        => Ok(await _service.GetAllAsync());
+
+    /// <summary>
     /// Busca cliente por CPF/CNPJ — portal de auto-atendimento.
     /// REQUER AUTENTICAÇÃO: retorna apenas Id, Name e City (sem PII sensível).
     /// Para acesso público futuro, implementar OTP via SMS/WhatsApp.

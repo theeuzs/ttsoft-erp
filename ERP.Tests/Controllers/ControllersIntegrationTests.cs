@@ -458,6 +458,33 @@ public class CustomersControllerTests : IntegrationTestBase
     public async Task GetById_NaoExistente_Retorna404()
         => (await AuthClient.GetAsync($"/api/customers/{Guid.NewGuid()}"))
             .StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+    // ── Fase C (WPF→API): endpoints usados pelo HttpCustomerService ──────
+    [Fact(DisplayName = "Fase C — GET /api/customers/busca com token → 200 (lista, não PagedResult)")]
+    public async Task Busca_ComToken_Retorna200ComArray()
+    {
+        var resp = await AuthClient.GetAsync("/api/customers/busca?term=123");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var json = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+        json.RootElement.ValueKind.Should().Be(JsonValueKind.Array,
+            "HttpCustomerService.SearchAsync desserializa List<CustomerDto>, não PagedResult");
+    }
+
+    [Fact(DisplayName = "Fase C — GET /api/customers/todos com token → 200 (array)")]
+    public async Task Todos_ComToken_Retorna200ComArray()
+    {
+        var resp = await AuthClient.GetAsync("/api/customers/todos");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var json = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+        json.RootElement.ValueKind.Should().Be(JsonValueKind.Array);
+    }
+
+    [Fact(DisplayName = "Fase C — GET /api/customers/busca e /todos sem token → 401")]
+    public async Task BuscaETodos_SemToken_Retorna401()
+    {
+        (await AnonClient.GetAsync("/api/customers/busca?term=x")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await AnonClient.GetAsync("/api/customers/todos")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
