@@ -346,7 +346,18 @@ public partial class App : System.Windows.Application
         services.AddMemoryCache();
 
         // ── Application Services ──────────────────────────────────────────
-        services.AddScoped<IProductService,   ProductService>();
+        // Fase C, módulo 2 (09/2026) — HttpProductService no lugar do
+        // ProductService local. Consumidores: PdvViewModel, ProductViewModel,
+        // NotaAvulsaViewModel, ComprasViewModel, HistoricoComprasViewModel,
+        // HistoricoVendasViewModel, NotificacoesViewModel, SyncEngineService —
+        // todos via esta raiz de DI ou App.Services.CreateScope().
+        // FORA desta troca, de propósito: AjusteEstoqueViewModel usa
+        // IUnitOfWork.Products direto, não passa por IProductService — continua
+        // acessando o banco direto até ter uma migração própria.
+        // REQUER a API com GET /api/products/busca e /todos já publicada
+        // ANTES de instalar este WPF na loja.
+        // Rollback: voltar esta linha para ProductService.
+        services.AddScoped<IProductService, ERP.WPF.Services.HttpProductService>();
         services.AddScoped<ISupplierService,  SupplierService>();
         services.AddScoped<ICategoryService,  CategoryService>();
         services.AddScoped<IBrandService,     BrandService>();

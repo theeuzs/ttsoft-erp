@@ -53,6 +53,32 @@ public class ProductsController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Fase C (migração WPF→API) — expõe IProductService.SearchAsync como
+    /// está. É o que o PDV, NotaAvulsa, Compras, HistoricoCompras e
+    /// HistoricoVendas do WPF sempre chamaram: divide o termo em palavras,
+    /// cada palavra tem que aparecer em algum lugar do Nome OU no início do
+    /// Barcode/SKU. Diferente de GET /api/products?search= (GetPagedAsync),
+    /// que é um Contains simples numa palavra só, sem paginação por
+    /// relevância. Trocar um pelo outro muda o resultado da busca do PDV.
+    /// </summary>
+    [HttpGet("busca")]
+    [ProducesResponseType(typeof(IEnumerable<ProductDto>), 200)]
+    public async Task<IActionResult> Search([FromQuery] string? term = null)
+        => Ok(await _service.SearchAsync(term ?? string.Empty));
+
+    /// <summary>
+    /// Fase C — expõe IProductService.GetAllAsync (base inteira do tenant,
+    /// sem paginação). Usado pelo SyncEngine do WPF pra popular o cache
+    /// offline (SQLite) de produtos, e por qualquer tela que precise da
+    /// lista completa sem paginar (ex.: seletor de "produto pai" num
+    /// produto composto).
+    /// </summary>
+    [HttpGet("todos")]
+    [ProducesResponseType(typeof(IEnumerable<ProductDto>), 200)]
+    public async Task<IActionResult> GetAllSemPaginacao()
+        => Ok(await _service.GetAllAsync());
+
     /// <summary>Busca produto por ID.</summary>
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(ProductDto), 200)]

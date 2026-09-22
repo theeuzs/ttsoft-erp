@@ -434,6 +434,33 @@ public class ProductsControllerTests : IntegrationTestBase
         var resp = await AuthClient.PostAsync("/api/products", Json(new { }));
         resp.StatusCode.Should().BeOneOf(HttpStatusCode.BadRequest, HttpStatusCode.UnprocessableEntity);
     }
+
+    // ── Fase C (WPF→API): endpoints usados pelo HttpProductService ──────
+    [Fact(DisplayName = "Fase C — GET /api/products/busca com token → 200 (lista, não PagedResult)")]
+    public async Task Busca_ComToken_Retorna200ComArray()
+    {
+        var resp = await AuthClient.GetAsync("/api/products/busca?term=parafuso");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var json = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+        json.RootElement.ValueKind.Should().Be(JsonValueKind.Array,
+            "HttpProductService.SearchAsync desserializa List<ProductDto>, não PagedResult");
+    }
+
+    [Fact(DisplayName = "Fase C — GET /api/products/todos com token → 200 (array)")]
+    public async Task Todos_ComToken_Retorna200ComArray()
+    {
+        var resp = await AuthClient.GetAsync("/api/products/todos");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var json = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+        json.RootElement.ValueKind.Should().Be(JsonValueKind.Array);
+    }
+
+    [Fact(DisplayName = "Fase C — GET /api/products/busca e /todos sem token → 401")]
+    public async Task BuscaETodos_SemToken_Retorna401()
+    {
+        (await AnonClient.GetAsync("/api/products/busca?term=x")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await AnonClient.GetAsync("/api/products/todos")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

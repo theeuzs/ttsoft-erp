@@ -388,6 +388,9 @@ public class ProductViewModel : BaseViewModel
                     LabelUnidadeVenda = LabelUnidadeVenda,
                     ParentProductId   = ParentProductId == Guid.Empty ? null : ParentProductId,
                     ConversionFactor  = ConversionFactor > 0 ? ConversionFactor : 1m,
+                    ImageUrl           = ImageUrl,
+                    DescricaoDetalhada = DescricaoDetalhada,
+                    EmCampanha         = EmCampanha,
                 };
                 await service.UpdateAsync(dto);
                 StatusMessage = "Produto atualizado com sucesso!";
@@ -415,6 +418,9 @@ public class ProductViewModel : BaseViewModel
                     LabelUnidadeVenda = LabelUnidadeVenda,
                     ParentProductId   = ParentProductId == Guid.Empty ? null : ParentProductId,
                     ConversionFactor  = ConversionFactor > 0 ? ConversionFactor : 1m,
+                    ImageUrl           = ImageUrl,
+                    DescricaoDetalhada = DescricaoDetalhada,
+                    EmCampanha         = EmCampanha,
                 };
                 await service.CreateAsync(dto);
                 StatusMessage = "Produto criado com sucesso!";
@@ -500,6 +506,22 @@ public class ProductViewModel : BaseViewModel
         ProdutoPaiSelecionado = dto.ParentProductId.HasValue
             ? ListaProdutosPai.FirstOrDefault(p => p.Id == dto.ParentProductId)
             : null;
+        // S{N} FIX — achado auditando pra Fase C: estes 3 campos são
+        // editáveis nesta tela (ImageUrl via botão de upload, linha ~68;
+        // DescricaoDetalhada e EmCampanha via campos próprios) mas nunca
+        // eram carregados aqui. Consequência dupla: (1) editar um produto
+        // existente mostrava o formulário com esses campos SEMPRE vazios/
+        // desligados, mesmo que o produto já tivesse imagem/descrição/
+        // campanha cadastradas; (2) como o Save (abaixo) também nunca lia
+        // esses campos pro DTO, CADA edição de produto por esta tela
+        // apagava imagem, descrição detalhada e flag de campanha do banco
+        // — mesmo numa edição que só mudasse o preço. Ver MappingProfile.cs
+        // pra o mesmo problema no campo fiscal MercadoriaOrigem (esse,
+        // corrigido do lado do servidor, não da tela, porque a tela nem
+        // expõe esse campo pro usuário editar).
+        ImageUrl            = dto.ImageUrl;
+        DescricaoDetalhada  = dto.DescricaoDetalhada;
+        EmCampanha          = dto.EmCampanha;
         RecalcTaxes();
     }
 
@@ -521,6 +543,12 @@ public class ProductViewModel : BaseViewModel
         CostPriceChangedAt = null; CostPriceChangedBy = null;
         UnidadeEstoque = null; UnidadeVenda = null; FatorConversao = 1m; LabelUnidadeVenda = null;
         ParentProductId = null; ConversionFactor = 1m; ProdutoPaiSelecionado = null;
+        // Mesmo fix acima — sem isso, criar um produto novo logo depois de
+        // editar um que tinha imagem/descrição/campanha herdava esses
+        // valores por engano (a tela não limpava, só LoadFormFromDto que
+        // sobrescrevia — e só quando havia edição, não quando o form
+        // resetava pra criação).
+        ImageUrl = null; DescricaoDetalhada = null; EmCampanha = false;
         SelectedProduct = null;
         CategoriaSelecionada = null; MarcaSelecionada = null; FornecedorSelecionado = null;
     }
