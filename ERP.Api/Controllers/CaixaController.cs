@@ -157,6 +157,19 @@ public class CaixaController : ControllerBase
             return BadRequest(new { erro = ex.Message });
         }
     }
+
+    /// <summary>
+    /// Fase C (achado testando, não na auditoria original) — checagem de
+    /// idempotência financeira usada por MotorFinanceiroService, que roda
+    /// TANTO no servidor (SalesController, ao criar a venda) QUANTO no WPF
+    /// (FinalizarVendaViewModel/SaleViewModel, na hora da venda — inclusive
+    /// offline, pra atualizar a gaveta na hora). Sem [HasPermission] extra:
+    /// não é uma consulta de resumo, é uma pergunta de "já registrei isso?"
+    /// que qualquer venda precisa fazer, de qualquer operador autenticado.
+    /// </summary>
+    [HttpGet("existe-movimento/{salePaymentId:guid}")]
+    public async Task<IActionResult> ExisteMovimentoParaSalePayment(Guid salePaymentId)
+        => Ok(await _service.ExisteMovimentoParaSalePaymentAsync(salePaymentId));
 }
 
 public record MovimentoCaixaRequest(

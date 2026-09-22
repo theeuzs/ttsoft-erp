@@ -180,10 +180,21 @@ public class HttpCaixaServiceTests
         resumo.Extrato.Should().ContainSingle();
     }
 
-    [Fact(DisplayName = "ExisteMovimentoParaSalePaymentAsync — não tem endpoint, lança NotSupportedException")]
-    public async Task ExisteMovimentoParaSalePaymentAsync_LancaNotSupported()
+    [Fact(DisplayName = "ExisteMovimentoParaSalePaymentAsync — achado testando: MotorFinanceiroService roda no WPF também, precisa de endpoint de verdade")]
+    public async Task ExisteMovimentoParaSalePaymentAsync_UsaEndpointCerto()
     {
-        var act = async () => await new HttpCaixaService().ExisteMovimentoParaSalePaymentAsync(Guid.NewGuid());
-        await act.Should().ThrowAsync<NotSupportedException>();
+        var salePaymentId = Guid.NewGuid();
+        var h = new HandlerGravador(HttpStatusCode.OK, "true");
+        var existe = await new HttpCaixaService(h).ExisteMovimentoParaSalePaymentAsync(salePaymentId);
+
+        h.UltimaRequisicao!.RequestUri!.AbsolutePath.Should().Be($"/api/caixa/existe-movimento/{salePaymentId}");
+        existe.Should().BeTrue();
+    }
+
+    [Fact(DisplayName = "ExisteMovimentoParaSalePaymentAsync — false quando ainda não registrado")]
+    public async Task ExisteMovimentoParaSalePaymentAsync_Falso()
+    {
+        var h = new HandlerGravador(HttpStatusCode.OK, "false");
+        (await new HttpCaixaService(h).ExisteMovimentoParaSalePaymentAsync(Guid.NewGuid())).Should().BeFalse();
     }
 }

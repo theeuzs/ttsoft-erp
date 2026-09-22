@@ -22,9 +22,10 @@ namespace ERP.WPF.Services;
 /// bater com a interface local; todo consumidor no WPF já passa sempre o
 /// próprio AppSession.UserId, então não muda nada na prática.
 ///
-/// ExisteMovimentoParaSalePaymentAsync NÃO tem endpoint — é usado só
-/// internamente por SaleService/DevolucaoService, ambos server-side (Vendas
-/// já migrado na Fase B). Nada no WPF chama isso via ICaixaService.
+/// ExisteMovimentoParaSalePaymentAsync TEM endpoint (achado testando, não na
+/// auditoria original) — MotorFinanceiroService roda tanto no servidor quanto
+/// no WPF (offline-first: precisa atualizar a gaveta na hora da venda, antes
+/// de sincronizar), e chama isso direto. Ver comentário no método abaixo.
 /// </summary>
 public class HttpCaixaService : ICaixaService
 {
@@ -117,11 +118,23 @@ public class HttpCaixaService : ICaixaService
         resp.EnsureSuccessStatusCode();
     }
 
-    public Task<bool> ExisteMovimentoParaSalePaymentAsync(Guid salePaymentId)
-        => throw new NotSupportedException(
-            "ExisteMovimentoParaSalePaymentAsync é uso interno do servidor " +
-            "(SaleService/DevolucaoService) — não existe endpoint porque nada " +
-            "no WPF chama isso via ICaixaService.");
+    /// <summary>
+    /// S{N} FIX — achado testando, não na auditoria original: eu tinha
+    /// assumido que isso era uso interno só do servidor (SaleService), mas
+    /// MotorFinanceiroService roda TAMBÉM no WPF (registrado no App.xaml.cs,
+    /// chamado por FinalizarVendaViewModel/SaleViewModel a cada venda —
+    /// inclusive offline, pra atualizar a gaveta na hora) e chama isso
+    /// direto via ICaixaService. Sem essa implementação, TODA venda em
+    /// dinheiro/PIX/cartão/Haver quebrava com NotSupportedException.
+    /// </summary>
+    public async Task<bool> ExisteMovimentoParaSalePaymentAsync(Guid salePaymentId)
+    {
+        using var http = ApiHttp.CriarHttpClient(_handler);
+        var resp = await http.GetAsync(ApiHttp.Url($"{Base}/existe-movimento/{salePaymentId}"));
+        ApiHttp.LancarSeSessaoExpirada(resp);
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadFromJsonAsync<bool>(ApiHttp.JsonOpcoes);
+    }
 
     public async Task<ResumoCaixaDto?> ObterResumoAsync(Guid usuarioId, DateTime data)
     {

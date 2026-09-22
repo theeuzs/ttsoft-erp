@@ -896,6 +896,19 @@ public class CaixaControllerTests : IntegrationTestBase
         var status = (await AuthClient.GetAsync("/api/caixa/resumo?data=2026-01-15")).StatusCode;
         status.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.NotFound);
     }
+
+    [Fact(DisplayName = "Fase C — GET /api/caixa/existe-movimento/{id} com token → 200 (achado testando, usado por MotorFinanceiroService no WPF)")]
+    public async Task ExisteMovimento_ComToken_Retorna200()
+    {
+        var resp = await AuthClient.GetAsync($"/api/caixa/existe-movimento/{Guid.NewGuid()}");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await resp.Content.ReadAsStringAsync()).Should().Be("false", "Guid novo nunca teria movimento registrado");
+    }
+
+    [Fact(DisplayName = "Fase C — GET /api/caixa/existe-movimento/{id} sem token → 401")]
+    public async Task ExisteMovimento_SemToken_Retorna401()
+        => (await AnonClient.GetAsync($"/api/caixa/existe-movimento/{Guid.NewGuid()}"))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

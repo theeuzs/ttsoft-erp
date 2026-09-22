@@ -410,7 +410,22 @@ public class PdvViewModel : BaseViewModel
         RestaurarEstadoCarrinho();
 
         ComDbGateAsync(VerificarOrcamentoPendenteAsync).SafeFireAndForgetSilentAsync("PDV-OrcamentoPendente");
-        ComDbGateAsync(IniciarRadarSefazAsync).SafeFireAndForgetSilentAsync("PDV-RadarSefaz");
+        // S{N} FIX — achado testando Fase C (bug pré-existente, sem relação
+        // com a migração): IniciarRadarSefazAsync é um loop `while(true)`
+        // que roda a vida inteira do app (verifica SEFAZ a cada 30s). Rodar
+        // isso via ComDbGateAsync tomava a ÚNICA vaga do semáforo
+        // compartilhado (_dbGateInicializacao, capacidade 1) e NUNCA
+        // devolvia — o loop nunca termina, o `finally { Release() }` do
+        // ComDbGateAsync nunca é alcançado. A partir da primeira execução
+        // do Radar, QUALQUER outra chamada por ComDbGateAsync (inclusive
+        // EscutarRadio, que atualiza o badge "MEU CAIXA" a cada Suprimento/
+        // Sangria) ficava esperando pra sempre, em silêncio — sem exceção,
+        // sem log, sem timeout. CarregarMetaEVendasAsync (linha abaixo,
+        // mesma fila) sofria do mesmo travamento.
+        // Radar já isola o próprio acesso ao banco (cria um scope de DI
+        // novo a cada volta do loop) — nunca precisou do semáforo
+        // compartilhado. Roda solto agora, sem tomar a vaga de ninguém.
+        IniciarRadarSefazAsync().SafeFireAndForgetSilentAsync("PDV-RadarSefaz");
 
         // Sprint 5: carrega meta do dia e vendas em background
         ComDbGateAsync(CarregarMetaEVendasAsync).SafeFireAndForgetSilentAsync("PDV-MetaVendas");
@@ -1237,28 +1252,30 @@ public class PdvViewModel : BaseViewModel
     {
         try
         {
-            using (var scope = ERP.WPF.App.Services.CreateScope())
+            // S{N} FIX — achado testando Fase C (não durante a auditoria —
+            // esse bypass passou batido): este método recalculava "dinheiro
+            // na gaveta" direto de IUnitOfWork.Caixas, uma TERCEIRA cópia da
+            // mesma lógica de agregação (além da antiga do WPF — já removida
+            // — e da nova em CaixaService.ObterResumoAsync). Resultado
+            // visível: registrar um Suprimento atualizava o Resumo de Caixa
+            // (via API) mas não atualizava o badge "MEU CAIXA" do PDV (ainda
+            // lendo direto do banco, silenciosamente, sem erro visível pro
+            // usuário — SafeFireAndForgetSilentAsync só loga).
+            // Trocado por ObterResumoAsync: mesma fórmula que
+            // ResumoCaixaViewModel.TotalEmEspecie já usa (SaldoInicial +
+            // VendasDinheiro + Suprimentos − Sangrias − Despesas), sem
+            // duplicar a classificação por tipo de movimento — essa
+            // continua existindo em UM lugar só, no servidor.
+            var resumo = await _caixaService.ObterResumoAsync(AppSession.UserId, DateTime.Today);
+
+            if (resumo != null)
             {
-                var uow = scope.ServiceProvider.GetRequiredService<ERP.Domain.Interfaces.IUnitOfWork>();
-                var caixa = await uow.Caixas.GetCaixaAbertoByUsuarioAsync(AppSession.UserId);
-                
-                if (caixa != null && caixa.Movimentos != null)
-                {
-                    decimal totalGaveta = 0;
-                    foreach (var mov in caixa.Movimentos)
-                    {
-                        if (mov.Tipo == ERP.Domain.Enums.TipoMovimentoCaixa.Abertura || mov.Tipo == ERP.Domain.Enums.TipoMovimentoCaixa.Suprimento)
-                            totalGaveta += mov.Valor;
-                        else if (mov.Tipo == ERP.Domain.Enums.TipoMovimentoCaixa.Sangria && mov.FormaPagamento == ERP.Domain.Enums.PaymentMethod.Dinheiro)
-                            totalGaveta -= mov.Valor;
-                        else if ((mov.Tipo == ERP.Domain.Enums.TipoMovimentoCaixa.Venda || mov.Tipo.ToString() == "RecebimentoConta") && mov.FormaPagamento == ERP.Domain.Enums.PaymentMethod.Dinheiro)
-                            totalGaveta += mov.Valor;
-                    }
-                    
-                    System.Windows.Application.Current.Dispatcher.Invoke(() => {
-                        ValorAtualCaixa = totalGaveta;
-                    });
-                }
+                decimal totalGaveta = resumo.SaldoInicial + resumo.VendasDinheiro
+                                     + resumo.Suprimentos - resumo.Sangrias - resumo.Despesas;
+
+                System.Windows.Application.Current.Dispatcher.Invoke(() => {
+                    ValorAtualCaixa = totalGaveta;
+                });
             }
         }
         catch (Exception ex) { Log.Warning(ex, "AtualizarBotaoVerdeAsync: falha ao atualizar valor do caixa"); }

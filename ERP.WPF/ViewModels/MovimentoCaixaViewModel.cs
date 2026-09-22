@@ -1,5 +1,6 @@
 using ERP.WPF.Commands;
 using System;
+using System.Threading.Tasks;
 using System.Windows.Input;
 
 namespace ERP.WPF.ViewModels;
@@ -7,7 +8,18 @@ namespace ERP.WPF.ViewModels;
 public class MovimentoCaixaViewModel : BaseViewModel
 {
     public Action OnFechar { get; set; }
-    public Action<decimal, string> OnConfirmado { get; set; }
+
+    // S{N} FIX — achado testando Fase C: era Action<decimal,string> (void).
+    // ResumoCaixaViewModel atribui uma lambda "async (valor, descricao) =>
+    // {...}" aqui — com o delegate retornando void, o C# compila isso como
+    // "async void": Confirmar() disparava e IMEDIATAMENTE fechava o diálogo
+    // (OnFechar), sem esperar RegistrarMovimentoAsync/CarregarResumoAsync/
+    // NotificacaoCaixaAlterado terminarem. Qualquer exceção lá dentro
+    // desaparecia sem log. Era exatamente por isso que o badge "MEU CAIXA"
+    // do PDV não atualizava de forma confiável depois de Sangria/Suprimento
+    // — a notificação podia rodar bem depois do diálogo já ter fechado, ou
+    // falhar em silêncio. Func<Task> torna isso esperável de verdade.
+    public Func<decimal, string, Task> OnConfirmado { get; set; }
 
     public string TipoMovimento { get; set; } 
     public string CorTema { get; set; } 
@@ -36,13 +48,22 @@ public class MovimentoCaixaViewModel : BaseViewModel
         CorTema = isSangria ? "#EF4444" : "#10B981"; // Vermelho ou Verde
         Icone = isSangria ? "—" : "+";
 
-        // Só deixa confirmar se o valor for maior que zero e tiver uma descrição
-        ConfirmarCommand = new RelayCommand(_ => Confirmar(), _ => Valor > 0 && !string.IsNullOrWhiteSpace(Descricao));
+        // AsyncRelayCommand: aguarda ConfirmarAsync de verdade antes de
+        // liberar o botão de novo, e qualquer exceção vira MessageBox +
+        // Log.Error (em vez de sumir como antes) — ver Commands/RelayCommand.cs.
+        ConfirmarCommand = new AsyncRelayCommand(
+            async _ => await ConfirmarAsync(),
+            _ => Valor > 0 && !string.IsNullOrWhiteSpace(Descricao));
     }
 
-    private void Confirmar()
+    private async Task ConfirmarAsync()
     {
-        OnConfirmado?.Invoke(Valor, Descricao);
+        if (OnConfirmado != null)
+            await OnConfirmado(Valor, Descricao);
+
+        // Só fecha DEPOIS que registrar o movimento, atualizar o resumo e
+        // avisar o PDV já tiverem terminado de verdade — antes o diálogo
+        // fechava antes disso tudo rodar.
         OnFechar?.Invoke();
     }
 }
