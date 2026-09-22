@@ -71,20 +71,35 @@ public class ProductRepository : Repository<Product>, IProductRepository
 
         var words = term.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-        // Achado (09/09) — busca lenta do PDV. Contains() vira LIKE '%x%',
-        // nunca usa índice, força varredura completa da tabela toda vez.
-        // Nome continua Contains (as pessoas digitam qualquer pedaço do
-        // nome do produto, isso é real e vale manter). Código de barras e
-        // SKU viram StartsWith (LIKE 'x%') — ninguém busca "o meio" de um
-        // código de barras, sempre é digitado/escaneado do início, e isso
-        // sim consegue usar o índice (TenantId+Barcode já existia,
-        // TenantId+SKU foi adicionado agora).
+        // S{N} FIX — causa raiz real do bug de busca ("phillips" e "4.0X40"
+        // sumindo mesmo com o dado limpo no banco, confirmado via
+        // ToQueryString(): o SQL gerado usava o MESMO parâmetro reescrito
+        // (padrão 'palavra%', só sufixo) tanto pro Contains(Name) quanto
+        // pro StartsWith(Barcode/SKU). O provider SQL Server do EF Core
+        // reaproveita o "LIKE pattern rewriting" pela IDENTIDADE da
+        // variável C# capturada (`word`), não por qual método LINQ foi
+        // chamado — então usar a MESMA variável em .Contains() e
+        // .StartsWith() na mesma query faz o Contains herdar o padrão do
+        // StartsWith (só sufixo, sem prefixo). Isso entrou junto com o
+        // ajuste de performance de 09/09 que separou Barcode/SKU pra
+        // StartsWith mas deixou Name em Contains — combinação que
+        // disparou o bug.
+        // Fix: monta o padrão LIKE manualmente com EF.Functions.Like(),
+        // usando STRINGS DE FATO DIFERENTES pra cada caso (uma com '%'
+        // nos dois lados, outra só no fim) — não há mais parâmetro
+        // compartilhado pra reaproveitar errado. Escapa % _ [ ] à mão
+        // porque, ao contrário de Contains()/StartsWith(), EF.Functions.Like
+        // não escapa sozinho.
         foreach (var word in words)
         {
+            var termoEscapado  = EscaparCoringasLike(word);
+            var padraoContem   = $"%{termoEscapado}%"; // Name: em qualquer posição
+            var padraoComeca   = $"{termoEscapado}%";  // Barcode/SKU: só prefixo (usa índice)
+
             query = query.Where(p =>
-                p.Name.Contains(word) ||
-                (p.Barcode != null && p.Barcode.StartsWith(word)) ||
-                (p.SKU     != null && p.SKU.StartsWith(word)));
+                EF.Functions.Like(p.Name, padraoContem, "\\") ||
+                (p.Barcode != null && EF.Functions.Like(p.Barcode, padraoComeca, "\\")) ||
+                (p.SKU     != null && EF.Functions.Like(p.SKU, padraoComeca, "\\")));
         }
 
         return await query
@@ -94,6 +109,16 @@ public class ProductRepository : Repository<Product>, IProductRepository
             .Take(50)
             .ToListAsync();
     }
+
+    /// <summary>Escapa os coringas do LIKE (% _ [ ]) usando \ como caractere
+    /// de escape — precisa bater com o "\\" passado em EF.Functions.Like()
+    /// acima. Sem isso, buscar por um nome de produto que tenha "%" ou "_"
+    /// no meio (ex.: peso "50%") quebraria o padrão.</summary>
+    private static string EscaparCoringasLike(string valor) =>
+        valor.Replace("\\", "\\\\")
+             .Replace("%",  "\\%")
+             .Replace("_",  "\\_")
+             .Replace("[",  "\\[");
 
     public async Task<IEnumerable<Product>> GetLowStockAsync()
         => await _ctx.Products.AsNoTracking()
