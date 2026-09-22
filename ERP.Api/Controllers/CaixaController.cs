@@ -36,6 +36,23 @@ public class CaixaController : ControllerBase
         return caixa is null ? NotFound(new { mensagem = "Nenhum caixa aberto." }) : Ok(caixa);
     }
 
+    /// <summary>
+    /// Fase C (módulo Caixa) — resumo/extrato agregado pra uma data (hoje ou
+    /// passada). Agregação inteira feita no servidor — ver
+    /// CaixaService.ObterResumoAsync. `data` no formato yyyy-MM-dd; omitido
+    /// = hoje.
+    /// </summary>
+    [HasPermission(Permissions.CashViewSummary)]
+    [HttpGet("resumo")]
+    public async Task<IActionResult> GetResumo([FromQuery] DateTime? data = null)
+    {
+        var resumo = await _service.ObterResumoAsync(
+            UsuarioId, data ?? ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().Date);
+        return resumo is null
+            ? NotFound(new { mensagem = "Nenhum caixa encontrado para essa data." })
+            : Ok(resumo);
+    }
+
     /// <summary>Abre um novo caixa para o usuário autenticado.</summary>
     [HttpPost("abrir")]
     public async Task<IActionResult> Abrir([FromBody] AbrirCaixaRequestDto dto)

@@ -4,6 +4,8 @@ using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Domain.Interfaces;
 using System;
+using System.Globalization;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -12,6 +14,17 @@ namespace ERP.Application.Services;
 public class CaixaService : ICaixaService
 {
     private readonly IUnitOfWork _uow;
+
+    // S{N} FIX — achado ao mover o Resumo de Caixa pro servidor (Fase C):
+    // {valor:N2} sozinho usa CultureInfo.CurrentCulture do PROCESSO. No WPF
+    // isso sempre foi pt-BR (Windows configurado em português no PC da
+    // loja) — "R$ 20,00". Rodando na API (Azure/Linux), a cultura padrão do
+    // processo pode não ser pt-BR, e a mesma formatação viraria
+    // silenciosamente "R$ 20.00" (ponto em vez de vírgula) sem nenhum erro,
+    // só um extrato com formatação errada pro operador brasileiro. Fixado
+    // explicitamente aqui, não depende de como o host está configurado.
+    private static readonly CultureInfo CulturaMoeda = CultureInfo.GetCultureInfo("pt-BR");
+    private static string Moeda(decimal valor) => valor.ToString("N2", CulturaMoeda);
 
     // S8 FIX: new Random() sem seed → colisão de NumeroCaixa em chamadas concorrentes (seed = TickCount ~15ms).
     private static readonly ThreadLocal<Random> _rng =
@@ -124,14 +137,147 @@ public class CaixaService : ICaixaService
     public async Task FecharCaixaAsync(Guid usuarioId)
     {
         var caixaAberto = await _uow.Caixas.GetCaixaAbertoByUsuarioAsync(usuarioId);
-        
+
         if (caixaAberto != null)
         {
             caixaAberto.Status = StatusCaixa.Fechado;
             caixaAberto.DataFechamento = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
 
+            // S{N} FIX — achado auditando pra Fase C (módulo Caixa): antes,
+            // fechar o caixa por AQUI (endpoint da API) fazia a coisa certa
+            // com Status/DataFechamento, mas nunca deixava rastro no
+            // extrato. Enquanto isso, a tela de Resumo do WPF
+            // (ResumoCaixaViewModel.Encerrar) tinha o caminho OPOSTO: criava
+            // o movimento "FECHAMENTO DE CAIXA" certinho, só que fechava o
+            // caixa direto no banco (bypass deste método) SEM setar
+            // DataFechamento — todo caixa fechado por aquela tela ficava com
+            // DataFechamento eternamente nulo. Unificado aqui: agora este é
+            // o ÚNICO lugar que fecha caixa, faz as duas coisas certas de
+            // uma vez, e o WPF (Fase C) passa a chamar só isto.
+            await _uow.Caixas.AddMovimentoAsync(new CaixaMovimento
+            {
+                Id             = Guid.NewGuid(),
+                CaixaId        = caixaAberto.Id,
+                Valor          = 0,
+                Descricao      = "FECHAMENTO DE CAIXA",
+                FormaPagamento = PaymentMethod.Dinheiro,
+                Tipo           = TipoMovimentoCaixa.Fechamento,
+                DataHora       = caixaAberto.DataFechamento.Value
+            });
+
             _uow.Caixas.Update(caixaAberto);
             await _uow.CommitAsync();
         }
+    }
+
+    /// <summary>
+    /// Fase C, módulo Caixa — porta fiel de
+    /// ResumoCaixaViewModel.CarregarResumoAsync (WPF), com duas limpezas:
+    /// (1) tira a reflexão que buscava Descricao/Observacao/Motivo/Historico
+    /// via GetType().GetProperty — CaixaMovimento só tem Descricao, as outras
+    /// três nunca existiram, a reflexão nunca fazia nada além de achar
+    /// Descricao do jeito mais lento possível; (2) tira a reflexão que lia
+    /// UsuarioId de Caixa do mesmo jeito — Caixa.UsuarioId é uma propriedade
+    /// normal, sempre existiu. Fora essas duas limpezas, o comportamento é
+    /// idêntico ao original, incluindo os fixes S17 (PagamentoDespesa) e do
+    /// CancelamentoVenda que já estavam no WPF.
+    /// </summary>
+    public async Task<ResumoCaixaDto?> ObterResumoAsync(Guid usuarioId, DateTime data)
+    {
+        var caixa = await _uow.Caixas.ObterCaixaPorDataEUsuarioAsync(data, usuarioId);
+        if (caixa == null) return null;
+
+        var dto = new ResumoCaixaDto
+        {
+            CaixaId        = caixa.Id,
+            NumeroCaixa    = caixa.NumeroCaixa,
+            OperadorNome   = caixa.OperadorNome,
+            DataAbertura   = caixa.DataAbertura,
+            DataFechamento = caixa.DataFechamento,
+            Status         = caixa.Status,
+        };
+
+        foreach (var mov in caixa.Movimentos.OrderBy(m => m.DataHora))
+        {
+            var textoDescricao = mov.Descricao ?? string.Empty;
+            bool isEstorno = textoDescricao.ToLower().Contains("estorno");
+
+            if (mov.Tipo == TipoMovimentoCaixa.Abertura)
+            {
+                dto.SaldoInicial += mov.Valor;
+                dto.Extrato.Add($"ABERTURA \t\t\t + R$ {Moeda(mov.Valor)}");
+            }
+            else if (mov.Tipo == TipoMovimentoCaixa.Venda || mov.Tipo.ToString() == "RecebimentoConta")
+            {
+                if (mov.FormaPagamento == PaymentMethod.Dinheiro) dto.VendasDinheiro += mov.Valor;
+                else if (mov.FormaPagamento == PaymentMethod.Pix) dto.VendasPix += mov.Valor;
+                else if (mov.FormaPagamento == PaymentMethod.CartaoDebito) dto.VendasCartaoDebito += mov.Valor;
+                else if (mov.FormaPagamento == PaymentMethod.CartaoCredito) dto.VendasCartaoCredito += mov.Valor;
+                else if (mov.FormaPagamento == PaymentMethod.Haver) dto.VendasHaver += mov.Valor;
+                else dto.VendasAPrazo += mov.Valor;
+
+                string prefixoExtrato = textoDescricao.ToUpper().Contains("FIADO") || mov.Tipo.ToString() == "RecebimentoConta"
+                                    ? "REC. FIADO"
+                                    : "VENDA";
+
+                dto.Extrato.Add($"{prefixoExtrato} ({mov.FormaPagamento}) \t + R$ {Moeda(mov.Valor)}");
+            }
+            else if (mov.Tipo == TipoMovimentoCaixa.Suprimento)
+            {
+                dto.Suprimentos += mov.Valor;
+                dto.Extrato.Add($"SUPRIMENTO\t\t\t + R$ {Moeda(mov.Valor)}");
+            }
+            else if (mov.Tipo == TipoMovimentoCaixa.Sangria)
+            {
+                if (isEstorno)
+                {
+                    if (mov.FormaPagamento == PaymentMethod.Dinheiro) dto.VendasDinheiro -= mov.Valor;
+                    else if (mov.FormaPagamento == PaymentMethod.Pix) dto.VendasPix -= mov.Valor;
+                    else if (mov.FormaPagamento == PaymentMethod.CartaoDebito) dto.VendasCartaoDebito -= mov.Valor;
+                    else if (mov.FormaPagamento == PaymentMethod.CartaoCredito) dto.VendasCartaoCredito -= mov.Valor;
+                    else if (mov.FormaPagamento == PaymentMethod.Haver) dto.VendasHaver -= mov.Valor;
+                    else dto.VendasAPrazo -= mov.Valor;
+
+                    dto.Extrato.Add($"ESTORNO ({mov.FormaPagamento})\t\t - R$ {Moeda(mov.Valor)}");
+                }
+                else
+                {
+                    if (mov.FormaPagamento == PaymentMethod.Dinheiro) dto.Sangrias += mov.Valor;
+                    dto.Extrato.Add($"SANGRIA \t\t\t - R$ {Moeda(mov.Valor)}");
+                }
+            }
+            else if (mov.Tipo == TipoMovimentoCaixa.PagamentoDespesa)
+            {
+                // mov.Valor já vem negativo daqui (RegistrarMovimentoAsync recebe
+                // -conta.Valor em ContaPagarViewModel) — usa Math.Abs pra exibir e
+                // somar como valor positivo de saída, igual às outras categorias.
+                dto.Despesas += Math.Abs(mov.Valor);
+                dto.Extrato.Add($"{textoDescricao}\t\t - R$ {Moeda(Math.Abs(mov.Valor))}");
+            }
+            else if (mov.Tipo == TipoMovimentoCaixa.CancelamentoVenda)
+            {
+                // cancelar venda já cria o estorno certo no banco
+                // (SaleService.CancelAsync, valor negativo). Usa += (não -=)
+                // porque mov.Valor aqui JÁ vem negativo — subtrair de novo
+                // inverteria o sinal errado.
+                if (mov.FormaPagamento == PaymentMethod.Dinheiro) dto.VendasDinheiro += mov.Valor;
+                else if (mov.FormaPagamento == PaymentMethod.Pix) dto.VendasPix += mov.Valor;
+                else if (mov.FormaPagamento == PaymentMethod.CartaoDebito) dto.VendasCartaoDebito += mov.Valor;
+                else if (mov.FormaPagamento == PaymentMethod.CartaoCredito) dto.VendasCartaoCredito += mov.Valor;
+                else if (mov.FormaPagamento == PaymentMethod.Haver) dto.VendasHaver += mov.Valor;
+                else dto.VendasAPrazo += mov.Valor;
+
+                dto.Extrato.Add($"ESTORNO ({mov.FormaPagamento})\t\t - R$ {Moeda(Math.Abs(mov.Valor))}");
+            }
+            else if (!string.IsNullOrWhiteSpace(textoDescricao))
+            {
+                // Defesa: qualquer TipoMovimentoCaixa futuro sem branch dedicado
+                // ainda aparece no extrato, em vez de sumir silenciosamente
+                // (era exatamente isso que causava o bug do PagamentoDespesa).
+                dto.Extrato.Add($"{textoDescricao}\t\t {(mov.Valor >= 0 ? "+" : "-")} R$ {Moeda(Math.Abs(mov.Valor))}");
+            }
+        }
+
+        return dto;
     }
 }

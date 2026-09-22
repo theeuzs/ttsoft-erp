@@ -52,9 +52,14 @@ public class AbrirCaixaViewModel : BaseViewModel
             // 👇 1. Manda o serviço abrir o caixa (sem esperar que ele devolva nada) 👇
             await _caixaService.AbrirCaixaAsync(dto);
 
-            // 👇 2. Pesquisa no banco qual é o caixa que acabou de ser aberto 👇
-            var uow = ERP.WPF.App.Services.GetRequiredService<IUnitOfWork>();
-            var caixaAberto = await uow.Caixas.GetCaixaAbertoAsync();
+            // S{N} FIX — achado auditando pra Fase C: antes buscava direto no
+            // banco via IUnitOfWork.Caixas.GetCaixaAbertoAsync() SEM filtro de
+            // usuário (pega "qualquer caixa aberto do tenant" — o mesmo
+            // método com bug relatado no comentário S17 do CaixaRepository:
+            // se dois operadores tiverem caixa aberto ao mesmo tempo, corre o
+            // risco de pegar o caixa do OUTRO operador aqui). Trocado pelo
+            // método do serviço, que já filtra por usuário.
+            var caixaAberto = await _caixaService.ObterCaixaAbertoAsync(_usuarioId);
 
             // 👇 3. Salva a gaveta na sessão do usuário! 👇
             if (caixaAberto != null)

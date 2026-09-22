@@ -23,4 +23,12 @@ public interface ICaixaService
     /// <summary>Idempotência financeira granular (achado de auditoria pré-Fase-2
     /// do Offline-First, 08/2026) — checa por linha de pagamento específica.</summary>
     Task<bool> ExisteMovimentoParaSalePaymentAsync(Guid salePaymentId);
+
+    /// <summary>
+    /// Fase C, módulo Caixa — resumo/extrato agregado pra uma data (hoje ou
+    /// passada). Movido do WPF pro servidor: essa agregação já teve pelo
+    /// menos 2 bugs reais (ver comentários em ResumoCaixaDto). Devolve null
+    /// se não achar nenhum caixa pra essa data/usuário.
+    /// </summary>
+    Task<ResumoCaixaDto?> ObterResumoAsync(Guid usuarioId, DateTime data);
 }

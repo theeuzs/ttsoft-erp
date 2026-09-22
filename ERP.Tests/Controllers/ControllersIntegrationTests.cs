@@ -876,6 +876,26 @@ public class CaixaControllerTests : IntegrationTestBase
         var status = (await AuthClient.GetAsync("/api/caixa/aberto")).StatusCode;
         status.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.NotFound);
     }
+
+    // ── Fase C (WPF→API): endpoint usado pelo HttpCaixaService ───────────
+    [Fact(DisplayName = "Fase C — GET /api/caixa/resumo sem token → 401")]
+    public async Task Resumo_SemToken_Retorna401()
+        => (await AnonClient.GetAsync("/api/caixa/resumo"))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+    [Fact(DisplayName = "Fase C — GET /api/caixa/resumo com token → 200 ou 404 (nunca 500)")]
+    public async Task Resumo_ComToken_Retorna200Ou404()
+    {
+        var status = (await AuthClient.GetAsync("/api/caixa/resumo")).StatusCode;
+        status.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.NotFound);
+    }
+
+    [Fact(DisplayName = "Fase C — GET /api/caixa/resumo?data= aceita data específica sem erro de formato")]
+    public async Task Resumo_ComDataEspecifica_NaoQuebra()
+    {
+        var status = (await AuthClient.GetAsync("/api/caixa/resumo?data=2026-01-15")).StatusCode;
+        status.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.NotFound);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -1,7 +1,5 @@
 using ERP.Application.Interfaces;
-using ERP.Domain.Entities; 
 using ERP.Domain.Enums;
-using ERP.Domain.Interfaces; 
 using ERP.WPF.Commands;
 using Microsoft.Extensions.DependencyInjection;
 using System;
@@ -10,7 +8,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
-using System.Reflection;
 using ERP.WPF.Reports;
 using QuestPDF.Infrastructure;
 using ERP.WPF.Helpers;
@@ -20,7 +17,6 @@ namespace ERP.WPF.ViewModels;
 public class ResumoCaixaViewModel : BaseViewModel
 {
     private readonly ICaixaService _caixaService;
-    private readonly IUnitOfWork _uow;
 
     public Action OnFechar { get; set; }
     public Action OnEncerrarCaixa { get; set; }
@@ -94,7 +90,6 @@ public class ResumoCaixaViewModel : BaseViewModel
     public ResumoCaixaViewModel()
     {
         _caixaService = ERP.WPF.App.Services.GetRequiredService<ICaixaService>();
-        _uow = ERP.WPF.App.Services.GetRequiredService<IUnitOfWork>();
         QuestPDF.Settings.License = LicenseType.Community;
 
         SuprimentoCommand = new RelayCommand(_ => RealizarSuprimento());
@@ -111,163 +106,63 @@ public class ResumoCaixaViewModel : BaseViewModel
         {
             SaldoInicial = 0; VendasDinheiro = 0; VendasPix = 0; VendasCartaoDebito = 0; 
             VendasCartaoCredito = 0; VendasAPrazo = 0; VendasHaver = 0; 
-            Suprimentos = 0; Sangrias = 0;
+            Suprimentos = 0; Sangrias = 0; Despesas = 0;
             Extrato.Clear();
             NumeroCaixa = "#----";
 
-            Caixa caixaSelecionado = null;
+            // S{N} FIX — achado auditando pra Fase C (módulo Caixa): esta
+            // tela lia IUnitOfWork.Caixas direto e refazia toda a agregação
+            // por tipo de movimento aqui mesmo (reflexão pra achar Descricao
+            // e UsuarioId inclusos — nenhuma das duas fazia sentido, ver
+            // comentário em CaixaService.ObterResumoAsync). Essa lógica já
+            // teve pelo menos 2 bugs reais (PagamentoDespesa, Cancelamento-
+            // Venda — comentários originais preservados do lado do
+            // servidor). Migrado pra usar ObterResumoAsync via API: a
+            // agregação agora mora num lugar só (servidor), corrigível uma
+            // vez só pra qualquer cliente futuro.
+            Guid usuarioLogadoId = ERP.WPF.State.AppSession.UserId;
+            var resumo = await _caixaService.ObterResumoAsync(usuarioLogadoId, DataConsulta);
 
-            using (var scope = ERP.WPF.App.Services.CreateScope())
+            if (resumo == null)
             {
-                var uowFresco = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-                
-                Guid usuarioLogadoId = ERP.WPF.State.AppSession.UserId;
+                Extrato.Add($"Nenhum caixa encontrado em {DataConsulta:dd/MM/yyyy}.");
+                StatusCaixaTexto = "Sem Movimento";
+                VisibilidadeBotoesAcao = Visibility.Collapsed;
+                AtualizarTotaisTela();
+                return;
+            }
 
-                if (DataConsulta.Date == DateTime.Today)
-                {
-                    if (usuarioLogadoId != Guid.Empty)
-                    {
-                        caixaSelecionado = await uowFresco.Caixas.GetCaixaAbertoByUsuarioAsync(usuarioLogadoId);
-                    }
-                }
+            // Mantido EXATAMENTE como antes: número mostrado na tela vem dos
+            // 4 primeiros caracteres do Id (não do NumeroCaixa sequencial da
+            // entidade, que existe mas nunca foi usado aqui) — achado durante
+            // a migração, não é bug (não perde nem inventa dado), só uma
+            // escolha de exibição estranha que preferi não mudar sem pedir.
+            NumeroCaixa = $"#{resumo.CaixaId.ToString().Substring(0, 4).ToUpper()}";
 
-                if (caixaSelecionado == null)
-                {
-                    var todosCaixas = await uowFresco.Caixas.GetAllAsync();
-                    
-                    var caixasDoDia = todosCaixas.Where(c => c.Movimentos != null && c.Movimentos.Any(m => m.DataHora.Date == DataConsulta.Date)).ToList();
-                    
-                    caixaSelecionado = caixasDoDia.FirstOrDefault(c => 
-                    {
-                        var prop = c.GetType().GetProperty("UsuarioId");
-                        if (prop != null && usuarioLogadoId != Guid.Empty)
-                        {
-                            var id = (Guid?)prop.GetValue(c);
-                            return id == usuarioLogadoId;
-                        }
-                        return true; 
-                    });
+            if (resumo.Status == StatusCaixa.Aberto && DataConsulta.Date == DateTime.Today)
+            {
+                StatusCaixaTexto = "Aberto: Hoje";
+                VisibilidadeBotoesAcao = Visibility.Visible;
+            }
+            else
+            {
+                StatusCaixaTexto = $"Fechado em: {DataConsulta:dd/MM/yyyy}";
+                VisibilidadeBotoesAcao = Visibility.Collapsed;
+            }
 
-                    if (caixaSelecionado == null) caixaSelecionado = caixasDoDia.FirstOrDefault();
-                }
+            SaldoInicial        = resumo.SaldoInicial;
+            VendasDinheiro      = resumo.VendasDinheiro;
+            VendasPix           = resumo.VendasPix;
+            VendasCartaoDebito  = resumo.VendasCartaoDebito;
+            VendasCartaoCredito = resumo.VendasCartaoCredito;
+            VendasAPrazo        = resumo.VendasAPrazo;
+            VendasHaver         = resumo.VendasHaver;
+            Suprimentos         = resumo.Suprimentos;
+            Sangrias            = resumo.Sangrias;
+            Despesas            = resumo.Despesas;
 
-                if (caixaSelecionado == null)
-                {
-                    Extrato.Add($"Nenhum caixa encontrado em {DataConsulta:dd/MM/yyyy}.");
-                    StatusCaixaTexto = "Sem Movimento";
-                    VisibilidadeBotoesAcao = Visibility.Collapsed;
-                    AtualizarTotaisTela();
-                    return;
-                }
-
-                NumeroCaixa = $"#{caixaSelecionado.Id.ToString().Substring(0, 4).ToUpper()}";
-
-                if (caixaSelecionado.Status == StatusCaixa.Aberto && DataConsulta.Date == DateTime.Today)
-                {
-                    StatusCaixaTexto = "Aberto: Hoje";
-                    VisibilidadeBotoesAcao = Visibility.Visible;
-                }
-                else
-                {
-                    StatusCaixaTexto = $"Fechado em: {DataConsulta:dd/MM/yyyy}";
-                    VisibilidadeBotoesAcao = Visibility.Collapsed;
-                }
-
-                foreach (var mov in caixaSelecionado.Movimentos.OrderBy(m => m.DataHora))
-                {
-                    string textoDescricao = "";
-                    var tipoMovimento = mov.GetType();
-                    var propriedadeTexto = tipoMovimento.GetProperty("Descricao") ?? tipoMovimento.GetProperty("Observacao") ?? tipoMovimento.GetProperty("Motivo") ?? tipoMovimento.GetProperty("Historico");
-                    
-                    if (propriedadeTexto != null)
-                    {
-                        textoDescricao = propriedadeTexto.GetValue(mov)?.ToString() ?? "";
-                    }
-
-                    bool isEstorno = textoDescricao.ToLower().Contains("estorno");
-
-                    if (mov.Tipo == TipoMovimentoCaixa.Abertura)
-                    {
-                        SaldoInicial += mov.Valor;
-                        Extrato.Add($"ABERTURA \t\t\t + R$ {mov.Valor:N2}");
-                    }
-                    else if (mov.Tipo == TipoMovimentoCaixa.Venda || mov.Tipo.ToString() == "RecebimentoConta")
-                    {
-                        if (mov.FormaPagamento == PaymentMethod.Dinheiro) VendasDinheiro += mov.Valor;
-                        else if (mov.FormaPagamento == PaymentMethod.Pix) VendasPix += mov.Valor;
-                        else if (mov.FormaPagamento == PaymentMethod.CartaoDebito) VendasCartaoDebito += mov.Valor;
-                        else if (mov.FormaPagamento == PaymentMethod.CartaoCredito) VendasCartaoCredito += mov.Valor;
-                        else if (mov.FormaPagamento == PaymentMethod.Haver) VendasHaver += mov.Valor;
-                        else VendasAPrazo += mov.Valor; 
-                        
-                        string prefixoExtrato = textoDescricao.ToUpper().Contains("FIADO") || mov.Tipo.ToString() == "RecebimentoConta" 
-                                            ? "REC. FIADO" 
-                                            : "VENDA";
-
-                        Extrato.Add($"{prefixoExtrato} ({mov.FormaPagamento}) \t + R$ {mov.Valor:N2}");
-                    }
-                    else if (mov.Tipo == TipoMovimentoCaixa.Suprimento)
-                    {
-                        Suprimentos += mov.Valor;
-                        Extrato.Add($"SUPRIMENTO\t\t\t + R$ {mov.Valor:N2}");
-                    }
-                    else if (mov.Tipo == TipoMovimentoCaixa.Sangria)
-                    {
-                        if (isEstorno)
-                        {
-                            if (mov.FormaPagamento == PaymentMethod.Dinheiro) VendasDinheiro -= mov.Valor;
-                            else if (mov.FormaPagamento == PaymentMethod.Pix) VendasPix -= mov.Valor;
-                            else if (mov.FormaPagamento == PaymentMethod.CartaoDebito) VendasCartaoDebito -= mov.Valor;
-                            else if (mov.FormaPagamento == PaymentMethod.CartaoCredito) VendasCartaoCredito -= mov.Valor;
-                            else if (mov.FormaPagamento == PaymentMethod.Haver) VendasHaver -= mov.Valor;
-                            else VendasAPrazo -= mov.Valor;
-
-                            Extrato.Add($"ESTORNO ({mov.FormaPagamento})\t\t - R$ {mov.Valor:N2}");
-                        }
-                        else
-                        {
-                            if (mov.FormaPagamento == PaymentMethod.Dinheiro) Sangrias += mov.Valor;
-                            Extrato.Add($"SANGRIA \t\t\t - R$ {mov.Valor:N2}");
-                        }
-                    }
-                    else if (mov.Tipo == TipoMovimentoCaixa.PagamentoDespesa)
-                    {
-                        // mov.Valor já vem negativo daqui (RegistrarMovimentoAsync recebe
-                        // -conta.Valor em ContaPagarViewModel) — usa Math.Abs pra exibir e
-                        // somar como valor positivo de saída, igual às outras categorias.
-                        Despesas += Math.Abs(mov.Valor);
-                        Extrato.Add($"{textoDescricao}\t\t - R$ {Math.Abs(mov.Valor):N2}");
-                    }
-                    else if (mov.Tipo == TipoMovimentoCaixa.CancelamentoVenda)
-                    {
-                        // Achado (17/09) — cancelar venda já cria o estorno certo no
-                        // banco (SaleService.CancelAsync, valor negativo), mas essa
-                        // tela nunca sabia reconhecer TipoMovimentoCaixa.
-                        // CancelamentoVenda — só tratava estorno quando vinha como
-                        // Sangria com "estorno" no texto (padrão mais antigo). Sem
-                        // um branch próprio, caía no "senão" genérico lá embaixo, que
-                        // só escreve no extrato mas não desconta de nenhum total —
-                        // por isso "o dinheiro continua no caixa" mesmo com a venda
-                        // cancelada. Usa += (não -=) porque mov.Valor aqui JÁ vem
-                        // negativo — subtrair de novo inverteria o sinal errado.
-                        if (mov.FormaPagamento == PaymentMethod.Dinheiro) VendasDinheiro += mov.Valor;
-                        else if (mov.FormaPagamento == PaymentMethod.Pix) VendasPix += mov.Valor;
-                        else if (mov.FormaPagamento == PaymentMethod.CartaoDebito) VendasCartaoDebito += mov.Valor;
-                        else if (mov.FormaPagamento == PaymentMethod.CartaoCredito) VendasCartaoCredito += mov.Valor;
-                        else if (mov.FormaPagamento == PaymentMethod.Haver) VendasHaver += mov.Valor;
-                        else VendasAPrazo += mov.Valor;
-
-                        Extrato.Add($"ESTORNO ({mov.FormaPagamento})\t\t - R$ {Math.Abs(mov.Valor):N2}");
-                    }
-                    else if (!string.IsNullOrWhiteSpace(textoDescricao))
-                    {
-                        // Defesa: qualquer TipoMovimentoCaixa futuro que apareça aqui sem
-                        // um branch dedicado ainda aparece no extrato, em vez de sumir
-                        // silenciosamente como acontecia antes com PagamentoDespesa.
-                        Extrato.Add($"{textoDescricao}\t\t {(mov.Valor >= 0 ? "+" : "-")} R$ {Math.Abs(mov.Valor):N2}");
-                    }
-                }
-            } 
+            foreach (var linha in resumo.Extrato)
+                Extrato.Add(linha);
 
             AtualizarTotaisTela();
         }
@@ -329,25 +224,24 @@ public class ResumoCaixaViewModel : BaseViewModel
             try
             {
                 Guid usuarioId = ERP.WPF.State.AppSession.UserId;
-                
-                var caixaAberto = await _uow.Caixas.GetCaixaAbertoByUsuarioAsync(usuarioId);
-            
-                if (caixaAberto != null)
-                {
-                    caixaAberto.Status = StatusCaixa.Fechado; 
-                    
-                    Guid caixaId = ERP.WPF.State.AppSession.CaixaId ?? caixaAberto.Id;
-                    await _caixaService.RegistrarMovimentoAsync(usuarioId, 0, "FECHAMENTO DE CAIXA", PaymentMethod.Dinheiro, TipoMovimentoCaixa.Fechamento);
 
-                    _uow.Caixas.Update(caixaAberto);
-                    await _uow.CommitAsync();
-                }
+                // S{N} FIX — achado auditando pra Fase C (módulo Caixa): esta
+                // tela fechava o caixa NA MÃO (Status = Fechado direto no
+                // _uow, sem passar por FecharCaixaAsync), e por isso nunca
+                // gravava DataFechamento — todo caixa fechado por aqui ficava
+                // com esse campo eternamente nulo. FecharCaixaAsync agora
+                // também registra o movimento "FECHAMENTO DE CAIXA" (unificado
+                // no serviço, ver CaixaService.cs), então esta chamada única
+                // substitui as três linhas antigas (RegistrarMovimentoAsync +
+                // _uow.Caixas.Update + _uow.CommitAsync) sem perder nada do
+                // extrato.
+                await _caixaService.FecharCaixaAsync(usuarioId);
 
                 ERP.WPF.State.AppSession.CaixaId = null;
 
                 OnEncerrarCaixa?.Invoke();
                 OnFechar?.Invoke();
-                
+
                 MessageBox.Show("✅ Caixa encerrado com sucesso!", "Fechamento", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)

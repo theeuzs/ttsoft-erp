@@ -750,37 +750,34 @@ public class PdvViewModel : BaseViewModel
     {
         try
         {
-            // Criamos um escopo zerado para não dar conflito no Entity Framework
-            using (var scope = ERP.WPF.App.Services.CreateScope())
+            // S{N} FIX — achado auditando pra Fase C: trocado o acesso direto
+            // a IUnitOfWork.Caixas por ICaixaService (já injetado na classe),
+            // mesmo motivo do fix em AbrirCaixaViewModel — sem criar escopo
+            // novo de DbContext só pra isso.
+            var caixaAberto = await _caixaService.ObterCaixaAbertoAsync(AppSession.UserId);
+
+            if (caixaAberto != null)
             {
-                var uow = scope.ServiceProvider.GetRequiredService<ERP.Domain.Interfaces.IUnitOfWork>();
-                
-                // Busca direto no banco se esse usuário já tem caixa aberto hoje
-                var caixaAberto = await uow.Caixas.GetCaixaAbertoByUsuarioAsync(AppSession.UserId);
-                
-                if (caixaAberto != null)
-                {
-                    // Guarda o Id do caixa na sessão para o resto do sistema saber!
-                    ERP.WPF.State.AppSession.CaixaId = caixaAberto.Id;
+                // Guarda o Id do caixa na sessão para o resto do sistema saber!
+                ERP.WPF.State.AppSession.CaixaId = caixaAberto.Id;
 
-                    // Como estamos em background, pedimos pra thread principal da UI atualizar a tela
-                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        IsCaixaAberto = true;
-                        ValorAtualCaixa = caixaAberto.ValorAbertura; 
-                    });
-
-                    await AtualizarBotaoVerdeAsync(); 
-                }
-                else
+                // Como estamos em background, pedimos pra thread principal da UI atualizar a tela
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
-                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        IsCaixaAberto = false;
-                        ValorAtualCaixa = 0;
-                        ERP.WPF.State.AppSession.CaixaId = Guid.Empty;
-                    });
-                }
+                    IsCaixaAberto = true;
+                    ValorAtualCaixa = caixaAberto.ValorAbertura;
+                });
+
+                await AtualizarBotaoVerdeAsync();
+            }
+            else
+            {
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                {
+                    IsCaixaAberto = false;
+                    ValorAtualCaixa = 0;
+                    ERP.WPF.State.AppSession.CaixaId = Guid.Empty;
+                });
             }
         }
         catch (Exception ex) 

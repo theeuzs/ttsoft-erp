@@ -18,6 +18,20 @@ public interface ICaixaRepository
 
     // 🟢 NOVO: Busca o histórico de TODOS os caixas para o calendário de auditoria
     Task<IEnumerable<Caixa>> GetAllAsync();
+
+    /// <summary>
+    /// Fase C — busca o caixa certo pra uma data (resumo/extrato), sem
+    /// carregar todo o histórico do tenant em memória (GetAllAsync acima é
+    /// isso, e não escala). Ordem de preferência, replicando exatamente o
+    /// que o WPF fazia antes (ResumoCaixaViewModel.CarregarResumoAsync):
+    ///   1. Se a data é hoje: o caixa ABERTO do usuário, se existir.
+    ///   2. Senão: o caixa do usuário com algum movimento nessa data.
+    ///   3. Senão: qualquer caixa (de qualquer usuário) com movimento nessa
+    ///      data — mantém o comportamento antigo de fallback, mas nunca foi
+    ///      claro qual cenário de negócio isso cobre (nenhum teste/uso
+    ///      documentado exercita esse terceiro caso).
+    /// </summary>
+    Task<Caixa?> ObterCaixaPorDataEUsuarioAsync(DateTime data, Guid usuarioId);
     
     // Adiciona um caixa novo (Abertura)
     Task AddAsync(Caixa caixa);

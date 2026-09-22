@@ -339,6 +339,42 @@ public class AbrirCaixaDto
 }
 
 /// <summary>
+/// Fase C, módulo Caixa — resultado pronto do "Resumo de Caixa" (aberto ou de
+/// uma data passada). Agregação feita no servidor (ver CaixaService.
+/// ObterResumoAsync) — antes vivia inteira no WPF (ResumoCaixaViewModel),
+/// com lógica de agregação por tipo de movimento que já teve pelo menos 2
+/// bugs reais documentados (PagamentoDespesa nunca descontava do total em
+/// espécie; CancelamentoVenda não era reconhecido e o extrato não
+/// refletia a venda cancelada). Centralizar aqui significa corrigir uma vez só,
+/// pra qualquer cliente futuro (WPF, Portal), em vez de reimplementar em
+/// cada tela que precisar mostrar um resumo de caixa.
+/// Extrato já vem formatado como texto pronto pra exibir (mesmo formato que
+/// o WPF sempre usou) — não é reformatado pelo cliente.
+/// </summary>
+public class ResumoCaixaDto
+{
+    public Guid           CaixaId          { get; set; }
+    public int            NumeroCaixa      { get; set; }
+    public string         OperadorNome     { get; set; } = string.Empty;
+    public DateTime       DataAbertura     { get; set; }
+    public DateTime?      DataFechamento   { get; set; }
+    public StatusCaixa    Status           { get; set; }
+
+    public decimal SaldoInicial        { get; set; }
+    public decimal VendasDinheiro      { get; set; }
+    public decimal VendasPix           { get; set; }
+    public decimal VendasCartaoDebito  { get; set; }
+    public decimal VendasCartaoCredito { get; set; }
+    public decimal VendasAPrazo        { get; set; }
+    public decimal VendasHaver         { get; set; }
+    public decimal Suprimentos         { get; set; }
+    public decimal Sangrias            { get; set; }
+    public decimal Despesas            { get; set; }
+
+    public List<string> Extrato { get; set; } = new();
+}
+
+/// <summary>
 /// S8: DTO público para POST /api/caixa/abrir.
 /// UsuarioId e OperadorNome são sempre derivados do JWT no controller — não expostos ao cliente.
 /// </summary>

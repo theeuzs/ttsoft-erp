@@ -409,7 +409,13 @@ public partial class App : System.Windows.Application
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IRoleService, RoleService>();
-        services.AddScoped<ICaixaService, CaixaService>();
+        // Fase C, módulo 3 (09/2026) — HttpCaixaService no lugar do
+        // CaixaService local. Consumidores: AbrirCaixaViewModel, PdvViewModel,
+        // ResumoCaixaViewModel, FinanceiroViewModel, ContaPagarViewModel,
+        // SaleViewModel. REQUER a API com GET /api/caixa/resumo já publicada
+        // ANTES de instalar este WPF na loja.
+        // Rollback: voltar esta linha para CaixaService.
+        services.AddScoped<ICaixaService, ERP.WPF.Services.HttpCaixaService>();
         services.AddScoped<IContaBancariaService, ContaBancariaService>();
         services.AddScoped<IOrcamentoService, OrcamentoService>();
         services.AddScoped<IContaPagarService, ContaPagarService>();

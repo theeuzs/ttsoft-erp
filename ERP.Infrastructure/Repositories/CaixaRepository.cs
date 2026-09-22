@@ -57,6 +57,28 @@ public class CaixaRepository : ICaixaRepository
             .ToListAsync();
     }
 
+    public async Task<Caixa?> ObterCaixaPorDataEUsuarioAsync(DateTime data, Guid usuarioId)
+    {
+        if (data.Date == ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().Date)
+        {
+            var aberto = await GetCaixaAbertoByUsuarioAsync(usuarioId);
+            if (aberto != null) return aberto;
+        }
+
+        var doUsuarioNaData = await _context.Caixas
+            .Include(c => c.Movimentos)
+            .Where(c => c.UsuarioId == usuarioId && c.Movimentos.Any(m => m.DataHora.Date == data.Date))
+            .OrderByDescending(c => c.DataAbertura)
+            .FirstOrDefaultAsync();
+        if (doUsuarioNaData != null) return doUsuarioNaData;
+
+        return await _context.Caixas
+            .Include(c => c.Movimentos)
+            .Where(c => c.Movimentos.Any(m => m.DataHora.Date == data.Date))
+            .OrderByDescending(c => c.DataAbertura)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task AddAsync(Caixa caixa)
     {
         await _context.Caixas.AddAsync(caixa);
