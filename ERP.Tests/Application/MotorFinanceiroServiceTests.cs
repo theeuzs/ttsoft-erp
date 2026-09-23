@@ -88,7 +88,7 @@ public class MotorFinanceiroServiceTests
         _caixaServiceMock.Verify(
             s => s.RegistrarMovimentoAsync(
                 It.IsAny<Guid>(), It.IsAny<decimal>(), It.IsAny<string>(),
-                It.IsAny<PaymentMethod>(), It.IsAny<TipoMovimentoCaixa>(), It.IsAny<decimal>(), It.IsAny<Guid?>(), It.IsAny<Guid?>()),
+                It.IsAny<PaymentMethod>(), It.IsAny<TipoMovimentoCaixa>(), It.IsAny<decimal>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string>()),
             Times.Never);
     }
 
@@ -109,7 +109,7 @@ public class MotorFinanceiroServiceTests
         _caixaServiceMock.Verify(
             s => s.RegistrarMovimentoAsync(
                 It.IsAny<Guid>(), It.IsAny<decimal>(), It.IsAny<string>(),
-                It.IsAny<PaymentMethod>(), It.IsAny<TipoMovimentoCaixa>(), It.IsAny<decimal>(), It.IsAny<Guid?>(), It.IsAny<Guid?>()),
+                It.IsAny<PaymentMethod>(), It.IsAny<TipoMovimentoCaixa>(), It.IsAny<decimal>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string>()),
             Times.Never);
         _contaBancariaServiceMock.Verify(
             s => s.RegistrarEstornoVendaAsync(It.IsAny<Guid>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<Guid?>()),
@@ -127,7 +127,7 @@ public class MotorFinanceiroServiceTests
 
         _caixaServiceMock.Verify(
             s => s.RegistrarMovimentoAsync(
-                usuarioId, 80m, "ESTORNO VENDA TESTE", PaymentMethod.Dinheiro, TipoMovimentoCaixa.Sangria, It.IsAny<decimal>(), It.IsAny<Guid?>(), It.IsAny<Guid?>()),
+                usuarioId, 80m, "ESTORNO VENDA TESTE", PaymentMethod.Dinheiro, TipoMovimentoCaixa.Sangria, It.IsAny<decimal>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string>()),
             Times.Once);
     }
 
@@ -145,7 +145,7 @@ public class MotorFinanceiroServiceTests
         _caixaServiceMock.Verify(
             s => s.RegistrarMovimentoAsync(
                 It.IsAny<Guid>(), It.IsAny<decimal>(), It.IsAny<string>(),
-                It.IsAny<PaymentMethod>(), It.IsAny<TipoMovimentoCaixa>(), It.IsAny<decimal>(), It.IsAny<Guid?>(), It.IsAny<Guid?>()),
+                It.IsAny<PaymentMethod>(), It.IsAny<TipoMovimentoCaixa>(), It.IsAny<decimal>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string>()),
             Times.Never);
         _contaBancariaServiceMock.Verify(
             s => s.RegistrarEstornoVendaAsync(It.IsAny<Guid>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<Guid?>()),
@@ -178,7 +178,7 @@ public class MotorFinanceiroServiceTests
 
         _caixaServiceMock.Verify(s => s.RegistrarMovimentoAsync(
             It.IsAny<Guid>(), 100m, It.IsAny<string>(), PaymentMethod.Dinheiro, TipoMovimentoCaixa.Venda,
-            It.IsAny<decimal>(), vendaId, salePaymentId), Times.Once);
+            It.IsAny<decimal>(), vendaId, salePaymentId, It.IsAny<string>()), Times.Once);
     }
 
     [Fact]
@@ -223,7 +223,7 @@ public class MotorFinanceiroServiceTests
 
         _caixaServiceMock.Verify(s => s.RegistrarMovimentoAsync(
             It.IsAny<Guid>(), It.IsAny<decimal>(), It.IsAny<string>(), It.IsAny<PaymentMethod>(),
-            It.IsAny<TipoMovimentoCaixa>(), It.IsAny<decimal>(), It.IsAny<Guid?>(), It.IsAny<Guid?>()), Times.Never);
+            It.IsAny<TipoMovimentoCaixa>(), It.IsAny<decimal>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
@@ -286,7 +286,7 @@ public class MotorFinanceiroServiceTests
 
         _caixaServiceMock.Verify(s => s.RegistrarMovimentoAsync(
             It.IsAny<Guid>(), 30m, It.IsAny<string>(), PaymentMethod.Dinheiro, TipoMovimentoCaixa.Venda,
-            It.IsAny<decimal>(), vendaId, salePaymentDinheiro), Times.Once);
+            It.IsAny<decimal>(), vendaId, salePaymentDinheiro, It.IsAny<string>()), Times.Once);
         _contaBancariaServiceMock.Verify(s => s.RegistrarRecebimentoVendaAsync(
             vendaId, 40m, It.IsAny<string>(), salePaymentPix), Times.Once);
         _recebivelOperadoraServiceMock.Verify(s => s.RegistrarRecebivelVendaAsync(
