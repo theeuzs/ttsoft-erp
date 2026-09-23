@@ -125,6 +125,34 @@ public class HttpCaixaServiceTests
         json.RootElement.GetProperty("FormaPagamento").GetString().Should().Be("Pix");
     }
 
+    [Fact(DisplayName = "RegistrarMovimentoAsync — autorizadorToken vai no CORPO, não troca o Bearer da chamada")]
+    public async Task RegistrarMovimentoAsync_AutorizadorTokenVaiNoCorpo_NaoNoBearer()
+    {
+        var h = new HandlerGravador(HttpStatusCode.OK, "{\"mensagem\":\"ok\"}");
+        await new HttpCaixaService(h).RegistrarMovimentoAsync(
+            Guid.NewGuid(), 50m, "teste", PaymentMethod.Dinheiro, TipoMovimentoCaixa.Sangria,
+            autorizadorToken: "token-fake-do-gerente");
+
+        using var json2 = JsonDocument.Parse(h.UltimoCorpo!);
+        json2.RootElement.GetProperty("AutorizadorToken").GetString().Should().Be("token-fake-do-gerente");
+
+        // O Bearer da chamada continua sendo a sessão normal (AppSession.JwtToken),
+        // nunca o token do autorizador — senão a chamada "viraria" o autorizador
+        // pro servidor (achado testando: sangria caía no caixa do gerente).
+        h.UltimaRequisicao!.Headers.Authorization!.Parameter.Should().NotBe("token-fake-do-gerente");
+    }
+
+    [Fact(DisplayName = "RegistrarMovimentoAsync — sem autorizadorToken, corpo manda null (comportamento normal preservado)")]
+    public async Task RegistrarMovimentoAsync_SemAutorizadorToken_CorpoTemNull()
+    {
+        var h = new HandlerGravador(HttpStatusCode.OK, "{\"mensagem\":\"ok\"}");
+        await new HttpCaixaService(h).RegistrarMovimentoAsync(
+            Guid.NewGuid(), 50m, "teste", PaymentMethod.Dinheiro, TipoMovimentoCaixa.Suprimento);
+
+        using var json3 = JsonDocument.Parse(h.UltimoCorpo!);
+        json3.RootElement.GetProperty("AutorizadorToken").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
     [Fact(DisplayName = "RegistrarMovimentoAsync — 400 vira InvalidOperationException (ex.: sangria maior que o saldo)")]
     public async Task RegistrarMovimentoAsync_400_LancaInvalidOperationException()
     {

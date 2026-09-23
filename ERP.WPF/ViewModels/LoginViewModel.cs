@@ -2,6 +2,7 @@ using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using ERP.WPF.Commands;
 using ERP.WPF.State;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Linq;
 using System.Net.Http.Json;
@@ -91,6 +92,12 @@ public class LoginViewModel : BaseViewModel
                 {
                     cnpjCliente = config["Cnpj"];
                 }
+
+                // S{N} FIX — achado testando Fase C: guarda o CNPJ na sessão
+                // pra SenhaGerenteView conseguir logar como o autorizador
+                // mais tarde (antes só existia essa variável local, perdida
+                // assim que o login terminava).
+                ERP.WPF.State.AppSession.TenantCnpj = cnpjCliente;
             }
             catch
             {
@@ -183,6 +190,21 @@ public class LoginViewModel : BaseViewModel
                         "Vendas e Histórico não vão funcionar até isso ser resolvido — tente novamente em alguns segundos ou reabra o sistema.",
                         "Aviso de Conexão", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
                 }
+
+                // S{N} FIX — achado testando Fase C: PdvViewModel é Singleton,
+                // então VerificarCaixaAbertoAsync (dentro dele) só rodava na
+                // primeira vez que o app abria. Login de um SEGUNDO usuário,
+                // na mesma sessão do app (troca de turno sem fechar o
+                // sistema), deixava a tela do PDV com o estado de caixa do
+                // usuário ANTERIOR. Chama de novo aqui, pra cada login.
+                // Best-effort: se falhar (API fora do ar), não trava o
+                // login — o próprio método já loga o erro internamente.
+                try
+                {
+                    var pdv = ERP.WPF.App.Services.GetRequiredService<PdvViewModel>();
+                    await pdv.RefrescarEstadoDeLoginAsync();
+                }
+                catch { /* best-effort — não impede o login de completar */ }
 
                 OnLoginResult?.Invoke(this, true);
             }

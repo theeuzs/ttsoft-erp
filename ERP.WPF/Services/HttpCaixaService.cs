@@ -63,7 +63,8 @@ public class HttpCaixaService : ICaixaService
 
     public async Task RegistrarMovimentoAsync(Guid usuarioId, decimal valor, string descricao,
         PaymentMethod formaPagamento, TipoMovimentoCaixa tipo,
-        decimal maxSangriaValue = 0m, Guid? vendaId = null, Guid? salePaymentId = null)
+        decimal maxSangriaValue = 0m, Guid? vendaId = null, Guid? salePaymentId = null,
+        string? autorizadorToken = null)
     {
         // maxSangriaValue: ignorado aqui de propósito — o controller resolve
         // o limite pelo CARGO do usuário via JWT (_tenant.MaxSangriaValue),
@@ -77,12 +78,20 @@ public class HttpCaixaService : ICaixaService
         // um projeto que o WPF não referencia (e não deveria). O shape
         // JSON (Valor/Descricao/Tipo/FormaPagamento) é o que importa pro
         // model binding da API, não o tipo C# de quem manda.
+        //
+        // S{N} FIX — achado testando Fase C: AutorizadorToken vai no CORPO,
+        // não como o Bearer da chamada (ApiHttp.CriarHttpClient continua
+        // usando AppSession.JwtToken normalmente — a identidade da chamada
+        // continua sendo QUEM ESTÁ LOGADO, pra a sangria/suprimento cair no
+        // caixa certo). O servidor valida esse token separadamente, só como
+        // prova de que alguém com permissão autorizou.
         var corpo = new
         {
-            Valor          = valor,
-            Descricao      = descricao,
-            Tipo           = tipo.ToString(),
-            FormaPagamento = formaPagamento.ToString()
+            Valor            = valor,
+            Descricao        = descricao,
+            Tipo             = tipo.ToString(),
+            FormaPagamento   = formaPagamento.ToString(),
+            AutorizadorToken = autorizadorToken
         };
 
         using var http = ApiHttp.CriarHttpClient(_handler);

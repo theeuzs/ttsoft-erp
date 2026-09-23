@@ -97,8 +97,13 @@ public class CaixaService : ICaixaService
     // 🟢 Registra movimento no caixa DO USUÁRIO
     public async Task RegistrarMovimentoAsync(Guid usuarioId, decimal valor, string descricao,
                                                PaymentMethod formaPagamento, TipoMovimentoCaixa tipo,
-                                               decimal maxSangriaValue = 0m, Guid? vendaId = null, Guid? salePaymentId = null)
+                                               decimal maxSangriaValue = 0m, Guid? vendaId = null, Guid? salePaymentId = null,
+                                               string? autorizadorToken = null)
     {
+        // autorizadorToken: sem uso aqui — é um conceito só da camada HTTP
+        // (ver ICaixaService). Este método já roda no servidor; a
+        // autorização (permissão do CALLER) já foi checada pelo controller
+        // antes de chegar até aqui.
         // S8 FIX: silêncio com caixa fechado → 200 OK fantasma; agora lança exceção (400 no controller).
         var caixaAberto = await _uow.Caixas.GetCaixaAbertoByUsuarioAsync(usuarioId)
             ?? throw new InvalidOperationException("Nenhum caixa aberto para este usuário.");

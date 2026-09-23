@@ -180,6 +180,17 @@ public class ResumoCaixaViewModel : BaseViewModel
 
     private void RealizarSuprimento()
     {
+        // S{N} FIX — achado testando Fase C: Suprimento nunca pedia senha de
+        // gerente, diferente da Sangria — mas os dois exigem cash.sangria
+        // do lado da API (/suprimento tem o mesmo [HasPermission] que
+        // /sangria). Um Vendedor batia direto num 403 sem entender por quê,
+        // sem chance de um gerente autorizar na hora. Agora os dois passam
+        // pelo mesmo portão.
+        var telaSenha = new ERP.WPF.Views.SenhaGerenteView { Contexto = "lançar suprimento" };
+        telaSenha.ShowDialog();
+
+        if (!telaSenha.Autorizado) return;
+
         var vm = new MovimentoCaixaViewModel(false); 
         var view = new Views.MovimentoCaixaView(vm);
 
@@ -187,7 +198,17 @@ public class ResumoCaixaViewModel : BaseViewModel
         {
             Guid usuarioId = ERP.WPF.State.AppSession.UserId;
             
-            await _caixaService.RegistrarMovimentoAsync(usuarioId, valor, "SUPRIMENTO", PaymentMethod.Dinheiro, TipoMovimentoCaixa.Suprimento);
+            // S{N} FIX — achado testando Fase C (correção de uma tentativa
+            // anterior errada): o token do autorizador vai como PARÂMETRO
+            // aqui, não trocando AppSession.JwtToken. Trocar a sessão fazia
+            // a chamada inteira "virar" o gerente pro servidor — o
+            // suprimento tentava cair no caixa DELE (ou falhava, se ele não
+            // tivesse caixa aberto, que foi o erro visto testando). Com o
+            // Vendedor continuando como identidade da chamada, o dinheiro
+            // cai no caixa certo, e o token do gerente só prova a
+            // autorização.
+            await _caixaService.RegistrarMovimentoAsync(usuarioId, valor, "SUPRIMENTO", PaymentMethod.Dinheiro,
+                TipoMovimentoCaixa.Suprimento, autorizadorToken: telaSenha.TokenAutorizador);
             await CarregarResumoAsync(); 
             PdvViewModel.NotificacaoCaixaAlterado?.Invoke();
         };
@@ -196,7 +217,7 @@ public class ResumoCaixaViewModel : BaseViewModel
 
     private void RealizarSangria()
     {
-        var telaSenha = new ERP.WPF.Views.SenhaGerenteView();
+        var telaSenha = new ERP.WPF.Views.SenhaGerenteView { Contexto = "realizar sangria" };
         telaSenha.ShowDialog();
 
         if (!telaSenha.Autorizado) return; 
@@ -208,7 +229,8 @@ public class ResumoCaixaViewModel : BaseViewModel
         {
             Guid usuarioId = ERP.WPF.State.AppSession.UserId;
             
-            await _caixaService.RegistrarMovimentoAsync(usuarioId, valor, "SANGRIA", PaymentMethod.Dinheiro, TipoMovimentoCaixa.Sangria);
+            await _caixaService.RegistrarMovimentoAsync(usuarioId, valor, "SANGRIA", PaymentMethod.Dinheiro,
+                TipoMovimentoCaixa.Sangria, autorizadorToken: telaSenha.TokenAutorizador);
             await CarregarResumoAsync(); 
             PdvViewModel.NotificacaoCaixaAlterado?.Invoke();
         };

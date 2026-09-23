@@ -909,6 +909,103 @@ public class CaixaControllerTests : IntegrationTestBase
     public async Task ExisteMovimento_SemToken_Retorna401()
         => (await AnonClient.GetAsync($"/api/caixa/existe-movimento/{Guid.NewGuid()}"))
             .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+    // ── Fase C (achado testando): autorização por token de terceiro ──────
+    // Sangria/Suprimento feitos por quem não tem cash.sangria, mas com um
+    // gerente/admin autorizando na hora (SenhaGerenteView no WPF). O ponto
+    // crítico destes testes: a identidade da CHAMADA continua sendo de
+    // quem não tem a permissão — só a permissão em si vem emprestada.
+
+    [Fact(DisplayName = "Fase C — Sangria sem cash.sangria e SEM token de autorizador → 403")]
+    public async Task Sangria_SemPermissaoSemAutorizador_Retorna403()
+    {
+        var tokenVendedor = Factory.GerarToken("Vendedor", permissoes: new[] { Permissions.CashViewSummary });
+        using var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenVendedor);
+
+        var resp = await client.PostAsJsonAsync("/api/caixa/sangria",
+            new { Valor = 10m, Descricao = "teste" });
+
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact(DisplayName = "Fase C — Sangria sem cash.sangria, COM token de autorizador válido (tem a permissão) → passa do 403 (400 por falta de caixa é esperado)")]
+    public async Task Sangria_SemPermissao_ComAutorizadorValido_PassaDoForbid()
+    {
+        var tokenVendedor    = Factory.GerarToken("Vendedor", permissoes: new[] { Permissions.CashViewSummary });
+        var tokenAutorizador = Factory.GerarToken("Gerente",  permissoes: new[] { Permissions.CashSangria });
+
+        using var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenVendedor);
+
+        var resp = await client.PostAsJsonAsync("/api/caixa/sangria",
+            new { Valor = 10m, Descricao = "teste", AutorizadorToken = tokenAutorizador });
+
+        // Nunca 403 — a autorização passou. 400 é o resultado ESPERADO aqui
+        // (este Vendedor sintético não tem caixa aberto no banco de teste),
+        // não uma falha do teste — o que importa é que passou do gate.
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await resp.Content.ReadAsStringAsync()).Should().Contain("Nenhum caixa aberto");
+    }
+
+    [Fact(DisplayName = "Fase C — token de autorizador de OUTRO tenant nunca autoriza, mesmo com a permissão certa")]
+    public async Task Sangria_AutorizadorDeOutroTenant_ContinuaForbid()
+    {
+        var outroTenantId    = Guid.NewGuid();
+        var tokenVendedor    = Factory.GerarToken("Vendedor", permissoes: new[] { Permissions.CashViewSummary });
+        var tokenAutorizador = Factory.GerarToken("Gerente",  permissoes: new[] { Permissions.CashSangria }, tenantId: outroTenantId);
+
+        using var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenVendedor);
+
+        var resp = await client.PostAsJsonAsync("/api/caixa/sangria",
+            new { Valor = 10m, Descricao = "teste", AutorizadorToken = tokenAutorizador });
+
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact(DisplayName = "Fase C — token de autorizador SEM a permissão certa não autoriza")]
+    public async Task Sangria_AutorizadorSemAPermissaoCerta_ContinuaForbid()
+    {
+        var tokenVendedor    = Factory.GerarToken("Vendedor", permissoes: new[] { Permissions.CashViewSummary });
+        var tokenAutorizador = Factory.GerarToken("Supervisor", permissoes: new[] { Permissions.CashViewSummary });
+
+        using var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenVendedor);
+
+        var resp = await client.PostAsJsonAsync("/api/caixa/sangria",
+            new { Valor = 10m, Descricao = "teste", AutorizadorToken = tokenAutorizador });
+
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact(DisplayName = "Fase C — token de autorizador malformado não derruba a requisição, só nega")]
+    public async Task Sangria_AutorizadorTokenMalformado_ContinuaForbidSemQuebrar()
+    {
+        var tokenVendedor = Factory.GerarToken("Vendedor", permissoes: new[] { Permissions.CashViewSummary });
+
+        using var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenVendedor);
+
+        var resp = await client.PostAsJsonAsync("/api/caixa/sangria",
+            new { Valor = 10m, Descricao = "teste", AutorizadorToken = "isso-nao-e-um-jwt" });
+
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact(DisplayName = "Fase C — quem JÁ TEM cash.sangria não precisa de autorizador (comportamento antigo preservado)")]
+    public async Task Sangria_ComPermissaoPropria_NaoPrecisaDeAutorizador()
+    {
+        var tokenGerente = Factory.GerarToken("Gerente", permissoes: new[] { Permissions.CashSangria });
+        using var client = Factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenGerente);
+
+        var resp = await client.PostAsJsonAsync("/api/caixa/sangria",
+            new { Valor = 10m, Descricao = "teste" });
+
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

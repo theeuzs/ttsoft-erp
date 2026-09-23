@@ -33,6 +33,12 @@ public static class AppSession
     // URL base da API — setada em App.xaml.cs, lida pelo LoginViewModel
     public static string ApiBaseUrl { get; set; } = string.Empty;
 
+    // S{N} FIX — achado testando Fase C: precisa disso pra SenhaGerenteView
+    // conseguir logar como o autorizador (gerente/admin) mais tarde, no meio
+    // de uma Sangria/Suprimento — o CNPJ só era lido uma vez, no login
+    // inicial, e nunca ficava guardado em lugar nenhum depois disso.
+    public static string TenantCnpj { get; set; } = string.Empty;
+
     public static void Login(
         Guid id,
         string name,

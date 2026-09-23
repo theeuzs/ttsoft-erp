@@ -66,7 +66,7 @@
                         FontWeight="Bold" Height="40" BorderThickness="0" Cursor="Hand">
                     <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></Button.Resources>
                 </Button>
-                <Button Grid.Column="2" Content="✔ AUTORIZAR" Click="BtnAutorizar_Click"
+                <Button x:Name="BtnAutorizar" Grid.Column="2" Content="✔ AUTORIZAR" Click="BtnAutorizar_Click"
                         Background="#1E62A6" Foreground="White"
                         FontWeight="Bold" Height="40" BorderThickness="0" Cursor="Hand"
                         IsDefault="True">

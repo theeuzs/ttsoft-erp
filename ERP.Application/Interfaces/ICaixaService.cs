@@ -13,9 +13,18 @@ public interface ICaixaService
     Task AbrirCaixaAsync(AbrirCaixaDto dto);
 
     // 🟢 Registra movimento no caixa DO USUÁRIO
+    // S{N} FIX — achado testando Fase C: autorizadorToken é usado só pela
+    // implementação HTTP (ver HttpCaixaService) — quando um gerente/admin
+    // autoriza uma Sangria/Suprimento de um Vendedor sem a permissão, o
+    // token DELE (obtido separadamente, sem trocar a identidade da
+    // chamada) vai aqui, pro servidor validar como PROVA de autorização,
+    // sem nunca virar "quem" fez a chamada (isso continua sendo usuarioId).
+    // A implementação local (CaixaService, server-side) ignora — já roda
+    // no servidor, não tem esse conceito de "chamada HTTP separada".
     Task RegistrarMovimentoAsync(Guid usuarioId, decimal valor, string descricao,
                                   PaymentMethod formaPagamento, TipoMovimentoCaixa tipo,
-                                  decimal maxSangriaValue = 0m, Guid? vendaId = null, Guid? salePaymentId = null);
+                                  decimal maxSangriaValue = 0m, Guid? vendaId = null, Guid? salePaymentId = null,
+                                  string? autorizadorToken = null);
 
     // 🟢 Fecha o caixa DO USUÁRIO
     Task FecharCaixaAsync(Guid usuarioId);

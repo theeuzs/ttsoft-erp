@@ -761,6 +761,19 @@ public class PdvViewModel : BaseViewModel
     public ICommand SearchCustomerCommand { get; }
     public ICommand SalvarOrcamentoCommand { get; }
 
+    /// <summary>
+    /// S{N} FIX — achado testando Fase C: PdvViewModel é Singleton (de
+    /// propósito, preserva carrinho ao trocar de tela — F1↔F2 etc.), mas
+    /// isso significa que VerificarCaixaAbertoAsync só rodava UMA vez, na
+    /// primeira construção da instância. Se um segundo usuário loga depois
+    /// (troca de turno no mesmo PC, sem fechar o app), IsCaixaAberto
+    /// continuava com o valor do usuário ANTERIOR — a tela podia mostrar
+    /// "Caixa Fechado" pro Vendedor novo mesmo ele já tendo um caixa aberto
+    /// de verdade (ou o oposto). Chamado pelo LoginViewModel logo após
+    /// AppSession.Login, pra cada login — não só o primeiro.
+    /// </summary>
+    public Task RefrescarEstadoDeLoginAsync() => VerificarCaixaAbertoAsync();
+
     private async Task VerificarCaixaAbertoAsync()
     {
         try
@@ -1610,6 +1623,25 @@ public class PdvViewModel : BaseViewModel
 
         telaResumo.DataContext = caixaVm;
         telaResumo.Owner = System.Windows.Application.Current.MainWindow;
+
+        // S{N} FIX — achado testando Fase C: este é o método que o botão de
+        // verdade usa (RelayCommand só aceita Action<object?>, então
+        // AbrirResumoCaixaCommand só pode apontar pra este overload, não pro
+        // AbrirResumoCaixa() sem parâmetro logo acima). Sem OnFechar/
+        // OnEncerrarCaixa conectados, fechar o caixa pela tela de Resumo
+        // (ResumoCaixaViewModel.Encerrar, que já chama FecharCaixaAsync
+        // sozinha) nunca avisava o PDV — IsCaixaAberto continuava true, a
+        // tela de venda continuava liberada com o caixa já fechado no banco.
+        // Não chama FecharCaixaAsync aqui de novo — Encerrar() já fez isso
+        // antes de invocar OnEncerrarCaixa; só sincroniza o estado do PDV.
+        caixaVm.OnFechar = telaResumo.Close;
+        caixaVm.OnEncerrarCaixa = () =>
+        {
+            IsCaixaAberto = false;
+            ValorAtualCaixa = 0;
+            NotificacaoCaixaAlterado?.Invoke();
+        };
+
         telaResumo.ShowDialog();
     }
 

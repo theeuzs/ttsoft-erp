@@ -2,9 +2,14 @@ using ERP.Api.Security;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using ERP.Domain.Enums;
+using ERP.Persistence.Context;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Text;
 
 namespace ERP.Api.Controllers;
 
@@ -13,13 +18,17 @@ namespace ERP.Api.Controllers;
 [Authorize]
 public class CaixaController : ControllerBase
 {
-    private readonly ICaixaService  _service;
-    private readonly IRequestTenant _tenant;
+    private readonly ICaixaService   _service;
+    private readonly IRequestTenant  _tenant;
+    private readonly IConfiguration  _config;
+    private readonly AppDbContext    _db;
 
-    public CaixaController(ICaixaService service, IRequestTenant tenant)
+    public CaixaController(ICaixaService service, IRequestTenant tenant, IConfiguration config, AppDbContext db)
     {
         _service = service;
         _tenant  = tenant;
+        _config  = config;
+        _db      = db;
     }
 
     private Guid UsuarioId => Guid.Parse(
@@ -94,10 +103,12 @@ public class CaixaController : ControllerBase
     }
 
     /// <summary>Registra sangria no caixa.</summary>
-    [HasPermission(Permissions.CashSangria)]
     [HttpPost("sangria")]
     public async Task<IActionResult> Sangria([FromBody] MovimentoCaixaRequest dto)
     {
+        if (!await TemPermissaoOuAutorizacaoAsync(Permissions.CashSangria, dto.AutorizadorToken))
+            return Forbid();
+
         try
         {
             // S13: passa MaxSangriaValue do cargo (IRequestTenant) para SangriaPolicy
@@ -114,10 +125,12 @@ public class CaixaController : ControllerBase
     }
 
     /// <summary>Registra suprimento no caixa.</summary>
-    [HasPermission(Permissions.CashSangria)]
     [HttpPost("suprimento")]
     public async Task<IActionResult> Suprimento([FromBody] MovimentoCaixaRequest dto)
     {
+        if (!await TemPermissaoOuAutorizacaoAsync(Permissions.CashSangria, dto.AutorizadorToken))
+            return Forbid();
+
         try
         {
             await _service.RegistrarMovimentoAsync(
@@ -144,7 +157,7 @@ public class CaixaController : ControllerBase
         // S8 FIX: tipos restritos exigem a mesma permissão que os endpoints dedicados.
         // Antes: POST /movimento?Tipo=Sangria bypass total de [HasPermission(CashSangria)] em /sangria.
         var tipoRestrito = tipo is TipoMovimentoCaixa.Sangria or TipoMovimentoCaixa.Suprimento;
-        if (tipoRestrito && !User.HasClaim("permission", Permissions.CashSangria))
+        if (tipoRestrito && !await TemPermissaoOuAutorizacaoAsync(Permissions.CashSangria, dto.AutorizadorToken))
             return Forbid();
 
         try
@@ -170,10 +183,94 @@ public class CaixaController : ControllerBase
     [HttpGet("existe-movimento/{salePaymentId:guid}")]
     public async Task<IActionResult> ExisteMovimentoParaSalePayment(Guid salePaymentId)
         => Ok(await _service.ExisteMovimentoParaSalePaymentAsync(salePaymentId));
+
+    /// <summary>
+    /// Fase C (achado testando) — checa se QUEM ESTÁ FAZENDO a chamada tem a
+    /// permissão direto, OU se um SEGUNDO usuário (gerente/admin) autorizou
+    /// esta operação especificamente, provando isso com o próprio token dele.
+    ///
+    /// Por que não trocar o Bearer da chamada pelo token do autorizador
+    /// (jeito mais óbvio, tentado e revertido): UsuarioId acima vem SEMPRE
+    /// do token que autentica a chamada (S8 FIX, de propósito — impede um
+    /// usuário mexer no caixa de outro). Se a chamada inteira fosse feita
+    /// com o token do gerente, UsuarioId viraria o ID DELE — a sangria/
+    /// suprimento cairia no caixa do gerente (ou falharia, se ele não tiver
+    /// caixa aberto — foi exatamente o erro visto testando). Por isso o
+    /// token do autorizador vem SEPARADO, no corpo do request, e é validado
+    /// aqui de forma independente — sem nunca virar "quem" fez a chamada.
+    ///
+    /// Validação replica o que o pipeline de autenticação normal já faz
+    /// (Program.cs, AddJwtBearer): assinatura, emissor, audiência, validade
+    /// — E a MESMA checagem de token_version (revogação de sessão: logout/
+    /// troca de senha/desativação invalidam tokens antigos mesmo não
+    /// expirados). Sem isso, um gerente que perdeu acesso recentemente
+    /// (mas cujo token JWT ainda não expirou) continuaria conseguindo
+    /// autorizar operações por aqui mesmo depois de "desligado" do sistema.
+    /// Cross-tenant também é checado — token de autorizador de OUTRO tenant
+    /// nunca é aceito, mesmo criptograficamente válido.
+    /// </summary>
+    private async Task<bool> TemPermissaoOuAutorizacaoAsync(string permissao, string? autorizadorToken)
+    {
+        if (User.HasClaim("permission", permissao))
+            return true;
+
+        if (string.IsNullOrWhiteSpace(autorizadorToken))
+            return false;
+
+        ClaimsPrincipal principal;
+        try
+        {
+            var handler = new JwtSecurityTokenHandler();
+            var parametros = new TokenValidationParameters
+            {
+                ValidateIssuer           = true,
+                ValidateAudience         = true,
+                ValidateLifetime         = true,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer              = _config["Jwt:Issuer"],
+                ValidAudience            = _config["Jwt:Audience"],
+                IssuerSigningKey         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!)),
+                ClockSkew                = TimeSpan.Zero
+            };
+            principal = handler.ValidateToken(autorizadorToken, parametros, out _);
+        }
+        catch
+        {
+            // Assinatura inválida, expirado, emissor/audiência errados, etc.
+            // — token do autorizador não presta, não autoriza nada.
+            return false;
+        }
+
+        // Mesmo tenant do usuário que está fazendo a chamada — nunca aceita
+        // autorizador de outro tenant, por mais válido que o token seja.
+        var tenantIdClaim = principal.FindFirst("tenant_id")?.Value;
+        if (!Guid.TryParse(tenantIdClaim, out var tenantIdAutorizador) || tenantIdAutorizador != _tenant.TenantId)
+            return false;
+
+        // Mesma checagem de revogação de sessão que o pipeline normal faz —
+        // ver OnTokenValidated em Program.cs. Sem isso, um token de gerente
+        // já deslogado/desativado (mas ainda não expirado) continuaria
+        // valendo pra autorizar por aqui.
+        var userIdClaim       = principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        var tokenVersionClaim = principal.FindFirst("token_version")?.Value;
+        if (Guid.TryParse(userIdClaim, out var autorizadorId) && int.TryParse(tokenVersionClaim, out var tokenVersion))
+        {
+            var atual = await _db.Users.IgnoreQueryFilters().AsNoTracking()
+                .Where(u => u.Id == autorizadorId)
+                .Select(u => new { u.TokenVersion, u.IsActive })
+                .FirstOrDefaultAsync();
+
+            if (atual == null || !atual.IsActive || atual.TokenVersion != tokenVersion)
+                return false;
+        }
+
+        return principal.HasClaim("permission", permissao);
+    }
 }
 
 public record MovimentoCaixaRequest(
     decimal Valor,
     string  Descricao,
-    string? Tipo          = "Sangria",
-    string? FormaPagamento = "Dinheiro");
+    string? Tipo             = "Sangria",
+    string? FormaPagamento   = "Dinheiro",
+    string? AutorizadorToken = null);
