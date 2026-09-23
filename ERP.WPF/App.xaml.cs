@@ -418,8 +418,17 @@ public partial class App : System.Windows.Application
         services.AddScoped<ICaixaService, ERP.WPF.Services.HttpCaixaService>();
         services.AddScoped<IContaBancariaService, ContaBancariaService>();
         services.AddScoped<IOrcamentoService, OrcamentoService>();
-        services.AddScoped<IContaPagarService, ContaPagarService>();
-        services.AddScoped<IContaReceberService, ContaReceberService>();
+        // Fase C, módulo 4 (09/2026) — HttpContaPagarService/HttpContaReceberService
+        // no lugar dos locais. IMPORTANTE: ContaPagarViewModel (tela cheia de
+        // Contas a Pagar) NÃO usa IContaPagarService — bypassa direto via
+        // IUnitOfWork (Update/Delete/pagamento com escolha de origem, que a
+        // API ainda não tem). Essa troca de DI não afeta aquela tela; ela
+        // continua exatamente como estava, decisão documentada (ver
+        // HttpContaPagarService.cs). REQUER a API com os 4 endpoints novos
+        // (existe-para-sale-payment, gerar-a-prazo, inadimplentes/count,
+        // vencendo-hoje) já publicada ANTES de instalar este WPF na loja.
+        services.AddScoped<IContaPagarService,   ERP.WPF.Services.HttpContaPagarService>();
+        services.AddScoped<IContaReceberService, ERP.WPF.Services.HttpContaReceberService>();
         services.AddScoped<ERP.Application.Interfaces.IImportacaoService,
                             ERP.Infrastructure.Services.ImportacaoService>();
         services.AddScoped<INfeImportService, NfeImportService>();

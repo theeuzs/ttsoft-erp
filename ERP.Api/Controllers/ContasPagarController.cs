@@ -2,6 +2,7 @@ using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Linq;
 
 using ERP.Api.Security;
 namespace ERP.Api.Controllers;
@@ -54,4 +55,19 @@ public class ContasPagarController : ControllerBase
         await _service.CancelarAsync(id, ct);
         return NoContent();
     }
+
+    /// <summary>
+    /// Fase C (achado testando) — usado por NotificacoesViewModel no WPF.
+    /// Devolve DTO próprio, não a ValueTuple (string,decimal) da interface —
+    /// System.Text.Json serializa ValueTuple como campos (Item1/Item2), não
+    /// como as propriedades Descricao/Valor que o cliente esperaria.
+    /// </summary>
+    [HttpGet("vencendo-hoje")]
+    public async Task<IActionResult> GetVencendoHoje(CancellationToken ct = default)
+    {
+        var itens = await _service.GetVencendoHojeAsync();
+        return Ok(itens.Select(i => new VencendoHojeItemDto(i.Descricao, i.Valor)));
+    }
 }
+
+public record VencendoHojeItemDto(string Descricao, decimal Valor);

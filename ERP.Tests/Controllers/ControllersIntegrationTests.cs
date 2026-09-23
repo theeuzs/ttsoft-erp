@@ -813,6 +813,28 @@ public class ContasPagarControllerTests : IntegrationTestBase
         var body = await resp.Content.ReadAsStringAsync();
         body.Should().Contain("id");
     }
+
+    // ── Fase C (achado testando): usado por NotificacoesViewModel no WPF ─
+    [Fact(DisplayName = "Fase C — GET /api/contas-pagar/vencendo-hoje sem token → 401")]
+    public async Task VencendoHoje_SemToken_Retorna401()
+        => (await AnonClient.GetAsync("/api/contas-pagar/vencendo-hoje"))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+    [Fact(DisplayName = "Fase C — GET /api/contas-pagar/vencendo-hoje com token → 200 (array com Descricao/Valor, não Item1/Item2)")]
+    public async Task VencendoHoje_ComToken_Retorna200ComShapeCorreto()
+    {
+        var resp = await AuthClient.GetAsync("/api/contas-pagar/vencendo-hoje");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Confirma que o controller projeta pra VencendoHojeItemDto — se
+        // alguém reverter pra devolver a ValueTuple crua, isso viria como
+        // {"item1":...,"item2":...} em vez de "descricao"/"valor", e
+        // HttpContaPagarService.GetVencendoHojeAsync quebraria silenciosamente
+        // (campos sempre vazios) sem esse teste pra travar a regressão.
+        var body = await resp.Content.ReadAsStringAsync();
+        using var json = System.Text.Json.JsonDocument.Parse(body);
+        json.RootElement.ValueKind.Should().Be(System.Text.Json.JsonValueKind.Array);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1138,6 +1160,40 @@ public class ContasReceberControllerTests : IntegrationTestBase
 
         var corpo = await resp.Content.ReadAsStringAsync();
         corpo.Should().Contain("ja-existente");
+    }
+
+    // ── Fase C (achado testando ANTES de migrar): usados pelo MotorFinanceiroService
+    // no WPF — mesma lição do módulo Caixa, dessa vez aplicada a tempo. ─────
+    [Fact(DisplayName = "Fase C — GET /api/contas-receber/existe-para-sale-payment/{id} sem token → 401")]
+    public async Task ExisteParaSalePayment_SemToken_Retorna401()
+        => (await AnonClient.GetAsync($"/api/contas-receber/existe-para-sale-payment/{Guid.NewGuid()}"))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+    [Fact(DisplayName = "Fase C — GET /api/contas-receber/existe-para-sale-payment/{id} com token → 200 false pra Guid novo")]
+    public async Task ExisteParaSalePayment_ComToken_RetornaFalsePraGuidNovo()
+    {
+        var resp = await AuthClient.GetAsync($"/api/contas-receber/existe-para-sale-payment/{Guid.NewGuid()}");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await resp.Content.ReadAsStringAsync()).Should().Be("false");
+    }
+
+    [Fact(DisplayName = "Fase C — POST /api/contas-receber/gerar-a-prazo sem token → 401")]
+    public async Task GerarAPrazo_SemToken_Retorna401()
+        => (await AnonClient.PostAsync("/api/contas-receber/gerar-a-prazo",
+                Json(new { ClienteId = Guid.NewGuid(), VendaId = (Guid?)null, Valor = 10m, Descricao = "x" })))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+    [Fact(DisplayName = "Fase C — GET /api/contas-receber/inadimplentes/count sem token → 401")]
+    public async Task CountInadimplentes_SemToken_Retorna401()
+        => (await AnonClient.GetAsync("/api/contas-receber/inadimplentes/count"))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+    [Fact(DisplayName = "Fase C — GET /api/contas-receber/inadimplentes/count com token → 200 com um número")]
+    public async Task CountInadimplentes_ComToken_Retorna200()
+    {
+        var resp = await AuthClient.GetAsync("/api/contas-receber/inadimplentes/count");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        int.TryParse(await resp.Content.ReadAsStringAsync(), out _).Should().BeTrue();
     }
 }
 

@@ -173,9 +173,37 @@ public class ContasReceberController : ControllerBase
         };
     }
 
+    /// <summary>
+    /// Fase C (achado testando antes de migrar, não depois — MotorFinanceiroService
+    /// roda tanto no servidor quanto no WPF, mesmo padrão do Caixa) —
+    /// idempotência: já existe conta a receber pra essa linha de pagamento?
+    /// </summary>
+    [HttpGet("existe-para-sale-payment/{salePaymentId:guid}")]
+    public async Task<IActionResult> ExisteParaSalePayment(Guid salePaymentId)
+        => Ok(await _service.ExisteContaParaSalePaymentAsync(salePaymentId));
+
+    /// <summary>
+    /// Fase C — gera a conta a prazo de uma venda. Chamado pelo
+    /// MotorFinanceiroService (servidor E WPF, offline-first: precisa
+    /// registrar a dívida na hora da venda, antes de sincronizar).
+    /// </summary>
+    [HttpPost("gerar-a-prazo")]
+    public async Task<IActionResult> GerarAPrazo([FromBody] GerarContaAPrazoRequest dto)
+    {
+        await _service.GerarContaAPrazoAsync(dto.ClienteId, dto.VendaId, dto.Valor, dto.Descricao, dto.SalePaymentId);
+        return Ok();
+    }
+
+    /// <summary>Fase C — contagem de clientes inadimplentes, usada pelo indicador
+    /// no menu principal e na tela de notificações do WPF.</summary>
+    [HttpGet("inadimplentes/count")]
+    public async Task<IActionResult> CountInadimplentes()
+        => Ok(await _service.CountInadimplentesAsync());
+
 }
 
 public record BaixaParcialDto(decimal Valor);
 public record CancelarContaDto(string Motivo);
 public record DescontoContaDto(decimal ValorDesconto, string Motivo);
 public record BaixaEmLoteDto(List<Guid> ContaIds, decimal ValorAPagar, decimal ValorDesconto, string FormaPagamento);
+public record GerarContaAPrazoRequest(Guid ClienteId, Guid? VendaId, decimal Valor, string Descricao, Guid? SalePaymentId = null);
