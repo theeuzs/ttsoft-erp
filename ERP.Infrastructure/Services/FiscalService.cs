@@ -65,19 +65,19 @@ public class FiscalService : IFiscalService
             ? MontarRequestNfeA4(sale)
             : MontarRequestNfce(sale);
 
-        var (sucesso, mensagem, urlDanfe, urlXml) = tipoDocumento == "NFE"
+        var (sucesso, mensagem, urlDanfe, urlXml, chave, numero) = tipoDocumento == "NFE"
             ? await _nfeService.EmitirNfeA4Async(vendaId.ToString(), request, config.TokenFocusNfe, config.UsarAmbienteProducao)
             : await _nfceService.EmitirNfceAsync(vendaId.ToString(), request, config.TokenFocusNfe, config.UsarAmbienteProducao);
 
         if (sucesso && !string.IsNullOrWhiteSpace(urlDanfe))
         {
-            try { await _saleService.AtualizarDadosNfceAsync(vendaId, urlDanfe, "Autorizada", ambienteSefaz, vendaId.ToString()); }
+            try { await _saleService.AtualizarDadosNfceAsync(vendaId, urlDanfe, "Autorizada", ambienteSefaz, vendaId.ToString(), chave, numero); }
             catch (Exception exAtualizar)
             {
                 Log.Warning(exAtualizar, "Falha ao salvar dados locais da nota autorizada para a venda {VendaId} (nota em si já foi autorizada na SEFAZ)", vendaId);
             }
 
-            await RegistrarNotaFiscalAsync(vendaId, sale, tipoDocumento, "Autorizada", urlDanfe, ambienteSefaz, urlXml);
+            await RegistrarNotaFiscalAsync(vendaId, sale, tipoDocumento, "Autorizada", urlDanfe, ambienteSefaz, urlXml, chave, numero);
 
             return new FiscalEmissionResult
             {
@@ -148,7 +148,7 @@ public class FiscalService : IFiscalService
         var request = MontarRequestNfeDevolucao(sale, itensDevolvidos, motivo);
         var referenciaDevolucao = $"devolucao-{vendaId}-{ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():yyyyMMddHHmmss}";
 
-        var (sucesso, mensagem, urlDanfe, urlXml) = await _nfeService.EmitirNfeA4Async(
+        var (sucesso, mensagem, urlDanfe, urlXml, chave, numero) = await _nfeService.EmitirNfeA4Async(
             referenciaDevolucao, request, config.TokenFocusNfe, config.UsarAmbienteProducao);
 
         if (sucesso && !string.IsNullOrWhiteSpace(urlDanfe))
@@ -160,6 +160,8 @@ public class FiscalService : IFiscalService
                 Status                = "Autorizada",
                 Finalidade            = "4",
                 RefNFe                = sale.NfceChave,
+                Chave                 = string.IsNullOrWhiteSpace(chave) ? null : chave,
+                Numero                = string.IsNullOrWhiteSpace(numero) ? null : numero,
                 UrlDanfe              = urlDanfe,
                 XmlUrl                = string.IsNullOrWhiteSpace(urlXml) ? null : urlXml,
                 Ambiente              = ambienteSefaz,
@@ -256,7 +258,8 @@ public class FiscalService : IFiscalService
     /// Upsert por (VendaId, Tipo): reemissão atualiza o mesmo registro, não
     /// acumula duplicata.</summary>
     private async Task RegistrarNotaFiscalAsync(
-        Guid vendaId, Domain.Entities.Sale sale, string tipoDocumento, string status, string? urlDanfe, string ambiente, string? urlXml)
+        Guid vendaId, Domain.Entities.Sale sale, string tipoDocumento, string status, string? urlDanfe, string ambiente, string? urlXml,
+        string? chave = null, string? numero = null)
     {
         // Achado (21/08) — escapou da caçada anterior por ser multi-linha.
         // Sem AsTracking(), o upsert do else abaixo (reemissão) não
@@ -272,6 +275,8 @@ public class FiscalService : IFiscalService
                 VendaId               = vendaId,
                 Status                = status,
                 Finalidade            = "1",
+                Chave                 = string.IsNullOrWhiteSpace(chave) ? null : chave,
+                Numero                = string.IsNullOrWhiteSpace(numero) ? null : numero,
                 UrlDanfe              = urlDanfe,
                 XmlUrl                = string.IsNullOrWhiteSpace(urlXml) ? null : urlXml,
                 Ambiente              = ambiente,
@@ -286,6 +291,8 @@ public class FiscalService : IFiscalService
             existente.UrlDanfe    = urlDanfe ?? existente.UrlDanfe;
             existente.XmlUrl      = string.IsNullOrWhiteSpace(urlXml) ? existente.XmlUrl : urlXml;
             existente.Ambiente    = ambiente;
+            if (!string.IsNullOrWhiteSpace(chave))  existente.Chave  = chave;
+            if (!string.IsNullOrWhiteSpace(numero)) existente.Numero = numero;
         }
 
         await _ctx.SaveChangesAsync();

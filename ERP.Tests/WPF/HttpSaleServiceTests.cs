@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -55,6 +56,8 @@ public class HttpSaleServiceTests
     {
         private readonly HttpStatusCode _status;
         private readonly string? _corpoJson;
+        public HttpRequestMessage? UltimaRequisicao { get; private set; }
+        public string? UltimoCorpo { get; private set; }
 
         public RespostaFixaHandler(HttpStatusCode status, string? corpoJson = null)
         {
@@ -62,12 +65,14 @@ public class HttpSaleServiceTests
             _corpoJson = corpoJson;
         }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
+            UltimaRequisicao = request;
+            UltimoCorpo = request.Content != null ? await request.Content.ReadAsStringAsync(ct) : null;
             var resp = new HttpResponseMessage(_status);
             if (_corpoJson != null)
                 resp.Content = new StringContent(_corpoJson, Encoding.UTF8, "application/json");
-            return Task.FromResult(resp);
+            return resp;
         }
     }
 
@@ -198,6 +203,35 @@ public class HttpSaleServiceTests
             Guid.NewGuid(), "https://danfe.teste/x", "Autorizada", "homologacao", "ref-123");
 
         await act.Should().NotThrowAsync();
+    }
+
+    [Fact(DisplayName = "AtualizarDadosNfceAsync — achado testando Fase C: chave/numero vão no corpo quando informados")]
+    public async Task AtualizarDadosNfceAsync_ComChaveENumero_VaiNoCorpo()
+    {
+        var h = new RespostaFixaHandler(HttpStatusCode.NoContent);
+        var service = new HttpSaleService(h);
+
+        await service.AtualizarDadosNfceAsync(
+            Guid.NewGuid(), "https://danfe.teste/x", "Autorizada", "homologacao", "ref-123",
+            chave: "41260912345678000199550010000012341234567890", numero: "1234");
+
+        using var json = JsonDocument.Parse(h.UltimoCorpo!);
+        json.RootElement.GetProperty("Chave").GetString().Should().Be("41260912345678000199550010000012341234567890");
+        json.RootElement.GetProperty("Numero").GetString().Should().Be("1234");
+    }
+
+    [Fact(DisplayName = "AtualizarDadosNfceAsync — sem chave/numero (contingência), corpo manda null, comportamento antigo preservado")]
+    public async Task AtualizarDadosNfceAsync_SemChaveNumero_CorpoTemNull()
+    {
+        var h = new RespostaFixaHandler(HttpStatusCode.NoContent);
+        var service = new HttpSaleService(h);
+
+        await service.AtualizarDadosNfceAsync(
+            Guid.NewGuid(), "https://danfe.teste/x", "Contingência", "homologacao", "ref-123");
+
+        using var json = JsonDocument.Parse(h.UltimoCorpo!);
+        json.RootElement.GetProperty("Chave").ValueKind.Should().Be(JsonValueKind.Null);
+        json.RootElement.GetProperty("Numero").ValueKind.Should().Be(JsonValueKind.Null);
     }
 
     [Fact(DisplayName = "GetAllAsync — 401 vira SessaoExpiradaException")]

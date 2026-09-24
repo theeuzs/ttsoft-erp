@@ -11,16 +11,16 @@ public class NfeEmissionService : INfeEmissionService
     
     public NfeEmissionService(IFocusNfeHttpClient httpClient) => _httpClient = httpClient;
 
-    public async Task<(bool Sucesso, string Mensagem, string UrlDanfe, string UrlXml)> EmitirNfeA4Async(string referencia, FocusNfceRequest nfe, string token, bool isProducao)
+    public async Task<(bool Sucesso, string Mensagem, string UrlDanfe, string UrlXml, string Chave, string Numero)> EmitirNfeA4Async(string referencia, FocusNfceRequest nfe, string token, bool isProducao)
     {
-        if (string.IsNullOrWhiteSpace(token)) return (false, "Token não configurado.", "", "");
+        if (string.IsNullOrWhiteSpace(token)) return (false, "Token não configurado.", "", "", "", "");
         
         _httpClient.SetApiToken(token);
         string baseServidor = isProducao ? "https://api.focusnfe.com.br" : "https://homologacao.focusnfe.com.br";
         
         var responseResult = await _httpClient.PostAsync($"{baseServidor}/v2/nfe?ref={referencia}", nfe);
 
-        if (responseResult.IsFailed) return (false, $"Erro: {responseResult.Errors[0].Message}", "", "");
+        if (responseResult.IsFailed) return (false, $"Erro: {responseResult.Errors[0].Message}", "", "", "", "");
 
         using var doc = JsonDocument.Parse(responseResult.Value);
         string status = doc.RootElement.TryGetProperty("status", out var s) ? s.GetString() ?? "" : "";
@@ -29,8 +29,11 @@ public class NfeEmissionService : INfeEmissionService
         {
             string urlRelativa = doc.RootElement.TryGetProperty("caminho_danfe", out var u) ? u.GetString() ?? "" : "";
             string urlXmlRelativa = doc.RootElement.TryGetProperty("caminho_xml_nota_fiscal", out var x) ? x.GetString() ?? "" : "";
+            // S{N} FIX — achado testando Fase C: mesmo gap do NfceEmissionService.
+            string chave  = doc.RootElement.TryGetProperty("chave_nfe", out var ch) ? ch.GetString() ?? "" : "";
+            string numero = doc.RootElement.TryGetProperty("numero", out var nu) ? nu.GetString() ?? "" : "";
             string urlXmlCompleta = string.IsNullOrWhiteSpace(urlXmlRelativa) ? "" : $"{baseServidor}{urlXmlRelativa}";
-            return (true, "NF-e Autorizada com sucesso!", $"{baseServidor}{urlRelativa}", urlXmlCompleta);
+            return (true, "NF-e Autorizada com sucesso!", $"{baseServidor}{urlRelativa}", urlXmlCompleta, chave, numero);
         }
         else if (status == "processando_autorizacao")
         {
@@ -44,13 +47,15 @@ public class NfeEmissionService : INfeEmissionService
                 {
                     string urlRel = consultaDoc.RootElement.TryGetProperty("caminho_danfe", out var urlProp) ? urlProp.GetString() : "";
                     string urlXmlRel = consultaDoc.RootElement.TryGetProperty("caminho_xml_nota_fiscal", out var xmlProp) ? xmlProp.GetString() : "";
+                    string chaveConsulta  = consultaDoc.RootElement.TryGetProperty("chave_nfe", out var chProp) ? chProp.GetString() ?? "" : "";
+                    string numeroConsulta = consultaDoc.RootElement.TryGetProperty("numero", out var nuProp) ? nuProp.GetString() ?? "" : "";
                     string urlXmlComp = string.IsNullOrWhiteSpace(urlXmlRel) ? "" : $"{baseServidor}{urlXmlRel}";
-                    return (true, "NF-e Autorizada com sucesso!", $"{baseServidor}{urlRel}", urlXmlComp);
+                    return (true, "NF-e Autorizada com sucesso!", $"{baseServidor}{urlRel}", urlXmlComp, chaveConsulta, numeroConsulta);
                 }
             }
-            return (true, "A Nota está processando na SEFAZ. Consulte o status em instantes.", "", "");
+            return (true, "A Nota está processando na SEFAZ. Consulte o status em instantes.", "", "", "", "");
         }
 
-        return (false, $"Nota Rejeitada. Status: {status}", "", "");
+        return (false, $"Nota Rejeitada. Status: {status}", "", "", "", "");
     }
 }

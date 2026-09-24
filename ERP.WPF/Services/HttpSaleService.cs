@@ -155,12 +155,12 @@ public class HttpSaleService : ISaleService
         resp.EnsureSuccessStatusCode();
     }
 
-    public async Task AtualizarDadosNfceAsync(Guid vendaId, string urlDanfe, string status, string ambiente, string referencia)
+    public async Task AtualizarDadosNfceAsync(Guid vendaId, string urlDanfe, string status, string ambiente, string referencia, string? chave = null, string? numero = null)
     {
         using var http = CriarHttpClient();
         var resp = await http.PatchAsJsonAsync(
             $"{AppSession.ApiBaseUrl}/api/sales/{vendaId}/nfce",
-            new { UrlDanfe = urlDanfe, Status = status, Ambiente = ambiente, Referencia = referencia },
+            new { UrlDanfe = urlDanfe, Status = status, Ambiente = ambiente, Referencia = referencia, Chave = chave, Numero = numero },
             JsonOpcoes);
         LancarSeSessaoExpirada(resp);
 

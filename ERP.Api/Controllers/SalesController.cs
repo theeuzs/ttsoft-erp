@@ -165,7 +165,7 @@ public class SalesController : ControllerBase
     [HttpPatch("{id:guid}/nfce")]
     public async Task<IActionResult> AtualizarDadosNfce(Guid id, [FromBody] AtualizarDadosNfceRequestDto dto)
     {
-        await _saleService.AtualizarDadosNfceAsync(id, dto.UrlDanfe, dto.Status, dto.Ambiente, dto.Referencia);
+        await _saleService.AtualizarDadosNfceAsync(id, dto.UrlDanfe, dto.Status, dto.Ambiente, dto.Referencia, dto.Chave, dto.Numero);
         return NoContent();
     }
 
@@ -188,4 +188,4 @@ public record CancelSaleRequestDto(string Motivo = "Cancelamento via API");
 // via HTTP, pra NfeContingencyWorker/FiscalService/NotasFiscaisViewModel
 // continuarem funcionando quando ISaleService virar HttpSaleService.
 public record AtualizarDadosNfceRequestDto(
-    string UrlDanfe, string Status, string Ambiente, string Referencia);
+    string UrlDanfe, string Status, string Ambiente, string Referencia, string? Chave = null, string? Numero = null);

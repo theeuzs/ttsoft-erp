@@ -586,6 +586,37 @@ public class SalesControllerTests : IntegrationTestBase
         venda.NfceReferencia.Should().Be("ref-123");
     }
 
+    [Fact(DisplayName = "PATCH /api/sales/{id}/nfce — achado testando Fase C: Chave/Numero persistem quando informados")]
+    public async Task AtualizarDadosNfce_ComChaveENumero_Persiste()
+    {
+        var vendaId = Guid.NewGuid();
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Sales.Add(new ERP.Domain.Entities.Sale
+            {
+                Id = vendaId, TenantId = ErpApiFactory.TestTenantId,
+                SaleNumber = $"TESTE-{vendaId:N}", Total = 50m,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var dto = new
+        {
+            UrlDanfe = "https://danfe.teste/x", Status = "Autorizada", Ambiente = "homologacao", Referencia = "ref-456",
+            Chave = "41260912820608000141650010000033021148784290", Numero = "3302"
+        };
+        var resp = await AuthClient.PatchAsJsonAsync($"/api/sales/{vendaId}/nfce", dto);
+        resp.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        using var scopeVerif = Factory.Services.CreateScope();
+        var dbVerif = scopeVerif.ServiceProvider.GetRequiredService<AppDbContext>();
+        var venda = dbVerif.Sales.IgnoreQueryFilters().First(s => s.Id == vendaId);
+        venda.NfceChave.Should().Be("41260912820608000141650010000033021148784290");
+        venda.NfceNumero.Should().Be("3302");
+    }
+
     [Fact(DisplayName = "PATCH /api/sales/{id}/nfce — venda inexistente não lança erro (mesmo comportamento do SaleService local)")]
     public async Task AtualizarDadosNfce_VendaInexistente_NaoLancaErro()
     {

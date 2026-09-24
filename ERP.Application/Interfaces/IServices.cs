@@ -37,7 +37,11 @@ public interface ISaleService
     Task<SaleDetailDto?> GetDetailAsync(Guid id);
     Task<SaleDto> CreateAsync(CreateSaleDto dto);
     Task CancelAsync(Guid id, string reason);
-    Task AtualizarDadosNfceAsync(Guid vendaId, string urlDanfe, string status, string ambiente, string referencia);
+    // S{N} FIX — achado testando Fase C: chave/numero opcionais (default
+    // null) pra gravar o que a Focus manda na autorização, sem quebrar quem
+    // já chama isso sem esses dados (NfeContingencyWorker/HostedService, que
+    // não foram tocados nesta correção).
+    Task AtualizarDadosNfceAsync(Guid vendaId, string urlDanfe, string status, string ambiente, string referencia, string? chave = null, string? numero = null);
     Task<IEnumerable<SalesReportItemDto>> GetSalesReportAsync(DateTime startDate, DateTime endDate, string? sellerName = null);
 }
 

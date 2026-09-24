@@ -89,7 +89,7 @@ public class FiscalServiceFreteTests
 
         var nfeMock = new Mock<INfeEmissionService>();
         nfeMock.Setup(s => s.EmitirNfeA4Async(It.IsAny<string>(), It.IsAny<FocusNfceRequest>(), It.IsAny<string>(), It.IsAny<bool>()))
-            .ReturnsAsync((false, "Nota Rejeitada. Status: erro_autorizacao", "", ""));
+            .ReturnsAsync((false, "Nota Rejeitada. Status: erro_autorizacao", "", "", "", ""));
 
         var service = new FiscalService(
             ctx0,

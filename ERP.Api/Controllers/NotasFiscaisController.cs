@@ -92,13 +92,13 @@ public class NotasFiscaisController : ControllerBase
         };
 
         var referencia = $"venda-{req.VendaId ?? Guid.NewGuid()}";
-        var (sucesso, mensagem, urlDanfe, urlXml) = await _nfce.EmitirNfceAsync(
+        var (sucesso, mensagem, urlDanfe, urlXml, chave, numero) = await _nfce.EmitirNfceAsync(
             referencia, focusReq, config.TokenFocusNfe, config.UsarAmbienteProducao);
 
         if (!sucesso)
             return BadRequest(new { erro = mensagem });
 
-        return Ok(new { Sucesso = true, Referencia = referencia, UrlDanfe = urlDanfe, UrlXml = urlXml });
+        return Ok(new { Sucesso = true, Referencia = referencia, UrlDanfe = urlDanfe, UrlXml = urlXml, Chave = chave, Numero = numero });
     }
 
     /// <summary>S16 FIX: emite NFC-e ou NF-e a partir de uma venda já persistida —

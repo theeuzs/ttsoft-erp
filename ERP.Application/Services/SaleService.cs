@@ -251,7 +251,7 @@ public class SaleService : ISaleService
 
         return _mapper.Map<SaleDto>(sale);
     }
-    public async Task AtualizarDadosNfceAsync(Guid vendaId, string urlDanfe, string status, string ambiente, string referencia)
+    public async Task AtualizarDadosNfceAsync(Guid vendaId, string urlDanfe, string status, string ambiente, string referencia, string? chave = null, string? numero = null)
 {
     var venda = await _uow.Sales.GetByIdAsync(vendaId); 
     
@@ -261,6 +261,8 @@ public class SaleService : ISaleService
         venda.NfceStatusFocus = status;
         venda.NfceAmbiente = ambiente;
         venda.NfceReferencia = referencia;
+        if (!string.IsNullOrWhiteSpace(chave))  venda.NfceChave  = chave;
+        if (!string.IsNullOrWhiteSpace(numero)) venda.NfceNumero = numero;
 
         if (status == "Autorizada")
             venda.Status = Domain.Enums.SaleStatus.NotaEmitida;

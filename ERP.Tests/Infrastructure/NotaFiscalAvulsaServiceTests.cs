@@ -60,7 +60,7 @@ public class NotaFiscalAvulsaServiceTests
 
         var nfeMock = new Mock<INfeEmissionService>();
         nfeMock.Setup(s => s.EmitirNfeA4Async(It.IsAny<string>(), It.IsAny<FocusNfceRequest>(), It.IsAny<string>(), It.IsAny<bool>()))
-            .ReturnsAsync((true, "Autorizada", "https://focusnfe.com.br/danfe/teste", "https://focusnfe.com.br/xml/teste"));
+            .ReturnsAsync((true, "Autorizada", "https://focusnfe.com.br/danfe/teste", "https://focusnfe.com.br/xml/teste", "", ""));
 
         var cancelMock = new Mock<INfeCancellationService>();
         cancelMock.Setup(s => s.CancelarNotaAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), "NFE"))

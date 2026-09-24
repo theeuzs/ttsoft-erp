@@ -533,12 +533,14 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
         };
 
         var referencia = $"avulsa-{nota.Id}";
-        var (sucesso, mensagem, urlDanfe, urlXml) = await _nfeService.EmitirNfeA4Async(
+        var (sucesso, mensagem, urlDanfe, urlXml, chave, numero) = await _nfeService.EmitirNfeA4Async(
             referencia, request, config.TokenFocusNfe, config.UsarAmbienteProducao);
 
         if (sucesso && !string.IsNullOrWhiteSpace(urlDanfe))
         {
             nota.Status      = "Autorizada";
+            nota.Chave       = string.IsNullOrWhiteSpace(chave) ? null : chave;
+            nota.Numero      = string.IsNullOrWhiteSpace(numero) ? null : numero;
             nota.UrlDanfe    = urlDanfe;
             nota.XmlUrl      = string.IsNullOrWhiteSpace(urlXml) ? null : urlXml;
             nota.Ambiente    = ambienteSefaz;

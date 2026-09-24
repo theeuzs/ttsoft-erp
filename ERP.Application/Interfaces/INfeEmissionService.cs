@@ -4,5 +4,6 @@ namespace ERP.Application.Interfaces;
 
 public interface INfeEmissionService
 {
-    Task<(bool Sucesso, string Mensagem, string UrlDanfe, string UrlXml)> EmitirNfeA4Async(string referencia, FocusNfceRequest nfe, string token, bool isProducao);
+    // Mesmo achado/fix do INfceEmissionService — ver comentário lá.
+    Task<(bool Sucesso, string Mensagem, string UrlDanfe, string UrlXml, string Chave, string Numero)> EmitirNfeA4Async(string referencia, FocusNfceRequest nfe, string token, bool isProducao);
 }

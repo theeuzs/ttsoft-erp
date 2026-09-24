@@ -81,7 +81,7 @@ public class FiscalServiceVUnComTests
 
         var nfceMock = new Mock<INfceEmissionService>();
         nfceMock.Setup(s => s.EmitirNfceAsync(It.IsAny<string>(), It.IsAny<FocusNfceRequest>(), It.IsAny<string>(), It.IsAny<bool>()))
-            .ReturnsAsync((false, "Nota Rejeitada. Status: erro_autorizacao", "", ""));
+            .ReturnsAsync((false, "Nota Rejeitada. Status: erro_autorizacao", "", "", "", ""));
 
         var service = new FiscalService(
             ctx0,
