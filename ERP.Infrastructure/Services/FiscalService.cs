@@ -145,7 +145,18 @@ public class FiscalService : IFiscalService
         var config = await _configProvider.ObterConfiguracaoAsync();
         string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
 
-        var request = MontarRequestNfeDevolucao(sale, itensDevolvidos, motivo);
+        // S{N} FIX — achado no painel da Focus (nota de devolução saiu com
+        // codigo_ncm zerado): MontarRequestNfeDevolucao só recebia a tupla
+        // (ProductId, Nome, Quantidade, Valor) — nunca tinha acesso ao
+        // Product de verdade, então NCM/CSOSN sempre saíam hardcoded/errados
+        // (só o CFOP de entrada estava certo). Busca os produtos aqui, com
+        // NCM/CSOSN de verdade, igual o MontarItens já faz pro fluxo normal.
+        var produtoIds = itensDevolvidos.Select(i => i.ProductId).ToList();
+        var produtos = await _ctx.Products.AsNoTracking()
+            .Where(p => produtoIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id);
+
+        var request = MontarRequestNfeDevolucao(sale, itensDevolvidos, motivo, produtos);
         var referenciaDevolucao = $"devolucao-{vendaId}-{ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():yyyyMMddHHmmss}";
 
         var (sucesso, mensagem, urlDanfe, urlXml, chave, numero) = await _nfeService.EmitirNfeA4Async(
@@ -184,7 +195,8 @@ public class FiscalService : IFiscalService
     }
 
     private static FocusNfceRequest MontarRequestNfeDevolucao(
-        Domain.Entities.Sale sale, List<(Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)> itens, string motivo)
+        Domain.Entities.Sale sale, List<(Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)> itens, string motivo,
+        Dictionary<Guid, Domain.Entities.Product> produtos)
     {
         var customer = sale.Customer;
         string? cpfCnpjLimpo = null;
@@ -203,22 +215,42 @@ public class FiscalService : IFiscalService
         // contribuinte se comunica pelo indicador (campo separado), nunca
         // escrevendo a palavra no lugar do número.
 
-        var itensRequest = itens.Select((item, index) => new FocusItemRequest
+        // S{N} FIX — achado testando devolução de verdade pela primeira vez
+        // (Fase C, módulo Fiscal): mesmo bug do S20 (13/08), nunca replicado
+        // aqui — MontarRequestNfeDevolucao é um método separado de
+        // MontarRequestNfeA4/MontarRequestNfce, e o S20 só tinha corrigido
+        // os outros dois. Sem IndicadorIeDestinatario, a Focus rejeita com
+        // "Missing child element(s)... indIEDest" assim que a devolução tem
+        // cliente identificado — que é sempre o caso aqui (DevolucaoViewModel
+        // já exige cliente vinculado antes de confirmar, S17).
+        string? indicadorIe = string.IsNullOrWhiteSpace(cpfCnpjLimpo) ? null : "9";
+
+        var itensRequest = itens.Select((item, index) =>
         {
-            NumeroItem             = (index + 1).ToString(),
-            CodigoProduto          = item.ProductId.ToString().Substring(0, 6),
-            Descricao              = item.ProductName,
-            QuantidadeComercial    = item.Quantidade.ToString("F2", CultureInfo.InvariantCulture),
-            ValorUnitarioComercial = item.ValorUnitario.ToString("F2", CultureInfo.InvariantCulture),
-            ValorBruto             = (item.Quantidade * item.ValorUnitario).ToString("F2", CultureInfo.InvariantCulture),
-            // Devolução de venda dentro do estado — CFOP de entrada (1xxx),
-            // não o de saída (5xxx) usado na venda original.
-            Cfop                   = "1202",
-            CodigoNcm              = "00000000",
-            IcmsSituacaoTributaria = "102",
-            IcmsOrigem             = "0",
-            PisSituacaoTributaria     = "99",
-            CofinsSituacaoTributaria  = "99",
+            produtos.TryGetValue(item.ProductId, out var produto);
+            var ncm   = produto?.NCM;
+            var csosn = produto?.CSOSN;
+
+            return new FocusItemRequest
+            {
+                NumeroItem             = (index + 1).ToString(),
+                CodigoProduto          = item.ProductId.ToString().Substring(0, 6),
+                Descricao              = item.ProductName,
+                QuantidadeComercial    = item.Quantidade.ToString("F2", CultureInfo.InvariantCulture),
+                ValorUnitarioComercial = item.ValorUnitario.ToString("F2", CultureInfo.InvariantCulture),
+                ValorBruto             = (item.Quantidade * item.ValorUnitario).ToString("F2", CultureInfo.InvariantCulture),
+                // Devolução de venda dentro do estado — CFOP de entrada (1xxx),
+                // não o de saída (5xxx) usado na venda original.
+                Cfop                   = "1202",
+                // S{N} FIX — achado no painel da Focus: NCM saía sempre
+                // "00000000" (hardcoded), independente do produto real —
+                // mesmo padrão de extração do MontarItens (fluxo normal).
+                CodigoNcm              = string.IsNullOrWhiteSpace(ncm) ? "00000000" : ncm!.Replace(".", "").Replace("-", "").Trim(),
+                IcmsSituacaoTributaria = string.IsNullOrWhiteSpace(csosn) ? "102" : csosn!.Split('-')[0].Trim(),
+                IcmsOrigem             = "0",
+                PisSituacaoTributaria     = "99",
+                CofinsSituacaoTributaria  = "99",
+            };
         }).ToList();
 
         return new FocusNfceRequest
@@ -236,6 +268,7 @@ public class FiscalService : IFiscalService
             UfDestinatario         = string.IsNullOrWhiteSpace(customer?.State) ? "PR" : customer.State,
             CepDestinatario        = string.IsNullOrWhiteSpace(cepLimpo) ? "00000000" : cepLimpo,
             IeDestinatario         = ieLimpa,
+            IndicadorIeDestinatario = indicadorIe,
             Itens                  = itensRequest,
             Pagamentos             = new List<FocusPagamentoRequest>(),
             NotasReferenciadas     = new List<NotaReferenciadaRequest> { new() { ChaveNfe = sale.NfceChave! } },
