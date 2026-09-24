@@ -159,4 +159,27 @@ public class FiscalServiceDevolucaoIndicadorIeTests
                 Times.Once);
         }
     }
+
+    [Fact(DisplayName = "EmitirNotaDevolucaoAsync — achado na rejeição SEFAZ 518 real: TipoDocumento precisa ser Entrada (0), consistente com o CFOP 1202")]
+    public async Task Devolucao_TipoDocumentoEEntrada_ConsistenteComCfop()
+    {
+        var tenantId   = Guid.NewGuid();
+        var vendaId    = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        var (service, nfeMock, scope, produtoId) = Build(tenantId, vendaId, customerId);
+        using (scope)
+        {
+            var itens = new List<(Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)>
+                { (produtoId, "Produto Teste", 1m, 10m) };
+
+            await service.EmitirNotaDevolucaoAsync(vendaId, itens, "motivo");
+
+            nfeMock.Verify(s => s.EmitirNfeA4Async(
+                It.IsAny<string>(),
+                It.Is<FocusNfceRequest>(req => req.TipoDocumento == "0" && req.Itens[0].Cfop == "1202"),
+                It.IsAny<string>(),
+                It.IsAny<bool>()),
+                Times.Once);
+        }
+    }
 }

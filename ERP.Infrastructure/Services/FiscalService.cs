@@ -256,7 +256,13 @@ public class FiscalService : IFiscalService
         return new FocusNfceRequest
         {
             DataEmissao            = DataEmissaoAgora(),
-            TipoDocumento          = "1",
+            // S{N} FIX — achado na rejeição SEFAZ 518 real ("CFOP de entrada
+            // para NF-e de saida"): TipoDocumento estava copiado do fluxo
+            // normal de venda ("1" = Saída), mas devolução usa CFOP 1202
+            // (entrada — produto voltando pro estoque, direção contrária da
+            // venda original). tpNF precisa bater com a direção do CFOP: "0"
+            // = Entrada, consistente com o 1202 já usado logo abaixo.
+            TipoDocumento          = "0",
             NaturezaOperacao       = "DEVOLUCAO DE VENDA",
             FinalidadeEmissao      = "4",
             CpfCnpj                = cpfCnpjLimpo,
