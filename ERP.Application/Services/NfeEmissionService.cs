@@ -1,5 +1,6 @@
 using ERP.Application.DTOs.FocusNfe;
 using ERP.Application.Interfaces;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -30,7 +31,7 @@ public class NfeEmissionService : INfeEmissionService
             string urlRelativa = doc.RootElement.TryGetProperty("caminho_danfe", out var u) ? u.GetString() ?? "" : "";
             string urlXmlRelativa = doc.RootElement.TryGetProperty("caminho_xml_nota_fiscal", out var x) ? x.GetString() ?? "" : "";
             // S{N} FIX — achado testando Fase C: mesmo gap do NfceEmissionService.
-            string chave  = doc.RootElement.TryGetProperty("chave_nfe", out var ch) ? ch.GetString() ?? "" : "";
+            string chave  = LimparChaveAcesso(doc.RootElement.TryGetProperty("chave_nfe", out var ch) ? ch.GetString() : null);
             string numero = doc.RootElement.TryGetProperty("numero", out var nu) ? nu.GetString() ?? "" : "";
             string urlXmlCompleta = string.IsNullOrWhiteSpace(urlXmlRelativa) ? "" : $"{baseServidor}{urlXmlRelativa}";
             return (true, "NF-e Autorizada com sucesso!", $"{baseServidor}{urlRelativa}", urlXmlCompleta, chave, numero);
@@ -47,7 +48,7 @@ public class NfeEmissionService : INfeEmissionService
                 {
                     string urlRel = consultaDoc.RootElement.TryGetProperty("caminho_danfe", out var urlProp) ? urlProp.GetString() : "";
                     string urlXmlRel = consultaDoc.RootElement.TryGetProperty("caminho_xml_nota_fiscal", out var xmlProp) ? xmlProp.GetString() : "";
-                    string chaveConsulta  = consultaDoc.RootElement.TryGetProperty("chave_nfe", out var chProp) ? chProp.GetString() ?? "" : "";
+                    string chaveConsulta  = LimparChaveAcesso(consultaDoc.RootElement.TryGetProperty("chave_nfe", out var chProp) ? chProp.GetString() : null);
                     string numeroConsulta = consultaDoc.RootElement.TryGetProperty("numero", out var nuProp) ? nuProp.GetString() ?? "" : "";
                     string urlXmlComp = string.IsNullOrWhiteSpace(urlXmlRel) ? "" : $"{baseServidor}{urlXmlRel}";
                     return (true, "NF-e Autorizada com sucesso!", $"{baseServidor}{urlRel}", urlXmlComp, chaveConsulta, numeroConsulta);
@@ -56,6 +57,21 @@ public class NfeEmissionService : INfeEmissionService
             return (true, "A Nota está processando na SEFAZ. Consulte o status em instantes.", "", "", "", "");
         }
 
-        return (false, $"Nota Rejeitada. Status: {status}", "", "", "", "");
+        // S{N} FIX — mesmo achado do NfceEmissionService: mensagem_sefaz
+        // (motivo real da rejeição) era descartada, WPF só mostrava "Status:
+        // erro_autorizacao" sem dizer o que corrigir.
+        string mensagemSefaz = doc.RootElement.TryGetProperty("mensagem_sefaz", out var msgProp) ? msgProp.GetString() ?? "" : "";
+        string mensagemRejeicao = string.IsNullOrWhiteSpace(mensagemSefaz)
+            ? $"Nota Rejeitada. Status: {status}"
+            : $"Nota Rejeitada: {mensagemSefaz}";
+        return (false, mensagemRejeicao, "", "", "", "");
+    }
+
+    /// <summary>Ver comentário no NfceEmissionService — mesmo achado, mesmo fix.</summary>
+    private static string LimparChaveAcesso(string? chave)
+    {
+        if (string.IsNullOrWhiteSpace(chave)) return "";
+        var digitos = new string(chave.Where(char.IsDigit).ToArray());
+        return digitos.Length > 44 ? digitos[^44..] : digitos;
     }
 }

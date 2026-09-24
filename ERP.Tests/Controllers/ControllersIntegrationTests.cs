@@ -2137,8 +2137,19 @@ public class F11DualTenantTests : IClassFixture<ErpApiFactory>
 
         var resp = await ClientFor(tenantB).GetAsync($"/api/fidelidade/{clienteId}/saldo");
 
+        // S{N} FIX — achado rodando a suíte inteira (não relacionado ao
+        // Módulo 5/Fiscal): a asserção original procurava o texto "500" na
+        // resposta inteira pra confirmar que os pontos do Tenant A não
+        // vazaram — mas a resposta também inclui o customerId (um GUID
+        // aleatório), que por coincidência pode conter "500" em algum trecho
+        // hexadecimal, derrubando o teste por um motivo que nada tem a ver
+        // com vazamento de dado entre tenants. Corrigido pra checar o campo
+        // de verdade (saldo) via JSON, não uma busca de texto solta.
         if (resp.IsSuccessStatusCode)
-            (await resp.Content.ReadAsStringAsync()).Should().NotContain("500");
+        {
+            using var json = System.Text.Json.JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            json.RootElement.GetProperty("saldo").GetInt32().Should().Be(0);
+        }
         else
             resp.StatusCode.Should().BeOneOf(HttpStatusCode.NotFound, HttpStatusCode.Forbidden);
     }
