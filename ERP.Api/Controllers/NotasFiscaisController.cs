@@ -168,6 +168,59 @@ public class NotasFiscaisController : ControllerBase
             Ambiente = config.UsarAmbienteProducao ? "Produção" : "Homologação"
         });
     }
+
+    /// <summary>Módulo 5 (Fiscal), Etapa 1B — emite NF-e de devolução (finalidade=4),
+    /// referenciando a chave da nota original. Chamado por DevolucaoService (WPF),
+    /// depois que a devolução operacional (estoque + Haver) já foi commitada —
+    /// best-effort de propósito: IFiscalService.EmitirNotaDevolucaoAsync nunca lança
+    /// em falha de negócio (sem chave original, rejeição SEFAZ), só em venda
+    /// inexistente. Mesmo padrão de resposta do EmitirDaVenda, pra HttpFiscalService
+    /// tratar os dois de forma idêntica.</summary>
+    [HasPermission(Permissions.NotasFiscaisView)]
+    [HttpPost("{vendaId:guid}/emitir-devolucao")]
+    public async Task<IActionResult> EmitirDevolucao(Guid vendaId, [FromBody] EmitirDevolucaoRequest req)
+    {
+        var itens = req.Itens
+            .Select(i => (i.ProductId, i.ProductName, i.Quantidade, i.ValorUnitario))
+            .ToList();
+
+        FiscalEmissionResult resultado;
+        try
+        {
+            resultado = await _fiscal.EmitirNotaDevolucaoAsync(vendaId, itens, req.Motivo ?? "");
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { erro = ex.Message });
+        }
+
+        if (!resultado.Sucesso)
+            return BadRequest(new { erro = resultado.Mensagem });
+
+        return Ok(new
+        {
+            Sucesso        = true,
+            Mensagem       = resultado.Mensagem,
+            Status         = resultado.Status,
+            UrlDanfe       = resultado.UrlDanfe,
+            Ambiente       = resultado.Ambiente,
+            EmContingencia = resultado.EmContingencia
+        });
+    }
+}
+
+public class ItemDevolucaoDto
+{
+    public Guid    ProductId     { get; set; }
+    public string  ProductName   { get; set; } = string.Empty;
+    public decimal Quantidade    { get; set; }
+    public decimal ValorUnitario { get; set; }
+}
+
+public class EmitirDevolucaoRequest
+{
+    public List<ItemDevolucaoDto> Itens  { get; set; } = [];
+    public string?                Motivo { get; set; }
 }
 
 public class EmitirNfceRequest

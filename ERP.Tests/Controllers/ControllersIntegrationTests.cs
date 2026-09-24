@@ -1538,6 +1538,42 @@ public class NotasFiscaisControllerTests : IntegrationTestBase
             Json(new { Justificativa = "curta" }));
         resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
+
+    // ── Módulo 5 (Fiscal), Etapa 1A: agora é o endpoint que o WPF usa de
+    // verdade pra emitir nota (via HttpFiscalService), não só o Portal. ──
+    [Fact(DisplayName = "Fase C — POST /api/notas-fiscais/{tipo}/emitir-da-venda/{id} sem token → 401")]
+    public async Task EmitirDaVenda_SemToken_Retorna401()
+        => (await AnonClient.PostAsync($"/api/notas-fiscais/nfce/emitir-da-venda/{Guid.NewGuid()}", content: null))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+    [Fact(DisplayName = "Fase C — POST /api/notas-fiscais/nfce/emitir-da-venda/{id} pra venda inexistente → 404")]
+    public async Task EmitirDaVenda_VendaInexistente_Retorna404()
+    {
+        var resp = await AuthClient.PostAsync($"/api/notas-fiscais/nfce/emitir-da-venda/{Guid.NewGuid()}", content: null);
+        resp.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact(DisplayName = "Fase C — POST /api/notas-fiscais/nfe/emitir-da-venda/{id} pra venda inexistente → 404 (mesma rota, tipo NFE)")]
+    public async Task EmitirDaVenda_Nfe_VendaInexistente_Retorna404()
+    {
+        var resp = await AuthClient.PostAsync($"/api/notas-fiscais/nfe/emitir-da-venda/{Guid.NewGuid()}", content: null);
+        resp.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    // ── Módulo 5 (Fiscal), Etapa 1B: devolução. ──────────────────────────
+    [Fact(DisplayName = "Fase C — POST /api/notas-fiscais/{id}/emitir-devolucao sem token → 401")]
+    public async Task EmitirDevolucao_SemToken_Retorna401()
+        => (await AnonClient.PostAsync($"/api/notas-fiscais/{Guid.NewGuid()}/emitir-devolucao",
+                Json(new { Itens = new List<object>(), Motivo = "teste" })))
+            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+    [Fact(DisplayName = "Fase C — POST /api/notas-fiscais/{id}/emitir-devolucao pra venda inexistente → 404")]
+    public async Task EmitirDevolucao_VendaInexistente_Retorna404()
+    {
+        var resp = await AuthClient.PostAsync($"/api/notas-fiscais/{Guid.NewGuid()}/emitir-devolucao",
+            Json(new { Itens = new List<object>(), Motivo = "Produto com defeito" }));
+        resp.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

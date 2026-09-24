@@ -397,8 +397,13 @@ public partial class App : System.Windows.Application
         // o mesmo banco compartilhado depois da Fase 4 da migração.
         services.AddScoped<ERP.Application.Interfaces.ITenantFeatureFlagsProvider,
                             ERP.Infrastructure.Services.TenantFeatureFlagsProvider>();
+        // Módulo 5 (Fiscal), Etapas 1A+1B — HttpFiscalService no lugar do
+        // FiscalService local: EmitirNotaAsync (venda normal) e
+        // EmitirNotaDevolucaoAsync (devolução) migrados, os dois via endpoint
+        // próprio. FiscalService (Infrastructure) fica no código, órfão, até
+        // a Etapa 1C confirmar que nada mais precisa dele.
         services.AddScoped<ERP.Application.Interfaces.IFiscalService,
-                            ERP.Infrastructure.Services.FiscalService>();
+                            ERP.WPF.Services.HttpFiscalService>();
         services.AddScoped<ERP.Application.Interfaces.INotaFiscalAvulsaService,
                             ERP.Infrastructure.Services.NotaFiscalAvulsaService>();
         services.AddScoped<ERP.Application.Interfaces.INfeRecebidaService,
