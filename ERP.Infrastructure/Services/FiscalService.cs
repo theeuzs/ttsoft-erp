@@ -77,6 +77,37 @@ public class FiscalService : IFiscalService
                 Log.Warning(exAtualizar, "Falha ao salvar dados locais da nota autorizada para a venda {VendaId} (nota em si já foi autorizada na SEFAZ)", vendaId);
             }
 
+            // Regra VC02-14 — persiste o NumeroItemFiscal que MontarItens já
+            // atribuiu em memória (mesmo número usado no payload que a Focus
+            // acabou de autorizar). ExecuteUpdateAsync de propósito: `sale`
+            // veio AsNoTracking, e AppDbContext roda com NoTracking global —
+            // uma gravação via .Update()/SaveChanges silenciosamente não
+            // persistiria aqui (mesma classe de bug já documentada em S28).
+            // Só grava depois de autorizado — nunca em rejeição.
+            //
+            // NumeroItemFiscal == null no filtro: torna a gravação idempotente
+            // e monotônica (NULL → 1, nunca 1 → 2). Protege contra uma
+            // eventual reemissão desta venda sobrescrever um snapshot fiscal
+            // já congelado — EmitirNotaAsync ainda não tem guarda própria
+            // contra chamada duplicada em todos os chamadores (WPF
+            // SaleViewModel tem; API EmitirDaVenda e OrderProcessingService
+            // não têm — tarefa separada, fora do escopo desta correção).
+            // 0 linhas afetadas aqui não é erro: só significa que o valor já
+            // estava preenchido, o que é exatamente o comportamento desejado.
+            try
+            {
+                foreach (var item in sale.Items)
+                {
+                    await _ctx.SaleItems
+                        .Where(si => si.Id == item.Id && si.NumeroItemFiscal == null)
+                        .ExecuteUpdateAsync(s => s.SetProperty(si => si.NumeroItemFiscal, item.NumeroItemFiscal));
+                }
+            }
+            catch (Exception exNumeroItem)
+            {
+                Log.Warning(exNumeroItem, "Falha ao persistir NumeroItemFiscal para a venda {VendaId} (nota já autorizada na SEFAZ; devolução futura desta venda pode ficar bloqueada até corrigir)", vendaId);
+            }
+
             await RegistrarNotaFiscalAsync(vendaId, sale, tipoDocumento, "Autorizada", urlDanfe, ambienteSefaz, urlXml, chave, numero);
 
             return new FiscalEmissionResult
@@ -121,25 +152,60 @@ public class FiscalService : IFiscalService
     }
 
     public async Task<FiscalEmissionResult> EmitirNotaDevolucaoAsync(
-        Guid vendaId, List<(Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)> itensDevolvidos, string motivo)
+        Guid vendaId,
+        List<(Guid SaleItemId, Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)> itensDevolvidos,
+        string motivo)
     {
+        // Include(Items) adicionado nesta correção — sem isso, sale.Items
+        // vinha vazio e não dava pra localizar NumeroItemFiscal por SaleItemId.
         var sale = await _ctx.Sales.AsNoTracking()
             .Include(s => s.Customer)
+            .Include(s => s.Items)
             .FirstOrDefaultAsync(s => s.Id == vendaId)
             ?? throw new KeyNotFoundException($"Venda {vendaId} não encontrada.");
 
         if (string.IsNullOrWhiteSpace(sale.NfceChave))
         {
             // Best-effort de propósito: sem a chave da nota original não dá
-            // pra montar "notas_referenciadas" corretamente, e a SEFAZ exige
-            // isso pra devolução. A devolução operacional (estoque + Haver)
-            // já aconteceu antes de chegar aqui — isso só avisa, não desfaz nada.
+            // pra montar o referenciamento fiscal, e a SEFAZ exige isso pra
+            // devolução. A devolução operacional (estoque + Haver) já
+            // aconteceu antes de chegar aqui — isso só avisa, não desfaz nada.
             return new FiscalEmissionResult
             {
                 Sucesso = false,
                 Mensagem = "Essa venda não tem nota fiscal original (NF-e) registrada — não é possível emitir NF-e de devolução sem a chave da nota original.",
                 Status = "Não Aplicável"
             };
+        }
+
+        // Validação defensiva (regra VC02-14) — cada item devolvido precisa
+        // localizar um SaleItem de verdade, com NumeroItemFiscal já
+        // congelado na emissão original. Sem isso, a Focus rejeita (321/1193:
+        // "DFe Referenciado não informado") ou, pior, aceitaríamos submeter
+        // um nItem errado — melhor recusar aqui, com mensagem clara, do que
+        // deixar a SEFAZ rejeitar ou (pior ainda) autorizar uma referência
+        // fiscal incorreta.
+        foreach (var item in itensDevolvidos)
+        {
+            var saleItem = sale.Items.FirstOrDefault(i => i.Id == item.SaleItemId);
+            if (saleItem == null)
+            {
+                return new FiscalEmissionResult
+                {
+                    Sucesso = false,
+                    Mensagem = $"Item de devolução não corresponde a nenhuma linha da venda original (SaleItemId {item.SaleItemId}).",
+                    Status = "Não Aplicável"
+                };
+            }
+            if (saleItem.NumeroItemFiscal is null)
+            {
+                return new FiscalEmissionResult
+                {
+                    Sucesso = false,
+                    Mensagem = "Esta venda foi emitida antes do rastreamento de item por número da nota — não é possível gerar devolução fiscal automática para ela.",
+                    Status = "Não Aplicável"
+                };
+            }
         }
 
         var config = await _configProvider.ObterConfiguracaoAsync();
@@ -195,7 +261,9 @@ public class FiscalService : IFiscalService
     }
 
     private static FocusNfceRequest MontarRequestNfeDevolucao(
-        Domain.Entities.Sale sale, List<(Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)> itens, string motivo,
+        Domain.Entities.Sale sale,
+        List<(Guid SaleItemId, Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)> itens,
+        string motivo,
         Dictionary<Guid, Domain.Entities.Product> produtos)
     {
         var customer = sale.Customer;
@@ -231,6 +299,12 @@ public class FiscalService : IFiscalService
             var ncm   = produto?.NCM;
             var csosn = produto?.CSOSN;
 
+            // Regra VC02-14 (NT 2025.002-RTC, produção 01/09/2026) —
+            // referenciamento por item, não mais só no cabeçalho.
+            // Validado já em EmitirNotaDevolucaoAsync que este SaleItem
+            // existe e tem NumeroItemFiscal — aqui é só leitura.
+            var saleItemOriginal = sale.Items.First(i => i.Id == item.SaleItemId);
+
             return new FocusItemRequest
             {
                 NumeroItem             = (index + 1).ToString(),
@@ -250,6 +324,11 @@ public class FiscalService : IFiscalService
                 IcmsOrigem             = "0",
                 PisSituacaoTributaria     = "99",
                 CofinsSituacaoTributaria  = "99",
+                // Regra VC02-14 — referenciamento por item. chave é a mesma
+                // pra todos os itens (uma só venda original); nItem é
+                // específico de cada linha, congelado na emissão original.
+                ChaveAcessoDfeReferenciado = sale.NfceChave,
+                NumeroItemDfeReferenciado  = saleItemOriginal.NumeroItemFiscal!.Value.ToString(),
             };
         }).ToList();
 
@@ -277,7 +356,11 @@ public class FiscalService : IFiscalService
             IndicadorIeDestinatario = indicadorIe,
             Itens                  = itensRequest,
             Pagamentos             = new List<FocusPagamentoRequest>(),
-            NotasReferenciadas     = new List<NotaReferenciadaRequest> { new() { ChaveNfe = sale.NfceChave! } },
+            // Regra VC02-14 — a partir de 01/09/2026 o referenciamento no
+            // cabeçalho não pode coexistir com o referenciamento por item
+            // (chave_acesso_dfe_referenciado/numero_item_dfe_referenciado,
+            // já preenchidos em cada item acima). NotasReferenciadas
+            // removido de propósito, não esquecido.
         };
     }
 
@@ -352,6 +435,17 @@ public class FiscalService : IFiscalService
 
         return sale.Items.Select((item, index) =>
         {
+            // Regra VC02-14 — fonte única de verdade: o número atribuído aqui
+            // é o MESMO usado no payload (NumeroItem, abaixo) e o mesmo que
+            // EmitirNotaAsync persiste depois da autorização. Não existe uma
+            // segunda leitura/reconstrução: é atribuído uma vez, aqui, em
+            // memória — o objeto `item` é o mesmo `sale.Items[i]` que
+            // EmitirNotaAsync usa pra persistir, dentro da mesma execução.
+            // Nada é gravado no banco por esta linha sozinha (sale veio
+            // AsNoTracking) — a gravação de verdade só acontece se a Focus
+            // autorizar, num passo explícito separado.
+            item.NumeroItemFiscal = index + 1;
+
             var produto = item.Product;
             var ncm    = produto?.NCM;
             var csosn  = produto?.CSOSN;
@@ -381,7 +475,7 @@ public class FiscalService : IFiscalService
 
             var request = new FocusItemRequest
             {
-                NumeroItem             = (index + 1).ToString(),
+                NumeroItem             = item.NumeroItemFiscal!.Value.ToString(),
                 CodigoProduto          = item.ProductId.ToString().Substring(0, 6),
                 Descricao              = item.ProductName,
                 QuantidadeComercial    = item.Quantity.ToString("F2", CultureInfo.InvariantCulture),

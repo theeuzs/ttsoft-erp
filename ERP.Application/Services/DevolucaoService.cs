@@ -125,9 +125,12 @@ public class DevolucaoService : IDevolucaoService
             {
                 var itensParaNota = itensValidos.Select(item =>
                 {
-                    var itemVenda = venda.Items.First(i => i.ProductId == item.ProductId);
+                    // Localiza por SaleItemId, não por ProductId — evita
+                    // ambiguidade se a mesma venda algum dia tiver o mesmo
+                    // produto em duas linhas (ver análise da regra VC02-14).
+                    var itemVenda = venda.Items.First(i => i.Id == item.SaleItemId);
                     var unitPriceEfetivo = itemVenda.UnitPrice * (1m - itemVenda.DiscountPercent / 100m);
-                    return (item.ProductId, item.ProductName, item.QuantidadeDevolver, unitPriceEfetivo);
+                    return (item.SaleItemId, item.ProductId, item.ProductName, item.QuantidadeDevolver, unitPriceEfetivo);
                 }).ToList();
 
                 var resultadoFiscal = await _fiscalService.EmitirNotaDevolucaoAsync(dto.VendaId, itensParaNota, dto.Motivo ?? "");

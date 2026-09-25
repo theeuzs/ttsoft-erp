@@ -121,10 +121,12 @@ public class HttpFiscalServiceTests
     {
         var vendaId = Guid.NewGuid();
         var produtoId = Guid.NewGuid();
+        var saleItemId = Guid.NewGuid();
         var h = new HandlerGravador(HttpStatusCode.OK,
             "{\"sucesso\":true,\"mensagem\":\"NF-e de devolução emitida com sucesso!\",\"status\":\"Autorizada\",\"urlDanfe\":\"https://x/dev.pdf\",\"ambiente\":\"Homologação\",\"emContingencia\":false}");
 
-        var itens = new List<(Guid, string, decimal, decimal)> { (produtoId, "Cimento", 2m, 35.90m) };
+        var itens = new List<(Guid SaleItemId, Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)>
+            { (saleItemId, produtoId, "Cimento", 2m, 35.90m) };
         var r = await new HttpFiscalService(h).EmitirNotaDevolucaoAsync(vendaId, itens, "Produto com defeito");
 
         h.UltimaRequisicao!.RequestUri!.AbsolutePath.Should().Be($"/api/notas-fiscais/{vendaId}/emitir-devolucao");
@@ -140,7 +142,7 @@ public class HttpFiscalServiceTests
             "{\"erro\":\"Essa venda não tem nota fiscal original (NF-e) registrada — não é possível emitir NF-e de devolução sem a chave da nota original.\"}");
 
         var r = await new HttpFiscalService(h).EmitirNotaDevolucaoAsync(
-            Guid.NewGuid(), new List<(Guid, string, decimal, decimal)>(), "motivo");
+            Guid.NewGuid(), new List<(Guid SaleItemId, Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)>(), "motivo");
 
         r.Sucesso.Should().BeFalse();
         r.Mensagem.Should().Contain("chave da nota original");
@@ -152,7 +154,7 @@ public class HttpFiscalServiceTests
         var h = new HandlerGravador(HttpStatusCode.NotFound, "{\"erro\":\"Venda não encontrada.\"}");
 
         var act = async () => await new HttpFiscalService(h).EmitirNotaDevolucaoAsync(
-            Guid.NewGuid(), new List<(Guid, string, decimal, decimal)>(), "motivo");
+            Guid.NewGuid(), new List<(Guid SaleItemId, Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)>(), "motivo");
 
         await act.Should().ThrowAsync<KeyNotFoundException>();
     }

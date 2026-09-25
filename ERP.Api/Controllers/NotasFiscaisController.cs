@@ -181,7 +181,7 @@ public class NotasFiscaisController : ControllerBase
     public async Task<IActionResult> EmitirDevolucao(Guid vendaId, [FromBody] EmitirDevolucaoRequest req)
     {
         var itens = req.Itens
-            .Select(i => (i.ProductId, i.ProductName, i.Quantidade, i.ValorUnitario))
+            .Select(i => (i.SaleItemId, i.ProductId, i.ProductName, i.Quantidade, i.ValorUnitario))
             .ToList();
 
         FiscalEmissionResult resultado;
@@ -211,6 +211,7 @@ public class NotasFiscaisController : ControllerBase
 
 public class ItemDevolucaoDto
 {
+    public Guid    SaleItemId    { get; set; }
     public Guid    ProductId     { get; set; }
     public string  ProductName   { get; set; } = string.Empty;
     public decimal Quantidade    { get; set; }

@@ -69,6 +69,20 @@ public class SaleItem : BaseEntity
     public decimal TotalItem { get; set; }
 
     /// <summary>
+    /// Número do item (nItem) no documento fiscal ORIGINAL autorizado pela SEFAZ —
+    /// não é "a posição do item na venda", é uma snapshot fiscal congelada no
+    /// momento da autorização. Nunca reconstruir a partir da ordem atual de
+    /// SaleItems (Id é Guid aleatório, CreatedAt pode empatar entre itens do
+    /// mesmo carrinho — nenhum dos dois é um índice fiscal confiável).
+    /// Null = venda sem nota autorizada, ou autorizada antes deste campo
+    /// existir (ver estratégia de backfill). Atribuído em
+    /// FiscalService.EmitirNotaAsync, só após confirmação de autorização —
+    /// nunca em rejeição. Usado por EmitirNotaDevolucaoAsync pra montar
+    /// numero_item_dfe_referenciado (regra VC02-14, NT 2025.002-RTC).
+    /// </summary>
+    public int? NumeroItemFiscal { get; set; }
+
+    /// <summary>
     /// Retorna TotalItem se salvo, senão recalcula via Quantity × UnitPrice (compatibilidade).
     /// </summary>
     public decimal TotalPrice => TotalItem > 0 ? TotalItem : Quantity * UnitPrice * (1 - DiscountPercent / 100);

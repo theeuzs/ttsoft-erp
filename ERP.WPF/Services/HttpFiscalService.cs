@@ -82,13 +82,13 @@ public class HttpFiscalService : IFiscalService
     /// </summary>
     public async Task<FiscalEmissionResult> EmitirNotaDevolucaoAsync(
         Guid vendaId,
-        List<(Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)> itensDevolvidos,
+        List<(Guid SaleItemId, Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)> itensDevolvidos,
         string motivo)
     {
         var corpo = new
         {
             Itens = itensDevolvidos
-                .Select(i => new { i.ProductId, i.ProductName, i.Quantidade, i.ValorUnitario })
+                .Select(i => new { i.SaleItemId, i.ProductId, i.ProductName, i.Quantidade, i.ValorUnitario })
                 .ToList(),
             Motivo = motivo
         };

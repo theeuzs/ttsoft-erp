@@ -18,7 +18,12 @@ public interface IFiscalService
     /// <summary>Item 7 do roadmap fiscal — NF-e de devolução (finalidade=4,
     /// referenciando a chave da nota original). Só funciona pra NF-e A4;
     /// NFC-e não tem esse evento — a devolução de venda no balcão continua
-    /// só operacional (estoque + Haver), sem documento fiscal próprio.</summary>
+    /// só operacional (estoque + Haver), sem documento fiscal próprio.
+    /// SaleItemId identifica a linha de forma inequívoca (regra VC02-14 —
+    /// referenciamento por item exige o nItem exato da nota original,
+    /// nunca reconstruído por ProductId ou por posição na lista).</summary>
     Task<FiscalEmissionResult> EmitirNotaDevolucaoAsync(
-        Guid vendaId, List<(Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)> itensDevolvidos, string motivo);
+        Guid vendaId,
+        List<(Guid SaleItemId, Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)> itensDevolvidos,
+        string motivo);
 }

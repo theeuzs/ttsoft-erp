@@ -249,6 +249,9 @@ public record SaleDetailDto(
 
 public record SaleItemDto(Guid ProductId, string ProductName, decimal Quantity, decimal UnitPrice, decimal DiscountPercent, decimal TotalPrice)
 {
+    /// <summary>Identidade da linha (SaleItem.Id) — necessário pra devolução
+    /// localizar NumeroItemFiscal sem ambiguidade (não usar ProductId).</summary>
+    public Guid     Id                { get; init; }
     public string?  LabelUnidadeVenda { get; init; }
     public string?  UnidadeEstoque    { get; init; }
     public decimal  FatorConversao    { get; init; } = 1m;
@@ -489,6 +492,13 @@ public class AuditLogDto
 // ── Devolução Parcial ─────────────────────────────────────────────────────
 public class DevolucaoItemDto
 {
+    /// <summary>
+    /// Identidade da linha fiscal — não usar ProductId pra localizar qual
+    /// SaleItem está sendo devolvido (ver análise da regra VC02-14).
+    /// ProductId é mantido pra exibição/compatibilidade, mas
+    /// EmitirNotaDevolucaoAsync busca NumeroItemFiscal por SaleItemId.
+    /// </summary>
+    public Guid    SaleItemId        { get; set; }
     public Guid    ProductId         { get; set; }
     public string  ProductName       { get; set; } = string.Empty;
     public decimal QuantidadeVendida  { get; set; }

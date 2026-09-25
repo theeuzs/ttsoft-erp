@@ -118,6 +118,7 @@ public class MappingProfile : Profile
             .ConstructUsing(i => new SaleItemDto(
                 i.ProductId, i.ProductName, i.Quantity, i.UnitPrice, i.DiscountPercent, i.TotalPrice)
             {
+                Id                = i.Id,
                 LabelUnidadeVenda = i.Product != null ? i.Product.LabelUnidadeVenda : null,
                 UnidadeEstoque    = i.Product != null ? (i.Product.UnidadeEstoque ?? i.Product.Unit) : null,
                 FatorConversao    = i.Product != null ? i.Product.FatorConversao    : 1m,

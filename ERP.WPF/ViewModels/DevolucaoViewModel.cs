@@ -12,6 +12,9 @@ namespace ERP.WPF.ViewModels;
 
 public class DevolucaoItemVm : BaseViewModel
 {
+    /// <summary>Identidade da linha fiscal (SaleItem.Id) — usada pra localizar
+    /// NumeroItemFiscal na devolução, não ProductId.</summary>
+    public Guid    SaleItemId         { get; set; }
     public Guid    ProductId          { get; set; }
     public string  ProductName        { get; set; } = string.Empty;
     public decimal QuantidadeVendida  { get; set; }
@@ -107,6 +110,7 @@ public class DevolucaoViewModel : BaseViewModel
             decimal jaDevolvido = jaDevolvidos != null && jaDevolvidos.TryGetValue(item.ProductId, out var jd) ? jd : 0m;
             var vm = new DevolucaoItemVm
             {
+                SaleItemId         = item.Id,
                 ProductId          = item.ProductId,
                 ProductName        = item.ProductName,
                 QuantidadeVendida  = item.Quantity,
@@ -218,6 +222,7 @@ public class DevolucaoViewModel : BaseViewModel
                 Motivo       = Motivo,
                 Itens        = itens.Select(i => new DevolucaoItemDto
                 {
+                    SaleItemId         = i.SaleItemId,
                     ProductId          = i.ProductId,
                     ProductName        = i.ProductName,
                     QuantidadeVendida  = i.QuantidadeVendida,

@@ -191,6 +191,17 @@ public class FocusItemRequest
 
     [JsonPropertyName("cofins_situacao_tributaria")]
     public string CofinsSituacaoTributaria { get; set; } = "99";
+
+    // Regra VC02-14 (NT 2025.002-RTC, produção 01/09/2026) — referenciamento
+    // por item em NF-e de devolução (finNFe=4). Nomes confirmados na
+    // documentação oficial de campos da Focus (chave_acesso_dfe_referenciado/
+    // numero_item_dfe_referenciado). Null em qualquer item que não seja
+    // devolução — não afeta emissão normal.
+    [JsonPropertyName("chave_acesso_dfe_referenciado")]
+    public string? ChaveAcessoDfeReferenciado { get; set; }
+
+    [JsonPropertyName("numero_item_dfe_referenciado")]
+    public string? NumeroItemDfeReferenciado { get; set; }
 }
 
 // Essa classe representa como o cliente pagou (Dinheiro, PIX, Cartão)
