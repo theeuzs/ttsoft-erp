@@ -207,13 +207,13 @@ public partial class App : System.Windows.Application
                 this.ShutdownMode = ShutdownMode.OnLastWindowClose;
                 mainWindow.Show();
 
-                var worker = Services.GetRequiredService<NfeContingencyWorker>();
-                _ = worker.IniciarTrabalhoEmBackgroundAsync(() =>
-                {
-                    var config = ConfiguracaoService.Carregar();
-                    string tokenFocus = config.UsarAmbienteProducao ? config.TokenFocusNfeProducao : config.TokenFocusNfeHomologacao;
-                    return (tokenFocus, config.UsarAmbienteProducao);
-                });
+                // Etapa 2 (Fiscal) — NfeContingencyWorker removido daqui.
+                // NfeContingencyHostedService (API) é o único processador da
+                // fila de contingência agora — rodava em paralelo com este,
+                // sem coordenação nenhuma entre os dois (achado da auditoria
+                // da Etapa 2). NfeContingencyWorker.cs fica órfão de
+                // propósito, não apagado ainda — mesma estratégia cautelosa
+                // já usada com FiscalService na Etapa 1.
             }
             else
             {
@@ -444,7 +444,10 @@ public partial class App : System.Windows.Application
         services.AddScoped<INfeCorrecaoService, ERP.Application.Services.NfeCorrecaoService>();
         services.AddScoped<INfeStatusService, NfeStatusService>();
         services.AddScoped<INfeContingencyService, NfeContingencyService>();
-        services.AddSingleton<NfeContingencyWorker>();
+        // Etapa 2 (Fiscal) — AddSingleton<NfeContingencyWorker>() removido.
+        // NfeContingencyService continua registrado: PdvViewModel ainda usa
+        // VerificarConexaoSefazAsync() pro ping de conectividade — só o
+        // PROCESSAMENTO da fila (o worker) saiu daqui, não o serviço.
         services.AddScoped<ILegacyImportService, LegacyImportService>();
         services.AddScoped<IFiscalCalculator, SimplesNacionalCalculator>();
         services.AddScoped<IMotorFiscalService, MotorFiscalService>();

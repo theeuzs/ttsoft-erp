@@ -1,5 +1,6 @@
 // ERP.Tests/Api/NfeContingencyHostedServiceTests.cs
 using ERP.Api.BackgroundServices;
+using ERP.Application.DTOs.FocusNfe;
 using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Persistence.Context;
@@ -7,7 +8,9 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -145,5 +148,68 @@ public class NfeContingencyHostedServiceTests
         // Guid.Empty — não vê a nota do tenantA (prova que a ordem tem
         // que ser: IRequestTenant primeiro, AppDbContext depois).
         pendentesVisiveis.Should().BeEmpty();
+    }
+
+    [Fact(DisplayName = "Etapa 2 (Fiscal) — ProcessarTenantAsync continua processando a fila normalmente depois da remoção do NfeContingencyWorker do WPF")]
+    public async Task ProcessarTenantAsync_ContinuaProcessandoNormalmente_SemDependerDoWorkerWpf()
+    {
+        // Prova que NfeContingencyHostedService (API) é autossuficiente —
+        // nunca dependeu do worker do WPF pra funcionar, e continua
+        // funcionando exatamente igual depois dele ter sido removido de lá.
+        // VerificarConexaoSefazAsync/serviços de emissão são mockados aqui
+        // (não a implementação real) pelo mesmo motivo já documentado nos
+        // testes acima: evitar ping de rede real, que tornaria o teste
+        // instável — não por causa da remoção do worker.
+        var tenantId = Guid.NewGuid();
+        var vendaId  = Guid.NewGuid();
+        var pendenteId = Guid.NewGuid();
+
+        var contingencyMock = new Mock<INfeContingencyService>();
+        contingencyMock.Setup(c => c.VerificarConexaoSefazAsync()).ReturnsAsync(true);
+        contingencyMock.Setup(c => c.ObterNotasPendentesAsync())
+            .ReturnsAsync(new List<NfePendente> { new() { Id = pendenteId, VendaId = vendaId, TipoNota = "NFCE", PayloadJson = "{}", Referencia = "ref-processamento" } });
+
+        var nfceMock = new Mock<INfceEmissionService>();
+        nfceMock.Setup(s => s.EmitirNfceAsync("ref-processamento", It.IsAny<FocusNfceRequest>(), It.IsAny<string>(), It.IsAny<bool>()))
+            .ReturnsAsync((true, "Autorizada", "https://focus/danfe.html", "", "", ""));
+
+        var saleServiceMock = new Mock<ISaleService>();
+        var configProviderMock = new Mock<IFiscalConfigurationProvider>();
+        configProviderMock.Setup(c => c.ObterConfiguracaoAsync())
+            .ReturnsAsync(new FiscalConfiguration { TokenFocusNfe = "token-teste", UsarAmbienteProducao = false });
+
+        var services = new ServiceCollection();
+        services.AddDbContext<AppDbContext>(opt => opt.UseInMemoryDatabase($"contingencia_processamento_{Guid.NewGuid():N}"));
+        services.AddScoped<IRequestTenant, ERP.Api.Services.RequestTenant>();
+        services.AddLogging();
+        services.AddSingleton(contingencyMock.Object);
+        services.AddSingleton(nfceMock.Object);
+        services.AddSingleton(new Mock<INfeEmissionService>().Object);
+        services.AddSingleton(saleServiceMock.Object);
+        services.AddSingleton(configProviderMock.Object);
+        var providerComMocks = services.BuildServiceProvider();
+
+        using (var seedScope = providerComMocks.CreateScope())
+        {
+            var ctx = seedScope.ServiceProvider.GetRequiredService<AppDbContext>();
+            ctx.NfePendentes.Add(new NfePendente
+            {
+                Id = pendenteId, TenantId = tenantId, VendaId = vendaId, TipoNota = "NFCE",
+                PayloadJson = "{}", Referencia = "ref-processamento"
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        var service = new NfeContingencyHostedService(
+            providerComMocks.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<NfeContingencyHostedService>.Instance);
+
+        await service.ProcessarTenantAsync(tenantId, CancellationToken.None);
+
+        saleServiceMock.Verify(s => s.AtualizarDadosNfceAsync(
+            vendaId, "https://focus/danfe.html", "Autorizada", It.IsAny<string>(), "ref-processamento", null, null),
+            Times.Once, "o processamento precisa continuar chamando a emissão e persistindo o resultado, exatamente como antes");
+        contingencyMock.Verify(c => c.RemoverNotaPendenteAsync(pendenteId), Times.Once,
+            "nota processada com sucesso precisa sair da fila de contingência");
     }
 }

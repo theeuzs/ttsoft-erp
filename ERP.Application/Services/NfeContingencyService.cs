@@ -10,14 +10,17 @@ namespace ERP.Application.Services;
 
 public class NfeContingencyService : INfeContingencyService
 {
-    private readonly IFocusNfeHttpClient _httpClient;
     private readonly IUnitOfWork _uow;
     private readonly IRequestTenant _tenant;
 
-    // Recebemos o UnitOfWork por injeção de dependência, igualzinho ao SaleService!
-    public NfeContingencyService(IFocusNfeHttpClient httpClient, IUnitOfWork uow, IRequestTenant tenant)
+    // Etapa 2 (Fiscal) — IFocusNfeHttpClient removido do construtor: era
+    // injetado, mas nenhum dos 5 métodos desta classe nunca o usava
+    // (confirmado em duas auditorias — Etapa 1C e Etapa 2). O registro do
+    // IFocusNfeHttpClient em si continua existindo, pra outros consumidores
+    // (INfceEmissionService/INfeEmissionService, ainda usados localmente por
+    // NotaFiscalAvulsaService/NfseEmissionService).
+    public NfeContingencyService(IUnitOfWork uow, IRequestTenant tenant)
     {
-        _httpClient = httpClient;
         _uow = uow;
         _tenant = tenant;
     }

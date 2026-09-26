@@ -392,10 +392,9 @@ public class NfeContingencyServiceTests
         uow.Setup(u => u.NfePendentes).Returns(repo.Object);
         uow.Setup(u => u.CommitAsync()).ReturnsAsync(1);
 
-        var http = new Mock<IFocusNfeHttpClient>();
         var tenant = new Mock<IRequestTenant>();
         tenant.Setup(t => t.TenantId).Returns(Guid.NewGuid());
-        return (new NfeContingencyService(http.Object, uow.Object, tenant.Object), uow, repo);
+        return (new NfeContingencyService(uow.Object, tenant.Object), uow, repo);
     }
 
     [Fact]
