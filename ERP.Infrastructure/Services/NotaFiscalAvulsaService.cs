@@ -634,7 +634,7 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
         var config = await _configProvider.ObterConfiguracaoAsync();
         var referencia = $"avulsa-{nota.Id}";
 
-        var (sucesso, statusFocus, urlDanfe) = await _statusService.ConsultarStatusNotaAsync(
+        var (sucesso, statusFocus, urlDanfe, _, _, _, _) = await _statusService.ConsultarStatusNotaAsync(
             referencia, config.TokenFocusNfe, config.UsarAmbienteProducao);
 
         if (!sucesso)

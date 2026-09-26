@@ -123,7 +123,7 @@ public class NotasFiscaisViewModel : BaseViewModel
 
                 foreach (var pendente in notasProcessando)
                 {
-                    var (sucesso, statusSefaz, urlDanfe) = await statusService.ConsultarStatusNotaAsync(pendente.NfceReferencia, tokenFocus, config.UsarAmbienteProducao);
+                    var (sucesso, statusSefaz, urlDanfe, chave, numero, _, _) = await statusService.ConsultarStatusNotaAsync(pendente.NfceReferencia, tokenFocus, config.UsarAmbienteProducao);
                     
                     if (sucesso && statusSefaz != "processando_autorizacao")
                     {
@@ -131,7 +131,7 @@ public class NotasFiscaisViewModel : BaseViewModel
 
                         await ExecuteWithFreshSaleServiceAsync(async s => 
                         {
-                            await s.AtualizarDadosNfceAsync(pendente.Id, urlDanfe, statusFinal, pendente.NfceAmbiente, pendente.NfceReferencia);
+                            await s.AtualizarDadosNfceAsync(pendente.Id, urlDanfe, statusFinal, pendente.NfceAmbiente, pendente.NfceReferencia, chave, numero);
                             return true;
                         });
 

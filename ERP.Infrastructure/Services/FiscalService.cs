@@ -32,6 +32,7 @@ public class FiscalService : IFiscalService
     private readonly INfeEmissionService _nfeService;
     private readonly INfeContingencyService _contingencyService;
     private readonly ISaleService _saleService;
+    private readonly INfeStatusService _statusService;
 
     public FiscalService(
         Persistence.Context.AppDbContext ctx,
@@ -39,7 +40,8 @@ public class FiscalService : IFiscalService
         INfceEmissionService nfceService,
         INfeEmissionService nfeService,
         INfeContingencyService contingencyService,
-        ISaleService saleService)
+        ISaleService saleService,
+        INfeStatusService statusService)
     {
         _ctx                 = ctx;
         _configProvider      = configProvider;
@@ -47,6 +49,7 @@ public class FiscalService : IFiscalService
         _nfeService          = nfeService;
         _contingencyService  = contingencyService;
         _saleService         = saleService;
+        _statusService       = statusService;
     }
 
     public async Task<FiscalEmissionResult> EmitirNotaAsync(Guid vendaId, string tipoDocumento)
@@ -117,6 +120,31 @@ public class FiscalService : IFiscalService
             };
         }
 
+        // Achado real (25/09) — Focus pode responder "sucesso" com
+        // processando_autorizacao, sem ainda ter o DANFE pronto: SEFAZ recebeu
+        // e não decidiu, não é rejeição nem falha de comunicação. Antes disso
+        // caía direto no fallback de falha (Status="Falha") e nada era
+        // persistido — se a SEFAZ autorizasse minutos depois (evidenciado com
+        // autorização real, Status 100, numa devolução de teste), o ERP nunca
+        // ficava sabendo. Mesmo padrão já usado e provado em
+        // NotaFiscalAvulsaService (S27, 19-20/08) — só que nunca replicado
+        // aqui. NfeStatusReconciliationHostedService consulta depois; nunca
+        // reenvia o documento (reenviar um "processando" arriscaria
+        // duplicidade — só falha de COMUNICAÇÃO, abaixo, é reenviável).
+        else if (sucesso)
+        {
+            try { await _saleService.AtualizarDadosNfceAsync(vendaId, "", "Processando", ambienteSefaz, vendaId.ToString()); }
+            catch (Exception exProcessando)
+            {
+                Log.Warning(exProcessando, "Falha ao marcar venda {VendaId} como Processando (nota já foi enviada à SEFAZ, só não sabemos o resultado ainda)", vendaId);
+            }
+
+            return new FiscalEmissionResult
+            {
+                Sucesso = true, Mensagem = mensagem, Status = "Processando", Ambiente = ambienteSefaz
+            };
+        }
+
         bool ehFalhaComunicacao = mensagem.Contains("Erro de Comunicação")
             && !mensagem.Contains("UnprocessableEntity")
             && !mensagem.Contains("erro_validacao_schema");
@@ -149,6 +177,86 @@ public class FiscalService : IFiscalService
         }
 
         return new FiscalEmissionResult { Sucesso = false, Mensagem = mensagem, Status = "Falha", Ambiente = ambienteSefaz };
+    }
+
+    /// <summary>Reconciliação do estado "Processando" pro lado da venda —
+    /// ver comentário na interface. NUNCA reenvia à Focus, só consulta.</summary>
+    public async Task ReconciliarVendaProcessandoAsync(Guid vendaId)
+    {
+        var sale = await _ctx.Sales.AsNoTracking()
+            .Include(s => s.Items).ThenInclude(i => i.Product)
+            .Include(s => s.Customer)
+            .FirstOrDefaultAsync(s => s.Id == vendaId);
+
+        // Sale.NfceStatusFocus != "Processando" cobre tanto "já resolveu"
+        // (outra consulta chegou primeiro) quanto "nunca esteve processando"
+        // — os dois casos são "nada a fazer aqui", não erro.
+        if (sale == null || sale.NfceStatusFocus != "Processando" || string.IsNullOrWhiteSpace(sale.NfceReferencia))
+            return;
+
+        var config = await _configProvider.ObterConfiguracaoAsync();
+        string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
+
+        var (sucesso, statusFocus, urlDanfe, chave, numero, urlXml, tipoEncontrado) =
+            await _statusService.ConsultarStatusNotaAsync(sale.NfceReferencia, config.TokenFocusNfe, config.UsarAmbienteProducao);
+
+        if (!sucesso)
+        {
+            // Falha na CONSULTA em si (Focus/rede fora do ar agora) — não é
+            // o mesmo que o documento ter sido rejeitado. Não decide nada,
+            // tenta de novo no próximo ciclo.
+            Log.Warning("Reconciliação: falha ao consultar status da venda {VendaId} — tenta de novo no próximo ciclo.", vendaId);
+            return;
+        }
+
+        if (statusFocus == "processando_autorizacao" || string.IsNullOrWhiteSpace(statusFocus))
+            return; // ainda sem decisão da SEFAZ — sem mudança, próximo ciclo tenta de novo
+
+        if (statusFocus == "autorizado" && !string.IsNullOrWhiteSpace(urlDanfe))
+        {
+            try { await _saleService.AtualizarDadosNfceAsync(vendaId, urlDanfe, "Autorizada", ambienteSefaz, sale.NfceReferencia, chave, numero); }
+            catch (Exception exAtualizar)
+            {
+                Log.Warning(exAtualizar, "Reconciliação: falha ao salvar dados da venda {VendaId} autorizada (nota já foi autorizada na SEFAZ).", vendaId);
+            }
+
+            // Precisa da MESMA numeração que MontarItens teria atribuído na
+            // tentativa original — nunca recalcular com lógica própria aqui
+            // (risco de divergir do que foi de fato enviado à Focus). Chama
+            // o builder certo só pelo efeito colateral da numeração; o
+            // FocusNfceRequest resultante é descartado, nunca enviado —
+            // reconciliação NUNCA reenvia documento.
+            string tipoDocumento = tipoEncontrado == "NFCE" ? "NFCE" : "NFE";
+            _ = tipoDocumento == "NFE" ? MontarRequestNfeA4(sale) : MontarRequestNfce(sale);
+
+            try
+            {
+                foreach (var item in sale.Items)
+                {
+                    await _ctx.SaleItems
+                        .Where(si => si.Id == item.Id && si.NumeroItemFiscal == null)
+                        .ExecuteUpdateAsync(s => s.SetProperty(si => si.NumeroItemFiscal, item.NumeroItemFiscal));
+                }
+            }
+            catch (Exception exNumeroItem)
+            {
+                Log.Warning(exNumeroItem, "Reconciliação: falha ao persistir NumeroItemFiscal para a venda {VendaId}.", vendaId);
+            }
+
+            await RegistrarNotaFiscalAsync(vendaId, sale, tipoDocumento, "Autorizada", urlDanfe, ambienteSefaz, urlXml, chave, numero);
+            return;
+        }
+
+        // Qualquer outro status definitivo (rejeitado, denegado, etc.) — a
+        // SEFAZ já decidiu, e não foi autorizar. Marca como Rejeitada pra
+        // não ficar "Processando" pra sempre e liberar nova tentativa depois
+        // de corrigir o problema (mesmo guard de SaleViewModel só bloqueia
+        // reemissão quando Status == "Autorizada"/"Processando").
+        try { await _saleService.AtualizarDadosNfceAsync(vendaId, "", "Rejeitada", ambienteSefaz, sale.NfceReferencia); }
+        catch (Exception exRejeitada)
+        {
+            Log.Warning(exRejeitada, "Reconciliação: falha ao marcar venda {VendaId} como rejeitada.", vendaId);
+        }
     }
 
     public async Task<FiscalEmissionResult> EmitirNotaDevolucaoAsync(
@@ -211,6 +319,23 @@ public class FiscalService : IFiscalService
         var config = await _configProvider.ObterConfiguracaoAsync();
         string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
 
+        // Proteção contra duplicidade (achado 25/09) — antes de criar
+        // qualquer coisa, confere se já existe uma devolução dessa venda
+        // aguardando a SEFAZ. "Processando" nunca reenvia, só consulta —
+        // uma tentativa nova aqui seria exatamente o reenvio que a regra
+        // fiscal proíbe, e criaria uma segunda NotaFiscal pra mesma tentativa.
+        var pendenteExistente = await _ctx.NotasFiscais.AsNoTracking()
+            .FirstOrDefaultAsync(n => n.VendaId == vendaId && n.Finalidade == "4" && n.Status == "Processando");
+        if (pendenteExistente != null)
+        {
+            return new FiscalEmissionResult
+            {
+                Sucesso = true,
+                Mensagem = "Já existe uma NF-e de devolução dessa venda aguardando confirmação da SEFAZ — aguarde a reconciliação automática antes de tentar de novo.",
+                Status = "Processando"
+            };
+        }
+
         // S{N} FIX — achado no painel da Focus (nota de devolução saiu com
         // codigo_ncm zerado): MontarRequestNfeDevolucao só recebia a tupla
         // (ProductId, Nome, Quantidade, Valor) — nunca tinha acesso ao
@@ -223,30 +348,46 @@ public class FiscalService : IFiscalService
             .ToDictionaryAsync(p => p.Id);
 
         var request = MontarRequestNfeDevolucao(sale, itensDevolvidos, motivo, produtos);
-        var referenciaDevolucao = $"devolucao-{vendaId}-{ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():yyyyMMddHHmmss}";
+
+        // Rota A (achado real 25/09 — devolução autorizada pela SEFAZ,
+        // Status 100, mas o ERP nunca soube): a referência antiga
+        // ("devolucao-{vendaId}-{timestamp}") tinha um timestamp embutido —
+        // impossível de reconstruir depois de "processando_autorizacao"
+        // resolver fora da janela de 3s. Agora a NotaFiscal é criada AQUI,
+        // ANTES de chamar a Focus, com Status="Processando" — a referência
+        // vira determinística (baseada no próprio Id da nota, já persistido),
+        // igual ao padrão já provado em NotaFiscalAvulsaService ("avulsa-{Id}").
+        var notaFiscal = new Domain.Entities.NotaFiscal
+        {
+            Tipo                  = "NFE",
+            VendaId               = vendaId,
+            Status                = "Processando",
+            Finalidade            = "4",
+            RefNFe                = sale.NfceChave,
+            Ambiente              = ambienteSefaz,
+            DataEmissao           = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
+            DestinatarioNome      = sale.Customer?.Name,
+            DestinatarioDocumento = sale.Customer?.Document,
+        };
+        _ctx.NotasFiscais.Add(notaFiscal);
+        await _ctx.SaveChangesAsync();
+
+        var referenciaDevolucao = $"devolucao-{notaFiscal.Id}";
 
         var (sucesso, mensagem, urlDanfe, urlXml, chave, numero) = await _nfeService.EmitirNfeA4Async(
             referenciaDevolucao, request, config.TokenFocusNfe, config.UsarAmbienteProducao);
 
         if (sucesso && !string.IsNullOrWhiteSpace(urlDanfe))
         {
-            _ctx.NotasFiscais.Add(new Domain.Entities.NotaFiscal
-            {
-                Tipo                  = "NFE",
-                VendaId               = vendaId,
-                Status                = "Autorizada",
-                Finalidade            = "4",
-                RefNFe                = sale.NfceChave,
-                Chave                 = string.IsNullOrWhiteSpace(chave) ? null : chave,
-                Numero                = string.IsNullOrWhiteSpace(numero) ? null : numero,
-                UrlDanfe              = urlDanfe,
-                XmlUrl                = string.IsNullOrWhiteSpace(urlXml) ? null : urlXml,
-                Ambiente              = ambienteSefaz,
-                DataEmissao           = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
-                DestinatarioNome      = sale.Customer?.Name,
-                DestinatarioDocumento = sale.Customer?.Document,
-                MotivoCancelamento    = null,
-            });
+            // Atualiza a MESMA linha criada acima — nunca uma segunda.
+            // notaFiscal continua tracked nesta mesma execução (Add() rastreia
+            // independente do NoTracking global, que só afeta resultado de
+            // query — não é o caso aqui, nunca foi requery).
+            notaFiscal.Status   = "Autorizada";
+            notaFiscal.Chave    = string.IsNullOrWhiteSpace(chave) ? null : chave;
+            notaFiscal.Numero   = string.IsNullOrWhiteSpace(numero) ? null : numero;
+            notaFiscal.UrlDanfe = urlDanfe;
+            notaFiscal.XmlUrl   = string.IsNullOrWhiteSpace(urlXml) ? null : urlXml;
             await _ctx.SaveChangesAsync();
 
             return new FiscalEmissionResult
@@ -256,8 +397,94 @@ public class FiscalService : IFiscalService
             };
         }
 
+        if (sucesso)
+        {
+            // processando_autorizacao — a NotaFiscal já foi criada como
+            // "Processando" acima, nada a atualizar aqui.
+            // NfeStatusReconciliationHostedService consulta depois pela
+            // referência determinística já persistida (RefNFe + Id da nota).
+            return new FiscalEmissionResult
+            {
+                Sucesso = true, Mensagem = mensagem, Status = "Processando", Ambiente = ambienteSefaz
+            };
+        }
+
+        bool ehFalhaComunicacao = mensagem.Contains("Erro de Comunicação")
+            && !mensagem.Contains("UnprocessableEntity")
+            && !mensagem.Contains("erro_validacao_schema");
+
+        if (ehFalhaComunicacao)
+        {
+            // Limitação conhecida, fora do escopo desta correção: devolução
+            // ainda não tem contingência própria (NfePendente é só pro fluxo
+            // normal de venda). A nota fica "Processando" — se o documento
+            // nunca chegou de verdade na Focus, a reconciliação nunca vai
+            // achar nada (404 nos dois endpoints) e ela fica "Processando"
+            // indefinidamente. Registrado como pendência separada, não
+            // resolvido aqui — construir contingência de devolução de verdade
+            // é tarefa própria.
+            Log.Warning("Devolução {NotaFiscalId} (venda {VendaId}): falha de comunicação com a Focus, sem contingência própria — fica Processando.", notaFiscal.Id, vendaId);
+            return new FiscalEmissionResult
+            {
+                Sucesso = true, Mensagem = mensagem, Status = "Processando", Ambiente = ambienteSefaz
+            };
+        }
+
+        // Rejeição definitiva da SEFAZ — atualiza a MESMA linha (nunca cria
+        // outra). MotivoCancelamento reaproveitado pra guardar o motivo da
+        // rejeição — não existe campo próprio pra isso em NotaFiscal, e o
+        // nome já é próximo o suficiente semanticamente ("motivo pelo qual
+        // não seguiu adiante").
+        notaFiscal.Status = "Rejeitada";
+        notaFiscal.MotivoCancelamento = mensagem;
+        await _ctx.SaveChangesAsync();
+
         Log.Warning("Falha ao emitir NF-e de devolução pra venda {VendaId}: {Mensagem}", vendaId, mensagem);
         return new FiscalEmissionResult { Sucesso = false, Mensagem = mensagem, Status = "Falha", Ambiente = ambienteSefaz };
+    }
+
+    /// <summary>Reconciliação do estado "Processando" pro lado da devolução —
+    /// ver comentário na interface. NUNCA reenvia à Focus, só consulta.
+    /// Opera sobre a MESMA NotaFiscal criada em EmitirNotaDevolucaoAsync
+    /// (Rota A) — nunca cria uma segunda linha.</summary>
+    public async Task ReconciliarDevolucaoProcessandoAsync(Guid notaFiscalId)
+    {
+        var nota = await _ctx.NotasFiscais.AsTracking().FirstOrDefaultAsync(n => n.Id == notaFiscalId);
+        if (nota == null || nota.Status != "Processando")
+            return;
+
+        var config = await _configProvider.ObterConfiguracaoAsync();
+        var referencia = $"devolucao-{nota.Id}";
+
+        var (sucesso, statusFocus, urlDanfe, chave, numero, urlXml, _) =
+            await _statusService.ConsultarStatusNotaAsync(referencia, config.TokenFocusNfe, config.UsarAmbienteProducao);
+
+        if (!sucesso)
+        {
+            Log.Warning("Reconciliação: falha ao consultar status da devolução {NotaFiscalId} — tenta de novo no próximo ciclo.", notaFiscalId);
+            return;
+        }
+
+        if (statusFocus == "processando_autorizacao" || string.IsNullOrWhiteSpace(statusFocus))
+            return; // ainda sem decisão — sem mudança, próximo ciclo tenta de novo
+
+        if (statusFocus == "autorizado" && !string.IsNullOrWhiteSpace(urlDanfe))
+        {
+            nota.Status   = "Autorizada";
+            nota.Chave    = string.IsNullOrWhiteSpace(chave) ? null : chave;
+            nota.Numero   = string.IsNullOrWhiteSpace(numero) ? null : numero;
+            nota.UrlDanfe = urlDanfe;
+            nota.XmlUrl   = string.IsNullOrWhiteSpace(urlXml) ? null : urlXml;
+            await _ctx.SaveChangesAsync();
+            return;
+        }
+
+        // Qualquer outro status definitivo — a SEFAZ já decidiu, e não foi
+        // autorizar. Marca como Rejeitada pra não ficar "Processando" pra
+        // sempre e liberar uma nova tentativa de devolução (o guard de
+        // duplicidade só bloqueia enquanto o Status for "Processando").
+        nota.Status = "Rejeitada";
+        await _ctx.SaveChangesAsync();
     }
 
     private static FocusNfceRequest MontarRequestNfeDevolucao(

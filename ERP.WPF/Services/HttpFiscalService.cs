@@ -120,4 +120,16 @@ public class HttpFiscalService : IFiscalService
             EmContingencia = corpoResp.TryGetProperty("emContingencia", out var c) && c.ValueKind == JsonValueKind.True
         };
     }
+
+    /// <summary>Reconciliação do estado "Processando" é responsabilidade
+    /// exclusiva do servidor (NfeStatusReconciliationHostedService, que
+    /// resolve IFiscalService dentro da própria API, sem passar pelo WPF).
+    /// Nunca deveria ser chamado a partir daqui — se algo tentar, é sinal de
+    /// código novo que esqueceu essa distinção.</summary>
+    public Task ReconciliarVendaProcessandoAsync(Guid vendaId)
+        => throw new NotSupportedException("Reconciliação de venda 'Processando' só roda no servidor (NfeStatusReconciliationHostedService).");
+
+    /// <summary>Ver comentário em ReconciliarVendaProcessandoAsync — mesma razão.</summary>
+    public Task ReconciliarDevolucaoProcessandoAsync(Guid notaFiscalId)
+        => throw new NotSupportedException("Reconciliação de devolução 'Processando' só roda no servidor (NfeStatusReconciliationHostedService).");
 }

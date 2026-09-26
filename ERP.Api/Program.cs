@@ -270,6 +270,7 @@ builder.Services.AddScoped<ERP.Application.Interfaces.INfeContingencyService,
 // agora roda dentro da própria API (todos os tenants), não só quando o
 // WPF de alguma loja está aberto. Ver ERP.Api/BackgroundServices/NfeContingencyHostedService.cs.
 builder.Services.AddHostedService<ERP.Api.BackgroundServices.NfeContingencyHostedService>();
+builder.Services.AddHostedService<ERP.Api.BackgroundServices.NfeStatusReconciliationHostedService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IFiscalService,
                             ERP.Infrastructure.Services.FiscalService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IMotorFiscalService,

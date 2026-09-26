@@ -93,7 +93,8 @@ public class FiscalServiceIndicadorIeTests
             nfceMock.Object,
             new Mock<INfeEmissionService>().Object,
             new Mock<INfeContingencyService>().Object,
-            new Mock<ISaleService>().Object);
+            new Mock<ISaleService>().Object,
+            new Mock<INfeStatusService>().Object);
 
         return (service, nfceMock, scope);
     }

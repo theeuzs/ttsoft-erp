@@ -296,6 +296,18 @@ public class SaleViewModel : BaseViewModel
             return;
         }
 
+        // Achado real (25/09) — "Processando" nunca pode reenviar, só
+        // consultar (reenviar arriscaria duplicidade fiscal: o documento já
+        // foi submetido, só ainda não sabemos o resultado). Antes desta
+        // correção, "Processando" nunca era persistido, então esse caso
+        // nunca acontecia — agora que é, precisa da mesma guarda que
+        // "Autorizada" já tinha.
+        if (!string.IsNullOrWhiteSpace(venda.NfceStatusFocus) && venda.NfceStatusFocus == "Processando")
+        {
+            MessageBox.Show("Essa venda já tem uma nota fiscal aguardando confirmação da SEFAZ. Aguarde a reconciliação automática — não é possível reenviar enquanto está processando.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
         if (venda.Status == SaleStatus.Cancelada)
         {
             MessageBox.Show("Não é possível emitir nota pra uma venda cancelada.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);

@@ -81,7 +81,8 @@ public class FiscalServiceDevolucaoIndicadorIeTests
             new Mock<INfceEmissionService>().Object,
             nfeMock.Object,
             new Mock<INfeContingencyService>().Object,
-            new Mock<ISaleService>().Object);
+            new Mock<ISaleService>().Object,
+            new Mock<INfeStatusService>().Object);
 
         return (service, nfeMock, scope, saleItemId, produtoId);
     }

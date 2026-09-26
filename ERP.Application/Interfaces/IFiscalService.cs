@@ -26,4 +26,20 @@ public interface IFiscalService
         Guid vendaId,
         List<(Guid SaleItemId, Guid ProductId, string ProductName, decimal Quantidade, decimal ValorUnitario)> itensDevolvidos,
         string motivo);
+
+    /// <summary>Reconciliação do estado "processando_autorizacao" — usado pelo
+    /// NfeStatusReconciliationHostedService. NUNCA reenvia o documento à Focus,
+    /// só consulta o resultado que já foi submetido (reenviar arriscaria
+    /// duplicidade fiscal). Autorizada/Rejeitada: persiste o resultado
+    /// definitivo. Ainda processando: não altera nada, tenta de novo no
+    /// próximo ciclo. Erro de comunicação na CONSULTA em si (Focus/rede fora
+    /// do ar agora) é diferente de "documento rejeitado" — não decide nada
+    /// sobre o documento, só tenta de novo depois.</summary>
+    Task ReconciliarVendaProcessandoAsync(Guid vendaId);
+
+    /// <summary>Mesma reconciliação do lado da devolução — opera sobre a
+    /// NotaFiscal (Finalidade=4) já criada em "Processando" no momento da
+    /// tentativa original (Rota A: a nota existe ANTES da chamada à Focus,
+    /// com referência determinística "devolucao-{NotaFiscal.Id}").</summary>
+    Task ReconciliarDevolucaoProcessandoAsync(Guid notaFiscalId);
 }

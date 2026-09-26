@@ -105,7 +105,8 @@ public class FiscalServiceNumeroItemFiscalTests
             ctx, configProvider.Object, nfceMock.Object,
             new Mock<INfeEmissionService>().Object,
             new Mock<INfeContingencyService>().Object,
-            saleServiceMock.Object);
+            saleServiceMock.Object,
+            new Mock<INfeStatusService>().Object);
     }
 
     [Fact(DisplayName = "EmitirNotaAsync — venda de 1 item autorizada: NumeroItemFiscal=1 persiste de verdade no banco")]
