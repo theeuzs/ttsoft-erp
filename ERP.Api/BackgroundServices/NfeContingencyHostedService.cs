@@ -114,11 +114,21 @@ public class NfeContingencyHostedService : BackgroundService
         var pendentes = await contingencyService.ObterNotasPendentesAsync();
         if (!pendentes.Any()) return;
 
-        if (!await contingencyService.VerificarConexaoSefazAsync())
-        {
-            _logger.LogWarning("NfeContingencyHostedService: sem conexão com a SEFAZ, tenant {TenantId} fica pra próxima.", tenantId);
-            return;
-        }
+        // Achado real (26/09, Etapa 2) — VerificarConexaoSefazAsync() faz um
+        // ping ICMP puro (8.8.8.8), e o Azure App Service bloqueia ICMP de
+        // saída no sandbox dele (limitação conhecida da plataforma, não
+        // configuração nossa). Esse pré-check sempre retornava false aqui,
+        // fazendo ProcessarTenantAsync desistir ANTES de tentar reprocessar
+        // qualquer pendência — silenciosamente, desde que esse HostedService
+        // existe. Nunca apareceu antes porque o worker do WPF (rodando na
+        // rede normal da loja, onde ICMP funciona) processava a fila
+        // primeiro. Removido daqui: a própria tentativa de reemissão já é o
+        // teste de conectividade real (HTTPS, não ICMP) — se a Focus estiver
+        // inacessível de verdade, a tentativa falha e a nota continua na
+        // fila pro próximo ciclo, sem precisar de um pré-check separado.
+        // VerificarConexaoSefazAsync() não foi apagado — PdvViewModel (WPF)
+        // continua usando pra indicador visual de conexão na loja, onde
+        // ICMP funciona normal.
 
         var configProvider = scope.ServiceProvider.GetRequiredService<IFiscalConfigurationProvider>();
         var config = await configProvider.ObterConfiguracaoAsync();
