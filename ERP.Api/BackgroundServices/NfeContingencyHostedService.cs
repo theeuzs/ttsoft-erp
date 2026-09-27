@@ -139,9 +139,10 @@ public class NfeContingencyHostedService : BackgroundService
             return;
         }
 
-        var nfceService = scope.ServiceProvider.GetRequiredService<INfceEmissionService>();
-        var nfeService  = scope.ServiceProvider.GetRequiredService<INfeEmissionService>();
-        var saleService = scope.ServiceProvider.GetRequiredService<ISaleService>();
+        var nfceService  = scope.ServiceProvider.GetRequiredService<INfceEmissionService>();
+        var nfeService   = scope.ServiceProvider.GetRequiredService<INfeEmissionService>();
+        var saleService  = scope.ServiceProvider.GetRequiredService<ISaleService>();
+        var fiscalService = scope.ServiceProvider.GetRequiredService<IFiscalService>();
         string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
 
         foreach (var nota in pendentes)
@@ -152,21 +153,37 @@ public class NfeContingencyHostedService : BackgroundService
             {
                 var request = Newtonsoft.Json.JsonConvert.DeserializeObject<FocusNfceRequest>(nota.PayloadJson);
                 bool sucesso = false; string mensagem = ""; string urlDanfe = "";
+                string urlXml = ""; string chave = ""; string numero = "";
 
                 if (nota.TipoNota == "NFCE")
                 {
                     var result = await nfceService.EmitirNfceAsync(nota.Referencia, request!, config.TokenFocusNfe, config.UsarAmbienteProducao);
                     sucesso = result.Sucesso; mensagem = result.Mensagem; urlDanfe = result.UrlDanfe;
+                    urlXml = result.UrlXml; chave = result.Chave; numero = result.Numero;
                 }
                 else
                 {
                     var result = await nfeService.EmitirNfeA4Async(nota.Referencia, request!, config.TokenFocusNfe, config.UsarAmbienteProducao);
                     sucesso = result.Sucesso; mensagem = result.Mensagem; urlDanfe = result.UrlDanfe;
+                    urlXml = result.UrlXml; chave = result.Chave; numero = result.Numero;
                 }
 
                 if (sucesso && !string.IsNullOrWhiteSpace(urlDanfe))
                 {
-                    await saleService.AtualizarDadosNfceAsync(nota.VendaId, urlDanfe, "Autorizada", ambienteSefaz, nota.Referencia);
+                    // Rota A (achado real 26/09) — antes disso, essa
+                    // reemissão só chamava AtualizarDadosNfceAsync com 5
+                    // argumentos: Sale.NfceChave/NfceNumero nunca eram
+                    // gravados, SaleItem.NumeroItemFiscal nunca era atribuído,
+                    // e a NotaFiscal criada em "Contingência" (no momento em
+                    // que a pendência foi registrada) nunca era promovida pra
+                    // "Autorizada" — ficava divergente do estado real da
+                    // SEFAZ pra sempre. PersistirEmissaoAutorizadaAsync é o
+                    // mesmo ponto de convergência usado por EmitirNotaAsync
+                    // (emissão direta) e ReconciliarVendaProcessandoAsync —
+                    // upsert por (VendaId, Tipo), então promove a MESMA linha
+                    // "Contingência" existente, nunca cria uma segunda.
+                    await fiscalService.PersistirEmissaoAutorizadaAsync(
+                        nota.VendaId, nota.TipoNota, urlDanfe, ambienteSefaz, nota.Referencia, urlXml, chave, numero);
                     await contingencyService.RemoverNotaPendenteAsync(nota.Id);
                     _logger.LogInformation("NfeContingencyHostedService: nota {Referencia} (tenant {TenantId}) autorizada em contingência.", nota.Referencia, tenantId);
                 }

@@ -74,44 +74,7 @@ public class FiscalService : IFiscalService
 
         if (sucesso && !string.IsNullOrWhiteSpace(urlDanfe))
         {
-            try { await _saleService.AtualizarDadosNfceAsync(vendaId, urlDanfe, "Autorizada", ambienteSefaz, vendaId.ToString(), chave, numero); }
-            catch (Exception exAtualizar)
-            {
-                Log.Warning(exAtualizar, "Falha ao salvar dados locais da nota autorizada para a venda {VendaId} (nota em si já foi autorizada na SEFAZ)", vendaId);
-            }
-
-            // Regra VC02-14 — persiste o NumeroItemFiscal que MontarItens já
-            // atribuiu em memória (mesmo número usado no payload que a Focus
-            // acabou de autorizar). ExecuteUpdateAsync de propósito: `sale`
-            // veio AsNoTracking, e AppDbContext roda com NoTracking global —
-            // uma gravação via .Update()/SaveChanges silenciosamente não
-            // persistiria aqui (mesma classe de bug já documentada em S28).
-            // Só grava depois de autorizado — nunca em rejeição.
-            //
-            // NumeroItemFiscal == null no filtro: torna a gravação idempotente
-            // e monotônica (NULL → 1, nunca 1 → 2). Protege contra uma
-            // eventual reemissão desta venda sobrescrever um snapshot fiscal
-            // já congelado — EmitirNotaAsync ainda não tem guarda própria
-            // contra chamada duplicada em todos os chamadores (WPF
-            // SaleViewModel tem; API EmitirDaVenda e OrderProcessingService
-            // não têm — tarefa separada, fora do escopo desta correção).
-            // 0 linhas afetadas aqui não é erro: só significa que o valor já
-            // estava preenchido, o que é exatamente o comportamento desejado.
-            try
-            {
-                foreach (var item in sale.Items)
-                {
-                    await _ctx.SaleItems
-                        .Where(si => si.Id == item.Id && si.NumeroItemFiscal == null)
-                        .ExecuteUpdateAsync(s => s.SetProperty(si => si.NumeroItemFiscal, item.NumeroItemFiscal));
-                }
-            }
-            catch (Exception exNumeroItem)
-            {
-                Log.Warning(exNumeroItem, "Falha ao persistir NumeroItemFiscal para a venda {VendaId} (nota já autorizada na SEFAZ; devolução futura desta venda pode ficar bloqueada até corrigir)", vendaId);
-            }
-
-            await RegistrarNotaFiscalAsync(vendaId, sale, tipoDocumento, "Autorizada", urlDanfe, ambienteSefaz, urlXml, chave, numero);
+            await PersistirEmissaoAutorizadaAsync(vendaId, tipoDocumento, urlDanfe, ambienteSefaz, vendaId.ToString(), urlXml, chave, numero);
 
             return new FiscalEmissionResult
             {
@@ -181,6 +144,63 @@ public class FiscalService : IFiscalService
 
     /// <summary>Reconciliação do estado "Processando" pro lado da venda —
     /// ver comentário na interface. NUNCA reenvia à Focus, só consulta.</summary>
+    public async Task PersistirEmissaoAutorizadaAsync(
+        Guid vendaId, string tipoDocumento, string urlDanfe, string ambiente,
+        string referencia, string urlXml, string chave, string numero)
+    {
+        var sale = await _ctx.Sales.AsNoTracking()
+            .Include(s => s.Items)
+            .Include(s => s.Customer)
+            .FirstOrDefaultAsync(s => s.Id == vendaId);
+
+        if (sale == null)
+        {
+            Log.Warning("PersistirEmissaoAutorizadaAsync: venda {VendaId} não encontrada (nota já foi autorizada na SEFAZ, mas não há venda pra persistir contra).", vendaId);
+            return;
+        }
+
+        try { await _saleService.AtualizarDadosNfceAsync(vendaId, urlDanfe, "Autorizada", ambiente, referencia, chave, numero); }
+        catch (Exception exAtualizar)
+        {
+            Log.Warning(exAtualizar, "Falha ao salvar dados locais da nota autorizada para a venda {VendaId} (nota em si já foi autorizada na SEFAZ)", vendaId);
+        }
+
+        // Regra VC02-14 — atribui a mesma numeração sequencial que MontarItens
+        // teria usado (só a numeração, não o payload inteiro — NCM/ST não
+        // fazem falta aqui). ExecuteUpdateAsync de propósito: `sale` veio
+        // AsNoTracking, e AppDbContext roda com NoTracking global — uma
+        // gravação via .Update()/SaveChanges silenciosamente não persistiria
+        // aqui (mesma classe de bug já documentada em S28). Só grava depois
+        // de autorizado — nunca em rejeição, porque quem chama este método
+        // só chama depois de confirmar sucesso.
+        //
+        // NumeroItemFiscal == null no filtro: torna a gravação idempotente e
+        // monotônica (NULL → 1, nunca 1 → 2) — nunca sobrescreve um snapshot
+        // fiscal já congelado, não importa quantas vezes (ou de quantos
+        // caminhos diferentes) este método seja chamado pra mesma venda.
+        try
+        {
+            var itensOrdenados = sale.Items.ToList();
+            for (int i = 0; i < itensOrdenados.Count; i++)
+            {
+                var item = itensOrdenados[i];
+                await _ctx.SaleItems
+                    .Where(si => si.Id == item.Id && si.NumeroItemFiscal == null)
+                    .ExecuteUpdateAsync(s => s.SetProperty(si => si.NumeroItemFiscal, i + 1));
+            }
+        }
+        catch (Exception exNumeroItem)
+        {
+            Log.Warning(exNumeroItem, "Falha ao persistir NumeroItemFiscal para a venda {VendaId} (nota já autorizada na SEFAZ; devolução futura desta venda pode ficar bloqueada até corrigir)", vendaId);
+        }
+
+        // Upsert por (VendaId, Tipo) — se a venda entrou em contingência antes,
+        // já existe uma NotaFiscal com Status="Contingência" aqui, criada no
+        // momento do registro da pendência; essa chamada promove a MESMA
+        // linha pra "Autorizada", nunca cria uma segunda.
+        await RegistrarNotaFiscalAsync(vendaId, sale, tipoDocumento, "Autorizada", urlDanfe, ambiente, urlXml, chave, numero);
+    }
+
     public async Task ReconciliarVendaProcessandoAsync(Guid vendaId)
     {
         var sale = await _ctx.Sales.AsNoTracking()
@@ -214,36 +234,8 @@ public class FiscalService : IFiscalService
 
         if (statusFocus == "autorizado" && !string.IsNullOrWhiteSpace(urlDanfe))
         {
-            try { await _saleService.AtualizarDadosNfceAsync(vendaId, urlDanfe, "Autorizada", ambienteSefaz, sale.NfceReferencia, chave, numero); }
-            catch (Exception exAtualizar)
-            {
-                Log.Warning(exAtualizar, "Reconciliação: falha ao salvar dados da venda {VendaId} autorizada (nota já foi autorizada na SEFAZ).", vendaId);
-            }
-
-            // Precisa da MESMA numeração que MontarItens teria atribuído na
-            // tentativa original — nunca recalcular com lógica própria aqui
-            // (risco de divergir do que foi de fato enviado à Focus). Chama
-            // o builder certo só pelo efeito colateral da numeração; o
-            // FocusNfceRequest resultante é descartado, nunca enviado —
-            // reconciliação NUNCA reenvia documento.
             string tipoDocumento = tipoEncontrado == "NFCE" ? "NFCE" : "NFE";
-            _ = tipoDocumento == "NFE" ? MontarRequestNfeA4(sale) : MontarRequestNfce(sale);
-
-            try
-            {
-                foreach (var item in sale.Items)
-                {
-                    await _ctx.SaleItems
-                        .Where(si => si.Id == item.Id && si.NumeroItemFiscal == null)
-                        .ExecuteUpdateAsync(s => s.SetProperty(si => si.NumeroItemFiscal, item.NumeroItemFiscal));
-                }
-            }
-            catch (Exception exNumeroItem)
-            {
-                Log.Warning(exNumeroItem, "Reconciliação: falha ao persistir NumeroItemFiscal para a venda {VendaId}.", vendaId);
-            }
-
-            await RegistrarNotaFiscalAsync(vendaId, sale, tipoDocumento, "Autorizada", urlDanfe, ambienteSefaz, urlXml, chave, numero);
+            await PersistirEmissaoAutorizadaAsync(vendaId, tipoDocumento, urlDanfe, ambienteSefaz, sale.NfceReferencia, urlXml, chave, numero);
             return;
         }
 

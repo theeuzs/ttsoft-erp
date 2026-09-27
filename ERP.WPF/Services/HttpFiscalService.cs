@@ -132,4 +132,13 @@ public class HttpFiscalService : IFiscalService
     /// <summary>Ver comentário em ReconciliarVendaProcessandoAsync — mesma razão.</summary>
     public Task ReconciliarDevolucaoProcessandoAsync(Guid notaFiscalId)
         => throw new NotSupportedException("Reconciliação de devolução 'Processando' só roda no servidor (NfeStatusReconciliationHostedService).");
+
+    /// <summary>Ponto único de convergência pra persistência pós-autorização —
+    /// chamado pelo próprio FiscalService (servidor), por
+    /// ReconciliarVendaProcessandoAsync e por NfeContingencyHostedService.
+    /// Nunca deveria ser chamado a partir do WPF.</summary>
+    public Task PersistirEmissaoAutorizadaAsync(
+        Guid vendaId, string tipoDocumento, string urlDanfe, string ambiente,
+        string referencia, string urlXml, string chave, string numero)
+        => throw new NotSupportedException("PersistirEmissaoAutorizadaAsync só roda no servidor — é o ponto de convergência da persistência fiscal, chamado por EmitirNotaAsync/ReconciliarVendaProcessandoAsync/NfeContingencyHostedService.");
 }

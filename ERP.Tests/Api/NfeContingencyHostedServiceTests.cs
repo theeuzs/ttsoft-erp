@@ -169,11 +169,16 @@ public class NfeContingencyHostedServiceTests
         contingencyMock.Setup(c => c.ObterNotasPendentesAsync())
             .ReturnsAsync(new List<NfePendente> { new() { Id = pendenteId, VendaId = vendaId, TipoNota = "NFCE", PayloadJson = "{}", Referencia = "ref-processamento" } });
 
+        // Achado real (26/09, Rota A) — antes desta correção, chave/numero/
+        // urlXml eram descartados aqui (só sucesso/mensagem/urlDanfe eram
+        // lidos do resultado). Preenchidos de propósito no mock, não vazios,
+        // pra provar que agora realmente chegam até a persistência.
         var nfceMock = new Mock<INfceEmissionService>();
         nfceMock.Setup(s => s.EmitirNfceAsync("ref-processamento", It.IsAny<FocusNfceRequest>(), It.IsAny<string>(), It.IsAny<bool>()))
-            .ReturnsAsync((true, "Autorizada", "https://focus/danfe.html", "", "", ""));
+            .ReturnsAsync((true, "Autorizada", "https://focus/danfe.html", "https://focus/nfce.xml", "41260912820608000141650010000033191728969200", "1234"));
 
         var saleServiceMock = new Mock<ISaleService>();
+        var fiscalServiceMock = new Mock<IFiscalService>();
         var configProviderMock = new Mock<IFiscalConfigurationProvider>();
         configProviderMock.Setup(c => c.ObterConfiguracaoAsync())
             .ReturnsAsync(new FiscalConfiguration { TokenFocusNfe = "token-teste", UsarAmbienteProducao = false });
@@ -186,6 +191,7 @@ public class NfeContingencyHostedServiceTests
         services.AddSingleton(nfceMock.Object);
         services.AddSingleton(new Mock<INfeEmissionService>().Object);
         services.AddSingleton(saleServiceMock.Object);
+        services.AddSingleton(fiscalServiceMock.Object);
         services.AddSingleton(configProviderMock.Object);
         var providerComMocks = services.BuildServiceProvider();
 
@@ -206,9 +212,16 @@ public class NfeContingencyHostedServiceTests
 
         await service.ProcessarTenantAsync(tenantId, CancellationToken.None);
 
-        saleServiceMock.Verify(s => s.AtualizarDadosNfceAsync(
-            vendaId, "https://focus/danfe.html", "Autorizada", It.IsAny<string>(), "ref-processamento", null, null),
-            Times.Once, "o processamento precisa continuar chamando a emissão e persistindo o resultado, exatamente como antes");
+        // Rota A — antes desta correção, o processamento chamava
+        // saleService.AtualizarDadosNfceAsync direto, com só 5 argumentos
+        // (chave/numero sempre null, NumeroItemFiscal e NotaFiscal nunca
+        // tocados). Agora passa pelo mesmo ponto de convergência que a
+        // emissão direta usa — prova que chave/numero/urlXml realmente
+        // chegam até lá, não são descartados no meio do caminho.
+        fiscalServiceMock.Verify(f => f.PersistirEmissaoAutorizadaAsync(
+            vendaId, "NFCE", "https://focus/danfe.html", It.IsAny<string>(), "ref-processamento",
+            "https://focus/nfce.xml", "41260912820608000141650010000033191728969200", "1234"),
+            Times.Once, "o processamento precisa persistir o resultado completo (chave/numero/urlXml), não só status/urlDanfe");
         contingencyMock.Verify(c => c.RemoverNotaPendenteAsync(pendenteId), Times.Once,
             "nota processada com sucesso precisa sair da fila de contingência");
     }

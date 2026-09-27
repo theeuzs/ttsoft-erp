@@ -35,6 +35,22 @@ public interface IFiscalService
     /// próximo ciclo. Erro de comunicação na CONSULTA em si (Focus/rede fora
     /// do ar agora) é diferente de "documento rejeitado" — não decide nada
     /// sobre o documento, só tenta de novo depois.</summary>
+    /// <summary>Ponto único de convergência pros efeitos de uma autorização —
+    /// Sale.NfceStatusFocus/NfceChave/NfceNumero/NfceUrlDanfe/NfceAmbiente,
+    /// SaleItem.NumeroItemFiscal, e o upsert em NotasFiscais (Contingência →
+    /// Autorizada, quando aplicável). Chamado por EmitirNotaAsync (emissão
+    /// direta), ReconciliarVendaProcessandoAsync ("Processando" → resolvido)
+    /// e NfeContingencyHostedService (contingência → resolvida) — os três
+    /// caminhos que podem descobrir uma autorização, em momentos diferentes.
+    /// Nunca envia nada à Focus — só persiste um resultado que a Focus já
+    /// confirmou. Recarrega a Sale internamente (não aceita a entidade já
+    /// carregada) de propósito: garante que os três chamadores calculem
+    /// NumeroItemFiscal do mesmo jeito, no mesmo lugar, sem risco de duas
+    /// implementações divergirem com o tempo.</summary>
+    Task PersistirEmissaoAutorizadaAsync(
+        Guid vendaId, string tipoDocumento, string urlDanfe, string ambiente,
+        string referencia, string urlXml, string chave, string numero);
+
     Task ReconciliarVendaProcessandoAsync(Guid vendaId);
 
     /// <summary>Mesma reconciliação do lado da devolução — opera sobre a
