@@ -1,6 +1,7 @@
 // ── ERP.Infrastructure/Services/FiscalService.cs ───────────────────────────
 using ERP.Application.DTOs;
 using ERP.Application.DTOs.FocusNfe;
+using ERP.Application.Fiscal.Focus;
 using ERP.Application.Interfaces;
 using ERP.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -217,7 +218,10 @@ public class FiscalService : IFiscalService
         var config = await _configProvider.ObterConfiguracaoAsync();
         string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
 
-        var (sucesso, statusFocus, urlDanfe, chave, numero, urlXml, tipoEncontrado) =
+        // Etapa 4: o 7o elemento da tupla (tipo "encontrado") nao e confiavel: a Focus
+        // responde NFC-e tambem em /v2/nfe, entao ele volta "NFE" para uma NFC-e. Descartado
+        // de proposito; o tipo vem do modelo da chave autorizada (ver abaixo).
+        var (sucesso, statusFocus, urlDanfe, chave, numero, urlXml, _) =
             await _statusService.ConsultarStatusNotaAsync(sale.NfceReferencia, config.TokenFocusNfe, config.UsarAmbienteProducao);
 
         if (!sucesso)
@@ -234,7 +238,19 @@ public class FiscalService : IFiscalService
 
         if (statusFocus == "autorizado" && !string.IsNullOrWhiteSpace(urlDanfe))
         {
-            string tipoDocumento = tipoEncontrado == "NFCE" ? "NFCE" : "NFE";
+            // Etapa 4: o tipo vem do proprio documento autorizado: o modelo da chave de acesso
+            // (55 = NF-e, 65 = NFC-e), definido pela SEFAZ. Nao depende de qual endpoint da
+            // Focus respondeu nem de suposicao sobre quem produz "Processando": o worker
+            // seleciona TODA venda Processando (sem filtro de tipo) e o PATCH /sales/{id}/nfce
+            // aceita qualquer texto de status. Sem modelo reconhecivel nao se adivinha: nada e
+            // persistido e a venda segue Processando, com erro no log, para revisao.
+            var tipoDoc = FocusChaveAcesso.TipoDocumento(chave);
+            if (tipoDoc is null)
+            {
+                Log.Error("Reconciliacao: venda {VendaId} autorizada na Focus, mas a chave '{Chave}' nao permite determinar o modelo (55/65). Nada foi persistido; a venda segue Processando.", vendaId, chave);
+                return;
+            }
+            string tipoDocumento = tipoDoc == FocusDocumentType.Nfce ? "NFCE" : "NFE";
             await PersistirEmissaoAutorizadaAsync(vendaId, tipoDocumento, urlDanfe, ambienteSefaz, sale.NfceReferencia, urlXml, chave, numero);
             return;
         }

@@ -187,6 +187,56 @@ public class FiscalServiceReconciliationTests
         nota.Tipo.Should().Be("NFCE");
     }
 
+    // Etapa 4: o Tipo da NotaFiscal vem do modelo da chave autorizada (55/65), nunca do 7o elemento
+    // da consulta (que a Focus pode errar: responde NFC-e tambem em /v2/nfe) nem de suposicao sobre
+    // quem produz "Processando".
+    [Theory(DisplayName = "ReconciliarVendaProcessandoAsync — Tipo da NotaFiscal vem do modelo da chave, ignorando o tipo 'encontrado' errado")]
+    [InlineData("41260912820608000141650010000033221640357603", "NFE", "NFCE")]   // modelo 65, tipo encontrado errado (NFE)
+    [InlineData("41260912820608000141550010000003141237502171", "NFCE", "NFE")]   // modelo 55, tipo encontrado errado (NFCE)
+    public async Task ReconciliarVenda_TipoVemDoModeloDaChave(string chave, string tipoEncontradoErrado, string tipoEsperado)
+    {
+        var tenantId = Guid.NewGuid();
+        Guid vendaId = default;
+        using var ctx = CriarContexto(tenantId, db =>
+        {
+            (vendaId, _, _, _) = SeedVendaComNota(db, tenantId, nfceStatusFocus: "Processando", numeroItemFiscal: null);
+        });
+
+        var (service, statusMock, _) = CriarServiceParaReconciliacao(ctx);
+        statusMock.Setup(s => s.ConsultarStatusNotaAsync(vendaId.ToString(), It.IsAny<string>(), It.IsAny<bool>()))
+            .ReturnsAsync((true, "autorizado", "https://focus/danfe.html", chave, "1", "https://focus/x.xml", tipoEncontradoErrado));
+
+        await service.ReconciliarVendaProcessandoAsync(vendaId);
+
+        var nota = await ctx.NotasFiscais.AsNoTracking().SingleAsync(n => n.VendaId == vendaId);
+        nota.Tipo.Should().Be(tipoEsperado);
+    }
+
+    [Theory(DisplayName = "ReconciliarVendaProcessandoAsync — chave sem modelo reconhecivel: nada e persistido e a venda segue Processando (nao adivinha o tipo)")]
+    [InlineData("")]
+    [InlineData("123")]
+    [InlineData("41260912820608000141570010000033221640357603")]   // modelo 57: nem NF-e nem NFC-e
+    public async Task ReconciliarVenda_ChaveSemModeloValido_NaoPersiste(string chave)
+    {
+        var tenantId = Guid.NewGuid();
+        Guid vendaId = default;
+        using var ctx = CriarContexto(tenantId, db =>
+        {
+            (vendaId, _, _, _) = SeedVendaComNota(db, tenantId, nfceStatusFocus: "Processando", numeroItemFiscal: null);
+        });
+
+        var (service, statusMock, saleServiceMock) = CriarServiceParaReconciliacao(ctx);
+        statusMock.Setup(s => s.ConsultarStatusNotaAsync(vendaId.ToString(), It.IsAny<string>(), It.IsAny<bool>()))
+            .ReturnsAsync((true, "autorizado", "https://focus/danfe.html", chave, "1", "https://focus/x.xml", "NFE"));
+
+        await service.ReconciliarVendaProcessandoAsync(vendaId);
+
+        saleServiceMock.Verify(s => s.AtualizarDadosNfceAsync(
+            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        (await ctx.NotasFiscais.AsNoTracking().AnyAsync(n => n.VendaId == vendaId)).Should().BeFalse();
+    }
+
     [Fact(DisplayName = "ReconciliarVendaProcessandoAsync — ainda processando: não altera nada, tenta de novo depois")]
     public async Task ReconciliarVenda_AindaProcessando_NaoAltera()
     {
