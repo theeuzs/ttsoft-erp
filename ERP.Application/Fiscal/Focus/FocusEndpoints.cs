@@ -26,4 +26,18 @@ public static class FocusEndpoints
 
         return $"{Host(isProducao)}/v2/{segmento}/{Uri.EscapeDataString(referencia.Trim())}";
     }
+
+    /// <summary>
+    /// POST de emissao de NFC-e: {host}/v2/nfce?ref={ref}. A referencia e escapada como dado de
+    /// URL (Uri.EscapeDataString): um caractere reservado nao consegue criar outro parametro.
+    /// Para as referencias de hoje (GUID, "devolucao-{guid}") o resultado e identico ao texto
+    /// montado antes por NfceEmissionService.
+    /// </summary>
+    public static string EmissaoNfce(string referencia, bool isProducao)
+    {
+        if (string.IsNullOrWhiteSpace(referencia))
+            throw new ArgumentException("Referencia obrigatoria.", nameof(referencia));
+
+        return $"{Host(isProducao)}/v2/nfce?ref={Uri.EscapeDataString(referencia.Trim())}";
+    }
 }
