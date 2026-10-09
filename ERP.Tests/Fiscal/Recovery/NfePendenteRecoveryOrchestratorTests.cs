@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Linq.Expressions;
+using System.Reflection;
 using ERP.Application.Fiscal.Focus;
 using ERP.Application.Fiscal.Recovery;
 using ERP.Application.Interfaces;
@@ -312,7 +313,7 @@ public sealed class NfePendenteRecoveryOrchestratorTests
         n.ProximaTentativaEm.Should().Be(new DateTime(2026, 10, 8, 15, 2, 0));
         n.TentativasConsulta.Should().Be(1);
         n.TentativasPost.Should().Be(1);
-        n.UltimaDecisao.Should().StartWith("OperacaoPendente").And.Contain("original=" + RecoveryFixtures.DataAntiga);
+        n.UltimaDecisao.Should().StartWith("DataEmissao original=" + RecoveryFixtures.DataAntiga).And.Contain("OperacaoPendente");
         NadaFoiPersistido(c);
         NenhumaVendaMarcada(c);
     }
@@ -785,13 +786,13 @@ public sealed class NfePendenteRecoveryOrchestratorTests
         var segunda = c.Amb.Semear(dataFalha: new DateTime(2026, 10, 8, 9, 0, 0));
         var fotoPrimeira = FotoPendencia.De(c.Amb.Ler(primeira));
         var fotoSegunda = FotoPendencia.De(c.Amb.Ler(segunda));
+        using var cts = new CancellationTokenSource();
         c.Focus.EnfileirarGet((Func<CancellationToken, Task<FocusResponse>>)(async ct =>
         {
+            cts.Cancel();   // o cancelamento chega DURANTE a chamada, sem depender de tempo (sem teste instavel)
             await Task.Delay(Timeout.Infinite, ct);
             return null!;
         }));
-        using var cts = new CancellationTokenSource();
-        cts.CancelAfter(TimeSpan.FromMilliseconds(50));
 
         Func<Task> act = async () => await c.CicloAsync(cts.Token);
 
@@ -824,6 +825,197 @@ public sealed class NfePendenteRecoveryOrchestratorTests
         r.IntervencaoManual.Should().Be(1);   // 404 com a D8 desligada
         r.ErrosDeProcessamento.Should().Be(0);
         r.FalhasDePersistencia.Should().Be(0);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    //  4A-5d.1: rastro das datas (F-1), lacunas de teste (F-3) e guarda estrutural (F-4)
+    // ═════════════════════════════════════════════════════════════════════
+
+    [Fact(DisplayName = "F-1: um texto enorme vindo da Focus NAO empurra a data original para fora dos 500 caracteres")]
+    public async Task F1_TextoLongoDaFocus_PreservaANotaDasDatas()
+    {
+        using var c = new Cenario { Opcoes = D8Ligada };
+        var id = c.Amb.Semear();
+        c.Focus.EnfileirarGet(Resp.NaoEncontrado());
+        // HTTP 418 + codigo gigante: o classificador devolve Desconhecido com o codigo DENTRO do Detalhe.
+        c.Focus.EnfileirarPost(Resp.Http(418, "{\"codigo\":\"" + new string('x', 1000) + "\"}"));
+
+        await c.CicloAsync();
+
+        var n = c.Amb.Ler(id);
+        n.Estado.Should().Be(NfePendenteEstados.Ativa);
+        n.FalhasDesconhecidasSeguidas.Should().Be(1);
+        n.UltimaDecisao!.Length.Should().Be(500, "o motivo da politica passou de 500 caracteres e foi cortado");
+        n.UltimaDecisao.Should().StartWith("DataEmissao original=" + RecoveryFixtures.DataAntiga + "; nova=" + DataNova);
+    }
+
+    [Fact(DisplayName = "F-3a: autorizacao vinda do POST e persistencia falha: a pendencia fica, com backoff, e o ciclo seguinte CONSULTA em vez de reenviar")]
+    public async Task F3a_AutorizadaNoPost_PersistenciaFalha_NaoReenvia()
+    {
+        using var c = new Cenario { Opcoes = D8Ligada };
+        var id = c.Amb.Semear();
+        var nota = c.Amb.Ler(id);
+        c.Fiscal.SetupSequence(QualquerPersistir())
+            .Throws(new InvalidOperationException("sem banco"))
+            .Returns(Task.CompletedTask);
+        c.Focus.EnfileirarGet(Resp.NaoEncontrado());
+        c.Focus.EnfileirarPost(Resp.Autorizada());
+
+        var r1 = await c.CicloAsync();
+
+        r1.FalhasDePersistencia.Should().Be(1);
+        r1.Autorizadas.Should().Be(0);
+        r1.ErrosDeProcessamento.Should().Be(0);
+        c.Eventos.Should().NotContain("Store.Remover");
+        c.Amb.Visivel(id).Should().BeTrue();
+        var n1 = c.Amb.Ler(id);
+        n1.Estado.Should().Be(NfePendenteEstados.Ativa);
+        n1.FalhasTransitoriasSeguidas.Should().Be(1);
+        n1.FalhasDesconhecidasSeguidas.Should().Be(0, "nao e resposta desconhecida da Focus");
+        n1.ProximaTentativaEm.Should().Be(new DateTime(2026, 10, 8, 15, 2, 0));
+        n1.TentativasPost.Should().Be(1);
+        n1.UltimaDecisao.Should().StartWith("DataEmissao original=" + RecoveryFixtures.DataAntiga).And.Contain("persistencia local falhou");
+
+        c.Relogio.DefinirUtc(n1.ProximaTentativaEm!.Value);
+        c.Focus.EnfileirarGet(Resp.Autorizada());
+        var r2 = await c.CicloAsync();
+
+        c.Metodos.Should().Equal("GET", "POST", "GET");   // o ciclo 2 NAO fez novo POST
+        r2.Autorizadas.Should().Be(1);
+        VerificarPersistiu(c, nota, vezes: 2);
+        c.Amb.Visivel(id).Should().BeFalse();
+    }
+
+    [Fact(DisplayName = "F-3b: o Aplicar FINAL falha depois do POST: nada vira 'concluido', o POST nao e contado e o ciclo seguinte comeca por GET")]
+    public async Task F3b_FalhaNoAplicarFinalDepoisDoPost()
+    {
+        using var c = new Cenario { Opcoes = D8Ligada };
+        var id = c.Amb.Semear();
+        var chamadasDeAplicar = 0;
+        c.Antes["Aplicar"] = () =>
+        {
+            if (++chamadasDeAplicar == 2)
+                throw new InvalidOperationException("banco fora do ar");
+            return Task.CompletedTask;
+        };
+        c.Focus.EnfileirarGet(Resp.NaoEncontrado());
+        c.Focus.EnfileirarPost(Resp.Timeout());
+
+        var r1 = await c.CicloAsync();
+
+        r1.FalhasDePersistencia.Should().Be(1);
+        r1.ErrosDeProcessamento.Should().Be(0);
+        c.Metodos.Should().Equal("GET", "POST");
+        var n1 = c.Amb.Ler(id);
+        n1.Estado.Should().Be(NfePendenteEstados.Ativa);
+        n1.FalhasTransitoriasSeguidas.Should().Be(0, "a decisao final nao foi gravada");
+        n1.TentativasPost.Should().Be(0, "o POST nao foi contado: a gravacao final falhou (subcontagem conhecida)");
+        n1.ProximaTentativaEm.Should().Be(new DateTime(2026, 10, 8, 15, 0, 0), "continua a agenda da gravacao da intencao");
+        n1.UltimaDecisao.Should().StartWith("Regenerando DataEmissao original=" + RecoveryFixtures.DataAntiga);
+        PayloadDataEmissao.LerTexto(n1.PayloadJson).Should().Be(DataNova);
+
+        c.Focus.EnfileirarGet(Resp.Autorizada());
+        var r2 = await c.CicloAsync();
+
+        c.Metodos.Should().Equal("GET", "POST", "GET");
+        r2.Autorizadas.Should().Be(1);
+    }
+
+    [Fact(DisplayName = "F-3c: cancelamento DURANTE o POST: propaga, nao vira Desconhecido e o ciclo seguinte comeca por GET (o POST pode ter chegado a Focus)")]
+    public async Task F3c_CancelamentoDuranteOPost()
+    {
+        using var c = new Cenario { Opcoes = D8Ligada };
+        var id = c.Amb.Semear();
+        using var cts = new CancellationTokenSource();
+        c.Focus.AoPostar = _ =>
+        {
+            cts.Cancel();   // o cancelamento chega com o POST em andamento, sem depender de tempo
+            return Task.CompletedTask;
+        };
+        c.Focus.EnfileirarGet(Resp.NaoEncontrado());
+        c.Focus.EnfileirarPost((Func<CancellationToken, Task<FocusResponse>>)(async ct =>
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            return null!;
+        }));
+
+        Func<Task> act = async () => await c.CicloAsync(cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        c.Eventos.Should().Equal("Store.Obter", "Focus.GET", "Store.Aplicar", "Store.Regravar", "Focus.POST");
+        var n = c.Amb.Ler(id);
+        n.Estado.Should().Be(NfePendenteEstados.Ativa);
+        n.FalhasDesconhecidasSeguidas.Should().Be(0, "cancelamento nao e resultado desconhecido");
+        n.FalhasTransitoriasSeguidas.Should().Be(0);
+        n.TentativasPost.Should().Be(0, "o POST nao foi contado, mas pode ter chegado a Focus");
+        n.ProximaTentativaEm.Should().Be(new DateTime(2026, 10, 8, 15, 0, 0));
+        PayloadDataEmissao.LerTexto(n.PayloadJson).Should().Be(DataNova);
+
+        c.Focus.EnfileirarGet(Resp.Autorizada());
+        var r2 = await c.CicloAsync();
+
+        c.Metodos.Should().Equal("GET", "POST", "GET");   // a Focus decide: nunca um segundo POST as cegas
+        r2.Autorizadas.Should().Be(1);
+    }
+
+    // Os dois testes abaixo usam REFLEXAO de proposito: a politica atual nunca leva ao POST sem GET, entao a unica
+    // forma de provar a guarda e chamar o metodo privado direto com uma execucao "virgem" (sem GET feito).
+
+    private static object NovaExecucao(ERP.Domain.Entities.NfePendente nota, RecoveryTenantContext contexto)
+    {
+        var tipo = typeof(NfePendenteRecoveryOrchestrator).GetNestedType("Execucao", BindingFlags.NonPublic)!;
+
+        return Activator.CreateInstance(
+            tipo,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            null,
+            new object[] { nota, contexto, new RecoveryCycleResult(), CancellationToken.None },
+            null)!;
+    }
+
+    private static NfePendenteRecoveryOrchestrator NovoOrquestradorDeGuarda(Cenario c, AlvoStore alvo) =>
+        new(new StoreRegistradora(alvo.Store, c.Eventos, c.Falhas, c.Antes),
+            c.Focus, c.Fiscal.Object, c.Vendas.Object, D8Ligada, c.Relogio.Ler);
+
+    [Fact(DisplayName = "F-4: a regeneracao sem GET concluido no ciclo e recusada ANTES de qualquer gravacao e de qualquer POST")]
+    public async Task F4_Regenerar_SemGet_Recusado()
+    {
+        using var c = new Cenario { Opcoes = D8Ligada };
+        var id = c.Amb.Semear();
+        var nota = c.Amb.Ler(id);
+        var foto = FotoPendencia.De(nota);
+        using var alvo = c.Amb.NovaStore();
+        var orquestrador = NovoOrquestradorDeGuarda(c, alvo);
+        var decisao = new RecoveryDecision(
+            RecoveryAction.ReenviarComDataRegenerada, NfePendenteEstados.Ativa, Agora0, 0, 0, "teste");
+        var metodo = typeof(NfePendenteRecoveryOrchestrator)
+            .GetMethod("RegenerarEReenviarAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        var tarefa = (Task)metodo.Invoke(orquestrador, new object[] { NovaExecucao(nota, c.Contexto), decisao })!;
+        Func<Task> act = async () => await tarefa;
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*GET*");
+        c.Focus.Chamadas.Should().BeEmpty();
+        c.Eventos.Should().BeEmpty("nenhuma gravacao (nem Aplicar, nem Regravar) pode ter acontecido");
+        FotoPendencia.De(c.Amb.Ler(id)).Should().Be(foto);
+    }
+
+    [Fact(DisplayName = "F-4: EnviarAsync, o unico ponto de POST, sem GET concluido no ciclo e recusado e nao chama a Focus")]
+    public async Task F4_Enviar_SemGet_Recusado()
+    {
+        using var c = new Cenario { Opcoes = D8Ligada };
+        var id = c.Amb.Semear();
+        var nota = c.Amb.Ler(id);
+        using var alvo = c.Amb.NovaStore();
+        var orquestrador = NovoOrquestradorDeGuarda(c, alvo);
+        var metodo = typeof(NfePendenteRecoveryOrchestrator)
+            .GetMethod("EnviarAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        var tarefa = (Task)metodo.Invoke(orquestrador, new object[] { NovaExecucao(nota, c.Contexto), "{}" })!;
+        Func<Task> act = async () => await tarefa;
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*GET*");
+        c.Focus.Chamadas.Should().BeEmpty();
     }
 
     [Fact(DisplayName = "Construtor e metodo recusam argumentos nulos")]

@@ -299,6 +299,8 @@ public sealed class NfePendenteRecoveryOrchestrator
 
     private async Task RegenerarEReenviarAsync(Execucao e, RecoveryDecision decisaoGet)
     {
+        ExigirConsultaConcluida(e);   // antes de QUALQUER gravacao
+
         if (e.JaPostou)
             throw new InvalidOperationException("Um segundo POST na mesma rodada foi bloqueado.");
 
@@ -317,7 +319,7 @@ public sealed class NfePendenteRecoveryOrchestrator
             e.Pendencia.Id, e.Pendencia.Referencia, dataOriginal, dataNova);
 
         // (1) Registra a data original e a nova em UltimaDecisao ANTES de mexer no payload.
-        var intencao = decisaoGet with { Motivo = $"{decisaoGet.Motivo} | Regenerando {e.NotaRegeneracao}" };
+        var intencao = decisaoGet with { Motivo = $"Regenerando {e.NotaRegeneracao} | {decisaoGet.Motivo}" };
         if (!await AplicarAsync(e, intencao))
         {
             e.Resultado.Ignoradas++;
@@ -396,12 +398,21 @@ public sealed class NfePendenteRecoveryOrchestrator
     {
         e.ConsultaPendente = true;   // a tentativa conta, tenha dado certo ou nao
 
-        return await _focus.ConsultarAsync(
+        var resposta = await _focus.ConsultarAsync(
             FocusDocumentType.Nfce, e.Pendencia.Referencia, e.Contexto.Token, e.Contexto.IsProducao, e.Ct);
+
+        // "GET concluido" = a Focus respondeu por HTTP, com QUALQUER status (inclusive o 404 que motiva a
+        // regeneracao). Falha de transporte / timeout nao conta.
+        if (resposta.HouveRespostaHttp)
+            e.ConsultaConcluidaNoCiclo = true;
+
+        return resposta;
     }
 
     private async Task<FocusResponse> EnviarAsync(Execucao e, string corpo)
     {
+        ExigirConsultaConcluida(e);   // ultima linha de defesa: este e o unico ponto de POST
+
         e.PostPendente = true;
         e.JaPostou = true;
 
@@ -478,10 +489,12 @@ public sealed class NfePendenteRecoveryOrchestrator
 
     // ── Apoio ────────────────────────────────────────────────────────────
 
+    // A nota vai no INICIO: a store corta UltimaDecisao em 500 caracteres pelo FIM, e o texto da politica
+    // pode crescer (traz detalhes vindos da Focus). Assim o rastro das datas e o que nunca se perde.
     private static RecoveryDecision ComNota(Execucao e, RecoveryDecision decisao) =>
         e.NotaRegeneracao is null || decisao.Motivo.Contains(e.NotaRegeneracao, StringComparison.Ordinal)
             ? decisao
-            : decisao with { Motivo = $"{decisao.Motivo} | {e.NotaRegeneracao}" };
+            : decisao with { Motivo = $"{e.NotaRegeneracao} | {decisao.Motivo}" };
 
     private string NovaDataEmissao() =>
         TimeZoneInfo.ConvertTime(_relogio(), FusoBrasilHelper.FusoBrasil)
@@ -500,6 +513,18 @@ public sealed class NfePendenteRecoveryOrchestrator
             pendencia.FalhasTransitoriasSeguidas,
             pendencia.FalhasDesconhecidasSeguidas,
             PayloadDataEmissao.Ler(pendencia.PayloadJson));
+    }
+
+    /// <summary>
+    /// Garantia ESTRUTURAL de que nenhum POST sai sem uma consulta (GET) concluida, neste ciclo e para esta
+    /// pendencia, em vez de depender so de a politica nunca pedir a regeneracao sem um veredito de GET.
+    /// Uma violacao e um defeito de programacao: vira excecao de processamento (conta para o limite K).
+    /// </summary>
+    private static void ExigirConsultaConcluida(Execucao e)
+    {
+        if (!e.ConsultaConcluidaNoCiclo)
+            throw new InvalidOperationException(
+                "POST bloqueado: nao houve consulta (GET) concluida neste ciclo para a pendencia.");
     }
 
     private static string Resumo(Exception ex)
@@ -534,6 +559,9 @@ public sealed class NfePendenteRecoveryOrchestrator
 
         /// <summary>POST tentado e ainda nao contabilizado por uma gravacao.</summary>
         public bool PostPendente { get; set; }
+
+        /// <summary>A Focus RESPONDEU (HTTP, qualquer status) a um GET desta pendencia neste ciclo.</summary>
+        public bool ConsultaConcluidaNoCiclo { get; set; }
 
         /// <summary>No maximo UM POST por pendencia por ciclo.</summary>
         public bool JaPostou { get; set; }
