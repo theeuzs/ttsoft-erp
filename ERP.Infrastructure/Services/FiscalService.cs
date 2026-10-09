@@ -1,6 +1,7 @@
 // ── ERP.Infrastructure/Services/FiscalService.cs ───────────────────────────
 using ERP.Application.DTOs;
 using ERP.Application.DTOs.FocusNfe;
+using ERP.Application.Fiscal;
 using ERP.Application.Fiscal.Focus;
 using ERP.Application.Interfaces;
 using ERP.Domain.Enums;
@@ -149,6 +150,17 @@ public class FiscalService : IFiscalService
         Guid vendaId, string tipoDocumento, string urlDanfe, string ambiente,
         string referencia, string urlXml, string chave, string numero)
     {
+        // Comportamento INALTERADO para os chamadores que ja existem (emissao online, reconciliacao e o
+        // worker antigo): o resultado e ignorado e as falhas "engolidas" seguem so como Log.Warning.
+        await PersistirEmissaoAutorizadaComResultadoAsync(
+            vendaId, tipoDocumento, urlDanfe, ambiente, referencia, urlXml, chave, numero);
+    }
+
+    /// <summary>Mesma persistencia, devolvendo o que foi REALMENTE gravado (F-2). Ver a interface.</summary>
+    public async Task<PersistenciaAutorizacaoResultado> PersistirEmissaoAutorizadaComResultadoAsync(
+        Guid vendaId, string tipoDocumento, string urlDanfe, string ambiente,
+        string referencia, string urlXml, string chave, string numero)
+    {
         var sale = await _ctx.Sales.AsNoTracking()
             .Include(s => s.Items)
             .Include(s => s.Customer)
@@ -157,10 +169,19 @@ public class FiscalService : IFiscalService
         if (sale == null)
         {
             Log.Warning("PersistirEmissaoAutorizadaAsync: venda {VendaId} não encontrada (nota já foi autorizada na SEFAZ, mas não há venda pra persistir contra).", vendaId);
-            return;
+            return PersistenciaAutorizacaoResultado.VendaAusente;
         }
 
-        try { await _saleService.AtualizarDadosNfceAsync(vendaId, urlDanfe, "Autorizada", ambiente, referencia, chave, numero); }
+        var dadosDaVendaGravados = false;
+        try
+        {
+            await _saleService.AtualizarDadosNfceAsync(vendaId, urlDanfe, "Autorizada", ambiente, referencia, chave, numero);
+
+            // O ISaleService nao lanca quando nao acha a venda: ele simplesmente nao grava. So se confirma lendo de volta.
+            dadosDaVendaGravados = await ConfirmarDadosDaVendaAsync(vendaId, chave, numero);
+            if (!dadosDaVendaGravados)
+                Log.Warning("Dados locais da nota autorizada NAO foram confirmados no banco para a venda {VendaId} (a chamada nao lancou, mas a leitura de volta nao bate).", vendaId);
+        }
         catch (Exception exAtualizar)
         {
             Log.Warning(exAtualizar, "Falha ao salvar dados locais da nota autorizada para a venda {VendaId} (nota em si já foi autorizada na SEFAZ)", vendaId);
@@ -179,6 +200,7 @@ public class FiscalService : IFiscalService
         // monotônica (NULL → 1, nunca 1 → 2) — nunca sobrescreve um snapshot
         // fiscal já congelado, não importa quantas vezes (ou de quantos
         // caminhos diferentes) este método seja chamado pra mesma venda.
+        var numeroItemFiscalGravado = false;
         try
         {
             var itensOrdenados = sale.Items.ToList();
@@ -189,6 +211,10 @@ public class FiscalService : IFiscalService
                     .Where(si => si.Id == item.Id && si.NumeroItemFiscal == null)
                     .ExecuteUpdateAsync(s => s.SetProperty(si => si.NumeroItemFiscal, i + 1));
             }
+
+            numeroItemFiscalGravado = await ConfirmarNumeroItemFiscalAsync(itensOrdenados.Select(it => it.Id).ToList());
+            if (!numeroItemFiscalGravado)
+                Log.Warning("NumeroItemFiscal NAO foi confirmado no banco para a venda {VendaId} (nota ja autorizada na SEFAZ).", vendaId);
         }
         catch (Exception exNumeroItem)
         {
@@ -200,6 +226,36 @@ public class FiscalService : IFiscalService
         // momento do registro da pendência; essa chamada promove a MESMA
         // linha pra "Autorizada", nunca cria uma segunda.
         await RegistrarNotaFiscalAsync(vendaId, sale, tipoDocumento, "Autorizada", urlDanfe, ambiente, urlXml, chave, numero);
+
+        return new PersistenciaAutorizacaoResultado(VendaEncontrada: true, dadosDaVendaGravados, numeroItemFiscalGravado);
+    }
+
+    /// <summary>Le a venda de volta: o status "Autorizada" gravado e, quando informados, a chave e o numero.</summary>
+    private async Task<bool> ConfirmarDadosDaVendaAsync(Guid vendaId, string chave, string numero)
+    {
+        var gravado = await _ctx.Sales.AsNoTracking()
+            .Where(s => s.Id == vendaId)
+            .Select(s => new { s.NfceStatusFocus, s.NfceChave, s.NfceNumero })
+            .FirstOrDefaultAsync();
+
+        if (gravado is null)
+            return false;
+
+        return gravado.NfceStatusFocus == "Autorizada"
+            && (string.IsNullOrWhiteSpace(chave) || gravado.NfceChave == chave)
+            && (string.IsNullOrWhiteSpace(numero) || gravado.NfceNumero == numero);
+    }
+
+    /// <summary>Confirma que nenhum item da venda ficou sem NumeroItemFiscal (um valor ja congelado conta como gravado).</summary>
+    private async Task<bool> ConfirmarNumeroItemFiscalAsync(List<Guid> itemIds)
+    {
+        if (itemIds.Count == 0)
+            return true;
+
+        var faltando = await _ctx.SaleItems.AsNoTracking()
+            .AnyAsync(si => itemIds.Contains(si.Id) && si.NumeroItemFiscal == null);
+
+        return !faltando;
     }
 
     public async Task ReconciliarVendaProcessandoAsync(Guid vendaId)

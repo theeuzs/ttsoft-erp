@@ -1,5 +1,6 @@
 // ERP.WPF/Services/HttpFiscalService.cs
 using ERP.Application.DTOs;
+using ERP.Application.Fiscal;
 using ERP.Application.Interfaces;
 using System.Net;
 using System.Net.Http;
@@ -141,4 +142,10 @@ public class HttpFiscalService : IFiscalService
         Guid vendaId, string tipoDocumento, string urlDanfe, string ambiente,
         string referencia, string urlXml, string chave, string numero)
         => throw new NotSupportedException("PersistirEmissaoAutorizadaAsync só roda no servidor — é o ponto de convergência da persistência fiscal, chamado por EmitirNotaAsync/ReconciliarVendaProcessandoAsync/NfeContingencyHostedService.");
+
+    /// <summary>Servidor apenas, como PersistirEmissaoAutorizadaAsync. Nunca deveria ser chamado a partir do WPF.</summary>
+    public Task<PersistenciaAutorizacaoResultado> PersistirEmissaoAutorizadaComResultadoAsync(
+        Guid vendaId, string tipoDocumento, string urlDanfe, string ambiente,
+        string referencia, string urlXml, string chave, string numero)
+        => throw new NotSupportedException("PersistirEmissaoAutorizadaComResultadoAsync so roda no servidor.");
 }

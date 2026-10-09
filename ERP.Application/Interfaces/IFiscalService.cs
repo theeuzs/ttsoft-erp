@@ -1,5 +1,6 @@
 // ── ERP.Application/Interfaces/IFiscalService.cs ────────────────────────────
 using ERP.Application.DTOs;
+using ERP.Application.Fiscal;
 
 namespace ERP.Application.Interfaces;
 
@@ -48,6 +49,15 @@ public interface IFiscalService
     /// NumeroItemFiscal do mesmo jeito, no mesmo lugar, sem risco de duas
     /// implementações divergirem com o tempo.</summary>
     Task PersistirEmissaoAutorizadaAsync(
+        Guid vendaId, string tipoDocumento, string urlDanfe, string ambiente,
+        string referencia, string urlXml, string chave, string numero);
+
+    /// <summary>Mesma persistencia de <see cref="PersistirEmissaoAutorizadaAsync"/>, mas DIZ o que de fato foi
+    /// gravado (conferido por leitura de volta no banco). Quem decide se uma pendencia pode sair da fila
+    /// (a recuperacao fiscal) usa este. O metodo acima segue tolerante, de proposito: a emissao online nao
+    /// pode devolver erro ao PDV de uma nota que a SEFAZ ja autorizou. A falha no registro da NotaFiscal
+    /// continua sendo lancada nos dois.</summary>
+    Task<PersistenciaAutorizacaoResultado> PersistirEmissaoAutorizadaComResultadoAsync(
         Guid vendaId, string tipoDocumento, string urlDanfe, string ambiente,
         string referencia, string urlXml, string chave, string numero);
 

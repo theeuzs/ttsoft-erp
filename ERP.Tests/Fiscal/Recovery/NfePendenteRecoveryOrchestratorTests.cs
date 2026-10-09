@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
+using ERP.Application.Fiscal;
 using ERP.Application.Fiscal.Focus;
 using ERP.Application.Fiscal.Recovery;
 using ERP.Application.Interfaces;
@@ -34,8 +35,10 @@ public sealed class NfePendenteRecoveryOrchestratorTests
 
     // ── Cenario ──────────────────────────────────────────────────────────
 
-    private static Expression<Func<IFiscalService, Task>> QualquerPersistir() =>
-        f => f.PersistirEmissaoAutorizadaAsync(
+    private static readonly PersistenciaAutorizacaoResultado Completo = new(true, true, true);
+
+    private static Expression<Func<IFiscalService, Task<PersistenciaAutorizacaoResultado>>> QualquerPersistir() =>
+        f => f.PersistirEmissaoAutorizadaComResultadoAsync(
             It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>());
 
@@ -50,7 +53,7 @@ public sealed class NfePendenteRecoveryOrchestratorTests
         {
             Focus = new FocusRoteirizado(Eventos);
 
-            Fiscal.Setup(QualquerPersistir()).Callback(() => Eventos.Add("Fiscal.Persistir")).Returns(Task.CompletedTask);
+            Fiscal.Setup(QualquerPersistir()).Callback(() => Eventos.Add("Fiscal.Persistir")).Returns(Task.FromResult(Completo));
             Vendas.Setup(QualquerRejeitar()).Callback(() => Eventos.Add("Vendas.Rejeitar")).Returns(Task.CompletedTask);
         }
 
@@ -86,7 +89,7 @@ public sealed class NfePendenteRecoveryOrchestratorTests
         var host = producao ? "https://api.focusnfe.com.br" : "https://homologacao.focusnfe.com.br";
         var ambiente = producao ? "Produção" : "Homologação";
 
-        c.Fiscal.Verify(f => f.PersistirEmissaoAutorizadaAsync(
+        c.Fiscal.Verify(f => f.PersistirEmissaoAutorizadaComResultadoAsync(
             nota.VendaId, "NFCE", host + r.CaminhoDanfe, ambiente, nota.Referencia,
             host + r.CaminhoXmlNotaFiscal, r.ChaveNfe!, r.Numero!), Times.Exactly(vezes));
     }
@@ -670,7 +673,7 @@ public sealed class NfePendenteRecoveryOrchestratorTests
         var nota = c.Amb.Ler(id);
         c.Fiscal.SetupSequence(QualquerPersistir())
             .Throws(new InvalidOperationException("sem banco"))
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult(Completo));
         c.Focus.EnfileirarGet(Resp.Autorizada(), Resp.Autorizada());
 
         var r1 = await c.CicloAsync();
@@ -857,7 +860,7 @@ public sealed class NfePendenteRecoveryOrchestratorTests
         var nota = c.Amb.Ler(id);
         c.Fiscal.SetupSequence(QualquerPersistir())
             .Throws(new InvalidOperationException("sem banco"))
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult(Completo));
         c.Focus.EnfileirarGet(Resp.NaoEncontrado());
         c.Focus.EnfileirarPost(Resp.Autorizada());
 
@@ -1016,6 +1019,91 @@ public sealed class NfePendenteRecoveryOrchestratorTests
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*GET*");
         c.Focus.Chamadas.Should().BeEmpty();
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    //  F-2: o resultado da persistencia diz o que foi REALMENTE gravado
+    // ═════════════════════════════════════════════════════════════════════
+
+    [Fact(DisplayName = "F-2: venda ausente na persistencia -> IntervencaoManual; a pendencia NAO e removida e o ciclo seguinte nao a toca")]
+    public async Task F2_VendaAusente_IntervencaoManual_NaoRemove()
+    {
+        using var c = new Cenario();
+        var id = c.Amb.Semear();
+        var nota = c.Amb.Ler(id);
+        c.Fiscal.Setup(QualquerPersistir()).Returns(Task.FromResult(PersistenciaAutorizacaoResultado.VendaAusente));
+        c.Focus.EnfileirarGet(Resp.Autorizada());
+
+        var r1 = await c.CicloAsync();
+
+        r1.IntervencaoManual.Should().Be(1);
+        r1.Autorizadas.Should().Be(0);
+        r1.FalhasDePersistencia.Should().Be(0, "nao e falha de infraestrutura: e uma decisao para uma pessoa");
+        c.Eventos.Should().NotContain("Store.Remover");
+        c.Amb.Visivel(id).Should().BeTrue();
+        var n = c.Amb.Ler(id);
+        n.Estado.Should().Be(NfePendenteEstados.IntervencaoManual);
+        n.UltimaDecisao.Should().Contain("nao existe localmente").And.Contain(Resp.Autorizada().ChaveNfe!);
+        VerificarPersistiu(c, nota);
+
+        // Terminal: o ciclo seguinte nao seleciona, nao consulta e nao grava.
+        var chamadas = c.Focus.Chamadas.Count;
+        var r2 = await c.CicloAsync();
+        r2.Elegiveis.Should().Be(0);
+        c.Focus.Chamadas.Count.Should().Be(chamadas);
+    }
+
+    [Theory(DisplayName = "F-2: persistencia INCOMPLETA mantem a pendencia, agenda backoff e, quando completa, remove (sem nunca fazer POST)")]
+    [InlineData(false, true, "dados da venda")]
+    [InlineData(true, false, "numero fiscal do item")]
+    [InlineData(false, false, "dados da venda")]
+    public async Task F2_PersistenciaIncompleta_MantemEReagenda(bool dadosGravados, bool numeroGravado, string trecho)
+    {
+        using var c = new Cenario();
+        var id = c.Amb.Semear();
+        var nota = c.Amb.Ler(id);
+        c.Fiscal.SetupSequence(QualquerPersistir())
+            .Returns(Task.FromResult(new PersistenciaAutorizacaoResultado(true, dadosGravados, numeroGravado)))
+            .Returns(Task.FromResult(Completo));
+        c.Focus.EnfileirarGet(Resp.Autorizada(), Resp.Autorizada());
+
+        var r1 = await c.CicloAsync();
+
+        r1.FalhasDePersistencia.Should().Be(1);
+        r1.Autorizadas.Should().Be(0);
+        r1.ErrosDeProcessamento.Should().Be(0);
+        c.Eventos.Should().NotContain("Store.Remover");
+        var n1 = c.Amb.Ler(id);
+        n1.Estado.Should().Be(NfePendenteEstados.Ativa);
+        n1.FalhasTransitoriasSeguidas.Should().Be(1);
+        n1.FalhasDesconhecidasSeguidas.Should().Be(0, "persistencia incompleta nao e resposta desconhecida da Focus");
+        n1.ProximaTentativaEm.Should().Be(new DateTime(2026, 10, 8, 15, 2, 0));
+        n1.UltimaDecisao.Should().Contain("ficou incompleta").And.Contain(trecho);
+
+        c.Relogio.DefinirUtc(n1.ProximaTentativaEm!.Value);
+        var r2 = await c.CicloAsync();
+
+        r2.Autorizadas.Should().Be(1);
+        VerificarPersistiu(c, nota, vezes: 2);
+        c.Amb.Visivel(id).Should().BeFalse();
+        c.Metodos.Should().OnlyContain(m => m == "GET", "o ciclo seguinte consulta; nunca reenvia");
+    }
+
+    [Fact(DisplayName = "F-2: resultado NULO do servico fiscal nunca e tratado como sucesso: a pendencia fica e reagenda")]
+    public async Task F2_ResultadoNulo_NaoRemove()
+    {
+        using var c = new Cenario();
+        var id = c.Amb.Semear();
+        c.Fiscal.Setup(QualquerPersistir()).Returns(Task.FromResult<PersistenciaAutorizacaoResultado>(null!));
+        c.Focus.EnfileirarGet(Resp.Autorizada());
+
+        var r = await c.CicloAsync();
+
+        r.FalhasDePersistencia.Should().Be(1);
+        r.Autorizadas.Should().Be(0);
+        c.Eventos.Should().NotContain("Store.Remover");
+        c.Amb.Visivel(id).Should().BeTrue();
+        c.Amb.Ler(id).FalhasTransitoriasSeguidas.Should().Be(1);
     }
 
     [Fact(DisplayName = "Construtor e metodo recusam argumentos nulos")]

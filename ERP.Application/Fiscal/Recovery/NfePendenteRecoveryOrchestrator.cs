@@ -1,4 +1,5 @@
 using System.Globalization;
+using ERP.Application.Fiscal;
 using ERP.Application.Fiscal.Focus;
 using ERP.Application.Interfaces;
 using ERP.Domain.Common;
@@ -221,9 +222,10 @@ public sealed class NfePendenteRecoveryOrchestrator
         var urlDanfe = host + resposta.CaminhoDanfe;
         var urlXml = string.IsNullOrWhiteSpace(resposta.CaminhoXmlNotaFiscal) ? string.Empty : host + resposta.CaminhoXmlNotaFiscal;
 
+        PersistenciaAutorizacaoResultado? persistencia;
         try
         {
-            await _fiscal.PersistirEmissaoAutorizadaAsync(
+            persistencia = await _fiscal.PersistirEmissaoAutorizadaComResultadoAsync(
                 e.Pendencia.VendaId, TipoNfce, urlDanfe, e.Contexto.AmbienteNome,
                 e.Pendencia.Referencia, urlXml, resposta.ChaveNfe, resposta.Numero ?? string.Empty);
         }
@@ -237,7 +239,47 @@ public sealed class NfePendenteRecoveryOrchestrator
                 "Recuperacao fiscal: autorizada na Focus, mas a persistencia local FALHOU na pendencia {PendenciaId} " +
                 "(ref {Referencia}). A pendencia continua na fila.", e.Pendencia.Id, e.Pendencia.Referencia);
 
-            await RegistrarFalhaLocalDeAutorizacaoAsync(e, ex);
+            await RegistrarFalhaLocalDeAutorizacaoAsync(
+                e, $"Autorizada na Focus, mas a persistencia local falhou ({ex.GetType().Name}): {Resumo(ex)}");
+            return;
+        }
+
+        // O resultado diz o que foi REALMENTE gravado (conferido por leitura de volta). So "completo" libera a remocao.
+        if (persistencia is null)
+        {
+            // Contrato violado (ex.: um dublê sem configuracao). Nunca se trata ausencia de informacao como sucesso.
+            e.Resultado.FalhasDePersistencia++;
+            Log.Error("Recuperacao fiscal: o servico fiscal nao devolveu o resultado da persistencia na pendencia {PendenciaId} (ref {Referencia}).",
+                e.Pendencia.Id, e.Pendencia.Referencia);
+
+            await RegistrarFalhaLocalDeAutorizacaoAsync(
+                e, "Autorizada na Focus, mas a persistencia local ficou incompleta (o servico fiscal nao devolveu o resultado)");
+            return;
+        }
+
+        if (!persistencia.VendaEncontrada)
+        {
+            // A nota existe na SEFAZ e nao ha venda local: repetir nao resolve e remover perderia o unico ponteiro. Decide uma pessoa.
+            Log.Error("Recuperacao fiscal: autorizada na Focus, mas a venda {VendaId} nao existe localmente (pendencia {PendenciaId}, ref {Referencia}, chave {Chave}). IntervencaoManual.",
+                e.Pendencia.VendaId, e.Pendencia.Id, e.Pendencia.Referencia, resposta.ChaveNfe);
+
+            var semVenda = new RecoveryDecision(
+                RecoveryAction.IntervencaoManual, NfePendenteEstados.IntervencaoManual, null, 0, 0,
+                $"Autorizada na Focus (chave {resposta.ChaveNfe}), mas a venda {e.Pendencia.VendaId} nao existe localmente; " +
+                "nada foi persistido. A NotaFiscal em contingencia, se houver, continua como esta. Revisar manualmente.");
+
+            await GravarDecisaoAsync(e, ComNota(e, semVenda));
+            return;
+        }
+
+        if (!persistencia.Completa)
+        {
+            e.Resultado.FalhasDePersistencia++;
+            Log.Error("Recuperacao fiscal: autorizada na Focus, mas a persistencia local ficou INCOMPLETA na pendencia {PendenciaId} (ref {Referencia}): {Faltas}. A pendencia continua na fila.",
+                e.Pendencia.Id, e.Pendencia.Referencia, persistencia.ResumoDoQueFalta());
+
+            await RegistrarFalhaLocalDeAutorizacaoAsync(
+                e, $"Autorizada na Focus, mas a persistencia local ficou incompleta ({persistencia.ResumoDoQueFalta()})");
             return;
         }
 
@@ -245,11 +287,10 @@ public sealed class NfePendenteRecoveryOrchestrator
         e.Resultado.Autorizadas++;
     }
 
-    private async Task RegistrarFalhaLocalDeAutorizacaoAsync(Execucao e, Exception ex)
+    private async Task RegistrarFalhaLocalDeAutorizacaoAsync(Execucao e, string detalhe)
     {
         try
         {
-            var detalhe = $"Autorizada na Focus, mas a persistencia local falhou ({ex.GetType().Name}): {Resumo(ex)}";
             var veredito = new FocusVerdict(FocusVerdictKind.Transitorio, Detalhe: detalhe);
 
             var decisao = RecoveryPolicy.Decidir(veredito, FocusOperation.Get, e.Situacao, _relogio(), _opcoes);
