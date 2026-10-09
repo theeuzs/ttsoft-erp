@@ -285,6 +285,10 @@ builder.Services.AddHttpClient<IFocusNfeHttpClient, ERP.Infrastructure.HttpClien
     client.BaseAddress = new Uri("https://api.focusnfe.com.br/v2/");
 });
 
+// Etapa 4 (4A-5e): registra a recuperacao fiscal (cliente HTTP, store, politica e orquestrador). INERTE: nada o resolve nem o
+// inicia; o interruptor e o HostedService so existem na 4A-6. Ver ERP.Api/Extensions/FiscalRecoveryServiceCollectionExtensions.cs.
+ERP.Api.Extensions.FiscalRecoveryServiceCollectionExtensions.AddFiscalRecovery(builder.Services);
+
 // ── FluentValidation ──────────────────────────────────────────────────────────
 builder.Services.AddValidatorsFromAssemblyContaining<ERP.Application.Validators.CreateProductValidator>();
 
