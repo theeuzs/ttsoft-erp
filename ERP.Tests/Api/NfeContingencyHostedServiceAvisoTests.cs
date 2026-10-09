@@ -77,6 +77,7 @@ public class NfeContingencyHostedServiceAvisoTests
         VendaId = Guid.NewGuid(),
         TipoNota = tipo,
         Estado = NfePendenteEstados.Ativa,
+        CriadaEmProducao = false,   // trava de ambiente: a configuracao destes testes e homologacao
         PayloadJson = "{}",
         Referencia = $"ref-{Guid.NewGuid():N}",
         DataFalha = new DateTime(2026, 10, 8, 9, 0, 0)

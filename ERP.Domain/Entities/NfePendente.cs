@@ -55,4 +55,11 @@ public class NfePendente : BaseEntity
 
     /// <summary>Base do limite K: +1 so em resultado desconhecido; zera em qualquer resultado conhecido.</summary>
     public int FalhasDesconhecidasSeguidas { get; set; }
+
+    /// <summary>
+    /// Ambiente da Focus em que a pendencia NASCEU: true = Producao, false = Homologacao, nulo = desconhecido (anterior a trava de ambiente).
+    /// Gravado na criacao pelo ambiente da configuracao que fez o POST falhar; NUNCA deduzido do ambiente atual do tenant. Uma pendencia
+    /// so e consultada ou reenviada no ambiente em que nasceu (PendenciaAmbienteGuard); nulo = bloqueada ate uma pessoa classificar.
+    /// </summary>
+    public bool? CriadaEmProducao { get; set; }
 }

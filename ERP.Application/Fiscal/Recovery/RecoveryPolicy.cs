@@ -249,9 +249,15 @@ public static class RecoveryPolicy
                 "Ja esta em intervencao manual; a politica nao sai desse estado sozinha.");
         }
 
-        var motivo = avaliacao.Resultado == ResultadoAmbiente.Desconhecido
-            ? $"AmbienteDesconhecido: {avaliacao.Descricao}. Nenhuma chamada a Focus; classificar manualmente o ambiente de origem (CriadaEmProducao)."
-            : $"AmbienteDivergente: {avaliacao.Descricao}. Nenhuma chamada a Focus; so retoma quando a guarda confirmar o mesmo ambiente.";
+        var motivo = avaliacao.Resultado switch
+        {
+            ResultadoAmbiente.Desconhecido =>
+                $"AmbienteDesconhecido: {avaliacao.Descricao}. Nenhuma chamada a Focus; classificar manualmente o ambiente de origem (CriadaEmProducao).",
+            ResultadoAmbiente.Indeterminado =>
+                $"AmbienteIndeterminado: {avaliacao.Descricao}. Nenhuma chamada a Focus; so retoma quando a configuracao puder ser lida e confirmar o mesmo ambiente.",
+            _ =>
+                $"AmbienteDivergente: {avaliacao.Descricao}. Nenhuma chamada a Focus; so retoma quando a guarda confirmar o mesmo ambiente."
+        };
 
         return new RecoveryDecision(
             RecoveryAction.AguardarCorrecao,

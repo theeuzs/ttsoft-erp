@@ -403,11 +403,12 @@ public class NfeContingencyServiceTests
         var (svc, uow, repo) = Build();
         var vendaId = Guid.NewGuid();
 
-        await svc.RegistrarNotaPendenteAsync(vendaId, "NFCE", "{\"dados\":\"teste\"}");
+        await svc.RegistrarNotaPendenteAsync(vendaId, "NFCE", "{\"dados\":\"teste\"}", emProducao: true);
 
         repo.Verify(r => r.AddAsync(It.Is<NfePendente>(n =>
             n.VendaId   == vendaId &&
             n.TipoNota  == "NFCE" &&
+            n.CriadaEmProducao == true &&   // trava de ambiente: a origem vem do chamador
             n.Tentativas == 0)),
             Times.Once);
         uow.Verify(u => u.CommitAsync(), Times.Once);

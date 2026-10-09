@@ -167,7 +167,7 @@ public class NfeContingencyHostedServiceTests
         var contingencyMock = new Mock<INfeContingencyService>();
         contingencyMock.Setup(c => c.VerificarConexaoSefazAsync()).ReturnsAsync(true);
         contingencyMock.Setup(c => c.ObterNotasPendentesAsync())
-            .ReturnsAsync(new List<NfePendente> { new() { Id = pendenteId, VendaId = vendaId, TipoNota = "NFCE", PayloadJson = "{}", Referencia = "ref-processamento" } });
+            .ReturnsAsync(new List<NfePendente> { new() { Id = pendenteId, VendaId = vendaId, TipoNota = "NFCE", PayloadJson = "{}", Referencia = "ref-processamento", CriadaEmProducao = false } });
 
         // Achado real (26/09, Rota A) — antes desta correção, chave/numero/
         // urlXml eram descartados aqui (só sucesso/mensagem/urlDanfe eram
@@ -201,7 +201,8 @@ public class NfeContingencyHostedServiceTests
             ctx.NfePendentes.Add(new NfePendente
             {
                 Id = pendenteId, TenantId = tenantId, VendaId = vendaId, TipoNota = "NFCE",
-                PayloadJson = "{}", Referencia = "ref-processamento"
+                PayloadJson = "{}", Referencia = "ref-processamento",
+                CriadaEmProducao = false   // trava de ambiente: nasceu no mesmo ambiente da configuracao deste teste (homologacao)
             });
             await ctx.SaveChangesAsync();
         }

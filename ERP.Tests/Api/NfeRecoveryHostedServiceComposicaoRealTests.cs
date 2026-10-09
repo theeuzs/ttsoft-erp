@@ -57,7 +57,8 @@ public class NfeRecoveryHostedServiceComposicaoRealTests : IClassFixture<ErpApiF
             TipoNota = "NFCE",
             PayloadJson = RecoveryFixtures.PayloadNfce,
             Referencia = Guid.NewGuid().ToString(),
-            DataFalha = FusoBrasilHelper.AgoraNoBrasil().AddMinutes(-30)
+            DataFalha = FusoBrasilHelper.AgoraNoBrasil().AddMinutes(-30),
+            CriadaEmProducao = false   // a configuracao semeada e homologacao
         };
         ctx.NfePendentes.Add(nota);
         ctx.SaveChanges();
@@ -104,5 +105,70 @@ public class NfeRecoveryHostedServiceComposicaoRealTests : IClassFixture<ErpApiF
         Ler(servicos, a, idA).TentativasConsulta.Should().Be(1);
         Ler(servicos, b, idB).TentativasConsulta.Should().Be(1);
         Ler(servicos, c, idC).TentativasConsulta.Should().Be(0, "o tenant C nao esta na lista");
+    }
+
+    private static void DefinirAmbiente(IServiceProvider servicos, Guid tenantId, bool producao)
+    {
+        using var escopo = servicos.CreateScope();
+        escopo.ServiceProvider.GetRequiredService<IRequestTenant>().TenantId = tenantId;
+        var ctx = escopo.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        ctx.TenantFiscalConfigurations
+            .Where(c => c.TenantId == tenantId)
+            .ExecuteUpdate(s => s.SetProperty(c => c.UsarAmbienteProducao, producao));
+    }
+
+    private static void TornarElegivel(IServiceProvider servicos, Guid tenantId, Guid id)
+    {
+        using var escopo = servicos.CreateScope();
+        escopo.ServiceProvider.GetRequiredService<IRequestTenant>().TenantId = tenantId;
+        var ctx = escopo.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        ctx.NfePendentes
+            .Where(n => n.Id == id)
+            .ExecuteUpdate(s => s.SetProperty(n => n.ProximaTentativaEm, (DateTime?)null));
+    }
+
+    [Fact(DisplayName = "COMPOSICAO REAL, O CENARIO DA NOITE: o flag do tenant e trocado NO BANCO depois de a pendencia nascer: bloqueia sem chamar a Focus e retoma quando o flag volta")]
+    public async Task ComposicaoReal_FlagTrocadoNoBanco_BloqueiaERetoma()
+    {
+        var eventos = new List<string>();
+        var focus = new FocusRoteirizado(eventos);
+        using var fabrica = _factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<IFocusReferenceClient>();
+            services.AddSingleton<IFocusReferenceClient>(focus);
+        }));
+        var servicos = fabrica.Services;
+        var tenant = Guid.NewGuid();
+        var (id, _) = SemearTenant(servicos, tenant, "token-real-A");   // configuracao e pendencia em HOMOLOGACAO
+        var worker = new NfeRecoveryHostedService(
+            servicos.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<NfeRecoveryHostedService>.Instance,
+            new FiscalRecoverySwitch(tenant.ToString()),
+            new FiscalRecoveryHeartbeat());
+
+        // 1) Compativel (homologacao): consulta a Focus.
+        focus.EnfileirarGet(Resp.Processando());
+        await worker.ExecutarCicloAsync(CancellationToken.None);
+        focus.Chamadas.Should().ContainSingle();
+
+        // 2) O flag e trocado no banco (producao) e a pendencia volta a ser elegivel: NENHUMA chamada nova.
+        DefinirAmbiente(servicos, tenant, producao: true);
+        TornarElegivel(servicos, tenant, id);
+        await worker.ExecutarCicloAsync(CancellationToken.None);
+
+        focus.Chamadas.Should().ContainSingle("a troca do flag no banco bloqueia a recuperacao");
+        var bloqueada = Ler(servicos, tenant, id);
+        bloqueada.Estado.Should().Be(NfePendenteEstados.AguardandoCorrecao);
+        bloqueada.UltimaDecisao.Should().StartWith("AmbienteDivergente:");
+
+        // 3) O flag volta a homologacao: a pendencia retoma.
+        DefinirAmbiente(servicos, tenant, producao: false);
+        TornarElegivel(servicos, tenant, id);
+        focus.EnfileirarGet(Resp.Processando());
+        await worker.ExecutarCicloAsync(CancellationToken.None);
+
+        focus.Chamadas.Should().HaveCount(2);
     }
 }

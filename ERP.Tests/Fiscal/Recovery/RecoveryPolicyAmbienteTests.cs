@@ -179,4 +179,34 @@ public class RecoveryPolicyAmbienteTests
         Action opcoesNulas = () => RecoveryPolicy.DecidirDivergenciaDeAmbiente(Pend(), HomologacaoParaProducao, Agora, null!);
         opcoesNulas.Should().Throw<ArgumentNullException>();
     }
+
+    // ── Configuracao ilegivel (Estagio 2) ────────────────────────────────
+
+    private static AvaliacaoAmbiente Ilegivel => PendenciaAmbienteGuard.ConfiguracaoIlegivel(false, true);
+
+    [Fact(DisplayName = "Configuracao ILEGIVEL: AguardandoCorrecao +30 min, contadores preservados, motivo AmbienteIndeterminado")]
+    public void Ilegivel_AguardaCorrecao()
+    {
+        var d = RecoveryPolicy.DecidirDivergenciaDeAmbiente(Pend(transitorias: 2, desconhecidas: 1), Ilegivel, Agora, Padrao);
+
+        d.Acao.Should().Be(RecoveryAction.AguardarCorrecao);
+        d.NovoEstado.Should().Be(NfePendenteEstados.AguardandoCorrecao);
+        d.ProximaTentativaEm.Should().Be(Agora.AddMinutes(30));
+        d.FalhasTransitoriasSeguidas.Should().Be(2);
+        d.FalhasDesconhecidasSeguidas.Should().Be(1);
+        d.Motivo.Should().StartWith("AmbienteIndeterminado:").And.Contain("nao foi possivel ler a configuracao fiscal atual");
+        d.Motivo.Length.Should().BeLessThanOrEqualTo(FiscalRecoveryStore.TamanhoMaximoUltimaDecisao);
+    }
+
+    [Fact(DisplayName = "Configuracao ILEGIVEL tambem NUNCA implica enviar nem consultar, em qualquer estado")]
+    public void Ilegivel_NuncaImplicaHttp()
+    {
+        foreach (var estado in new[] { NfePendenteEstados.Ativa, NfePendenteEstados.AguardandoCorrecao, NfePendenteEstados.IntervencaoManual })
+        {
+            var d = RecoveryPolicy.DecidirDivergenciaDeAmbiente(Pend(estado), Ilegivel, Agora, Padrao);
+
+            d.Acao.Should().BeOneOf(RecoveryAction.AguardarCorrecao, RecoveryAction.IntervencaoManual);
+            d.Regeneracao.Should().BeNull();
+        }
+    }
 }

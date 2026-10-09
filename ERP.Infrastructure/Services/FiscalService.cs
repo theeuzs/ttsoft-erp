@@ -119,7 +119,7 @@ public class FiscalService : IFiscalService
             try
             {
                 string jsonPayload = JsonConvert.SerializeObject(request);
-                await _contingencyService.RegistrarNotaPendenteAsync(vendaId, tipoDocumento, jsonPayload);
+                await _contingencyService.RegistrarNotaPendenteAsync(vendaId, tipoDocumento, jsonPayload, config.UsarAmbienteProducao);
                 await _saleService.AtualizarDadosNfceAsync(vendaId, "", "Contingência", ambienteSefaz, vendaId.ToString());
                 await RegistrarNotaFiscalAsync(vendaId, sale, tipoDocumento, "Contingência", null, ambienteSefaz, null);
 

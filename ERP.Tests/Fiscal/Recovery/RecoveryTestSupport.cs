@@ -108,7 +108,9 @@ internal sealed class RecoveryAmbiente : IDisposable
             Referencia = Guid.NewGuid().ToString(),
             DataFalha = dataFalha ?? new DateTime(2026, 10, 8, 9, 0, 0),
             Tentativas = 2,
-            UltimaMensagemErro = "erro legado"
+            UltimaMensagemErro = "erro legado",
+            // Trava de ambiente: o contexto padrao dos testes do orquestrador e PRODUCAO, e a pendencia nasce no mesmo ambiente.
+            CriadaEmProducao = true
         };
         ajustar?.Invoke(nota);
 
@@ -330,4 +332,46 @@ internal sealed class LoggerQueCaptura<T> : ILogger<T>
 
     public int Avisos(string trecho) =>
         Entradas.Count(e => e.Nivel == LogLevel.Warning && e.Mensagem.Contains(trecho, StringComparison.Ordinal));
+}
+
+/// <summary>
+/// Leitor de "ambiente configurado agora" dos testes da trava de ambiente. Conta as leituras e permite roteirizar o que cada uma devolve:
+/// um bool = o ambiente lido; uma Exception = falha de leitura. Esgotada a fila, devolve o valor padrao. Monta o RecoveryTenantContext como o
+/// worker faz (o leitor e obrigatorio).
+/// </summary>
+internal sealed class AmbienteLido
+{
+    private readonly Queue<object> _fila = new();
+
+    public AmbienteLido(bool padraoProducao) { Padrao = padraoProducao; }
+
+    public bool Padrao { get; set; }
+
+    public int Leituras { get; private set; }
+
+    public AmbienteLido Enfileirar(params object[] itens)
+    {
+        foreach (var item in itens) _fila.Enqueue(item);
+        return this;
+    }
+
+    public Task<bool> LerAsync(CancellationToken ct)
+    {
+        Leituras++;
+
+        if (_fila.Count == 0)
+            return Task.FromResult(Padrao);
+
+        return _fila.Dequeue() switch
+        {
+            bool producao => Task.FromResult(producao),
+            Exception ex => Task.FromException<bool>(ex),
+            var outro => throw new InvalidOperationException($"Item invalido na fila do leitor de ambiente: {outro?.GetType().Name}.")
+        };
+    }
+
+    public RecoveryTenantContext Contexto(string token, bool chamadaProducao) => new(token, chamadaProducao, LerAsync);
+
+    /// <summary>Contexto "normal": o ambiente da chamada e o configurado agora sao o mesmo e nao mudam.</summary>
+    public static RecoveryTenantContext Fixo(string token, bool producao) => new AmbienteLido(producao).Contexto(token, producao);
 }

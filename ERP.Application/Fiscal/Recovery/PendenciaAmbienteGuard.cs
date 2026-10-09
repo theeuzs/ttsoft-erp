@@ -13,7 +13,10 @@ public enum ResultadoAmbiente
     Divergente = 2,
 
     /// <summary>Pendencia sem ambiente de origem registrado (anterior a trava). Falha fechada: nunca e reenviada sozinha.</summary>
-    Desconhecido = 3
+    Desconhecido = 3,
+
+    /// <summary>Nao foi possivel LER a configuracao fiscal atual do tenant (erro de leitura). Falha fechada: sem leitura nao ha autorizacao.</summary>
+    Indeterminado = 4
 }
 
 /// <summary>
@@ -30,9 +33,13 @@ public sealed record AvaliacaoAmbiente(
     bool AmbienteDaChamadaProducao,
     bool AmbienteConfiguradoAgoraProducao)
 {
-    /// <summary>True SOMENTE se o rotulo e Compativel E os tres valores realmente coincidem (origem conhecida).</summary>
+    /// <summary>False quando a configuracao fiscal atual NAO pode ser lida; nesse caso AmbienteConfiguradoAgoraProducao nao tem significado.</summary>
+    public bool ConfiguracaoLegivel { get; init; } = true;
+
+    /// <summary>True SOMENTE se a configuracao foi lida, o rotulo e Compativel E os tres valores realmente coincidem (origem conhecida).</summary>
     public bool PodeProsseguir =>
-        Resultado == ResultadoAmbiente.Compativel
+        ConfiguracaoLegivel
+        && Resultado == ResultadoAmbiente.Compativel
         && CriadaEmProducao.HasValue
         && CriadaEmProducao.Value == AmbienteDaChamadaProducao
         && CriadaEmProducao.Value == AmbienteConfiguradoAgoraProducao;
@@ -46,12 +53,15 @@ public sealed record AvaliacaoAmbiente(
 
     public string NomeDaChamada => Nome(AmbienteDaChamadaProducao);
 
-    public string NomeConfigurado => Nome(AmbienteConfiguradoAgoraProducao);
+    public string NomeConfigurado => ConfiguracaoLegivel ? Nome(AmbienteConfiguradoAgoraProducao) : "ilegivel";
 
     /// <summary>Texto curto e SEM acentos, para log e para UltimaDecisao.</summary>
-    public string Descricao => CriadaEmProducao is null
-        ? $"pendencia sem ambiente de origem registrado; a chamada usaria {NomeDaChamada}; configurado agora: {NomeConfigurado}"
-        : $"pendencia criada em {NomeDaOrigem}; a chamada usaria {NomeDaChamada}; configurado agora: {NomeConfigurado}";
+    public string Descricao =>
+        !ConfiguracaoLegivel
+            ? $"nao foi possivel ler a configuracao fiscal atual do tenant; pendencia criada em {NomeDaOrigem}; a chamada usaria {NomeDaChamada}"
+        : CriadaEmProducao is null
+            ? $"pendencia sem ambiente de origem registrado; a chamada usaria {NomeDaChamada}; configurado agora: {NomeConfigurado}"
+            : $"pendencia criada em {NomeDaOrigem}; a chamada usaria {NomeDaChamada}; configurado agora: {NomeConfigurado}";
 
     private static string Nome(bool producao) => producao ? "Producao" : "Homologacao";
 }
@@ -81,6 +91,15 @@ public static class PendenciaAmbienteGuard
 
         return new AvaliacaoAmbiente(resultado, criadaEmProducao, ambienteDaChamadaProducao, ambienteConfiguradoAgoraProducao);
     }
+
+    /// <summary>
+    /// A configuracao fiscal atual NAO pode ser lida (excecao, configuracao ausente ou resposta invalida): nunca autoriza. Falha fechada.
+    /// </summary>
+    public static AvaliacaoAmbiente ConfiguracaoIlegivel(bool? criadaEmProducao, bool ambienteDaChamadaProducao) =>
+        new(ResultadoAmbiente.Indeterminado, criadaEmProducao, ambienteDaChamadaProducao, ambienteDaChamadaProducao)
+        {
+            ConfiguracaoLegivel = false
+        };
 
     /// <summary>Atalho para quando o ambiente da chamada e o configurado agora sao o mesmo valor (ex.: verificacao no inicio do ciclo).</summary>
     public static AvaliacaoAmbiente Avaliar(bool? criadaEmProducao, bool ambienteAtualProducao) =>

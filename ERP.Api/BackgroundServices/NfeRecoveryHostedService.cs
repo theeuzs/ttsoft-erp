@@ -142,8 +142,25 @@ public class NfeRecoveryHostedService : BackgroundService
         var requestTenant = scope.ServiceProvider.GetRequiredService<IRequestTenant>();
         requestTenant.TenantId = tenantId;
 
-        var config = await scope.ServiceProvider.GetRequiredService<IFiscalConfigurationProvider>().ObterConfiguracaoAsync();
-        var contexto = new RecoveryTenantContext(config.TokenFocusNfe ?? string.Empty, config.UsarAmbienteProducao);
+        var provider = scope.ServiceProvider.GetRequiredService<IFiscalConfigurationProvider>();
+        var config = await provider.ObterConfiguracaoAsync();
+
+        // Trava de ambiente: o orquestrador RELE a configuracao imediatamente antes de cada GET e de cada POST, por este leitor. Ele consulta o
+        // provider de novo a cada chamada (sem cache e sem reutilizar o config acima); um erro aqui bloqueia a chamada (falha fechada).
+        // Configuracao AUSENTE tambem e falha: o provider do banco devolve uma FiscalConfiguration vazia (UsarAmbienteProducao = false) quando a
+        // linha do tenant nao existe, e isso NAO pode ser lido como "homologacao confirmada".
+        var contexto = new RecoveryTenantContext(
+            config.TokenFocusNfe ?? string.Empty,
+            config.UsarAmbienteProducao,
+            async _ =>
+            {
+                var atual = await provider.ObterConfiguracaoAsync();
+
+                if (atual is null || string.IsNullOrWhiteSpace(atual.TokenFocusNfe))
+                    throw new InvalidOperationException("Configuracao fiscal ausente ou sem token na releitura.");
+
+                return atual.UsarAmbienteProducao;
+            });
 
         var orquestrador = scope.ServiceProvider.GetRequiredService<NfePendenteRecoveryOrchestrator>();
         var resultado = await orquestrador.ProcessarTenantAsync(contexto, ct);
@@ -154,7 +171,7 @@ public class NfeRecoveryHostedService : BackgroundService
     private void RegistrarResumo(Guid tenantId, bool emProducao, RecoveryCycleResult r)
     {
         var atividade = r.Autorizadas + r.Rejeitadas + r.Agendadas + r.AguardandoCorrecao + r.IntervencaoManual
-                      + r.Ignoradas + r.ErrosDeProcessamento + r.FalhasDePersistencia;
+                      + r.Ignoradas + r.ErrosDeProcessamento + r.FalhasDePersistencia + r.AmbienteDivergente;
 
         if (atividade == 0)
             return;
@@ -162,16 +179,17 @@ public class NfeRecoveryHostedService : BackgroundService
         _logger.LogInformation(
             "Recuperacao fiscal: tenant {TenantId} ({Ambiente}): {Elegiveis} elegivel(is), {Autorizadas} autorizada(s), {Rejeitadas} rejeitada(s), " +
             "{Agendadas} agendada(s), {AguardandoCorrecao} aguardando correcao, {IntervencaoManual} em intervencao manual, {Ignoradas} ignorada(s), " +
-            "{Erros} erro(s) de processamento, {FalhasPersistencia} falha(s) de persistencia.",
+            "{Erros} erro(s) de processamento, {FalhasPersistencia} falha(s) de persistencia, {AmbienteDivergente} bloqueada(s) por ambiente.",
             tenantId, emProducao ? "PRODUCAO" : "homologacao", r.Elegiveis, r.Autorizadas, r.Rejeitadas, r.Agendadas,
-            r.AguardandoCorrecao, r.IntervencaoManual, r.Ignoradas, r.ErrosDeProcessamento, r.FalhasDePersistencia);
+            r.AguardandoCorrecao, r.IntervencaoManual, r.Ignoradas, r.ErrosDeProcessamento, r.FalhasDePersistencia, r.AmbienteDivergente);
 
-        if (r.IntervencaoManual + r.ErrosDeProcessamento + r.FalhasDePersistencia > 0 && DeveAlertar(tenantId))
+        if (r.IntervencaoManual + r.ErrosDeProcessamento + r.FalhasDePersistencia + r.AmbienteDivergente > 0 && DeveAlertar(tenantId))
         {
             _logger.LogWarning(
                 "Recuperacao fiscal: ATENCAO no tenant {TenantId}: {IntervencaoManual} pendencia(s) em intervencao manual, " +
-                "{Erros} erro(s) de processamento e {FalhasPersistencia} falha(s) de persistencia neste ciclo. Revise a fila de pendencias fiscais.",
-                tenantId, r.IntervencaoManual, r.ErrosDeProcessamento, r.FalhasDePersistencia);
+                "{Erros} erro(s) de processamento, {FalhasPersistencia} falha(s) de persistencia e {AmbienteDivergente} pendencia(s) bloqueada(s) " +
+                "por ambiente incompativel neste ciclo. Revise a fila de pendencias fiscais.",
+                tenantId, r.IntervencaoManual, r.ErrosDeProcessamento, r.FalhasDePersistencia, r.AmbienteDivergente);
         }
     }
 

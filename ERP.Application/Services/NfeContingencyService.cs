@@ -39,7 +39,7 @@ public class NfeContingencyService : INfeContingencyService
         }
     }
 
-    public async Task RegistrarNotaPendenteAsync(Guid vendaId, string tipoNota, string payloadJson)
+    public async Task RegistrarNotaPendenteAsync(Guid vendaId, string tipoNota, string payloadJson, bool emProducao)
     {
         var notaPendente = new NfePendente
         {
@@ -50,7 +50,8 @@ public class NfeContingencyService : INfeContingencyService
             PayloadJson = payloadJson,
             Referencia = vendaId.ToString(),
             DataFalha = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
-            Tentativas = 0
+            Tentativas = 0,
+            CriadaEmProducao = emProducao
         };
 
         await _uow.NfePendentes.AddAsync(notaPendente);

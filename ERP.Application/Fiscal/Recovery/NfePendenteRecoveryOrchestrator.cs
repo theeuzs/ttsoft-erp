@@ -23,6 +23,13 @@ namespace ERP.Application.Fiscal.Recovery;
 ///  - Excecao de PROCESSAMENTO daquela nota (payload invalido, excecao inesperada do cliente):
 ///    vira veredito Desconhecido (a politica conta; K=3 leva a IntervencaoManual) e o ciclo segue.
 ///
+/// TRAVA DE AMBIENTE: uma pendencia so e consultada ou reenviada no ambiente em que NASCEU (NfePendente.CriadaEmProducao). A regra e
+/// PendenciaAmbienteGuard (origem x ambiente que a chamada vai usar x configuracao RELIDA agora) e roda DENTRO dos dois unicos pontos de HTTP
+/// (ConsultarAsync e EnviarAsync), antes de qualquer efeito, de modo que a regeneracao, o reenvio e a reconciliacao nao tem como contorna-la;
+/// a regeneracao ainda a verifica antes de gravar o payload novo. Sem autorizacao: nenhuma chamada a Focus, a pendencia vai para
+/// AguardandoCorrecao (contadores preservados) e retoma sozinha quando a guarda voltar a confirmar o mesmo ambiente. Erro ao reler a
+/// configuracao tambem bloqueia.
+///
 /// DATA ORIGINAL: antes de mexer no payload, a data original e a nova vao para UltimaDecisao e
 /// para o log estruturado (sem coluna nova). UltimaDecisao e sobrescrita pela decisao seguinte;
 /// por isso o log e a segunda trilha.
@@ -106,6 +113,10 @@ public sealed class NfePendenteRecoveryOrchestrator
                 "Nada foi dado como concluido; a proxima rodada retoma.",
                 fx.Etapa, pendencia.Id, pendencia.Referencia);
         }
+        catch (AmbienteIncompativelException ax)
+        {
+            await RegistrarAmbienteIncompativelAsync(e, ax.Avaliacao);
+        }
         catch (Exception ex)
         {
             resultado.ErrosDeProcessamento++;
@@ -116,6 +127,72 @@ public sealed class NfePendenteRecoveryOrchestrator
 
             await RegistrarExcecaoComoDesconhecidaAsync(e, ex);
         }
+    }
+
+    /// <summary>
+    /// Trava de ambiente: a pendencia NAO pode ser consultada nem reenviada agora. Grava a decisao segura (AguardandoCorrecao, contadores
+    /// preservados, motivo claro) e segue para a proxima. Nao e erro de processamento e NAO conta para o limite K. Nada aqui pode escapar.
+    /// </summary>
+    private async Task RegistrarAmbienteIncompativelAsync(Execucao e, AvaliacaoAmbiente avaliacao)
+    {
+        Log.Warning(
+            "Recuperacao fiscal: ambiente incompativel na pendencia {PendenciaId} (ref {Referencia}): {Descricao}. Nenhuma chamada a Focus.",
+            e.Pendencia.Id, e.Pendencia.Referencia, avaliacao.Descricao);
+
+        try
+        {
+            var decisao = RecoveryPolicy.DecidirDivergenciaDeAmbiente(e.Situacao, avaliacao, _relogio(), _opcoes);
+
+            if (await AplicarAsync(e, ComNota(e, decisao)))
+                e.Resultado.AmbienteDivergente++;
+            else
+                e.Resultado.Ignoradas++;
+        }
+        catch (FalhaDePersistenciaException fx)
+        {
+            e.Resultado.FalhasDePersistencia++;
+            Log.Error(fx.InnerException ?? fx,
+                "Recuperacao fiscal: nao foi possivel gravar a decisao de ambiente incompativel na pendencia {PendenciaId}.", e.Pendencia.Id);
+        }
+        catch (Exception falha)
+        {
+            Log.Error(falha,
+                "Recuperacao fiscal: nao foi possivel decidir sobre o ambiente incompativel na pendencia {PendenciaId}.", e.Pendencia.Id);
+        }
+    }
+
+    /// <summary>
+    /// A guarda estrutural. RELE a configuracao do tenant AGORA e so deixa passar se a origem da pendencia, o ambiente que a chamada vai
+    /// usar e a configuracao relida forem o MESMO ambiente. Nao reutiliza nenhuma leitura anterior. Falha de leitura (inclusive um leitor
+    /// que lanca) vira Indeterminado: sem leitura nao ha autorizacao. O cancelamento propaga.
+    /// </summary>
+    private async Task GarantirAmbienteAsync(Execucao e)
+    {
+        bool configuradoAgoraEmProducao;
+
+        try
+        {
+            configuradoAgoraEmProducao = await e.Contexto.LerAmbienteConfiguradoAgoraAsync(e.Ct);
+        }
+        catch (OperationCanceledException) when (e.Ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex,
+                "Recuperacao fiscal: nao foi possivel reler a configuracao fiscal do tenant (pendencia {PendenciaId}, ref {Referencia}); nenhuma chamada a Focus.",
+                e.Pendencia.Id, e.Pendencia.Referencia);
+
+            throw new AmbienteIncompativelException(
+                PendenciaAmbienteGuard.ConfiguracaoIlegivel(e.Pendencia.CriadaEmProducao, e.Contexto.IsProducao));
+        }
+
+        var avaliacao = PendenciaAmbienteGuard.Avaliar(
+            e.Pendencia.CriadaEmProducao, e.Contexto.IsProducao, configuradoAgoraEmProducao);
+
+        if (!avaliacao.PodeProsseguir)
+            throw new AmbienteIncompativelException(avaliacao);
     }
 
     private async Task RegistrarExcecaoComoDesconhecidaAsync(Execucao e, Exception ex)
@@ -345,6 +422,9 @@ public sealed class NfePendenteRecoveryOrchestrator
         if (e.JaPostou)
             throw new InvalidOperationException("Um segundo POST na mesma rodada foi bloqueado.");
 
+        // Trava de ambiente (pre-voo): antes de regenerar a data e de gravar o payload novo. A guarda final continua sendo a de EnviarAsync.
+        await GarantirAmbienteAsync(e);
+
         var payloadAntigo = e.Pendencia.PayloadJson;
         var dataOriginal = PayloadDataEmissao.LerTexto(payloadAntigo)
             ?? throw new InvalidOperationException("O payload nao tem uma DataEmissao textual de primeiro nivel.");
@@ -366,6 +446,14 @@ public sealed class NfePendenteRecoveryOrchestrator
             e.Resultado.Ignoradas++;
             return;
         }
+
+        // A gravacao (1) deixou na linha os contadores da decisao do GET; a Situacao acompanha, para que uma divergencia de ambiente
+        // detectada depois daqui (a guarda final de EnviarAsync) preserve os contadores que realmente estao gravados.
+        e.Situacao = e.Situacao with
+        {
+            FalhasTransitoriasSeguidas = decisaoGet.FalhasTransitoriasSeguidas,
+            FalhasDesconhecidasSeguidas = decisaoGet.FalhasDesconhecidasSeguidas
+        };
 
         // (2) O payload novo precisa estar no banco ANTES de qualquer POST.
         bool regravou;
@@ -437,6 +525,9 @@ public sealed class NfePendenteRecoveryOrchestrator
 
     private async Task<FocusResponse> ConsultarAsync(Execucao e)
     {
+        // Trava de ambiente: ANTES de qualquer efeito, inclusive antes de a tentativa ser contada (uma chamada bloqueada nao e tentativa).
+        await GarantirAmbienteAsync(e);
+
         e.ConsultaPendente = true;   // a tentativa conta, tenha dado certo ou nao
 
         var resposta = await _focus.ConsultarAsync(
@@ -453,6 +544,9 @@ public sealed class NfePendenteRecoveryOrchestrator
     private async Task<FocusResponse> EnviarAsync(Execucao e, string corpo)
     {
         ExigirConsultaConcluida(e);   // ultima linha de defesa: este e o unico ponto de POST
+
+        // Trava de ambiente: a configuracao e RELIDA aqui, imediatamente antes do POST. A validacao de um GET anterior nao autoriza este envio.
+        await GarantirAmbienteAsync(e);
 
         e.PostPendente = true;
         e.JaPostou = true;
@@ -612,6 +706,18 @@ public sealed class NfePendenteRecoveryOrchestrator
 
         /// <summary>"DataEmissao original=...; nova=..." depois de uma regeneracao; acompanha as decisoes seguintes.</summary>
         public string? NotaRegeneracao { get; set; }
+    }
+
+    /// <summary>A guarda de ambiente nao autorizou a chamada. Interna: vira a decisao segura em ProcessarIsoladoAsync.</summary>
+    private sealed class AmbienteIncompativelException : Exception
+    {
+        public AmbienteIncompativelException(AvaliacaoAmbiente avaliacao)
+            : base($"Ambiente incompativel: {avaliacao.Descricao}")
+        {
+            Avaliacao = avaliacao;
+        }
+
+        public AvaliacaoAmbiente Avaliacao { get; }
     }
 
     private sealed class FalhaDePersistenciaException : Exception

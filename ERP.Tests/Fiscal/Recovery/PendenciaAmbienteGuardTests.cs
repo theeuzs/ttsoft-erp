@@ -101,7 +101,7 @@ public class PendenciaAmbienteGuardTests
         default(ResultadoAmbiente).Should().NotBe(ResultadoAmbiente.Compativel);
         ((int)ResultadoAmbiente.Compativel).Should().BeGreaterThan(0);
 
-        foreach (var indefinido in new[] { 0, 4, 99, -1 })
+        foreach (var indefinido in new[] { 0, 5, 99, -1 })
         {
             new AvaliacaoAmbiente((ResultadoAmbiente)indefinido, true, true, true).PodeProsseguir
                 .Should().BeFalse($"o valor {indefinido} nao e 'compativel'");
@@ -150,5 +150,33 @@ public class PendenciaAmbienteGuardTests
             PendenciaAmbienteGuard.Avaliar(criada, chamada, configurado)
                 .Should().Be(PendenciaAmbienteGuard.Avaliar(criada, chamada, configurado));
         }
+    }
+
+    // ── Configuracao ilegivel (Estagio 2) ────────────────────────────────
+
+    [Fact(DisplayName = "Configuracao ILEGIVEL: nunca autoriza, para qualquer origem e ambiente de chamada (falha fechada)")]
+    public void ConfiguracaoIlegivel_NuncaAutoriza()
+    {
+        foreach (var criada in Origens)
+        foreach (var chamada in Booleanos)
+        {
+            var avaliacao = PendenciaAmbienteGuard.ConfiguracaoIlegivel(criada, chamada);
+
+            avaliacao.Resultado.Should().Be(ResultadoAmbiente.Indeterminado);
+            avaliacao.ConfiguracaoLegivel.Should().BeFalse();
+            avaliacao.PodeProsseguir.Should().BeFalse();
+            avaliacao.Descricao.Should().Contain("nao foi possivel ler a configuracao fiscal atual");
+            avaliacao.Descricao.All(c => c < 128).Should().BeTrue();
+        }
+    }
+
+    [Fact(DisplayName = "Um registro rotulado 'Compativel' mas marcado como ILEGIVEL tambem nao autoriza; Indeterminado e um valor definido (4)")]
+    public void RegistroCompativelMasIlegivel_NaoAutoriza()
+    {
+        new AvaliacaoAmbiente(ResultadoAmbiente.Compativel, true, true, true) { ConfiguracaoLegivel = false }
+            .PodeProsseguir.Should().BeFalse();
+
+        ((int)ResultadoAmbiente.Indeterminado).Should().Be(4);
+        ResultadoAmbiente.Indeterminado.Should().NotBe(ResultadoAmbiente.Compativel);
     }
 }

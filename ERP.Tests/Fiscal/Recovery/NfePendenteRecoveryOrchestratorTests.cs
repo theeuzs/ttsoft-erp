@@ -64,7 +64,7 @@ public sealed class NfePendenteRecoveryOrchestratorTests
         public Mock<IFiscalService> Fiscal { get; } = new();
         public Mock<ISaleService> Vendas { get; } = new();
         public RecoveryPolicyOptions Opcoes { get; set; } = new();
-        public RecoveryTenantContext Contexto { get; set; } = new("token-de-teste", true);
+        public RecoveryTenantContext Contexto { get; set; } = AmbienteLido.Fixo("token-de-teste", true);
         public Dictionary<string, Exception> Falhas { get; } = new();
         public Dictionary<string, Func<Task>> Antes { get; } = new();
 
@@ -124,8 +124,8 @@ public sealed class NfePendenteRecoveryOrchestratorTests
     [Fact(DisplayName = "Homologacao: URLs com o host e o nome de ambiente de homologacao")]
     public async Task Homologacao_HostEAmbiente()
     {
-        using var c = new Cenario { Contexto = new RecoveryTenantContext("token-de-teste", false) };
-        var id = c.Amb.Semear();
+        using var c = new Cenario { Contexto = AmbienteLido.Fixo("token-de-teste", false) };
+        var id = c.Amb.Semear(n => n.CriadaEmProducao = false);   // a pendencia nasceu em homologacao: o mesmo ambiente do contexto
         var nota = c.Amb.Ler(id);
         c.Focus.EnfileirarGet(Resp.Autorizada());
 
@@ -464,7 +464,7 @@ public sealed class NfePendenteRecoveryOrchestratorTests
     [Fact(DisplayName = "Token em branco: AguardandoCorrecao, ZERO chamadas a Focus e a consulta nao e contada")]
     public async Task TokenEmBranco_SemHttp()
     {
-        using var c = new Cenario { Contexto = new RecoveryTenantContext("   ", true) };
+        using var c = new Cenario { Contexto = AmbienteLido.Fixo("   ", true) };
         var id = c.Amb.Semear();
 
         var r = await c.CicloAsync();

@@ -203,6 +203,38 @@ public class NfeContingencyHostedService : BackgroundService
         }
     }
 
+    private readonly Dictionary<Guid, DateTimeOffset> _ultimoAvisoAmbientePorTenant = new();   // um ciclo por vez: sem concorrencia
+
+    /// <summary>Trava de ambiente: RELE a configuracao fiscal do tenant. Nunca lanca: se nao leu, devolve nulo (e a nota fica bloqueada).</summary>
+    private async Task<FiscalConfiguration?> ReleituraDaConfiguracaoAsync(IFiscalConfigurationProvider provider, NfePendente nota, Guid tenantId)
+    {
+        try
+        {
+            return await provider.ObterConfiguracaoAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "NfeContingencyHostedService: nao foi possivel reler a configuracao fiscal do tenant {TenantId} para a nota {Referencia}; nenhuma chamada a Focus.",
+                tenantId, nota.Referencia);
+            return null;
+        }
+    }
+
+    /// <summary>Trava de ambiente: Warning deduplicado (no maximo um a cada 30 minutos por tenant).</summary>
+    private void AvisarAmbienteIncompativel(Guid tenantId, int quantidade, string primeiroMotivo)
+    {
+        var agora = DateTimeOffset.UtcNow;
+        if (_ultimoAvisoAmbientePorTenant.TryGetValue(tenantId, out var ultimo) && agora - ultimo < IntervaloEntreAvisos)
+            return;
+
+        _ultimoAvisoAmbientePorTenant[tenantId] = agora;
+        _logger.LogWarning(
+            "NfeContingencyHostedService: ambiente fiscal incompativel: o tenant {TenantId} tem {Quantidade} nota(s) pendente(s) que NAO foram enviadas " +
+            "porque o ambiente em que nasceram nao e o configurado agora (ou nao foi possivel confirma-lo). Nenhuma chamada a Focus foi feita. Primeira: {Primeira}",
+            tenantId, quantidade, primeiroMotivo);
+    }
+
     internal async Task ProcessarTenantAsync(Guid tenantId, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -252,11 +284,36 @@ public class NfeContingencyHostedService : BackgroundService
         var nfeService   = scope.ServiceProvider.GetRequiredService<INfeEmissionService>();
         var saleService  = scope.ServiceProvider.GetRequiredService<ISaleService>();
         var fiscalService = scope.ServiceProvider.GetRequiredService<IFiscalService>();
-        string ambienteSefaz = config.UsarAmbienteProducao ? "Produção" : "Homologação";
+        var bloqueadasPorAmbiente = 0;
+        string? primeiroBloqueio = null;
 
         foreach (var nota in pendentes)
         {
             if (ct.IsCancellationRequested) return;
+
+            // Trava de ambiente (Estagio 2): a configuracao e RELIDA para CADA pendencia. Nada do contexto de uma nota anterior (token ou
+            // ambiente) e reutilizado, e a chamada usa o token e o ambiente DESTA releitura. Divergente, desconhecido (NULL) ou ilegivel:
+            // nao emite, NAO conta tentativa (nao e falha de comunicacao) e nao mexe na linha; fica como esta ate o ambiente voltar a bater
+            // ou ate uma pessoa classificar. Vale para NFC-e e NF-e.
+            var configNota = await ReleituraDaConfiguracaoAsync(configProvider, nota, tenantId);
+            var avaliacao = configNota is null
+                ? PendenciaAmbienteGuard.ConfiguracaoIlegivel(nota.CriadaEmProducao, config.UsarAmbienteProducao)
+                : PendenciaAmbienteGuard.Avaliar(nota.CriadaEmProducao, configNota.UsarAmbienteProducao);
+
+            if (configNota is null || !avaliacao.PodeProsseguir)
+            {
+                bloqueadasPorAmbiente++;
+                primeiroBloqueio ??= $"{nota.TipoNota} {nota.Referencia}: {avaliacao.Descricao}";
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(configNota.TokenFocusNfe))
+            {
+                _logger.LogWarning("NfeContingencyHostedService: tenant {TenantId} sem token Focus na releitura da configuracao; nota {Referencia} nao foi tentada.", tenantId, nota.Referencia);
+                continue;
+            }
+
+            string ambienteSefaz = configNota.UsarAmbienteProducao ? "Produção" : "Homologação";
 
             try
             {
@@ -266,13 +323,13 @@ public class NfeContingencyHostedService : BackgroundService
 
                 if (nota.TipoNota == "NFCE")
                 {
-                    var result = await nfceService.EmitirNfceAsync(nota.Referencia, request!, config.TokenFocusNfe, config.UsarAmbienteProducao);
+                    var result = await nfceService.EmitirNfceAsync(nota.Referencia, request!, configNota.TokenFocusNfe, configNota.UsarAmbienteProducao);
                     sucesso = result.Sucesso; mensagem = result.Mensagem; urlDanfe = result.UrlDanfe;
                     urlXml = result.UrlXml; chave = result.Chave; numero = result.Numero;
                 }
                 else
                 {
-                    var result = await nfeService.EmitirNfeA4Async(nota.Referencia, request!, config.TokenFocusNfe, config.UsarAmbienteProducao);
+                    var result = await nfeService.EmitirNfeA4Async(nota.Referencia, request!, configNota.TokenFocusNfe, configNota.UsarAmbienteProducao);
                     sucesso = result.Sucesso; mensagem = result.Mensagem; urlDanfe = result.UrlDanfe;
                     urlXml = result.UrlXml; chave = result.Chave; numero = result.Numero;
                 }
@@ -325,5 +382,8 @@ public class NfeContingencyHostedService : BackgroundService
                 _logger.LogError(ex, "NfeContingencyHostedService: exceção processando nota {Referencia} (tenant {TenantId}).", nota.Referencia, tenantId);
             }
         }
+
+        if (bloqueadasPorAmbiente > 0)
+            AvisarAmbienteIncompativel(tenantId, bloqueadasPorAmbiente, primeiroBloqueio!);
     }
 }

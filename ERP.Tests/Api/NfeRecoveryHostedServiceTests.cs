@@ -36,6 +36,12 @@ public class NfeRecoveryHostedServiceTests : IDisposable
     private readonly FocusRoteirizado _focus;
     private ServiceProvider? _provedor;
 
+    /// <summary>Quantas vezes o provider da configuracao fiscal foi consultado (prova a releitura real).</summary>
+    private int _leiturasDeConfiguracao;
+
+    /// <summary>Gancho chamado a CADA leitura da configuracao, com o numero da leitura (para mudar a configuracao no meio de um ciclo).</summary>
+    private Action<int>? _aoLerConfiguracao;
+
     public NfeRecoveryHostedServiceTests()
     {
         _focus = new FocusRoteirizado(_eventos);
@@ -94,9 +100,14 @@ public class NfeRecoveryHostedServiceTests : IDisposable
             var tenant = sp.GetRequiredService<IRequestTenant>();
             var mock = new Mock<IFiscalConfigurationProvider>();
             mock.Setup(c => c.ObterConfiguracaoAsync()).Returns(() =>
-                Task.FromResult(configuracoes.TryGetValue(tenant.TenantId, out var c)
+            {
+                _leiturasDeConfiguracao++;
+                _aoLerConfiguracao?.Invoke(_leiturasDeConfiguracao);
+
+                return Task.FromResult(configuracoes.TryGetValue(tenant.TenantId, out var c)
                     ? new FiscalConfiguration { TokenFocusNfe = c.Token, UsarAmbienteProducao = c.Producao }
-                    : new FiscalConfiguration()));
+                    : new FiscalConfiguration());
+            });
             return mock.Object;
         });
 
@@ -123,7 +134,7 @@ public class NfeRecoveryHostedServiceTests : IDisposable
         new(escopos ?? Escopos, logger ?? NullLogger<NfeRecoveryHostedService>.Instance, interruptor,
             batimento ?? new FiscalRecoveryHeartbeat(), atrasoInicial, intervalo, relogio);
 
-    private Guid Semear(Guid tenantId, DateTime? proximaTentativaEm = null, string estado = NfePendenteEstados.Ativa, string tipo = "NFCE")
+    private Guid Semear(Guid tenantId, DateTime? proximaTentativaEm = null, string estado = NfePendenteEstados.Ativa, string tipo = "NFCE", bool? criadaEmProducao = false)
     {
         using var ctx = _banco.NovoContexto(tenantId);
 
@@ -137,7 +148,8 @@ public class NfeRecoveryHostedServiceTests : IDisposable
             ProximaTentativaEm = proximaTentativaEm,
             PayloadJson = RecoveryFixtures.PayloadNfce,
             Referencia = Guid.NewGuid().ToString(),
-            DataFalha = FusoBrasilHelper.AgoraNoBrasil().AddMinutes(-30)
+            DataFalha = FusoBrasilHelper.AgoraNoBrasil().AddMinutes(-30),
+            CriadaEmProducao = criadaEmProducao   // as configuracoes destes testes sao homologacao
         };
 
         ctx.NfePendentes.Add(nota);
@@ -353,5 +365,87 @@ public class NfeRecoveryHostedServiceTests : IDisposable
         Semear(a);
         await worker.ExecutarCicloAsync(CancellationToken.None);
         logger.Avisos("ATENCAO").Should().Be(2, "passados 30 minutos, alerta de novo");
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    //  Trava de ambiente no worker (Estagio 2)
+    // ═════════════════════════════════════════════════════════════════════
+
+    [Fact(DisplayName = "RELEITURA REAL: cada validacao consulta o provider da configuracao de novo (uma ao montar o contexto, outra imediatamente antes do GET)")]
+    public async Task TravaDeAmbiente_ReleituraReal_ConsultaOProviderACadaValidacao()
+    {
+        var a = Guid.NewGuid();
+        Construir(Configs((a, "token-A")));
+        Semear(a);
+        _focus.EnfileirarGet(Resp.Processando());
+        var worker = NovoWorker(new FiscalRecoverySwitch(a.ToString()));
+
+        await worker.ExecutarCicloAsync(CancellationToken.None);
+
+        _focus.Chamadas.Should().ContainSingle();
+        _leiturasDeConfiguracao.Should().Be(2, "nenhuma configuracao capturada antes e reutilizada");
+    }
+
+    [Fact(DisplayName = "FLAG TROCADO DEPOIS DE CRIADA: pendencia nascida em homologacao e tenant agora em producao: NENHUMA chamada; ao voltar a homologacao, retoma")]
+    public async Task TravaDeAmbiente_FlagTrocado_BloqueiaERetoma()
+    {
+        var a = Guid.NewGuid();
+        var configs = Configs((a, "token-A"));
+        Construir(configs);
+        var id = Semear(a);                              // nasceu em homologacao
+        configs[a] = ("token-A", true);                  // o tenant foi para producao
+        var worker = NovoWorker(new FiscalRecoverySwitch(a.ToString()));
+
+        await worker.ExecutarCicloAsync(CancellationToken.None);
+
+        _focus.Chamadas.Should().BeEmpty();
+        var bloqueada = _banco.Ler(id);
+        bloqueada.Estado.Should().Be(NfePendenteEstados.AguardandoCorrecao);
+        bloqueada.UltimaDecisao.Should().StartWith("AmbienteDivergente:").And.Contain("configurado agora: Producao");
+        bloqueada.TentativasConsulta.Should().Be(0);
+
+        configs[a] = ("token-A", false);                 // volta a homologacao
+        _banco.ModificarPorFora(id, n => n.ProximaTentativaEm = DateTime.UtcNow.AddMinutes(-1));
+        _focus.EnfileirarGet(Resp.Processando());
+        await worker.ExecutarCicloAsync(CancellationToken.None);
+
+        _focus.Chamadas.Should().ContainSingle().Which.IsProducao.Should().BeFalse();
+        _banco.Ler(id).TentativasConsulta.Should().Be(1);
+    }
+
+    [Fact(DisplayName = "CONTEXTO VELHO no worker: a configuracao muda DEPOIS de o tenant ser lido e ANTES do GET: bloqueia (zero chamadas)")]
+    public async Task TravaDeAmbiente_ConfiguracaoMudaDepoisDeMontarOContexto_Bloqueia()
+    {
+        var a = Guid.NewGuid();
+        var configs = Configs((a, "token-A"));
+        Construir(configs);
+        var id = Semear(a);                              // nasceu em homologacao
+        _aoLerConfiguracao = leitura => { if (leitura == 2) configs[a] = ("token-A", true); };   // so a releitura ve producao
+        var worker = NovoWorker(new FiscalRecoverySwitch(a.ToString()));
+
+        await worker.ExecutarCicloAsync(CancellationToken.None);
+
+        _focus.Chamadas.Should().BeEmpty("o contexto foi montado para homologacao, mas a releitura ja diz producao");
+        _banco.Ler(id).UltimaDecisao.Should().Contain("a chamada usaria Homologacao").And.Contain("configurado agora: Producao");
+        _leiturasDeConfiguracao.Should().Be(2);
+    }
+
+    [Fact(DisplayName = "CONFIGURACAO AUSENTE na releitura (a linha do tenant some depois de o contexto ser montado): ilegivel, bloqueia; NAO e lida como 'homologacao confirmada'")]
+    public async Task TravaDeAmbiente_ConfiguracaoAusenteNaReleitura_Bloqueia()
+    {
+        var a = Guid.NewGuid();
+        var configs = Configs((a, "token-A"));
+        Construir(configs);
+        var id = Semear(a);                              // nasceu em homologacao, e a configuracao ainda diz homologacao no inicio
+        _aoLerConfiguracao = leitura => { if (leitura == 2) configs.Remove(a); };   // a releitura nao encontra mais a configuracao
+        var worker = NovoWorker(new FiscalRecoverySwitch(a.ToString()));
+
+        await worker.ExecutarCicloAsync(CancellationToken.None);
+
+        _focus.Chamadas.Should().BeEmpty("sem configuracao nao ha como confirmar o ambiente");
+        var bloqueada = _banco.Ler(id);
+        bloqueada.Estado.Should().Be(NfePendenteEstados.AguardandoCorrecao);
+        bloqueada.UltimaDecisao.Should().StartWith("AmbienteIndeterminado:");
+        bloqueada.TentativasConsulta.Should().Be(0);
     }
 }
