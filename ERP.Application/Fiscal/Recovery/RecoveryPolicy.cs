@@ -209,4 +209,56 @@ public static class RecoveryPolicy
         string motivo, int transitorias, int desconhecidas, MotivoRegeneracao? regeneracao = null) =>
         new(RecoveryAction.IntervencaoManual, NfePendenteEstados.IntervencaoManual, null,
             transitorias, desconhecidas, motivo, regeneracao);
+
+    /// <summary>
+    /// Trava de ambiente (Estagio 1): a decisao quando a guarda NAO autoriza uma chamada (ambiente divergente ou desconhecido).
+    /// NUNCA implica HTTP: so agenda a pendencia em AguardandoCorrecao (retoma sozinha quando a guarda voltar a confirmar o mesmo ambiente) e
+    /// PRESERVA os contadores (nao houve resultado da Focus, entao nao ha o que zerar nem o que somar). IntervencaoManual continua terminal.
+    /// O motivo comeca pelo que importa, porque o store corta UltimaDecisao pelo fim.
+    /// </summary>
+    public static RecoveryDecision DecidirDivergenciaDeAmbiente(
+        PendenciaSituacao pendencia,
+        AvaliacaoAmbiente avaliacao,
+        DateTimeOffset agora,
+        RecoveryPolicyOptions opcoes)
+    {
+        ArgumentNullException.ThrowIfNull(pendencia);
+        ArgumentNullException.ThrowIfNull(avaliacao);
+        ArgumentNullException.ThrowIfNull(opcoes);
+
+        if (avaliacao.PodeProsseguir)
+        {
+            throw new ArgumentException(
+                "A avaliacao e compativel; esta decisao so existe para ambiente divergente ou desconhecido.", nameof(avaliacao));
+        }
+
+        if (!NfePendenteEstados.EhValido(pendencia.Estado))
+        {
+            throw new ArgumentException(
+                $"Estado de pendencia invalido: '{pendencia.Estado}'.", nameof(pendencia));
+        }
+
+        if (pendencia.Estado == NfePendenteEstados.IntervencaoManual)
+        {
+            return new RecoveryDecision(
+                RecoveryAction.IntervencaoManual,
+                NfePendenteEstados.IntervencaoManual,
+                null,
+                pendencia.FalhasTransitoriasSeguidas,
+                pendencia.FalhasDesconhecidasSeguidas,
+                "Ja esta em intervencao manual; a politica nao sai desse estado sozinha.");
+        }
+
+        var motivo = avaliacao.Resultado == ResultadoAmbiente.Desconhecido
+            ? $"AmbienteDesconhecido: {avaliacao.Descricao}. Nenhuma chamada a Focus; classificar manualmente o ambiente de origem (CriadaEmProducao)."
+            : $"AmbienteDivergente: {avaliacao.Descricao}. Nenhuma chamada a Focus; so retoma quando a guarda confirmar o mesmo ambiente.";
+
+        return new RecoveryDecision(
+            RecoveryAction.AguardarCorrecao,
+            NfePendenteEstados.AguardandoCorrecao,
+            agora + opcoes.EsperaAguardandoCorrecao,
+            pendencia.FalhasTransitoriasSeguidas,
+            pendencia.FalhasDesconhecidasSeguidas,
+            motivo);
+    }
 }
