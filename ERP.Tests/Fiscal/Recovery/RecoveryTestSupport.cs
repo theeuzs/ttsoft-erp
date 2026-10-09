@@ -1,10 +1,12 @@
 using ERP.Application.Fiscal.Focus;
 using ERP.Application.Fiscal.Recovery;
+using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Domain.Interfaces;
 using ERP.Persistence.Context;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Moq;
 
 namespace ERP.Tests.Fiscal;
@@ -76,6 +78,20 @@ internal sealed class RecoveryAmbiente : IDisposable
             .Options;
 
         return new AppDbContext(options, new ERP.Tests.FakeRequestTenant { TenantId = tenantId });
+    }
+
+    /// <summary>
+    /// Mesmo banco e mesmo NoTracking, mas com o IRequestTenant do ESCOPO (o que a aplicacao faz): o AppDbContext copia o tenant UMA vez,
+    /// quando e construido. Serve para provar a ordem "tenant ANTES de resolver" do worker da recuperacao.
+    /// </summary>
+    public AppDbContext NovoContexto(IRequestTenant tenant)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(_conexao)
+            .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
+            .Options;
+
+        return new AppDbContext(options, tenant);
     }
 
     public Guid Semear(Action<NfePendente>? ajustar = null, string tipoNota = "NFCE", DateTime? dataFalha = null)
@@ -298,4 +314,20 @@ internal sealed class FocusRoteirizado : IFocusReferenceClient
                 throw new InvalidOperationException("Item de roteiro invalido.");
         }
     }
+}
+
+/// <summary>Logger que guarda as mensagens (ja formatadas), para os testes poderem conferir o que foi logado.</summary>
+internal sealed class LoggerQueCaptura<T> : ILogger<T>
+{
+    public List<(LogLevel Nivel, string Mensagem)> Entradas { get; } = new();
+
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+        Entradas.Add((logLevel, formatter(state, exception)));
+
+    public int Avisos(string trecho) =>
+        Entradas.Count(e => e.Nivel == LogLevel.Warning && e.Mensagem.Contains(trecho, StringComparison.Ordinal));
 }

@@ -289,6 +289,10 @@ builder.Services.AddHttpClient<IFocusNfeHttpClient, ERP.Infrastructure.HttpClien
 // inicia; o interruptor e o HostedService so existem na 4A-6. Ver ERP.Api/Extensions/FiscalRecoveryServiceCollectionExtensions.cs.
 ERP.Api.Extensions.FiscalRecoveryServiceCollectionExtensions.AddFiscalRecovery(builder.Services);
 
+// Etapa 4 (4A-6b): o worker da recuperacao fiscal. REGISTRADO, mas INERTE: com FiscalRecovery__TenantsHabilitados vazia (o padrao), cada
+// ciclo so registra o batimento e retorna: sem escopo, sem banco, sem Focus. Mantenha a lista VAZIA ate a ativacao ser aprovada.
+ERP.Api.Extensions.FiscalRecoveryServiceCollectionExtensions.AddFiscalRecoveryWorker(builder.Services);
+
 // ── FluentValidation ──────────────────────────────────────────────────────────
 builder.Services.AddValidatorsFromAssemblyContaining<ERP.Application.Validators.CreateProductValidator>();
 

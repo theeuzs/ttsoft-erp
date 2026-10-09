@@ -1,5 +1,7 @@
 using ERP.Application.DTOs.FocusNfe;
+using ERP.Application.Fiscal.Recovery;
 using ERP.Application.Interfaces;
+using ERP.Domain.Entities;
 using ERP.Persistence.Context;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -31,6 +33,12 @@ public class NfeContingencyHostedService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<NfeContingencyHostedService> _logger;
     private static readonly TimeSpan IntervaloEntreCiclos = TimeSpan.FromMinutes(2);
+
+    // 4A-6b (K4): quando este worker deixa NFC-e "para a recuperacao", so avisa se o worker novo NAO deu sinal de vida recentemente.
+    private static readonly TimeSpan JanelaDoBatimentoDaRecuperacao = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan CarenciaAposInicio = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan IntervaloEntreAvisos = TimeSpan.FromMinutes(30);
+    private DateTimeOffset _ultimoAvisoSemWorkerDaRecuperacao = DateTimeOffset.MinValue;
 
     public NfeContingencyHostedService(IServiceScopeFactory scopeFactory, ILogger<NfeContingencyHostedService> logger)
     {
@@ -81,6 +89,8 @@ public class NfeContingencyHostedService : BackgroundService
 
     internal async Task ProcessarTodosOsTenantsAsync(CancellationToken ct)
     {
+        ValidarInterruptorDaRecuperacao();
+
         var tenantIds = await ObterTenantsComNotasPendentesAsync(ct);
         if (tenantIds.Count == 0) return;
 
@@ -101,6 +111,98 @@ public class NfeContingencyHostedService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// 4A-6a: constroi o interruptor da recuperacao fiscal NO PRIMEIRO CICLO (logo ao subir), e nao so quando aparece a primeira pendencia.
+    /// E aqui que uma configuracao invalida e registrada no log como erro. Singleton: nos ciclos seguintes e so uma consulta ao container.
+    /// Nunca lanca: se nao for possivel, o cuidado com as NFC-e continua em SelecionarPendentesDoWorkerAntigo (em duvida, NFC-e de fora).
+    /// </summary>
+    private void ValidarInterruptorDaRecuperacao()
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            _ = scope.ServiceProvider.GetService<IFiscalRecoverySwitch>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "NfeContingencyHostedService: nao foi possivel inicializar o interruptor da recuperacao fiscal; em duvida, as NFC-e ficam de fora de cada ciclo.");
+        }
+    }
+
+    /// <summary>
+    /// 4A-6a: o que ESTE worker (o antigo) ainda pode processar numa fila que a recuperacao nova tambem enxerga.
+    ///  1) Linha em IntervencaoManual: NUNCA, com o interruptor ligado ou desligado. E o estado terminal: so uma pessoa tira dali.
+    ///  2) NFC-e de um tenant em que a recuperacao esta habilitada: nao toca (e a recuperacao que cuida, GET antes de qualquer POST).
+    ///  3) Em duvida (resolver ou consultar o interruptor lancou excecao): NAO toca em NFC-e neste ciclo. Atrasa 2 minutos, mas nunca
+    ///     arrisca um segundo POST nem desfaz a terminalidade. NF-e nunca depende do interruptor.
+    /// Tenant nao habilitado (ou interruptor ausente/vazio/invalido): tudo como sempre, exceto o item 1.
+    /// </summary>
+    internal static (IReadOnlyList<NfePendente> Selecionadas, int NfceDeixadas) SelecionarPendentesDoWorkerAntigo(
+        IEnumerable<NfePendente> pendentes, Guid tenantId, Func<IFiscalRecoverySwitch?> obterInterruptor, ILogger logger)
+    {
+        bool? recuperacaoCuidaDasNfce;   // true = a recuperacao cuida; false = nao cuida; null = nao foi possivel saber
+        try
+        {
+            recuperacaoCuidaDasNfce = obterInterruptor()?.EstaHabilitadoPara(tenantId) ?? false;
+        }
+        catch (Exception ex)
+        {
+            recuperacaoCuidaDasNfce = null;
+            logger.LogError(ex, "NfeContingencyHostedService: nao foi possivel consultar o interruptor da recuperacao fiscal para o tenant {TenantId}; as NFC-e ficam de fora deste ciclo.", tenantId);
+        }
+
+        var selecionadas = new List<NfePendente>();
+        var deixadasNfce = 0;
+
+        foreach (var nota in pendentes)
+        {
+            if (nota.Estado == NfePendenteEstados.IntervencaoManual)
+                continue;
+
+            if (nota.TipoNota == "NFCE" && recuperacaoCuidaDasNfce != false)
+            {
+                deixadasNfce++;
+                continue;
+            }
+
+            selecionadas.Add(nota);
+        }
+
+        if (deixadasNfce > 0)
+            logger.LogDebug("NfeContingencyHostedService: tenant {TenantId}: {Quantidade} NFC-e deixada(s) para a recuperacao fiscal.", tenantId, deixadasNfce);
+
+        return (selecionadas, deixadasNfce);
+    }
+
+    /// <summary>
+    /// 4A-6b (K4): este worker deixou NFC-e de fora porque a recuperacao deveria cuidar delas. Se o worker da recuperacao NAO deu sinal de
+    /// vida recentemente (nem esta na carencia de uma subida), ninguem esta processando essas notas: avisa, no maximo a cada 30 minutos.
+    /// Nunca lanca.
+    /// </summary>
+    private void AvisarSeNaoHaWorkerDaRecuperacao(IServiceProvider servicos, Guid tenantId, int quantidade)
+    {
+        try
+        {
+            var batimento = servicos.GetService<IFiscalRecoveryHeartbeat>();
+            if (batimento is not null && batimento.HaBatimentoRecente(JanelaDoBatimentoDaRecuperacao, CarenciaAposInicio))
+                return;
+
+            var agora = DateTimeOffset.UtcNow;
+            if (agora - _ultimoAvisoSemWorkerDaRecuperacao < IntervaloEntreAvisos)
+                return;
+
+            _ultimoAvisoSemWorkerDaRecuperacao = agora;
+            _logger.LogWarning(
+                "Recuperacao fiscal: o tenant {TenantId} tem {Quantidade} NFC-e deixada(s) de fora do worker antigo, mas o worker da recuperacao NAO deu sinal de vida recentemente. " +
+                "Se a recuperacao deveria estar ativa, ninguem esta processando essas notas; se nao deveria, esvazie FiscalRecovery__TenantsHabilitados.",
+                tenantId, quantidade);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "NfeContingencyHostedService: falha ao verificar o batimento da recuperacao fiscal.");
+        }
+    }
+
     internal async Task ProcessarTenantAsync(Guid tenantId, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -111,8 +213,15 @@ public class NfeContingencyHostedService : BackgroundService
         requestTenant.TenantId = tenantId;
 
         var contingencyService = scope.ServiceProvider.GetRequiredService<INfeContingencyService>();
-        var pendentes = await contingencyService.ObterNotasPendentesAsync();
-        if (!pendentes.Any()) return;
+        var todas = await contingencyService.ObterNotasPendentesAsync();
+        if (!todas.Any()) return;
+
+        // 4A-6a (corte da recuperacao fiscal): este worker NAO e mais dono de tudo o que esta na fila.
+        // O interruptor e opcional (se nao estiver registrado, nenhum tenant esta habilitado: comportamento de sempre).
+        var (pendentes, nfceDeixadas) = SelecionarPendentesDoWorkerAntigo(todas, tenantId, () => scope.ServiceProvider.GetService<IFiscalRecoverySwitch>(), _logger);
+        if (nfceDeixadas > 0)
+            AvisarSeNaoHaWorkerDaRecuperacao(scope.ServiceProvider, tenantId, nfceDeixadas);
+        if (pendentes.Count == 0) return;
 
         // Achado real (26/09, Etapa 2) — VerificarConexaoSefazAsync() faz um
         // ping ICMP puro (8.8.8.8), e o Azure App Service bloqueia ICMP de
@@ -135,7 +244,7 @@ public class NfeContingencyHostedService : BackgroundService
 
         if (string.IsNullOrWhiteSpace(config.TokenFocusNfe))
         {
-            _logger.LogWarning("NfeContingencyHostedService: tenant {TenantId} sem token Focus configurado — {Count} nota(s) pendente(s) não puderam ser tentadas.", tenantId, pendentes.Count());
+            _logger.LogWarning("NfeContingencyHostedService: tenant {TenantId} sem token Focus configurado — {Count} nota(s) pendente(s) não puderam ser tentadas.", tenantId, pendentes.Count);
             return;
         }
 

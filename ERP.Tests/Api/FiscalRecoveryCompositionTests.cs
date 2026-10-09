@@ -113,15 +113,17 @@ public class FiscalRecoveryCompositionTests : IClassFixture<ErpApiFactory>
         contador.Chamadas.Should().Be(1);
     }
 
-    [Fact(DisplayName = "Na aplicacao INTEIRA nenhum hosted service e da recuperacao; os workers fiscais existentes continuam registrados; D8 desligada e K = 3")]
+    [Fact(DisplayName = "Na aplicacao INTEIRA ha exatamente UM worker da recuperacao (4A-6b), inerte; os workers fiscais existentes continuam registrados; D8 desligada e K = 3")]
     public void ComposicaoReal_Inerte_EOpcoesComPadroes()
     {
         var hostedServices = _factory.Services.GetServices<IHostedService>().Select(h => h.GetType()).ToList();
 
         hostedServices.Should().Contain(typeof(NfeContingencyHostedService), "o worker antigo continua registrado e e quem trabalha hoje");
         hostedServices.Should().Contain(typeof(NfeStatusReconciliationHostedService));
-        hostedServices.Where(t => t.Namespace is not null && t.Namespace.Contains("Recovery", StringComparison.OrdinalIgnoreCase))
-            .Should().BeEmpty("a recuperacao nao tem worker: o HostedService e o interruptor so existem na 4A-6");
+        hostedServices.Count(t => t == typeof(NfeRecoveryHostedService))
+            .Should().Be(1, "4A-6b: exatamente UM worker da recuperacao, registrado pelo Program.cs e inerte (a lista de tenants esta vazia)");
+        _factory.Services.GetRequiredService<IFiscalRecoverySwitch>().TenantsHabilitados
+            .Should().BeEmpty("inerte por construcao: sem tenants habilitados o worker nao abre escopo, nao consulta o banco e nao chama a Focus");
 
         var opcoes = _factory.Services.GetRequiredService<RecoveryPolicyOptions>();
         opcoes.PermitirRegeneracaoDataEmissao.Should().BeFalse("a D8 so liga depois que o contador aprovar o limite N");
