@@ -100,7 +100,7 @@ public sealed class NfePendenteRecoveryAmbienteTests
         var r = await c.CicloAsync();
 
         c.Focus.Chamadas.Should().BeEmpty();
-        r.AmbienteDivergente.Should().Be(1);
+        r.BloqueadasPorAmbiente.Should().Be(1);
         r.ErrosDeProcessamento.Should().Be(0, "a divergencia nao e erro de processamento");
         r.FalhasDePersistencia.Should().Be(0);
         r.Autorizadas.Should().Be(0);
@@ -125,7 +125,7 @@ public sealed class NfePendenteRecoveryAmbienteTests
         var r = await c.CicloAsync();
 
         c.Focus.Chamadas.Should().BeEmpty();
-        r.AmbienteDivergente.Should().Be(1);
+        r.BloqueadasPorAmbiente.Should().Be(1);
         FoiBloqueada(c, id, "AmbienteDivergente:");
         c.Amb.Ler(id).UltimaDecisao.Should().Contain("pendencia criada em Producao").And.Contain("configurado agora: Homologacao");
     }
@@ -143,7 +143,7 @@ public sealed class NfePendenteRecoveryAmbienteTests
 
         c.Focus.Chamadas.Should().ContainSingle().Which.IsProducao.Should().Be(producao);
         r.Autorizadas.Should().Be(1);
-        r.AmbienteDivergente.Should().Be(0);
+        r.BloqueadasPorAmbiente.Should().Be(0);
         c.Ambiente.Leituras.Should().Be(1, "uma leitura imediatamente antes do unico GET");
     }
 
@@ -156,7 +156,7 @@ public sealed class NfePendenteRecoveryAmbienteTests
         var r = await c.CicloAsync();
 
         c.Focus.Chamadas.Should().BeEmpty();
-        r.AmbienteDivergente.Should().Be(1);
+        r.BloqueadasPorAmbiente.Should().Be(1);
         FoiBloqueada(c, id, "AmbienteDesconhecido:");
         c.Amb.Ler(id).UltimaDecisao.Should().Contain("classificar manualmente");
     }
@@ -176,7 +176,7 @@ public sealed class NfePendenteRecoveryAmbienteTests
         var r = await c.CicloAsync();
 
         c.Metodos.Should().Equal("GET");
-        r.AmbienteDivergente.Should().Be(1);
+        r.BloqueadasPorAmbiente.Should().Be(1);
         c.Ambiente.Leituras.Should().Be(2, "antes do GET e antes de regenerar");
         FoiBloqueada(c, id, "AmbienteDivergente:");
 
@@ -197,7 +197,7 @@ public sealed class NfePendenteRecoveryAmbienteTests
 
         c.Metodos.Should().Equal("GET");
         c.Focus.Chamadas.Should().NotContain(x => x.Metodo == "POST");
-        r.AmbienteDivergente.Should().Be(1);
+        r.BloqueadasPorAmbiente.Should().Be(1);
         r.Autorizadas.Should().Be(0);
         c.Ambiente.Leituras.Should().Be(3, "GET, pre-voo da regeneracao e POST: uma leitura nova para cada");
         c.Fiscal.Verify(QualquerPersistir(), Times.Never());
@@ -225,7 +225,7 @@ public sealed class NfePendenteRecoveryAmbienteTests
 
         c.Metodos.Should().Equal("GET", "POST");   // o segundo GET (reconciliacao) NAO saiu
         r.Autorizadas.Should().Be(0);
-        r.AmbienteDivergente.Should().Be(1);
+        r.BloqueadasPorAmbiente.Should().Be(1);
         c.Ambiente.Leituras.Should().Be(4, "GET, pre-voo, POST e GET da reconciliacao");
         c.Amb.Ler(id).TentativasPost.Should().Be(1, "o POST que realmente saiu e contado");
         c.Amb.Ler(id).Estado.Should().Be(NfePendenteEstados.AguardandoCorrecao);
@@ -255,7 +255,7 @@ public sealed class NfePendenteRecoveryAmbienteTests
         var r = await c.CicloAsync();
 
         c.Focus.Chamadas.Should().BeEmpty("uma comparacao de dois valores deixaria passar este caso e chamaria a PRODUCAO");
-        r.AmbienteDivergente.Should().Be(1);
+        r.BloqueadasPorAmbiente.Should().Be(1);
         FoiBloqueada(c, id, "AmbienteDivergente:");
         c.Amb.Ler(id).UltimaDecisao.Should().Contain("a chamada usaria Producao");
     }
@@ -273,7 +273,7 @@ public sealed class NfePendenteRecoveryAmbienteTests
         var r = await c.CicloAsync();
 
         c.Focus.Chamadas.Should().BeEmpty();
-        r.AmbienteDivergente.Should().Be(1);
+        r.BloqueadasPorAmbiente.Should().Be(1);
         r.ErrosDeProcessamento.Should().Be(0);
         r.FalhasDePersistencia.Should().Be(0);
         FoiBloqueada(c, id, "AmbienteIndeterminado:");
@@ -294,7 +294,7 @@ public sealed class NfePendenteRecoveryAmbienteTests
         var r = await c.CicloAsync();
 
         c.Metodos.Should().Equal("GET");
-        r.AmbienteDivergente.Should().Be(1);
+        r.BloqueadasPorAmbiente.Should().Be(1);
         c.Amb.Ler(id).UltimaDecisao.Should().Contain("AmbienteIndeterminado:");
     }
 
@@ -346,7 +346,7 @@ public sealed class NfePendenteRecoveryAmbienteTests
 
         c.Focus.Chamadas.Should().ContainSingle().Which.Referencia.Should().Be(refCompativel);
         r.Autorizadas.Should().Be(1);
-        r.AmbienteDivergente.Should().Be(1);
+        r.BloqueadasPorAmbiente.Should().Be(1);
         c.Amb.Visivel(compativel).Should().BeFalse("a compativel foi autorizada e removida");
         c.Amb.Ler(divergente).Estado.Should().Be(NfePendenteEstados.AguardandoCorrecao);
     }
@@ -357,7 +357,7 @@ public sealed class NfePendenteRecoveryAmbienteTests
         using var c = new Cenario();   // configuracao e chamada em producao; a pendencia nasceu em homologacao
         var id = c.Amb.Semear(n => n.CriadaEmProducao = false);
 
-        (await c.CicloAsync()).AmbienteDivergente.Should().Be(1);
+        (await c.CicloAsync()).BloqueadasPorAmbiente.Should().Be(1);
         c.Focus.Chamadas.Should().BeEmpty();
 
         // O ambiente volta a bater, mas a agenda ainda nao venceu: nada acontece.
@@ -390,7 +390,7 @@ public sealed class NfePendenteRecoveryAmbienteTests
 
         c.Focus.Chamadas.Should().BeEmpty();
         r.Elegiveis.Should().Be(1);
-        r.AmbienteDivergente.Should().Be(1);
+        r.BloqueadasPorAmbiente.Should().Be(1);
         c.Amb.Ler(id).ProximaTentativaEm.Should().Be(new DateTime(2026, 10, 8, 16, 1, 0));
     }
 }

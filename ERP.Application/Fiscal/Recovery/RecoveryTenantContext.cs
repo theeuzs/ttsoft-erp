@@ -54,8 +54,12 @@ public sealed class RecoveryCycleResult
     public int FalhasDePersistencia { get; set; }
 
     /// <summary>
-    /// Trava de ambiente: a pendencia NAO foi consultada nem reenviada porque o ambiente de origem e divergente, desconhecido ou a
-    /// configuracao nao pode ser lida. Nenhuma chamada a Focus foi feita; foi para AguardandoCorrecao.
+    /// Trava de ambiente: quantas pendencias foram BLOQUEADAS pela guarda de ambiente neste ciclo. A guarda atua antes de cada chamada a Focus
+    /// (consulta, regeneracao, envio): se o bloqueio ocorrer numa etapa posterior, uma consulta anterior do MESMO ciclo pode ter acontecido.
+    /// Nenhuma chamada a Focus e feita DEPOIS do bloqueio; a pendencia vai para AguardandoCorrecao. Conta os TRES tipos de bloqueio (origem
+    /// divergente, origem desconhecida e configuracao ilegivel); para distingui-los, ver o texto de UltimaDecisao (AmbienteDivergente:,
+    /// AmbienteDesconhecido:, AmbienteIndeterminado:). Para uma pendencia bloqueada ja na PRIMEIRA chamada (origem divergente ou desconhecida), nao houve
+    /// nenhuma chamada no ciclo.
     /// </summary>
-    public int AmbienteDivergente { get; set; }
+    public int BloqueadasPorAmbiente { get; set; }
 }

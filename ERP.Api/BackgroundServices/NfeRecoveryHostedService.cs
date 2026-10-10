@@ -171,7 +171,7 @@ public class NfeRecoveryHostedService : BackgroundService
     private void RegistrarResumo(Guid tenantId, bool emProducao, RecoveryCycleResult r)
     {
         var atividade = r.Autorizadas + r.Rejeitadas + r.Agendadas + r.AguardandoCorrecao + r.IntervencaoManual
-                      + r.Ignoradas + r.ErrosDeProcessamento + r.FalhasDePersistencia + r.AmbienteDivergente;
+                      + r.Ignoradas + r.ErrosDeProcessamento + r.FalhasDePersistencia + r.BloqueadasPorAmbiente;
 
         if (atividade == 0)
             return;
@@ -179,17 +179,17 @@ public class NfeRecoveryHostedService : BackgroundService
         _logger.LogInformation(
             "Recuperacao fiscal: tenant {TenantId} ({Ambiente}): {Elegiveis} elegivel(is), {Autorizadas} autorizada(s), {Rejeitadas} rejeitada(s), " +
             "{Agendadas} agendada(s), {AguardandoCorrecao} aguardando correcao, {IntervencaoManual} em intervencao manual, {Ignoradas} ignorada(s), " +
-            "{Erros} erro(s) de processamento, {FalhasPersistencia} falha(s) de persistencia, {AmbienteDivergente} bloqueada(s) por ambiente.",
+            "{Erros} erro(s) de processamento, {FalhasPersistencia} falha(s) de persistencia, {BloqueadasPorAmbiente} bloqueada(s) por ambiente.",
             tenantId, emProducao ? "PRODUCAO" : "homologacao", r.Elegiveis, r.Autorizadas, r.Rejeitadas, r.Agendadas,
-            r.AguardandoCorrecao, r.IntervencaoManual, r.Ignoradas, r.ErrosDeProcessamento, r.FalhasDePersistencia, r.AmbienteDivergente);
+            r.AguardandoCorrecao, r.IntervencaoManual, r.Ignoradas, r.ErrosDeProcessamento, r.FalhasDePersistencia, r.BloqueadasPorAmbiente);
 
-        if (r.IntervencaoManual + r.ErrosDeProcessamento + r.FalhasDePersistencia + r.AmbienteDivergente > 0 && DeveAlertar(tenantId))
+        if (r.IntervencaoManual + r.ErrosDeProcessamento + r.FalhasDePersistencia + r.BloqueadasPorAmbiente > 0 && DeveAlertar(tenantId))
         {
             _logger.LogWarning(
                 "Recuperacao fiscal: ATENCAO no tenant {TenantId}: {IntervencaoManual} pendencia(s) em intervencao manual, " +
-                "{Erros} erro(s) de processamento, {FalhasPersistencia} falha(s) de persistencia e {AmbienteDivergente} pendencia(s) bloqueada(s) " +
+                "{Erros} erro(s) de processamento, {FalhasPersistencia} falha(s) de persistencia e {BloqueadasPorAmbiente} pendencia(s) bloqueada(s) " +
                 "por ambiente incompativel neste ciclo. Revise a fila de pendencias fiscais.",
-                tenantId, r.IntervencaoManual, r.ErrosDeProcessamento, r.FalhasDePersistencia, r.AmbienteDivergente);
+                tenantId, r.IntervencaoManual, r.ErrosDeProcessamento, r.FalhasDePersistencia, r.BloqueadasPorAmbiente);
         }
     }
 

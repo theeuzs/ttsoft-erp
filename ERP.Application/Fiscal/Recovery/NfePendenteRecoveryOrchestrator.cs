@@ -5,6 +5,7 @@ using ERP.Application.Interfaces;
 using ERP.Domain.Common;
 using ERP.Domain.Entities;
 using Serilog;
+using Serilog.Context;
 
 namespace ERP.Application.Fiscal.Recovery;
 
@@ -97,6 +98,9 @@ public sealed class NfePendenteRecoveryOrchestrator
     {
         var e = new Execucao(pendencia, contexto, resultado, ct);
 
+        // Correlacao (observabilidade): todo log desta pendencia, inclusive o das tentativas do cliente da Focus, herda o PendenciaId.
+        using var correlacao = LogContext.PushProperty("PendenciaId", pendencia.Id);
+
         try
         {
             await ProcessarPendenciaAsync(e);
@@ -144,7 +148,7 @@ public sealed class NfePendenteRecoveryOrchestrator
             var decisao = RecoveryPolicy.DecidirDivergenciaDeAmbiente(e.Situacao, avaliacao, _relogio(), _opcoes);
 
             if (await AplicarAsync(e, ComNota(e, decisao)))
-                e.Resultado.AmbienteDivergente++;
+                e.Resultado.BloqueadasPorAmbiente++;
             else
                 e.Resultado.Ignoradas++;
         }

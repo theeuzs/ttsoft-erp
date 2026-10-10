@@ -375,3 +375,33 @@ internal sealed class AmbienteLido
     /// <summary>Contexto "normal": o ambiente da chamada e o configurado agora sao o mesmo e nao mudam.</summary>
     public static RecoveryTenantContext Fixo(string token, bool producao) => new AmbienteLido(producao).Contexto(token, producao);
 }
+
+/// <summary>
+/// Logger que guarda o ESTADO ESTRUTURADO de cada entrada (template original + propriedades), para testes de CONTRATO dos nomes das propriedades
+/// e de vazamento de dados sensiveis. LoggerQueCaptura guarda so a mensagem ja formatada.
+/// </summary>
+internal sealed class LoggerQueCapturaEstado<T> : ILogger<T>
+{
+    public sealed record Entrada(LogLevel Nivel, string Template, string Mensagem, IReadOnlyDictionary<string, object?> Propriedades);
+
+    public List<Entrada> Entradas { get; } = new();
+
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    {
+        var propriedades = new Dictionary<string, object?>();
+        if (state is IEnumerable<KeyValuePair<string, object?>> pares)
+        {
+            foreach (var par in pares)
+                propriedades[par.Key] = par.Value;
+        }
+
+        var template = propriedades.TryGetValue("{OriginalFormat}", out var original) ? original?.ToString() ?? string.Empty : string.Empty;
+        propriedades.Remove("{OriginalFormat}");
+
+        Entradas.Add(new Entrada(logLevel, template, formatter(state, exception), propriedades));
+    }
+}

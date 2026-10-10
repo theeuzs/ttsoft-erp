@@ -448,4 +448,36 @@ public class NfeRecoveryHostedServiceTests : IDisposable
         bloqueada.UltimaDecisao.Should().StartWith("AmbienteIndeterminado:");
         bloqueada.TentativasConsulta.Should().Be(0);
     }
+
+    [Fact(DisplayName = "CONTRATO DO LOG: o resumo do ciclo e o alerta emitem EXATAMENTE as propriedades estruturadas que o roteiro do piloto usa (inclusive BloqueadasPorAmbiente)")]
+    public async Task Contrato_NomesDasPropriedadesDoResumoEDoAlerta()
+    {
+        var a = Guid.NewGuid();
+        Construir(Configs((a, "token-A")));
+        Semear(a, criadaEmProducao: true);                       // nasceu em producao, o tenant esta em homologacao: bloqueada
+        var logger = new LoggerQueCapturaEstado<NfeRecoveryHostedService>();
+        var worker = NovoWorker(new FiscalRecoverySwitch(a.ToString()), logger: logger);
+
+        await worker.ExecutarCicloAsync(CancellationToken.None);
+
+        var resumo = logger.Entradas.Single(e => e.Template.StartsWith("Recuperacao fiscal: tenant"));
+        resumo.Propriedades.Keys.Should().BeEquivalentTo(new[]
+        {
+            "TenantId", "Ambiente", "Elegiveis", "Autorizadas", "Rejeitadas", "Agendadas", "AguardandoCorrecao",
+            "IntervencaoManual", "Ignoradas", "Erros", "FalhasPersistencia", "BloqueadasPorAmbiente"
+        });
+        resumo.Propriedades["TenantId"].Should().Be(a);
+        resumo.Propriedades["Ambiente"].Should().Be("homologacao");
+        resumo.Propriedades["Elegiveis"].Should().Be(1);
+        resumo.Propriedades["BloqueadasPorAmbiente"].Should().Be(1);
+        resumo.Propriedades["Erros"].Should().Be(0);
+        resumo.Propriedades["FalhasPersistencia"].Should().Be(0);
+
+        var alerta = logger.Entradas.Single(e => e.Template.StartsWith("Recuperacao fiscal: ATENCAO"));
+        alerta.Nivel.Should().Be(LogLevel.Warning);
+        alerta.Propriedades.Keys.Should().BeEquivalentTo(new[]
+        {
+            "TenantId", "IntervencaoManual", "Erros", "FalhasPersistencia", "BloqueadasPorAmbiente"
+        });
+    }
 }
