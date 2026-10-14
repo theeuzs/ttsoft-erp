@@ -453,6 +453,12 @@ builder.Services.AddHealthChecks()
 // ── Controllers + Swagger ─────────────────────────────────────────────────────
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IRequestTenant, RequestTenant>();
+
+// S{N} FIX: Theuzs e-commerce - canal somente leitura, autenticado por X-Theuzs-Key (ver ERP.Api/Ecommerce).
+builder.Services.Configure<ERP.Api.Ecommerce.EcommerceOptions>(
+    builder.Configuration.GetSection(ERP.Api.Ecommerce.EcommerceOptions.Secao));
+builder.Services.AddScoped<ERP.Api.Ecommerce.EcommerceApiKeyFilter>();
+builder.Services.AddScoped<ERP.Api.Ecommerce.EcommerceCatalogService>();
 builder.Services.AddControllers()
     .AddJsonOptions(opt =>
         opt.JsonSerializerOptions.Converters.Add(
