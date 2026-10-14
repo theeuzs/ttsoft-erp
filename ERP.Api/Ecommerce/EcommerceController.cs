@@ -47,4 +47,19 @@ public sealed class EcommerceController : ControllerBase
         var resultado = await _catalogo.ConsultarAsync(itens, ct);
         return Ok(new ConsultaCatalogoResponse(DateTimeOffset.UtcNow, resultado));
     }
+
+    /// <summary>
+    /// S{N} FIX: busca para o painel do site adicionar produto: codigo exato (SKU ou codigo de barras) ou palavras do nome.
+    /// Ex.: GET /api/ecommerce/v1/produtos/buscar?q=5706915058772  ou  ?q=alicate irwin
+    /// </summary>
+    [HttpGet("produtos/buscar")]
+    public async Task<ActionResult<BuscaProdutosResponse>> Buscar([FromQuery] string? q, CancellationToken ct)
+    {
+        var termo = (q ?? string.Empty).Trim();
+        if (termo.Length < 2 || termo.Length > 80)
+            return BadRequest("Informe de 2 a 80 caracteres.");
+
+        var itens = await _catalogo.BuscarAsync(termo, 20, ct);
+        return Ok(new BuscaProdutosResponse(DateTimeOffset.UtcNow, itens));
+    }
 }

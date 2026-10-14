@@ -17,7 +17,7 @@ namespace ERP.Api.Ecommerce;
 //  3. Piso de preco: preco >= repasse x (1 + MargemMinimaPercentual) por unidade, e
 //     (preco - repasse) x quantidade >= MargemMinimaReais por linha (permite caixa com 10 lampadas).
 //  4. Produto filho: estoque real fica no pai (ver Product.ParentProductId) => vendavel = estoque do pai / ConversionFactor.
-//  5. Custo e repasse nunca saem deste servico.
+//  5. Custo e repasse nunca saem deste servico. A busca do painel devolve so o PISO de venda (BuscarAsync).
 public sealed class EcommerceCatalogService
 {
     private readonly AppDbContext _ctx;
@@ -147,12 +147,118 @@ public sealed class EcommerceCatalogService
         return resposta;
     }
 
-    private static decimal CustoEfetivo(ProdutoLinha p)
-    {
-        var proprio = p.CostPrice > 0 ? p.CostPrice : p.OriginalCost;
-        if (proprio > 0 || !p.EhFilho) return proprio;
+    private static decimal CustoEfetivo(ProdutoLinha p) =>
+        CustoEfetivo(p.CostPrice, p.OriginalCost, p.EhFilho, p.ConversionFactor, p.CostPricePai, p.OriginalCostPai);
 
-        var custoPai = (p.CostPricePai ?? 0m) > 0 ? p.CostPricePai!.Value : (p.OriginalCostPai ?? 0m);
-        return custoPai * p.ConversionFactor;
+    private static decimal CustoEfetivo(decimal costPrice, decimal originalCost, bool ehFilho, decimal conversionFactor,
+        decimal? costPricePai, decimal? originalCostPai)
+    {
+        var proprio = costPrice > 0 ? costPrice : originalCost;
+        if (proprio > 0 || !ehFilho) return proprio;
+
+        var custoPai = (costPricePai ?? 0m) > 0 ? costPricePai!.Value : (originalCostPai ?? 0m);
+        return custoPai * conversionFactor;
+    }
+
+    // -------------------------------------------------------------------------------------------------
+    // S{N} FIX: busca do painel do site (adicionar produto). Somente leitura, mesmo tenant fixo da configuracao.
+    // -------------------------------------------------------------------------------------------------
+    private sealed record ProdutoBuscaLinha(
+        string? Sku,
+        string? Barcode,
+        string Nome,
+        string? Descricao,
+        string? ImagemUrl,
+        string? Categoria,
+        string? Marca,
+        string Unidade,
+        decimal SalePrice,
+        decimal Estoque,
+        decimal CostPrice,
+        decimal OriginalCost,
+        bool EhFilho,
+        decimal ConversionFactor,
+        decimal? EstoquePai,
+        decimal? CostPricePai,
+        decimal? OriginalCostPai);
+
+    public async Task<List<ProdutoBuscaResposta>> BuscarAsync(string termo, int limite, CancellationToken ct)
+    {
+        termo = termo.Trim();
+        var ativos = _ctx.Products
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(p => p.TenantId == _opt.TenantId && !p.IsDeleted && p.IsActive);
+
+        // 1) Codigo exato: SKU interno ou codigo de barras.
+        var exatos = await Projetar(ativos.Where(p => p.SKU == termo || p.Barcode == termo))
+            .Take(limite)
+            .ToListAsync(ct);
+
+        // 2) Nome contendo TODAS as palavras digitadas ("alicate irwin").
+        var porNome = ativos;
+        foreach (var palavra in termo.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(6))
+        {
+            var w = palavra;
+            porNome = porNome.Where(p => p.Name.Contains(w));
+        }
+        var nomes = await Projetar(porNome.OrderBy(p => p.Name))
+            .Take(limite)
+            .ToListAsync(ct);
+
+        return exatos
+            .Concat(nomes)
+            .Where(l => !string.IsNullOrWhiteSpace(l.Sku) || !string.IsNullOrWhiteSpace(l.Barcode)) // sem codigo o site nao consegue consultar
+            .DistinctBy(l => (l.Sku, l.Barcode, l.Nome))
+            .Take(limite)
+            .Select(ParaResposta)
+            .ToList();
+    }
+
+    private static IQueryable<ProdutoBuscaLinha> Projetar(IQueryable<ERP.Domain.Entities.Product> q) =>
+        q.Select(p => new ProdutoBuscaLinha(
+            p.SKU,
+            p.Barcode,
+            p.Name,
+            p.DescricaoDetalhada,
+            p.ImageUrl,
+            p.Category != null ? p.Category.Name : null,
+            p.Brand != null ? p.Brand.Name : null,
+            p.Unit,
+            p.SalePrice,
+            p.Stock,
+            p.CostPrice,
+            p.OriginalCost,
+            p.ParentProductId != null && p.ConversionFactor > 0,
+            p.ConversionFactor,
+            p.ParentProduct != null && !p.ParentProduct.IsDeleted ? (decimal?)p.ParentProduct.Stock : null,
+            p.ParentProduct != null ? (decimal?)p.ParentProduct.CostPrice : null,
+            p.ParentProduct != null ? (decimal?)p.ParentProduct.OriginalCost : null));
+
+    private ProdutoBuscaResposta ParaResposta(ProdutoBuscaLinha l)
+    {
+        var custo = CustoEfetivo(l.CostPrice, l.OriginalCost, l.EhFilho, l.ConversionFactor, l.CostPricePai, l.OriginalCostPai);
+        decimal? piso = null;
+        string? motivo = null;
+
+        if (custo <= 0)
+            motivo = "Custo invalido (CostPrice e OriginalCost zerados)";
+        else if (l.EhFilho && l.EstoquePai is null)
+            motivo = "Produto filho sem produto pai valido";
+        else
+        {
+            // Mesmo piso do ConsultarAsync, para uma unidade: repasse x (1 + %) e repasse + R$ minimo.
+            var repasse = Math.Round(custo * _opt.FatorRepasse, 2, MidpointRounding.AwayFromZero);
+            var minimo = Math.Max(repasse * (1 + _opt.MargemMinimaPercentual), repasse + _opt.MargemMinimaReais);
+            piso = Math.Ceiling(minimo * 100m) / 100m;
+        }
+
+        var estoque = l.EhFilho ? (l.EstoquePai ?? 0m) / l.ConversionFactor : l.Estoque;
+        var vendavel = Math.Max(0, (int)Math.Floor(estoque) - _opt.EstoqueReservaLoja);
+        var codigo = !string.IsNullOrWhiteSpace(l.Sku) ? l.Sku.Trim() : l.Barcode!.Trim();
+
+        return new ProdutoBuscaResposta(
+            codigo, l.Sku, l.Barcode, l.Nome, l.Descricao, l.ImagemUrl, l.Categoria, l.Marca, l.Unidade,
+            l.SalePrice, piso, motivo, vendavel);
     }
 }

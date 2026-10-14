@@ -23,3 +23,25 @@ public sealed record ItemCatalogoResposta(
     string? ImagemUrl,
     bool Disponivel,
     int QuantidadeMaxima);
+
+/// <summary>
+/// S{N} FIX: busca do painel do site (adicionar produto pelo codigo ou nome).
+/// Traz o preco de balcao e o PISO de venda no site (repasse x margem minima), NUNCA o custo.
+/// So o servidor do site recebe isto, e ele so mostra dentro do painel com login.
+/// </summary>
+public sealed record ProdutoBuscaResposta(
+    string Codigo,
+    string? Sku,
+    string? Barcode,
+    string Nome,
+    string? Descricao,
+    string? ImagemUrl,
+    string? Categoria,
+    string? Marca,
+    string Unidade,
+    decimal PrecoLoja,
+    decimal? PrecoMinimo,
+    string? Motivo,
+    int EstoqueVendavel);
+
+public sealed record BuscaProdutosResponse(DateTimeOffset GeradoEm, List<ProdutoBuscaResposta> Itens);
