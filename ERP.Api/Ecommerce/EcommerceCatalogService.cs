@@ -11,7 +11,10 @@ namespace ERP.Api.Ecommerce;
 //  1. Tenant vem de EcommerceOptions.TenantId, nunca da requisicao. IgnoreQueryFilters() + filtro explicito de
 //     TenantId e IsDeleted em TODA consulta (mesmo padrao do CatalogoPublicoService; o IgnoreQueryFilters
 //     tambem desliga o filtro de soft delete).
-//  2. Custo efetivo = CostPrice se > 0, senao OriginalCost (linha Zagonel/Sintex tem CostPrice = 0 na base).
+//  2. S{N} FIX: Custo efetivo = o MESMO "Custo Final Calculado" da tela de produto: OriginalCost x (1 + IPI%).
+//     CostPrice so entra como reserva quando OriginalCost esta zerado. Motivo: a tela de produto e a importacao
+//     por planilha atualizam so o OriginalCost; o CostPrice so muda em NF-e/pedido de compra e fica desatualizado
+//     (ex.: alicate Irwin com OriginalCost 44,38 e CostPrice antigo 31,97 gerava repasse errado).
 //     Produto filho (ParentProductId) sem custo proprio usa custo efetivo do pai x ConversionFactor.
 //     Custo efetivo <= 0 => SKU NAO publicavel (evita vender de graca).
 //  3. Piso de preco: preco >= repasse x (1 + MargemMinimaPercentual) por unidade, e
@@ -40,11 +43,13 @@ public sealed class EcommerceCatalogService
         decimal Estoque,
         decimal CostPrice,
         decimal OriginalCost,
+        decimal IpiPercent,
         bool EhFilho,
         decimal ConversionFactor,
         decimal? EstoquePai,
         decimal? CostPricePai,
-        decimal? OriginalCostPai);
+        decimal? OriginalCostPai,
+        decimal? IpiPercentPai);
 
     public async Task<List<ItemCatalogoResposta>> ConsultarAsync(IReadOnlyList<ItemConsultaCatalogo> itens, CancellationToken ct)
     {
@@ -71,11 +76,13 @@ public sealed class EcommerceCatalogService
                 p.Stock,
                 p.CostPrice,
                 p.OriginalCost,
+                p.IpiPercent,
                 p.ParentProductId != null && p.ConversionFactor > 0,
                 p.ConversionFactor,
                 p.ParentProduct != null && !p.ParentProduct.IsDeleted ? (decimal?)p.ParentProduct.Stock : null,
                 p.ParentProduct != null ? (decimal?)p.ParentProduct.CostPrice : null,
-                p.ParentProduct != null ? (decimal?)p.ParentProduct.OriginalCost : null))
+                p.ParentProduct != null ? (decimal?)p.ParentProduct.OriginalCost : null,
+                p.ParentProduct != null ? (decimal?)p.ParentProduct.IpiPercent : null))
             .ToListAsync(ct);
 
         // O site pode mandar o SKU Interno OU o codigo de barras (no cadastro da loja muitos produtos so tem um dos dois).
@@ -148,15 +155,19 @@ public sealed class EcommerceCatalogService
     }
 
     private static decimal CustoEfetivo(ProdutoLinha p) =>
-        CustoEfetivo(p.CostPrice, p.OriginalCost, p.EhFilho, p.ConversionFactor, p.CostPricePai, p.OriginalCostPai);
+        CustoEfetivo(p.CostPrice, p.OriginalCost, p.IpiPercent, p.EhFilho, p.ConversionFactor, p.CostPricePai, p.OriginalCostPai, p.IpiPercentPai);
 
-    private static decimal CustoEfetivo(decimal costPrice, decimal originalCost, bool ehFilho, decimal conversionFactor,
-        decimal? costPricePai, decimal? originalCostPai)
+    /// <summary>Igual ao "Custo Final Calculado" da tela: custo original + IPI. CostPrice so se o original estiver zerado.</summary>
+    private static decimal CustoDoCadastro(decimal costPrice, decimal originalCost, decimal ipiPercent) =>
+        originalCost > 0 ? Math.Round(originalCost * (1 + ipiPercent / 100m), 4) : costPrice;
+
+    private static decimal CustoEfetivo(decimal costPrice, decimal originalCost, decimal ipiPercent, bool ehFilho, decimal conversionFactor,
+        decimal? costPricePai, decimal? originalCostPai, decimal? ipiPercentPai)
     {
-        var proprio = costPrice > 0 ? costPrice : originalCost;
+        var proprio = CustoDoCadastro(costPrice, originalCost, ipiPercent);
         if (proprio > 0 || !ehFilho) return proprio;
 
-        var custoPai = (costPricePai ?? 0m) > 0 ? costPricePai!.Value : (originalCostPai ?? 0m);
+        var custoPai = CustoDoCadastro(costPricePai ?? 0m, originalCostPai ?? 0m, ipiPercentPai ?? 0m);
         return custoPai * conversionFactor;
     }
 
@@ -176,11 +187,13 @@ public sealed class EcommerceCatalogService
         decimal Estoque,
         decimal CostPrice,
         decimal OriginalCost,
+        decimal IpiPercent,
         bool EhFilho,
         decimal ConversionFactor,
         decimal? EstoquePai,
         decimal? CostPricePai,
-        decimal? OriginalCostPai);
+        decimal? OriginalCostPai,
+        decimal? IpiPercentPai);
 
     public async Task<List<ProdutoBuscaResposta>> BuscarAsync(string termo, int limite, CancellationToken ct)
     {
@@ -229,15 +242,17 @@ public sealed class EcommerceCatalogService
             p.Stock,
             p.CostPrice,
             p.OriginalCost,
+            p.IpiPercent,
             p.ParentProductId != null && p.ConversionFactor > 0,
             p.ConversionFactor,
             p.ParentProduct != null && !p.ParentProduct.IsDeleted ? (decimal?)p.ParentProduct.Stock : null,
             p.ParentProduct != null ? (decimal?)p.ParentProduct.CostPrice : null,
-            p.ParentProduct != null ? (decimal?)p.ParentProduct.OriginalCost : null));
+            p.ParentProduct != null ? (decimal?)p.ParentProduct.OriginalCost : null,
+            p.ParentProduct != null ? (decimal?)p.ParentProduct.IpiPercent : null));
 
     private ProdutoBuscaResposta ParaResposta(ProdutoBuscaLinha l)
     {
-        var custo = CustoEfetivo(l.CostPrice, l.OriginalCost, l.EhFilho, l.ConversionFactor, l.CostPricePai, l.OriginalCostPai);
+        var custo = CustoEfetivo(l.CostPrice, l.OriginalCost, l.IpiPercent, l.EhFilho, l.ConversionFactor, l.CostPricePai, l.OriginalCostPai, l.IpiPercentPai);
         decimal? piso = null;
         string? motivo = null;
 
