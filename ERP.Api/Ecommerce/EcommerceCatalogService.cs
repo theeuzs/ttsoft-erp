@@ -161,7 +161,8 @@ public sealed class EcommerceCatalogService
     private static decimal CustoDoCadastro(decimal costPrice, decimal originalCost, decimal ipiPercent) =>
         originalCost > 0 ? Math.Round(originalCost * (1 + ipiPercent / 100m), 4) : costPrice;
 
-    private static decimal CustoEfetivo(decimal costPrice, decimal originalCost, decimal ipiPercent, bool ehFilho, decimal conversionFactor,
+    // S{N} FIX: internal para o lancamento de venda (EcommercePedidoService) usar exatamente a mesma conta do catalogo.
+    internal static decimal CustoEfetivo(decimal costPrice, decimal originalCost, decimal ipiPercent, bool ehFilho, decimal conversionFactor,
         decimal? costPricePai, decimal? originalCostPai, decimal? ipiPercentPai)
     {
         var proprio = CustoDoCadastro(costPrice, originalCost, ipiPercent);

@@ -45,3 +45,27 @@ public sealed record ProdutoBuscaResposta(
     int EstoqueVendavel);
 
 public sealed record BuscaProdutosResponse(DateTimeOffset GeradoEm, List<ProdutoBuscaResposta> Itens);
+
+// -------------------------------------------------------------------------------------------------
+// S{N} FIX: lancamento da venda do site no ERP (pedido marcado como "Pago" no painel do site).
+// -------------------------------------------------------------------------------------------------
+
+/// <summary>
+/// PedidoId e o id unico do pedido no site (vira o Id da venda, por hash: chamar duas vezes nao duplica).
+/// Linhas ja vem expandidas pelo site (kit vira um SKU por componente; lote vira a quantidade em unidades).
+/// </summary>
+public sealed record LancarPedidoRequest(string? PedidoId, string? Numero, List<LinhaPedidoEcommerce>? Linhas);
+
+public sealed record LinhaPedidoEcommerce(string Sku, int Quantidade);
+
+/// <summary>Repasse = total da venda no ERP (custo efetivo x FatorRepasse). So o painel do site (com login) mostra.</summary>
+public sealed record LancarPedidoResponse(
+    Guid VendaId,
+    string NumeroVenda,
+    decimal Repasse,
+    bool JaExistia,
+    bool ContaRepasseCriada);
+
+public sealed record EstornarPedidoRequest(string? PedidoId, string? Motivo);
+
+public sealed record EstornarPedidoResponse(bool Estornado, string Mensagem);

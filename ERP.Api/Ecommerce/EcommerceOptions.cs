@@ -33,5 +33,18 @@ public sealed class EcommerceOptions
     /// <summary>Limite de SKUs por consulta (protecao contra abuso).</summary>
     public int MaxItensPorConsulta { get; set; } = 300;
 
+    /// <summary>
+    /// S{N} FIX: liga o lancamento de vendas do site no ERP (POST pedidos/lancar e pedidos/estornar).
+    /// Desligado por padrao: publicar a API nao muda nada ate configurar Ecommerce__LancamentoAtivo=true.
+    /// </summary>
+    public bool LancamentoAtivo { get; set; } = false;
+
+    /// <summary>
+    /// S{N} FIX: CPF/CNPJ do cliente de repasse (o MEI da Theuzs) cadastrado na loja. So numeros ou com mascara.
+    /// A venda do site e lancada para este cliente, a preco de repasse, com Conta a Receber no nome dele.
+    /// Fixo na configuracao: o site nunca escolhe o cliente.
+    /// </summary>
+    public string ClienteRepasseDocumento { get; set; } = string.Empty;
+
     public bool EstaConfigurado => TenantId != Guid.Empty && ApiKey.Length >= 32;
 }

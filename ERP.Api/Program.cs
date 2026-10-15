@@ -459,6 +459,7 @@ builder.Services.Configure<ERP.Api.Ecommerce.EcommerceOptions>(
     builder.Configuration.GetSection(ERP.Api.Ecommerce.EcommerceOptions.Secao));
 builder.Services.AddScoped<ERP.Api.Ecommerce.EcommerceApiKeyFilter>();
 builder.Services.AddScoped<ERP.Api.Ecommerce.EcommerceCatalogService>();
+builder.Services.AddScoped<ERP.Api.Ecommerce.EcommercePedidoService>(); // S{N} FIX: lancamento de vendas do site
 builder.Services.AddControllers()
     .AddJsonOptions(opt =>
         opt.JsonSerializerOptions.Converters.Add(
