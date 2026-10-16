@@ -243,8 +243,11 @@ public sealed class EcommercePedidoService
         UsarTenantDaLoja();
         var vendaId = IdDaVenda(pedidoId);
 
+        // S{N} FIX: AsTracking obrigatorio. A API usa NoTracking como padrao (Program.cs, UseQueryTrackingBehavior):
+        // sem isto, sale.Cancel() e as contas canceladas nao eram gravadas (so o UPDATE de estoque, em SQL direto, ia).
         var sale = await _ctx.Sales
             .IgnoreQueryFilters()
+            .AsTracking()
             .Include(s => s.Items)
             .FirstOrDefaultAsync(s => s.Id == vendaId && s.TenantId == _opt.TenantId && !s.IsDeleted, ct);
 
@@ -255,6 +258,7 @@ public sealed class EcommercePedidoService
 
         var contas = await _ctx.ContasReceber
             .IgnoreQueryFilters()
+            .AsTracking() // S{N} FIX: idem acima
             .Where(c => c.SaleId == vendaId && c.TenantId == _opt.TenantId && !c.IsDeleted && c.Status != "Cancelado")
             .ToListAsync(ct);
         if (contas.Any(c => c.ValorRecebido > 0 || c.Status != "Pendente"))
@@ -294,6 +298,10 @@ public sealed class EcommercePedidoService
                 foreach (var d in devolucoes)
                     await _ctx.Database.ExecuteSqlInterpolatedAsync(
                         $"UPDATE Products SET Stock = Stock + {d.Quantidade} WHERE Id = {d.EstoqueId} AND TenantId = {_opt.TenantId}", ct);
+
+                // S{N} FIX: se a venda nao estiver sendo gravada, desfaz tudo (inclusive o estoque) em vez de estornar pela metade.
+                if (_ctx.Entry(sale).State != EntityState.Modified)
+                    throw new InvalidOperationException("Estorno abortado: a venda nao foi marcada para gravacao (rastreamento do EF).");
 
                 await _uow.CommitAsync();
                 await tx.CommitAsync(ct);
