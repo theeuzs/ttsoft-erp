@@ -661,6 +661,201 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
         return new FiscalEmissionResult { Sucesso = false, Mensagem = $"Status: {statusFocus}. {motivo}", Status = "Rejeitada" };
     }
 
+    /// <summary>Prefixo do texto em InformacoesComplementares que lista as
+    /// vendas cobertas por uma NF-e única. Também é a marca que a checagem de
+    /// duplicidade procura — por isso não pode mudar sem migrar as notas já
+    /// emitidas.</summary>
+    private const string MarcadorVendasFaturadas = "Vendas faturadas: ";
+
+    // infCpl da NF-e aceita até 2000 caracteres.
+    private const int LimiteInfoComplementar = 2000;
+
+    public async Task<NfeUnicaRascunhoResultado> CriarRascunhoDeVendasAsync(
+        IReadOnlyList<Guid> vendaIds, string formaPagamentoFocus, decimal desconto = 0m)
+    {
+        var ids = (vendaIds ?? Array.Empty<Guid>()).Distinct().ToList();
+        if (ids.Count == 0)
+            throw new InvalidOperationException("Selecione ao menos uma venda.");
+        if (string.IsNullOrWhiteSpace(formaPagamentoFocus) || formaPagamentoFocus.Trim() == "90")
+            throw new InvalidOperationException(
+                "Informe a forma de pagamento real do cliente — \"sem pagamento\" não vale pra venda quitada.");
+        if (desconto < 0)
+            throw new InvalidOperationException("O desconto não pode ser negativo.");
+
+        var vendas = await _ctx.Sales.AsNoTracking()
+            .Include(s => s.Items).ThenInclude(i => i.Product)
+            .Include(s => s.Customer)
+            .Where(s => ids.Contains(s.Id))
+            .ToListAsync();
+
+        if (vendas.Count != ids.Count)
+            throw new KeyNotFoundException("Alguma das vendas selecionadas não foi encontrada.");
+
+        var cancelada = vendas.Where(v => v.Status == Domain.Enums.SaleStatus.Cancelada).ToList();
+        if (cancelada.Any())
+            throw new InvalidOperationException(
+                $"Venda cancelada não entra na nota: {string.Join(", ", cancelada.Select(v => v.SaleNumber))}.");
+
+        // Duplicidade 1 — a própria venda já tem nota (NFC-e ou NF-e da venda).
+        var comNota = vendas.Where(v =>
+            v.Status == Domain.Enums.SaleStatus.NotaEmitida
+            || !string.IsNullOrWhiteSpace(v.NfceChave)
+            || string.Equals(v.NfceStatusFocus, "Autorizada", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(v.NfceStatusFocus, "Processando", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        var idsComNotaViva = await _ctx.NotasFiscais.AsNoTracking()
+            .Where(n => n.VendaId.HasValue && ids.Contains(n.VendaId.Value)
+                        && n.Status != "Cancelada" && n.Status != "Rejeitada" && n.Status != "Rascunho")
+            .Select(n => n.VendaId!.Value)
+            .ToListAsync();
+        comNota.AddRange(vendas.Where(v => idsComNotaViva.Contains(v.Id) && !comNota.Contains(v)).ToList());
+
+        if (comNota.Any())
+            throw new InvalidOperationException(
+                $"Estas vendas já têm nota fiscal e emitir de novo duplicaria o faturamento: {string.Join(", ", comNota.Select(v => v.SaleNumber))}.");
+
+        // Duplicidade 2 — a venda já foi faturada dentro de OUTRA NF-e única.
+        // Sem coluna própria pra isso (evita migration em produção): a lista
+        // de vendas vai no texto complementar da nota, e é ele que se procura.
+        var textos = await _ctx.NotasFiscais.AsNoTracking()
+            .Where(n => n.Tipo == "NFE" && n.VendaId == null
+                        && n.Status != "Cancelada" && n.Status != "Rejeitada" && n.Status != "Rascunho"
+                        && n.InformacoesComplementares != null
+                        && n.InformacoesComplementares.Contains(MarcadorVendasFaturadas))
+            .Select(n => n.InformacoesComplementares!)
+            .ToListAsync();
+        var jaFaturadas = vendas.Where(v => textos.Any(t => t.Contains(v.SaleNumber))).ToList();
+        if (jaFaturadas.Any())
+            throw new InvalidOperationException(
+                $"Estas vendas já foram faturadas em outra NF-e única: {string.Join(", ", jaFaturadas.Select(v => v.SaleNumber))}.");
+
+        var clienteIds = vendas.Select(v => v.CustomerId).Distinct().ToList();
+        if (clienteIds.Count != 1 || clienteIds[0] == null)
+            throw new InvalidOperationException("Todas as vendas precisam ser do mesmo cliente cadastrado.");
+        var cliente = vendas.First().Customer
+            ?? throw new InvalidOperationException("Cliente da venda não encontrado.");
+
+        // ── Itens: agrupa por produto + valor unitário ──────────────────────
+        // Valor unitário = total do item / quantidade, em 2 casas (é o que a
+        // avulsa envia). Produto igual com preço diferente fica em linhas
+        // separadas — somar esconderia a diferença.
+        var linhas = vendas
+            .SelectMany(v => v.Items)
+            .Where(i => i.Quantity > 0)
+            .GroupBy(i => new { i.ProductId, Unit = Math.Round(i.TotalPrice / i.Quantity, 2, MidpointRounding.AwayFromZero) })
+            .Select(g => new
+            {
+                g.Key.ProductId,
+                Nome   = g.First().ProductName,
+                Qtd    = g.Sum(x => x.Quantity),
+                Unit   = g.Key.Unit,
+                Cfop   = LimparCfop(g.First().Product?.CFOPPadrao),
+                Produto = g.First().Product,
+            })
+            .ToList();
+
+        if (linhas.Count == 0)
+            throw new InvalidOperationException("As vendas selecionadas não têm itens.");
+
+        var avisos = new List<string>();
+
+        decimal totalEsperado = vendas.SelectMany(v => v.Items).Where(i => i.Quantity > 0).Sum(i => i.TotalPrice) - desconto;
+        decimal brutoLinhas   = linhas.Sum(l => Math.Round(l.Qtd * l.Unit, 2, MidpointRounding.AwayFromZero));
+        if (desconto > 0 && desconto >= brutoLinhas)
+            throw new InvalidOperationException("O desconto não pode ser maior ou igual ao total dos itens.");
+
+        // ── Rateio do desconto proporcional ao valor de cada linha ─────────
+        // A última linha absorve a sobra de centavos do arredondamento.
+        var itens = new List<NotaFiscalAvulsaItemDto>();
+        decimal descontoRestante = desconto;
+        for (int idx = 0; idx < linhas.Count; idx++)
+        {
+            var l = linhas[idx];
+            decimal valorLinha = Math.Round(l.Qtd * l.Unit, 2, MidpointRounding.AwayFromZero);
+            decimal unitFinal = l.Unit;
+
+            if (desconto > 0)
+            {
+                decimal parte = idx == linhas.Count - 1
+                    ? descontoRestante
+                    : Math.Round(desconto * valorLinha / brutoLinhas, 2, MidpointRounding.AwayFromZero);
+                descontoRestante -= parte;
+                unitFinal = Math.Round((valorLinha - parte) / l.Qtd, 2, MidpointRounding.AwayFromZero);
+                if (unitFinal <= 0)
+                    throw new InvalidOperationException(
+                        $"O desconto zera o valor de \"{l.Nome}\" — reduza o desconto ou ajuste na tela de Nota Avulsa.");
+            }
+
+            itens.Add(new NotaFiscalAvulsaItemDto
+            {
+                ProductId     = l.ProductId,
+                ProductName   = l.Nome,
+                Quantidade    = l.Qtd,
+                ValorUnitario = unitFinal,
+                Cfop          = l.Cfop,
+            });
+
+            if (l.Produto != null && string.IsNullOrWhiteSpace(l.Produto.NCM))
+                avisos.Add($"Produto sem NCM no cadastro: {l.Nome}.");
+        }
+
+        // O que a emissão vai realmente declarar: Quantidade × ValorUnitario
+        // por item, em 2 casas (mesma conta de EmitirAsync).
+        decimal totalNota = itens.Sum(i => Math.Round(i.Quantidade * i.ValorUnitario, 2, MidpointRounding.AwayFromZero));
+        if (totalNota != totalEsperado)
+            avisos.Add($"O total da nota (R$ {totalNota:N2}) difere do total das vendas menos o desconto (R$ {totalEsperado:N2}) "
+                     + "por arredondamento de centavos nos valores unitários — confira na tela de Nota Avulsa.");
+
+        // ── Texto complementar: lista as vendas cobertas (e é a marca da
+        // checagem de duplicidade acima) ────────────────────────────────────
+        var numeros = string.Join(", ", vendas.OrderBy(v => v.SaleDate).Select(v => v.SaleNumber));
+        var de  = vendas.Min(v => v.SaleDate).ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+        var ate = vendas.Max(v => v.SaleDate).ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+        string info = $"{MarcadorVendasFaturadas}{numeros} (vendas de {de} a {ate}).";
+        if (info.Length > LimiteInfoComplementar)
+            throw new InvalidOperationException(
+                "Vendas demais para uma nota só (a lista não cabe nas informações complementares). Selecione menos vendas.");
+
+        string? docCliente = string.IsNullOrWhiteSpace(cliente.Document)
+            ? null : new string(cliente.Document.Where(char.IsDigit).ToArray());
+        string? ieCliente = string.IsNullOrWhiteSpace(cliente.StateRegistration)
+            ? null : new string(cliente.StateRegistration.Where(char.IsDigit).ToArray());
+        if (string.IsNullOrWhiteSpace(ieCliente)) ieCliente = null;
+
+        var dto = new SalvarNotaFiscalAvulsaDto
+        {
+            NaturezaOperacao         = "VENDA DE MERCADORIA",
+            TipoOperacaoEntradaSaida = "S",
+            Finalidade               = "1",
+            DestinatarioNome         = cliente.Name,
+            DestinatarioDocumento    = docCliente,
+            DestinatarioLogradouro   = cliente.Street,
+            DestinatarioNumero       = cliente.Number,
+            DestinatarioBairro       = cliente.Neighborhood,
+            DestinatarioMunicipio    = cliente.City,
+            DestinatarioUf           = cliente.State,
+            DestinatarioCep          = cliente.ZipCode,
+            DestinatarioIe           = ieCliente,
+            IndicadorIeDestinatario  = ieCliente != null ? "1" : "9",
+            InformacoesComplementares = info,
+            ModalidadeFrete          = "9",
+            Itens                    = itens,
+            Pagamentos               = new List<NotaFiscalAvulsaPagamentoDto>
+            {
+                new() { FormaPagamento = formaPagamentoFocus.Trim(), Valor = totalNota }
+            },
+        };
+
+        var notaId = await SalvarRascunhoAsync(dto);
+        return new NfeUnicaRascunhoResultado(notaId, vendas.Count, itens.Count, totalEsperado, totalNota, avisos);
+    }
+
+    private static string LimparCfop(string? cfop)
+    {
+        var limpo = string.IsNullOrWhiteSpace(cfop) ? "" : new string(cfop.Where(char.IsDigit).ToArray());
+        return limpo.Length == 4 ? limpo : "5102";
+    }
+
     public async Task<IReadOnlyList<NfeA4HistoricoDto>> ListarHistoricoAsync(
         DateTime? dataInicio = null, DateTime? dataFim = null, string? status = null)
     {

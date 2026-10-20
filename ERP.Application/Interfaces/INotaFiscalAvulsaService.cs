@@ -21,6 +21,18 @@ public interface INotaFiscalAvulsaService
     /// recorrente sem redigitar tudo.</summary>
     Task<Guid> CopiarComoRascunhoAsync(Guid idOrigem);
 
+    /// <summary>S28 FIX — "NF-e única": junta os itens de várias vendas do
+    /// MESMO cliente num único rascunho de NF-e avulsa (pedido real da loja:
+    /// cliente quitou várias vendas a prazo e quer uma nota só). Não emite:
+    /// cria o rascunho e devolve avisos — a emissão continua passando pela
+    /// conferência da tela de Nota Avulsa. Bloqueia venda cancelada, venda
+    /// que já tem nota (NFC-e/NF-e) e venda já faturada em outra NF-e única.
+    /// `formaPagamentoFocus` é a forma REAL em que o cliente pagou (código
+    /// Focus: "01", "03", "04", "17"...) — "90 sem pagamento" não vale aqui.
+    /// `desconto` é rateado proporcionalmente nos itens.</summary>
+    Task<NfeUnicaRascunhoResultado> CriarRascunhoDeVendasAsync(
+        IReadOnlyList<Guid> vendaIds, string formaPagamentoFocus, decimal desconto = 0m);
+
     Task<NotaFiscalAvulsaDto?> ObterAsync(Guid id);
 
     Task<IReadOnlyList<NotaFiscalAvulsaResumoDto>> ListarAsync();

@@ -209,6 +209,13 @@
                                   Width="150" Height="42" FontSize="14" VerticalContentAlignment="Center"/>
                     </StackPanel>
 
+                    <Button Content="📄 NF-e ÚNICA" Command="{Binding EmitirNfeUnicaCommand}" Margin="0,0,12,0"
+                            Background="#F1F5F9" Foreground="#334155"
+                            FontWeight="Bold" FontSize="13" Padding="16,0" Height="42" BorderThickness="1" BorderBrush="#CBD5E1" Cursor="Hand"
+                            ToolTip="Junta os itens das vendas selecionadas num rascunho de NF-e única (não emite — você confere na Nota Avulsa)">
+                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                    </Button>
+
                     <Button Content="✓ RECEBER" Command="{Binding ReceberSelecionadasCommand}"
                             Background="#3B82F6" Foreground="White"
                             FontWeight="Black" FontSize="15" Padding="24,0" Height="42" BorderThickness="0" Cursor="Hand">

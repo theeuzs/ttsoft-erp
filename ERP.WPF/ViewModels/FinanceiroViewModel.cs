@@ -128,6 +128,7 @@ public class FinanceiroViewModel : BaseViewModel
     public ICommand ReceberSelecionadasCommand { get; }
     public ICommand CancelarContaCommand       { get; }
     public ICommand VerHistoricoContaCommand   { get; }
+    public ICommand EmitirNfeUnicaCommand      { get; } // S28 FIX — junta as vendas selecionadas numa NF-e só
 
     public FinanceiroViewModel()
     {
@@ -138,6 +139,7 @@ public class FinanceiroViewModel : BaseViewModel
         ReceberSelecionadasCommand = new AsyncRelayCommand(async _ => await ReceberSelecionadasAsync());
         CancelarContaCommand       = new AsyncRelayCommand(async p => await CancelarContaAsync(p as ContaReceberSelecionavel));
         VerHistoricoContaCommand   = new RelayCommand(p => AbrirHistoricoConta(p as ContaReceberSelecionavel));
+        EmitirNfeUnicaCommand      = new AsyncRelayCommand(async _ => await CriarRascunhoNfeUnicaAsync());
 
         // Abre a janelinha modal de detalhes do cliente
         AbrirDetalhesCommand       = new RelayCommand(c => AbrirDetalhesCliente(c as ResumoClienteDevedor));
@@ -227,6 +229,90 @@ public class FinanceiroViewModel : BaseViewModel
         }
         catch (Exception ex) { MessageBox.Show($"Erro ao carregar contas: {ex.Message}"); }
         finally { IsBusy = false; }
+    }
+
+    // ── S28 FIX — NF-e única das vendas selecionadas ──────────────────────────
+    // Pedido real da loja: cliente quitou várias vendas a prazo e quer UMA nota.
+    // Só cria o RASCUNHO na Nota Avulsa — quem confere e emite é o operador.
+    private static string? CodigoFocusDaForma(PaymentMethod forma) => forma switch
+    {
+        PaymentMethod.Dinheiro      => "01",
+        PaymentMethod.CartaoCredito => "03",
+        PaymentMethod.CartaoDebito  => "04",
+        PaymentMethod.Pix           => "17",
+        _                           => null   // APrazo/Haver não são forma de quitação
+    };
+
+    private async Task CriarRascunhoNfeUnicaAsync()
+    {
+        var selecionadas = ContasSelecionaveis.Where(c => c.IsSelecionada).ToList();
+        if (selecionadas.Count == 0)
+        {
+            MessageBox.Show("Selecione ao menos uma conta.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var semVenda = selecionadas.Where(c => !c.Conta.SaleId.HasValue).ToList();
+        if (semVenda.Count > 0)
+        {
+            MessageBox.Show(
+                $"{semVenda.Count} conta(s) selecionada(s) não têm venda vinculada (lançamento manual) e não têm itens para a nota:\n\n"
+                + string.Join("\n", semVenda.Select(c => "• " + c.Descricao))
+                + "\n\nDesmarque essas contas e tente de novo.",
+                "NF-e única", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var codigoForma = CodigoFocusDaForma(FormaPagamentoSelecionada);
+        if (codigoForma == null)
+        {
+            MessageBox.Show("Escolha a forma de pagamento real do cliente (dinheiro, Pix ou cartão).",
+                "NF-e única", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var vendaIds   = selecionadas.Select(c => c.Conta.SaleId!.Value).Distinct().ToList();
+        var nomeCliente = selecionadas.First().Conta.Customer?.Name ?? "Cliente";
+
+        var confirma = MessageBox.Show(
+            $"Criar o RASCUNHO de uma NF-e única para {nomeCliente}?\n\n"
+            + $"• {vendaIds.Count} venda(s) selecionada(s)\n"
+            + $"• Pagamento informado na nota: {FormaPagamentoSelecionada}\n"
+            + $"• Desconto a ratear nos itens: R$ {ValorDesconto:N2}\n\n"
+            + "A nota NÃO é emitida agora — você confere e emite na tela Nota Avulsa.",
+            "NF-e única", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirma != MessageBoxResult.Yes) return;
+
+        try
+        {
+            using var scope = App.Services.CreateScope();
+            var service = scope.ServiceProvider.GetRequiredService<INotaFiscalAvulsaService>();
+            var r = await service.CriarRascunhoDeVendasAsync(vendaIds, codigoForma, ValorDesconto);
+
+            // Confere o total da nota contra o que as contas selecionadas somam
+            // (venda parcialmente paga no PDV, parcelas fora da seleção etc.).
+            decimal totalContas = TotalSelecionado - ValorDesconto;
+            var avisos = new System.Collections.Generic.List<string>(r.Avisos);
+            if (Math.Abs(r.TotalNota - totalContas) > 0.01m)
+                avisos.Add($"O total da NF-e (R$ {r.TotalNota:N2}) é diferente do saldo das contas selecionadas menos o desconto (R$ {totalContas:N2}). "
+                         + "Pode haver venda parcialmente paga ou parcela fora da seleção — confira antes de emitir.");
+
+            var msg = $"Rascunho criado: {r.QtdItens} linha(s) de item, {r.QtdVendas} venda(s), total R$ {r.TotalNota:N2}.\n\n"
+                    + "Abra \"📝 Nota Avulsa\" no menu, escolha o rascunho na lista, confira (botão Conferir) e emita.";
+            if (avisos.Count > 0)
+                msg += "\n\nATENÇÃO:\n" + string.Join("\n", avisos.Select(a => "• " + a));
+
+            MessageBox.Show(msg, "NF-e única", MessageBoxButton.OK,
+                avisos.Count > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+        }
+        catch (InvalidOperationException ex)
+        {
+            MessageBox.Show(ex.Message, "NF-e única", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Erro ao criar o rascunho: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     // ── Recebimento em lote (várias contas selecionadas de uma vez) ──────────

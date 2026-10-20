@@ -109,3 +109,10 @@ public record ConferenciaItemDto(
 
 public record ConferenciaFiscalDto(
     List<ConferenciaItemDto> Itens, decimal ValorTotalProdutos, decimal ValorTotalImpostos);
+
+/// <summary>Resultado de "NF-e única a partir de vendas": o rascunho criado
+/// (nunca emitido — quem revisa e emite é a tela de Nota Avulsa) e o que
+/// merece olho humano antes de transmitir.</summary>
+public record NfeUnicaRascunhoResultado(
+    Guid NotaId, int QtdVendas, int QtdItens,
+    decimal TotalEsperado, decimal TotalNota, List<string> Avisos);
