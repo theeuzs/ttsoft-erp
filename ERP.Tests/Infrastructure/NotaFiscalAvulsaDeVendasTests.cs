@@ -379,4 +379,103 @@ public class NotaFiscalAvulsaDeVendasTests
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*desconto*");
     }
+
+    // ── Venda parcialmente paga no PDV ────────────────────────────────────
+    // Achado testando no WPF (20/10): venda de R$ 568,50 com R$ 68,50 pagos no
+    // PDV e R$ 500,00 a prazo saiu com UM pagamento de cartão de R$ 568,50 —
+    // a nota não refletia o que aconteceu.
+
+    private static Sale ComPagamento(Sale venda, PaymentMethod forma, decimal valor)
+    {
+        venda.Payments.Add(new SalePayment
+        {
+            Id = Guid.NewGuid(), TenantId = venda.TenantId, SaleId = venda.Id, PaymentMethod = forma, Amount = valor
+        });
+        return venda;
+    }
+
+    [Fact(DisplayName = "Venda parcialmente paga no PDV: a nota reparte o já recebido e o restante na forma escolhida")]
+    public async Task VendaParcialmentePaga_RepartePagamentos()
+    {
+        var t = Guid.NewGuid();
+        var prod = NovoProduto(t);
+        var cli = NovoCliente(t);
+        var v1 = NovaVenda(t, cli.Id, prod, "VND-001", 1, 568.50m);
+        ComPagamento(v1, PaymentMethod.Dinheiro, 68.50m);
+        ComPagamento(v1, PaymentMethod.APrazo, 500m);
+        var (service, ctx) = Build(t, c => { c.Products.Add(prod); c.Customers.Add(cli); c.Sales.Add(v1); });
+
+        var r = await service.CriarRascunhoDeVendasAsync(new[] { v1.Id }, "03");
+
+        r.TotalNota.Should().Be(568.50m);
+        r.TotalJaRecebido.Should().Be(68.50m);
+        r.Avisos.Should().BeEmpty();
+        var nota = await ctx.NotasFiscais.Include(n => n.Pagamentos).AsNoTracking().SingleAsync(n => n.Id == r.NotaId);
+        nota.Pagamentos.Should().HaveCount(2);
+        nota.Pagamentos.Single(p => p.FormaPagamento == "01").Valor.Should().Be(68.50m);
+        nota.Pagamentos.Single(p => p.FormaPagamento == "03").Valor.Should().Be(500m);
+        nota.Pagamentos.Sum(p => p.Valor).Should().Be(r.TotalNota);
+    }
+
+    [Fact(DisplayName = "Já recebido na mesma forma escolhida agora vira um pagamento só")]
+    public async Task VendaParcialmentePaga_MesmaForma_Soma()
+    {
+        var t = Guid.NewGuid();
+        var prod = NovoProduto(t);
+        var cli = NovoCliente(t);
+        var v1 = NovaVenda(t, cli.Id, prod, "VND-001", 1, 568.50m);
+        ComPagamento(v1, PaymentMethod.Dinheiro, 68.50m);
+        ComPagamento(v1, PaymentMethod.APrazo, 500m);
+        var (service, ctx) = Build(t, c => { c.Products.Add(prod); c.Customers.Add(cli); c.Sales.Add(v1); });
+
+        var r = await service.CriarRascunhoDeVendasAsync(new[] { v1.Id }, "01");
+
+        var nota = await ctx.NotasFiscais.Include(n => n.Pagamentos).AsNoTracking().SingleAsync(n => n.Id == r.NotaId);
+        nota.Pagamentos.Should().ContainSingle();
+        nota.Pagamentos.Single().FormaPagamento.Should().Be("01");
+        nota.Pagamentos.Single().Valor.Should().Be(568.50m);
+    }
+
+    [Fact(DisplayName = "Recebido no PDV de várias vendas é somado por forma")]
+    public async Task VariasVendas_SomaRecebidoPorForma()
+    {
+        var t = Guid.NewGuid();
+        var prod = NovoProduto(t);
+        var cli = NovoCliente(t);
+        var v1 = NovaVenda(t, cli.Id, prod, "VND-001", 1, 100m);
+        var v2 = NovaVenda(t, cli.Id, prod, "VND-002", 1, 100m);
+        ComPagamento(v1, PaymentMethod.Pix, 30m);
+        ComPagamento(v1, PaymentMethod.APrazo, 70m);
+        ComPagamento(v2, PaymentMethod.Pix, 20m);
+        ComPagamento(v2, PaymentMethod.APrazo, 80m);
+        var (service, ctx) = Build(t, c => { c.Products.Add(prod); c.Customers.Add(cli); c.Sales.AddRange(v1, v2); });
+
+        var r = await service.CriarRascunhoDeVendasAsync(new[] { v1.Id, v2.Id }, "04");
+
+        r.TotalJaRecebido.Should().Be(50m);
+        var nota = await ctx.NotasFiscais.Include(n => n.Pagamentos).AsNoTracking().SingleAsync(n => n.Id == r.NotaId);
+        nota.Pagamentos.Single(p => p.FormaPagamento == "17").Valor.Should().Be(50m);
+        nota.Pagamentos.Single(p => p.FormaPagamento == "04").Valor.Should().Be(150m);
+    }
+
+    [Fact(DisplayName = "Se o já recebido passa do total da nota (desconto grande), cai no pagamento único e avisa")]
+    public async Task RecebidoMaiorQueTotal_PagamentoUnico_ComAviso()
+    {
+        var t = Guid.NewGuid();
+        var prod = NovoProduto(t);
+        var cli = NovoCliente(t);
+        var v1 = NovaVenda(t, cli.Id, prod, "VND-001", 1, 100m);
+        ComPagamento(v1, PaymentMethod.Pix, 80m);
+        ComPagamento(v1, PaymentMethod.APrazo, 20m);
+        var (service, ctx) = Build(t, c => { c.Products.Add(prod); c.Customers.Add(cli); c.Sales.Add(v1); });
+
+        var r = await service.CriarRascunhoDeVendasAsync(new[] { v1.Id }, "01", desconto: 30m);
+
+        r.TotalNota.Should().Be(70m);
+        r.TotalJaRecebido.Should().Be(0m);
+        r.Avisos.Should().ContainSingle(a => a.Contains("já receberam"));
+        var nota = await ctx.NotasFiscais.Include(n => n.Pagamentos).AsNoTracking().SingleAsync(n => n.Id == r.NotaId);
+        nota.Pagamentos.Should().ContainSingle();
+        nota.Pagamentos.Single().Valor.Should().Be(70m);
+    }
 }

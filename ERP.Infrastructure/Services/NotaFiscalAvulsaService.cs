@@ -685,6 +685,7 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
         var vendas = await _ctx.Sales.AsNoTracking()
             .Include(s => s.Items).ThenInclude(i => i.Product)
             .Include(s => s.Customer)
+            .Include(s => s.Payments)
             .Where(s => ids.Contains(s.Id))
             .ToListAsync();
 
@@ -816,6 +817,8 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
             throw new InvalidOperationException(
                 "Vendas demais para uma nota só (a lista não cabe nas informações complementares). Selecione menos vendas.");
 
+        var pagamentos = MontarPagamentosDaNfeUnica(vendas, formaPagamentoFocus, totalNota, avisos, out var totalJaRecebido);
+
         string? docCliente = string.IsNullOrWhiteSpace(cliente.Document)
             ? null : new string(cliente.Document.Where(char.IsDigit).ToArray());
         string? ieCliente = string.IsNullOrWhiteSpace(cliente.StateRegistration)
@@ -840,15 +843,64 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
             InformacoesComplementares = info,
             ModalidadeFrete          = "9",
             Itens                    = itens,
-            Pagamentos               = new List<NotaFiscalAvulsaPagamentoDto>
-            {
-                new() { FormaPagamento = formaPagamentoFocus.Trim(), Valor = totalNota }
-            },
+            Pagamentos               = pagamentos,
         };
 
         var notaId = await SalvarRascunhoAsync(dto);
-        return new NfeUnicaRascunhoResultado(notaId, vendas.Count, itens.Count, totalEsperado, totalNota, avisos);
+        return new NfeUnicaRascunhoResultado(notaId, vendas.Count, itens.Count, totalEsperado, totalNota, totalJaRecebido, avisos);
     }
+
+    /// <summary>Pagamento da nota = o que cada venda JÁ recebeu no PDV (formas
+    /// reais gravadas na venda, tudo menos "a prazo") + o restante na forma
+    /// escolhida agora. Venda 100% a prazo cai inteira na forma escolhida.
+    /// Soma SEMPRE igual a `totalNota` (a SEFAZ exige vPag = vNF).</summary>
+    private static List<NotaFiscalAvulsaPagamentoDto> MontarPagamentosDaNfeUnica(
+        IEnumerable<Domain.Entities.Sale> vendas, string formaAgora, decimal totalNota,
+        List<string> avisos, out decimal totalJaRecebido)
+    {
+        // Dictionary preserva a ordem de inserção enquanto não há remoção.
+        var porForma = new Dictionary<string, decimal>();
+        foreach (var p in vendas.SelectMany(v => v.Payments)
+                     .Where(p => p.PaymentMethod != Domain.Enums.PaymentMethod.APrazo && p.Amount > 0))
+        {
+            var cod = CodigoFocusDaForma(p.PaymentMethod);
+            porForma[cod] = (porForma.TryGetValue(cod, out var atual) ? atual : 0m) + p.Amount;
+        }
+
+        decimal recebido = porForma.Values.Sum();
+        decimal restante = totalNota - recebido;
+
+        if (recebido > 0m && restante < 0m)
+        {
+            // Desconto/ajuste deixou a nota menor que o já recebido no PDV: não
+            // há como repartir sem inventar valor. Cai no pagamento único e avisa.
+            avisos.Add($"O que as vendas já receberam no PDV (R$ {recebido:N2}) é maior que o total da nota (R$ {totalNota:N2}). "
+                     + "O pagamento ficou todo na forma escolhida — ajuste na tela de Nota Avulsa.");
+            porForma.Clear();
+            recebido = 0m;
+            restante = totalNota;
+        }
+
+        if (restante > 0m)
+        {
+            var agora = formaAgora.Trim();
+            porForma[agora] = (porForma.TryGetValue(agora, out var atual) ? atual : 0m) + restante;
+        }
+
+        totalJaRecebido = recebido;
+        return porForma.Select(kv => new NotaFiscalAvulsaPagamentoDto { FormaPagamento = kv.Key, Valor = kv.Value }).ToList();
+    }
+
+    // Códigos Focus/SEFAZ (tPag): 01 dinheiro, 03 crédito, 04 débito, 17 Pix;
+    // Haver (crédito de loja do cliente) cai em 99 "outros".
+    private static string CodigoFocusDaForma(Domain.Enums.PaymentMethod forma) => forma switch
+    {
+        Domain.Enums.PaymentMethod.Dinheiro      => "01",
+        Domain.Enums.PaymentMethod.CartaoCredito => "03",
+        Domain.Enums.PaymentMethod.CartaoDebito  => "04",
+        Domain.Enums.PaymentMethod.Pix           => "17",
+        _                                         => "99",
+    };
 
     private static string LimparCfop(string? cfop)
     {

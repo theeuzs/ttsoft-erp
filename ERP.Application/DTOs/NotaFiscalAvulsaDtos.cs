@@ -115,4 +115,4 @@ public record ConferenciaFiscalDto(
 /// merece olho humano antes de transmitir.</summary>
 public record NfeUnicaRascunhoResultado(
     Guid NotaId, int QtdVendas, int QtdItens,
-    decimal TotalEsperado, decimal TotalNota, List<string> Avisos);
+    decimal TotalEsperado, decimal TotalNota, decimal TotalJaRecebido, List<string> Avisos);

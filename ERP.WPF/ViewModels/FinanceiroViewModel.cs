@@ -289,13 +289,16 @@ public class FinanceiroViewModel : BaseViewModel
             var service = scope.ServiceProvider.GetRequiredService<INotaFiscalAvulsaService>();
             var r = await service.CriarRascunhoDeVendasAsync(vendaIds, codigoForma, ValorDesconto);
 
-            // Confere o total da nota contra o que as contas selecionadas somam
-            // (venda parcialmente paga no PDV, parcelas fora da seleção etc.).
-            decimal totalContas = TotalSelecionado - ValorDesconto;
+            // Confere o que a nota declara como pago AGORA (total menos o que as
+            // vendas já receberam no PDV, esse repartido nas formas originais)
+            // contra o saldo das contas selecionadas. Diferença = parcela fora
+            // da seleção, baixa parcial anterior etc.
+            decimal totalContas  = TotalSelecionado - ValorDesconto;
+            decimal pagoAgoraNfe = r.TotalNota - r.TotalJaRecebido;
             var avisos = new System.Collections.Generic.List<string>(r.Avisos);
-            if (Math.Abs(r.TotalNota - totalContas) > 0.01m)
-                avisos.Add($"O total da NF-e (R$ {r.TotalNota:N2}) é diferente do saldo das contas selecionadas menos o desconto (R$ {totalContas:N2}). "
-                         + "Pode haver venda parcialmente paga ou parcela fora da seleção — confira antes de emitir.");
+            if (Math.Abs(pagoAgoraNfe - totalContas) > 0.01m)
+                avisos.Add($"A NF-e declara R$ {pagoAgoraNfe:N2} pagos agora, mas o saldo das contas selecionadas menos o desconto é R$ {totalContas:N2}. "
+                         + "Pode haver parcela fora da seleção ou baixa parcial anterior — confira antes de emitir.");
 
             var msg = $"Rascunho criado: {r.QtdItens} linha(s) de item, {r.QtdVendas} venda(s), total R$ {r.TotalNota:N2}.\n\n"
                     + "Abra \"📝 Nota Avulsa\" no menu, escolha o rascunho na lista, confira (botão Conferir) e emita.";
