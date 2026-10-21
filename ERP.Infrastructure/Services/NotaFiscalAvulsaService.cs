@@ -45,7 +45,16 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
 
         if (dto.Id.HasValue)
         {
-            var notaExistente = await _ctx.NotasFiscais.Include(n => n.Itens).Include(n => n.Pagamentos)
+            // S28 FIX: AsTracking() (identity resolution) — o contexto é NoTracking
+            // global e, sem rastreamento, Include de DUAS coleções (itens x
+            // pagamentos) gera produto cartesiano e instâncias DUPLICADAS do
+            // mesmo item (mesmo Id). RemoveRange então estourava "NotaFiscalItem
+            // cannot be tracked because another instance with the same key
+            // value for {'Id'} is already being tracked" em rascunho com vários
+            // itens e vários pagamentos (NF-e única). AsSplitQuery evita a
+            // explosão cartesiana de vez.
+            var notaExistente = await _ctx.NotasFiscais.AsTracking().AsSplitQuery()
+                .Include(n => n.Itens).Include(n => n.Pagamentos)
                 .FirstOrDefaultAsync(n => n.Id == dto.Id.Value)
                 ?? throw new KeyNotFoundException("Nota não encontrada.");
 
@@ -285,7 +294,9 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
 
     public async Task ExcluirRascunhoAsync(Guid id)
     {
-        var nota = await _ctx.NotasFiscais.Include(n => n.Itens).Include(n => n.Pagamentos).FirstOrDefaultAsync(n => n.Id == id)
+        // S28 FIX: mesmo motivo do SalvarRascunhoAsync (instâncias duplicadas).
+        var nota = await _ctx.NotasFiscais.AsTracking().AsSplitQuery()
+            .Include(n => n.Itens).Include(n => n.Pagamentos).FirstOrDefaultAsync(n => n.Id == id)
             ?? throw new KeyNotFoundException("Nota não encontrada.");
 
         if (nota.Status != "Rascunho")
@@ -333,7 +344,9 @@ public class NotaFiscalAvulsaService : INotaFiscalAvulsaService
         // Add()/Remove()/RemoveRange() explícitos escapam disso (marcam o
         // estado na mão), por isso os Itens/Pagamentos sempre gravaram
         // certo enquanto o Status da própria nota nunca gravava.
-        var nota = await _ctx.NotasFiscais.AsTracking().Include(n => n.Itens).Include(n => n.Pagamentos)
+        // S28 FIX: AsSplitQuery — evita duplicar itens com vários pagamentos.
+        var nota = await _ctx.NotasFiscais.AsTracking().AsSplitQuery()
+            .Include(n => n.Itens).Include(n => n.Pagamentos)
             .FirstOrDefaultAsync(n => n.Id == id)
             ?? throw new KeyNotFoundException("Nota não encontrada.");
 

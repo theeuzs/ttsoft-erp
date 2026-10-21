@@ -719,10 +719,39 @@ public class FiscalService : IFiscalService
     // houver tenant fora do Paraná de verdade.
     private const string UF_ORIGEM_LOJA = "PR";
 
+    /// <summary>
+    /// Rateia Sale.DiscountAmount entre os itens, proporcional ao valor de cada
+    /// um (vProd). O último item com valor absorve o resto, pra soma bater
+    /// exatamente com o desconto da venda (senão a SEFAZ rejeita o total).
+    /// Desconto por item (DiscountPercent) já está dentro de TotalPrice e não
+    /// entra aqui. Desconto inválido (&lt;=0 ou &gt;= soma) não é enviado.
+    /// </summary>
+    public static decimal[] RatearDescontoDaVenda(Domain.Entities.Sale sale)
+    {
+        var itens = sale.Items.ToList();
+        var resultado = new decimal[itens.Count];
+        decimal desconto = sale.DiscountAmount;
+        decimal soma = itens.Sum(i => i.TotalPrice);
+        if (desconto <= 0m || soma <= 0m || desconto >= soma) return resultado;
+
+        int ultimo = itens.FindLastIndex(i => i.TotalPrice > 0m);
+        decimal acumulado = 0m;
+        for (int i = 0; i < itens.Count; i++)
+        {
+            if (itens[i].TotalPrice <= 0m) continue;
+            if (i == ultimo) { resultado[i] = desconto - acumulado; break; }
+            var parte = Math.Round(desconto * itens[i].TotalPrice / soma, 2, MidpointRounding.AwayFromZero);
+            resultado[i] = parte;
+            acumulado += parte;
+        }
+        return resultado;
+    }
+
     private static List<FocusItemRequest> MontarItens(Domain.Entities.Sale sale)
     {
         string ufDestino = string.IsNullOrWhiteSpace(sale.Customer?.State) ? UF_ORIGEM_LOJA : sale.Customer!.State!;
         var stCalculator = new Domain.Services.Fiscal.ICMSSTCalculator();
+        var descontos = RatearDescontoDaVenda(sale);
 
         return sale.Items.Select((item, index) =>
         {
@@ -779,6 +808,9 @@ public class FiscalService : IFiscalService
                 PisSituacaoTributaria     = "99",
                 CofinsSituacaoTributaria  = "99"
             };
+
+            if (descontos[index] > 0m)
+                request.ValorDesconto = descontos[index].ToString("F2", CultureInfo.InvariantCulture);
 
             if (produto != null && produto.TemSubstituicaoTrib)
             {

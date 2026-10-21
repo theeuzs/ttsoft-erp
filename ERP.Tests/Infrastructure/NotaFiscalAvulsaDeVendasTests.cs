@@ -478,4 +478,54 @@ public class NotaFiscalAvulsaDeVendasTests
         nota.Pagamentos.Should().ContainSingle();
         nota.Pagamentos.Single().Valor.Should().Be(70m);
     }
+    [Fact(DisplayName = "Editar rascunho com vários itens e vários pagamentos não estoura erro de rastreamento")]
+    public async Task EditarRascunho_VariosItensEPagamentos_NaoDuplicaRastreamento()
+    {
+        var t = Guid.NewGuid();
+        var prod = NovoProduto(t);
+        var cli = NovoCliente(t);
+        var vendas = Enumerable.Range(1, 6)
+            .Select(n => NovaVenda(t, cli.Id, NovoProduto(t, $"Item {n}"), $"VND-{n:000}", 1, 10m * n))
+            .ToList();
+        var (service, ctx) = Build(t, c =>
+        {
+            c.Products.Add(prod); c.Customers.Add(cli);
+            foreach (var v in vendas)
+            {
+                c.Products.Add(new Product { Id = v.Items.Single().ProductId, TenantId = t, Name = v.Items.Single().ProductName,
+                    SalePrice = 10m, NCM = "25232900", CSOSN = "102", SKU = Guid.NewGuid().ToString("N")[..8] });
+            }
+            c.Sales.AddRange(vendas);
+        });
+        // produtos novos acima já foram semeados com os mesmos Ids dos itens
+        var r = await service.CriarRascunhoDeVendasAsync(vendas.Select(v => v.Id).ToList(), "17");
+
+        var dto = await service.ObterAsync(r.NotaId);
+        dto.Should().NotBeNull();
+        var salvar = new SalvarNotaFiscalAvulsaDto
+        {
+            Id = r.NotaId,
+            DestinatarioNome = dto!.DestinatarioNome,
+            Itens = dto.Itens.Select(i => new NotaFiscalAvulsaItemDto
+            {
+                ProductId = i.ProductId, ProductName = i.ProductName,
+                Quantidade = i.Quantidade, ValorUnitario = i.ValorUnitario, Cfop = i.Cfop
+            }).ToList(),
+            Pagamentos = new List<NotaFiscalAvulsaPagamentoDto>
+            {
+                new() { FormaPagamento = "01", Valor = 100m },
+                new() { FormaPagamento = "03", Valor = 50m },
+                new() { FormaPagamento = "17", Valor = dto.Itens.Sum(i => i.Quantidade * i.ValorUnitario) - 150m },
+            }
+        };
+
+        var id = await service.SalvarRascunhoAsync(salvar);
+        id.Should().Be(r.NotaId);
+        id = await service.SalvarRascunhoAsync(salvar);
+
+        var nota = await ctx.NotasFiscais.Include(n => n.Itens).Include(n => n.Pagamentos)
+            .AsNoTracking().SingleAsync(n => n.Id == id);
+        nota.Itens.Should().HaveCount(6);
+        nota.Pagamentos.Should().HaveCount(3);
+    }
 }

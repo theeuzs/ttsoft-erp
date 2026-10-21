@@ -156,6 +156,12 @@ public class FocusItemRequest
     [JsonPropertyName("valor_bruto")]
     public string ValorBruto { get; set; } = string.Empty;
 
+    // Desconto do fechamento da venda (Sale.DiscountAmount) rateado por item.
+    // Sem isso a NF-e/NFC-e saía pelo valor cheio e não batia com o pago.
+    // Null quando não há desconto — não altera o payload das vendas normais.
+    [JsonPropertyName("valor_desconto")]
+    public string? ValorDesconto { get; set; }
+
     // 👇 A TRINDADE SAGRADA QUE EU TINHA ESQUECIDO 👇
 
     [JsonPropertyName("codigo_ncm")]
