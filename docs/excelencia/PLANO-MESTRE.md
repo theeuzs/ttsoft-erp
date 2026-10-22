@@ -1,7 +1,7 @@
 # Plano Mestre — Programa de Excelência TTSoft
 
 > Produto: ConstruTTor ERP
-> Criado em: 2026-10-22 · Versão: 1.0 · Fase atual: **EXC-F0 concluída (preparação)**
+> Criado em: 2026-10-22 · Versão: 1.1 · Fase atual: **EXC-F0 concluída; EXC-A0 em execução**
 > Documentos relacionados: [CRITERIOS-DE-EXCELENCIA](CRITERIOS-DE-EXCELENCIA.md) · [INVENTARIO-AUDITORIAS](INVENTARIO-AUDITORIAS.md) · [REGISTRO-CENTRAL](REGISTRO-CENTRAL.md)
 
 ---
@@ -77,9 +77,12 @@ Códigos de área: `ADM`, `MKT`, `VEN`, `ENG`, `PRD`, `SEG`, `OPS`, `SUP`, `FIS`
   `F11` (9 testes) selecionam e aprovam testes.
 - Verificações pontuais registradas no [REGISTRO-CENTRAL](REGISTRO-CENTRAL.md).
 
+- 35 relatórios anteriores, entregues em 2026-10-22 (fora do repositório), inventariados e
+  reconciliados com o código atual (INVENTARIO §2 e §4).
+
 ### Não acessível nesta fase
 
-- Relatórios das auditorias anteriores (citados em commits, ausentes do repositório).
+- Relatórios citados e não localizados (INVENTARIO §2.3).
 - Histórico de execuções do CI no GitHub.
 - Ambiente Azure (bancos, App Service, Application Insights, backups, Blob de atualizações).
 - Conta Focus NFe, SEFAZ, certificados digitais.
@@ -121,10 +124,12 @@ Saídas:                 registros EXC-… criados/atualizados
 ```
 
 #### EXC-A0 — Linha de base e reconciliação
-- **Status:** Em execução (parcial, feita na EXC-F0).
+- **Status:** Em execução. Relatórios recebidos e reconciliados em 2026-10-22: 22 pendências
+  herdadas encerradas com evidência, 14 convertidas em registros, 9 adiadas para auditorias
+  específicas (INVENTARIO §4).
 - **Escopo:** relatórios anteriores, commits, documentos versionados; confronto com o código atual.
-- **Evidências necessárias:** relatórios das auditorias anteriores (S9–S13, "Fix auditoria",
-  fases de mai/2026), respostas às confirmações da seção 7.
+- **Evidências necessárias:** respostas às confirmações 2 a 9 da seção 7; relatórios
+  faltantes, se existirem (INVENTARIO §2.3).
 - **Critérios de aprovação:** cada item do INVENTARIO com estado *Confirmado*, *Divergente*
   ou *Sem relatório — não verificável*; pendências herdadas registradas sem duplicação.
 - **Encerramento:** inventário revisado pelo responsável; nenhuma pendência dos relatórios
@@ -178,15 +183,17 @@ ser considerado no planejamento (capacidade e revisão por pares).
 
 | # | Pergunta | Registro relacionado |
 |---|---|---|
-| 1 | Onde estão os relatórios das auditorias anteriores? | EXC-DAD-001 |
+| 1 | ~~Onde estão os relatórios das auditorias anteriores?~~ Respondida em 2026-10-22 (35 relatórios entregues; faltam os do INVENTARIO §2.3) | EXC-DAD-001 |
 | 2 | Qual login SQL o WPF usa em cada loja e quais permissões ele tem? | EXC-SEG-001 |
 | 3 | Os segredos removidos do repositório em jun/2026 foram trocados? | EXC-SEG-003 |
-| 4 | Quantas lojas estão em produção, com qual versão do WPF, e o banco é compartilhado? | EXC-SEG-001, EXC-OPS-004 |
-| 5 | Estado do interruptor de recuperação fiscal por tenant em produção | EXC-FIS-001 |
+| 4 | Quantas lojas estão em produção, com qual versão do WPF, e o banco é compartilhado? A Vila Verde já usa o banco na Azure? (em 13/08 usava versão antiga com banco local) | EXC-SEG-001, EXC-OPS-004 |
+| 5 | Estado do interruptor de recuperação fiscal por tenant em produção | EXC-FIS-001, EXC-FIS-007 |
 | 6 | Política de backup e último teste de restauração do Azure SQL | EXC-OPS-003 |
 | 7 | Onde estão termos de uso, política de privacidade e contrato de licença? | EXC-FIS-002 |
 | 8 | O app Mobile segue no escopo do produto? | EXC-PRD-001 |
 | 9 | Quem são os responsáveis por área? | §5 |
+| 10 | Onde está o código da API de licenças? | EXC-OPS-005 |
+| 11 | Quais custos mensais (Azure, Focus) e preços praticados existem hoje? | EXC-ADM-001, EXC-VEN-001 |
 
 ---
 
@@ -203,7 +210,8 @@ ser considerado no planejamento (capacidade e revisão por pares).
 
 ## 9. Próximas ações
 
-1. Obter os relatórios anteriores e as respostas da seção 7 (fecha EXC-A0).
+1. Obter as respostas da seção 7, em especial 2, 4 e 5, que podem elevar a gravidade de
+   EXC-SEG-001 e EXC-FIS-007 (fecha EXC-A0).
 2. Revisar e aprovar a ficha da EXC-A1.
 3. Executar a EXC-A1.
 
@@ -214,3 +222,4 @@ ser considerado no planejamento (capacidade e revisão por pares).
 | Data | Versão | Alteração |
 |---|---|---|
 | 2026-10-22 | 1.0 | Criação na fase EXC-F0 |
+| 2026-10-22 | 1.1 | Relatórios anteriores recebidos; EXC-A0 atualizada; confirmações 10 e 11 |
