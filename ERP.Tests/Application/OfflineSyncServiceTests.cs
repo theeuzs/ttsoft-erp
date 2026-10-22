@@ -181,6 +181,59 @@ namespace ERP.Tests.Application.Services
             var status = await _offlineDb.GetStatusAsync();
             status.VendasComErro.Should().Be(1);
         }
+
+        // ── Limpeza do cache de produtos ────────────────────────────────────
+
+        private static object Prod(Guid id) => new { Id = id, Name = $"P-{id:N}".Substring(0, 8), SalePrice = 1m, Stock = 1m };
+
+        private async Task<int> TotalCache() => (await _offlineDb.GetStatusAsync()).TotalProdutos;
+
+        [Fact(DisplayName = "Cache: produto que sumiu do snapshot completo é removido")]
+        public async Task Cache_ProdutoAusenteDoSnapshot_Removido()
+        {
+            var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
+            await _offlineDb.SincronizarProdutosAsync(new[] { Prod(a), Prod(b) });
+
+            await _offlineDb.SincronizarProdutosAsync(new[] { Prod(a) });
+
+            (await TotalCache()).Should().Be(1);
+        }
+
+        [Fact(DisplayName = "Cache: snapshot VAZIO nunca apaga o cache")]
+        public async Task Cache_SnapshotVazio_PreservaTudo()
+        {
+            await _offlineDb.SincronizarProdutosAsync(new[] { Prod(Guid.NewGuid()), Prod(Guid.NewGuid()) });
+
+            await _offlineDb.SincronizarProdutosAsync(Array.Empty<object>());
+
+            (await TotalCache()).Should().Be(2);
+        }
+
+        [Fact(DisplayName = "Cache: snapshot PARCIAL (< metade do cache) não remove nada")]
+        public async Task Cache_SnapshotParcial_PreservaTudo()
+        {
+            var todos = Enumerable.Range(0, 30).Select(_ => Guid.NewGuid()).ToList();
+            await _offlineDb.SincronizarProdutosAsync(todos.Select(Prod));
+
+            await _offlineDb.SincronizarProdutosAsync(todos.Take(5).Select(Prod));
+
+            (await TotalCache()).Should().Be(30);
+        }
+
+        [Fact(DisplayName = "Cache: produto usado por venda pendente NÃO é removido")]
+        public async Task Cache_ProdutoDeVendaPendente_Preservado()
+        {
+            var (a, usadoNaVenda) = (Guid.NewGuid(), Guid.NewGuid());
+            await _offlineDb.SincronizarProdutosAsync(new[] { Prod(a), Prod(usadoNaVenda) });
+            var vendaId = Guid.NewGuid();
+            var dto = DtoDeTeste(vendaId);
+            dto.Items[0].ProductId = usadoNaVenda;
+            await _offlineDb.SalvarVendaOfflineComOutboxAsync(vendaId, dto);
+
+            await _offlineDb.SincronizarProdutosAsync(new[] { Prod(a) });
+
+            (await TotalCache()).Should().Be(2, "a venda pendente ainda depende desse produto");
+        }
     }
 
     /// <summary>

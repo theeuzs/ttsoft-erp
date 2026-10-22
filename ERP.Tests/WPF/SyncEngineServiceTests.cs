@@ -264,6 +264,95 @@ public class SyncEngineServiceTests : IDisposable
             "ExtrairEntidadeId precisa achar o Id (PascalCase) no JSON pra RegistrarFalhaEventoAsync rodar de verdade");
     }
 
+    [Fact(DisplayName = "Erro de NEGÓCIO (400) — vai para quarentena, sai do ciclo, payload e motivo preservados")]
+    public async Task ProcessarOutbox_ErroDeNegocio_VaiParaQuarentena()
+    {
+        var vendaId = Guid.NewGuid();
+        await _offlineDb.SalvarVendaOfflineComOutboxAsync(vendaId, DtoDeTeste(vendaId));
+        _saleServiceMock.Setup(s => s.CreateAsync(It.IsAny<CreateSaleDto>()))
+            .ThrowsAsync(new ERP.Application.Exceptions.ErroNegocioVendaException("Produto X não encontrado."));
+
+        await _engine.ProcessarOutboxAsync();
+        await _engine.ProcessarOutboxAsync(); // 2º ciclo: não pode tentar de novo
+
+        _saleServiceMock.Verify(s => s.CreateAsync(It.IsAny<CreateSaleDto>()), Times.Once);
+        (await _offlineDb.GetEventosPendentesAsync()).Should().BeEmpty();
+        var quarentena = await _offlineDb.GetVendasEmQuarentenaAsync();
+        quarentena.Should().ContainSingle();
+        quarentena[0].UltimoErro.Should().Contain("Produto X");
+        quarentena[0].Json.Should().Contain(vendaId.ToString(), "o payload não pode ser descartado");
+        (await _offlineDb.GetStatusAsync()).VendasEmQuarentena.Should().Be(1);
+        _motorFinanceiroMock.Verify(m => m.ProcessarRecebimentoVendaAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<string>(), It.IsAny<decimal>(),
+            It.IsAny<System.Collections.Generic.IEnumerable<(Guid, PaymentMethod, decimal)>>()), Times.Never);
+    }
+
+    [Fact(DisplayName = "Erro TRANSITÓRIO (rede) — continua Pendente e tenta de novo no próximo ciclo")]
+    public async Task ProcessarOutbox_ErroDeRede_ContinuaPendente()
+    {
+        var vendaId = Guid.NewGuid();
+        await _offlineDb.SalvarVendaOfflineComOutboxAsync(vendaId, DtoDeTeste(vendaId));
+        _saleServiceMock.Setup(s => s.CreateAsync(It.IsAny<CreateSaleDto>()))
+            .ThrowsAsync(new HttpRequestException("sem rede"));
+
+        await _engine.ProcessarOutboxAsync();
+        await _engine.ProcessarOutboxAsync();
+
+        _saleServiceMock.Verify(s => s.CreateAsync(It.IsAny<CreateSaleDto>()), Times.Exactly(2));
+        var p = await _offlineDb.GetEventosPendentesAsync();
+        p.Should().ContainSingle().Which.Tentativas.Should().Be(2);
+        (await _offlineDb.GetVendasEmQuarentenaAsync()).Should().BeEmpty();
+    }
+
+    [Fact(DisplayName = "Erro INESPERADO — não descarta nem põe em quarentena; fica Pendente com o tipo no UltimoErro")]
+    public async Task ProcessarOutbox_ErroInesperado_FicaPendenteComDetalhe()
+    {
+        var vendaId = Guid.NewGuid();
+        await _offlineDb.SalvarVendaOfflineComOutboxAsync(vendaId, DtoDeTeste(vendaId));
+        _saleServiceMock.Setup(s => s.CreateAsync(It.IsAny<CreateSaleDto>()))
+            .ThrowsAsync(new NullReferenceException("bug"));
+
+        await _engine.ProcessarOutboxAsync();
+
+        (await _offlineDb.GetEventosPendentesAsync()).Should().ContainSingle();
+        (await _offlineDb.GetVendasEmQuarentenaAsync()).Should().BeEmpty();
+    }
+
+    [Fact(DisplayName = "Payload ANTIGO (sem OrigemOffline) é marcado como offline pelo motor, com a data original da fila")]
+    public async Task ProcessarOutbox_PayloadAntigo_MotorMarcaOrigemOffline()
+    {
+        var vendaId = Guid.NewGuid();
+        await _offlineDb.SalvarVendaOfflineComOutboxAsync(vendaId, DtoDeTeste(vendaId));
+        CreateSaleDto? recebido = null;
+        _saleServiceMock.Setup(s => s.CreateAsync(It.IsAny<CreateSaleDto>()))
+            .Callback<CreateSaleDto>(d => recebido = d)
+            .ReturnsAsync(new SaleDto(vendaId, "PDV-001", null, "Vendedor", DateTime.Now, SaleStatus.SemNota, "Dinheiro", 100m));
+
+        await _engine.ProcessarOutboxAsync();
+
+        recebido.Should().NotBeNull();
+        recebido!.OrigemOffline.Should().BeTrue();
+        recebido.DataVendaOriginal.Should().NotBeNull();
+    }
+
+    [Fact(DisplayName = "Reenfileirar quarentena devolve a venda à fila e zera tentativas")]
+    public async Task Reenfileirar_DevolveVendaParaAFila()
+    {
+        var vendaId = Guid.NewGuid();
+        await _offlineDb.SalvarVendaOfflineComOutboxAsync(vendaId, DtoDeTeste(vendaId));
+        _saleServiceMock.SetupSequence(s => s.CreateAsync(It.IsAny<CreateSaleDto>()))
+            .ThrowsAsync(new ERP.Application.Exceptions.ErroNegocioVendaException("CAIXA FECHADO"))
+            .ReturnsAsync(new SaleDto(vendaId, "PDV-001", null, "Vendedor", DateTime.Now, SaleStatus.SemNota, "Dinheiro", 100m));
+
+        await _engine.ProcessarOutboxAsync();
+        (await _offlineDb.ReenfileirarQuarentenaAsync()).Should().Be(1);
+        var sucessos = await _engine.ProcessarOutboxAsync();
+
+        sucessos.Should().Be(1);
+        (await _offlineDb.GetVendasEmQuarentenaAsync()).Should().BeEmpty();
+    }
+
     // ── SincronizarCatalogoAsync — nenhum teste existia pra esse método inteiro ──
 
     [Fact(DisplayName = "Sincronizar catálogo: produtos e clientes com sucesso — retorna true")]

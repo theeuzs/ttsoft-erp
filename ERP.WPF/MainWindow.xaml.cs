@@ -212,7 +212,7 @@ public partial class MainWindow : Window
             await engine.ProcessarOutboxAsync();
 
             var status = await offlineDb.GetStatusAsync();
-            ERP.WPF.Services.ConnectivityIndicatorState.AtualizarAposCiclo(true, status.VendasPendentes);
+            ERP.WPF.Services.ConnectivityIndicatorState.AtualizarAposCiclo(true, status.VendasNaoSincronizadas);
         }
         catch (Exception ex)
         {
@@ -233,7 +233,7 @@ public partial class MainWindow : Window
             // Esse ciclo é o sinal de conectividade mais confiável (§10) — roda
             // sempre, mesmo sem venda pendente, então "alcancouRede" reflete o
             // estado real da rede nesse instante, não só "tinha o que sincronizar".
-            ERP.WPF.Services.ConnectivityIndicatorState.AtualizarAposCiclo(alcancouRede, status.VendasPendentes);
+            ERP.WPF.Services.ConnectivityIndicatorState.AtualizarAposCiclo(alcancouRede, status.VendasNaoSincronizadas);
         }
         catch (Exception ex)
         {

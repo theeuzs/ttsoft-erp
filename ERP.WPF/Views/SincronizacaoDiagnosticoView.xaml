@@ -48,6 +48,24 @@
                     ToolTip="Atualizar status"/>
         </Grid>
 
+        <Grid Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0" Content="💾 Exportar vendas em quarentena"
+                    Command="{Binding ExportarQuarentenaCommand}" IsEnabled="{Binding Processando, Converter={StaticResource InverseBool}}"
+                    Height="40" Background="#64748B" Foreground="White" BorderThickness="0" Cursor="Hand"
+                    ToolTip="Salva o JSON de cada venda recusada por regra de negócio (nada é apagado)"/>
+
+            <Button Grid.Column="2" Content="🔁 Reenfileirar quarentena"
+                    Command="{Binding ReenfileirarQuarentenaCommand}" IsEnabled="{Binding Processando, Converter={StaticResource InverseBool}}"
+                    Height="40" Background="#64748B" Foreground="White" BorderThickness="0" Cursor="Hand"
+                    ToolTip="Devolve as vendas em quarentena à fila (use depois de resolver a causa: abrir caixa, ajustar estoque...)"/>
+        </Grid>
+
         <TextBlock Text="{Binding ResultadoTexto}" FontSize="13" TextWrapping="Wrap" Margin="0,16,0,0" Foreground="{DynamicResource TextDark}"/>
     </StackPanel>
 </UserControl>

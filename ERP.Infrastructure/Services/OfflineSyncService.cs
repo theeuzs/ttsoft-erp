@@ -127,11 +127,14 @@ public class OfflineSyncService
         await conn.OpenAsync();
         using var tx  = conn.BeginTransaction();
 
+        var idsSnapshot = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var produto in produtos)
         {
             var json = JsonSerializer.Serialize(produto, _jsonCamelCase);
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
+            idsSnapshot.Add(root.GetProperty("id").GetString()!);
 
             using var cmd = conn.CreateCommand();
             cmd.CommandText = @"
@@ -156,8 +159,91 @@ public class OfflineSyncService
             await cmd.ExecuteNonQueryAsync();
         }
 
+        var (removidos, motivoSemLimpeza) = await PurgarProdutosAusentesDoSnapshotAsync(conn, tx, idsSnapshot);
+
         tx.Commit();
-        await RegistrarLogAsync("SincProdutos", $"{produtos.Count()} produtos sincronizados em {ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():dd/MM/yyyy HH:mm}");
+        // Log só depois do commit: RegistrarLogAsync abre outra conexão e
+        // disputaria o lock de escrita com a transação ainda aberta.
+        if (motivoSemLimpeza != null)
+            await RegistrarLogAsync("SincProdutosSemLimpeza", motivoSemLimpeza);
+        await RegistrarLogAsync("SincProdutos", $"{idsSnapshot.Count} produtos sincronizados, {removidos} removido(s) do cache em {ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil():dd/MM/yyyy HH:mm}");
+    }
+
+    // Tamanho mínimo do cache para valer o teste de "snapshot parcial", e
+    // fração mínima do cache anterior que o snapshot precisa cobrir.
+    private const int CacheMinimoParaTesteDeCobertura = 20;
+    private const double CoberturaMinimaDoSnapshot = 0.5;
+
+    /// <summary>Remove do ProdutosCache o que o servidor não devolve mais
+    /// (excluído) — senão o PDV offline continua vendendo produto inexistente.
+    /// Conservador de propósito; NÃO purga se:
+    ///  • o snapshot veio vazio (resposta vazia nunca prova catálogo vazio);
+    ///  • o snapshot cobre menos da metade do cache atual (resposta parcial);
+    /// e NUNCA remove produto usado por venda ainda pendente ou em quarentena.
+    /// (Chegar aqui já implica HTTP 200 e JSON íntegro; sem total oficial no
+    /// endpoint, esses são os sinais de completude disponíveis.)</summary>
+    private async Task<(int Removidos, string? MotivoSemLimpeza)> PurgarProdutosAusentesDoSnapshotAsync(
+        SqliteConnection conn, SqliteTransaction tx, HashSet<string> idsSnapshot)
+    {
+        if (idsSnapshot.Count == 0)
+            return (0, "Snapshot vazio — cache preservado.");
+
+        var idsCache = new List<string>();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.Transaction = tx;
+            cmd.CommandText = "SELECT Id FROM ProdutosCache";
+            using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync()) idsCache.Add(r.GetString(0));
+        }
+
+        if (idsCache.Count >= CacheMinimoParaTesteDeCobertura
+            && idsSnapshot.Count < idsCache.Count * CoberturaMinimaDoSnapshot)
+        {
+            return (0, $"Snapshot parcial ({idsSnapshot.Count} de {idsCache.Count} no cache) — cache preservado.");
+        }
+
+        var obsoletos = idsCache.Where(id => !idsSnapshot.Contains(id)).ToList();
+        if (obsoletos.Count == 0) return (0, null);
+
+        var emUso = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.Transaction = tx;
+            cmd.CommandText = "SELECT DadosJson FROM VendasOffline WHERE Status <> 'Sincronizado'";
+            using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+                ColetarProductIds(r.GetString(0), emUso);
+        }
+
+        int removidos = 0;
+        foreach (var id in obsoletos.Where(id => !emUso.Contains(id)))
+        {
+            using var del = conn.CreateCommand();
+            del.Transaction = tx;
+            del.CommandText = "DELETE FROM ProdutosCache WHERE Id = @id";
+            del.Parameters.AddWithValue("@id", id);
+            removidos += await del.ExecuteNonQueryAsync();
+        }
+        return (removidos, null);
+    }
+
+    private static void ColetarProductIds(string vendaJson, HashSet<string> destino)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(vendaJson);
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (!prop.NameEquals("Items") && !prop.Name.Equals("items", StringComparison.OrdinalIgnoreCase)) continue;
+                if (prop.Value.ValueKind != JsonValueKind.Array) continue;
+                foreach (var item in prop.Value.EnumerateArray())
+                    foreach (var p in item.EnumerateObject())
+                        if (p.Name.Equals("ProductId", StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind == JsonValueKind.String)
+                            destino.Add(p.Value.GetString()!);
+            }
+        }
+        catch (JsonException) { /* payload ilegível: não dá pra proteger nada dele */ }
     }
 
     // Achado (16/09) — a metade que faltava da arquitetura offline-first
@@ -339,18 +425,100 @@ public class OfflineSyncService
         }
     }
 
-    public async Task<List<(string Id, string Json, int Tentativas)>> GetEventosPendentesAsync()
+    public async Task<List<(string Id, string Json, int Tentativas, string CriadoEm)>> GetEventosPendentesAsync()
     {
         using var conn = Abrir();
         await conn.OpenAsync();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT Id, PayloadJson, Tentativas FROM SyncOutbox WHERE Status = 'Pendente' ORDER BY CriadoEm";
+        cmd.CommandText = "SELECT Id, PayloadJson, Tentativas, CriadoEm FROM SyncOutbox WHERE Status = 'Pendente' ORDER BY CriadoEm";
 
-        var lista = new List<(string, string, int)>();
+        var lista = new List<(string, string, int, string)>();
         using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
-            lista.Add((reader.GetString(0), reader.GetString(1), reader.GetInt32(2)));
+            lista.Add((reader.GetString(0), reader.GetString(1), reader.GetInt32(2), reader.GetString(3)));
         return lista;
+    }
+
+    // ── Quarentena de falhas de NEGÓCIO ─────────────────────────────────────────
+    // Erro de negócio (produto inválido, estoque insuficiente, caixa fechado...)
+    // não melhora sozinho com retry. Em vez de tentar para sempre, o evento sai
+    // do ciclo automático com Status 'FalhaNegocio' — payload e motivo
+    // preservados, nada descartado. As DUAS tabelas mudam juntas, senão a
+    // reconciliação de órfãs recriaria o evento na Outbox.
+    public const string StatusFalhaNegocio = "FalhaNegocio";
+
+    public async Task MarcarEventoFalhaNegocioAsync(string outboxId, Guid entidadeId, string erro)
+    {
+        using var conn = Abrir();
+        await conn.OpenAsync();
+        using var tx = conn.BeginTransaction();
+
+        using (var cmd1 = conn.CreateCommand())
+        {
+            cmd1.Transaction = tx;
+            cmd1.CommandText = "UPDATE SyncOutbox SET Status = @st, Tentativas = Tentativas + 1, UltimoErro = @erro WHERE Id = @id";
+            cmd1.Parameters.AddWithValue("@st",   StatusFalhaNegocio);
+            cmd1.Parameters.AddWithValue("@id",   outboxId);
+            cmd1.Parameters.AddWithValue("@erro", erro);
+            await cmd1.ExecuteNonQueryAsync();
+        }
+        using (var cmd2 = conn.CreateCommand())
+        {
+            cmd2.Transaction = tx;
+            cmd2.CommandText = "UPDATE VendasOffline SET Status = @st, Tentativas = Tentativas + 1, UltimoErro = @erro WHERE Id = @id";
+            cmd2.Parameters.AddWithValue("@st",   StatusFalhaNegocio);
+            cmd2.Parameters.AddWithValue("@id",   entidadeId.ToString());
+            cmd2.Parameters.AddWithValue("@erro", erro);
+            await cmd2.ExecuteNonQueryAsync();
+        }
+        tx.Commit();
+        await RegistrarLogAsync("SyncFalhaNegocio", $"Venda {entidadeId} em quarentena: {erro}");
+    }
+
+    /// <summary>Vendas em quarentena (Id, motivo, quando, payload) — para
+    /// diagnóstico e exportação. Somente leitura.</summary>
+    public async Task<List<(string Id, string UltimoErro, string CriadoEm, string Json)>> GetVendasEmQuarentenaAsync()
+    {
+        using var conn = Abrir();
+        await conn.OpenAsync();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT Id, COALESCE(UltimoErro, ''), CriadoEm, DadosJson FROM VendasOffline WHERE Status = @st ORDER BY CriadoEm";
+        cmd.Parameters.AddWithValue("@st", StatusFalhaNegocio);
+
+        var lista = new List<(string, string, string, string)>();
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            lista.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3)));
+        return lista;
+    }
+
+    /// <summary>Devolve TODAS as vendas em quarentena para a fila (Pendente),
+    /// zerando tentativas. Ação manual do operador depois de resolver a causa
+    /// (abrir caixa, corrigir estoque...). Idempotente no servidor.</summary>
+    public async Task<int> ReenfileirarQuarentenaAsync()
+    {
+        using var conn = Abrir();
+        await conn.OpenAsync();
+        using var tx = conn.BeginTransaction();
+
+        int n;
+        using (var cmd1 = conn.CreateCommand())
+        {
+            cmd1.Transaction = tx;
+            cmd1.CommandText = "UPDATE SyncOutbox SET Status = 'Pendente', Tentativas = 0 WHERE Status = @st";
+            cmd1.Parameters.AddWithValue("@st", StatusFalhaNegocio);
+            n = await cmd1.ExecuteNonQueryAsync();
+        }
+        using (var cmd2 = conn.CreateCommand())
+        {
+            cmd2.Transaction = tx;
+            cmd2.CommandText = "UPDATE VendasOffline SET Status = 'Pendente', Tentativas = 0 WHERE Status = @st";
+            cmd2.Parameters.AddWithValue("@st", StatusFalhaNegocio);
+            await cmd2.ExecuteNonQueryAsync();
+        }
+        tx.Commit();
+        if (n > 0) await RegistrarLogAsync("ReenfileirarQuarentena", $"{n} venda(s) devolvida(s) à fila.");
+        return n;
     }
 
     // Achado (17/09) — venda pendente vista no diagnóstico ("Vendas
@@ -490,6 +658,7 @@ public class OfflineSyncService
             TotalClientes       = await Count("ClientesCache"),
             VendasPendentes     = await CountWhere("VendasOffline", "Status = 'Pendente'"),
             VendasComErro       = await CountWhere("VendasOffline", "Tentativas > 0 AND Status = 'Pendente'"),
+            VendasEmQuarentena  = await CountWhere("VendasOffline", $"Status = '{StatusFalhaNegocio}'"),
             TamanhoBanco        = new FileInfo(_dbPath).Length,
             CaminhoBanco        = _dbPath
         };
@@ -513,6 +682,11 @@ public class OfflineStatus
     public int    TotalProdutos   { get; set; }
     public int    TotalClientes   { get; set; }
     public int    VendasPendentes { get; set; }
+    /// <summary>Falha de negócio: fora do ciclo automático, payload preservado.</summary>
+    public int    VendasEmQuarentena { get; set; }
+    /// <summary>O que o indicador do PDV deve mostrar: quarentena NÃO pode
+    /// sumir do aviso só porque saiu do ciclo automático.</summary>
+    public int    VendasNaoSincronizadas => VendasPendentes + VendasEmQuarentena;
     public int    VendasComErro   { get; set; }
     public long   TamanhoBanco    { get; set; }
     public string CaminhoBanco    { get; set; } = string.Empty;

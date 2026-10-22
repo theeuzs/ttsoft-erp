@@ -79,6 +79,16 @@ public class SaleService : ISaleService
 
         var novaVendaId = dto.Id ?? Guid.NewGuid();
 
+        // Produto excluído só é aceito em venda reenviada pela fila offline,
+        // e só com Id (idempotência). dto.Id sozinho NÃO basta: o PDV online
+        // também o preenche. O tenant segue valendo no repositório.
+        bool permiteExcluido = dto.OrigemOffline && dto.Id.HasValue;
+
+        var agoraBr = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil();
+        var dataVenda = dto.OrigemOffline && dto.DataVendaOriginal.HasValue && dto.DataVendaOriginal.Value <= agoraBr
+            ? dto.DataVendaOriginal.Value
+            : agoraBr;
+
         var sale = new Sale
         {
             Id = novaVendaId, 
@@ -88,7 +98,7 @@ public class SaleService : ISaleService
             SellerName = dto.SellerName,
             DiscountAmount = dto.DiscountAmount,
             ShippingValue = dto.ShippingValue,
-            SaleDate = ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil(),
+            SaleDate = dataVenda,
             Notes = dto.Notes,
             Payments = dto.Payments.Select(p => new SalePayment
             {
@@ -118,15 +128,24 @@ public class SaleService : ISaleService
 
                 foreach (var itemDto in dto.Items)
                 {
-                    var product = await _uow.Products.GetByIdAsync(itemDto.ProductId)
+                    var product = (permiteExcluido
+                            ? await _uow.Products.GetByIdIncludingDeletedAsync(itemDto.ProductId)
+                            : await _uow.Products.GetByIdAsync(itemDto.ProductId))
                         ?? throw new KeyNotFoundException($"Produto {itemDto.ProductId} não encontrado.");
+
+                    if (product.IsDeleted)
+                        Serilog.Log.Warning(
+                            "Venda offline {SaleId} usa produto excluído {ProductId} ({Name}) — aceita porque a venda já ocorreu",
+                            novaVendaId, product.Id, product.Name);
 
                     Product produtoEstoque;
                     decimal qtdEstoque;
 
                     if (product.ParentProductId.HasValue && product.ConversionFactor > 0)
                     {
-                        produtoEstoque = await _uow.Products.GetByIdAsync(product.ParentProductId.Value)
+                        produtoEstoque = (permiteExcluido
+                                ? await _uow.Products.GetByIdIncludingDeletedAsync(product.ParentProductId.Value)
+                                : await _uow.Products.GetByIdAsync(product.ParentProductId.Value))
                             ?? throw new KeyNotFoundException(
                                 $"Produto pai de '{product.Name}' não encontrado. " +
                                 $"Verifique o cadastro de produto composto.");
@@ -231,7 +250,16 @@ public class SaleService : ISaleService
             catch (Exception ex)
             {
                 await tx.RollbackAsync();
-                throw new Exception($"ERRO NA VENDA (revertido): {ex.InnerException?.Message ?? ex.Message}", ex);
+                var mensagem = $"ERRO NA VENDA (revertido): {ex.InnerException?.Message ?? ex.Message}";
+
+                // Só regra de negócio vira 400 (ErroNegocioVendaException);
+                // qualquer outra coisa continua Exception genérica → 500, para
+                // não esconder falha interna como se fosse erro do operador.
+                if (ex is InvalidOperationException or KeyNotFoundException
+                       or ERP.Application.Exceptions.LimiteCreditoExcedidoException)
+                    throw new ERP.Application.Exceptions.ErroNegocioVendaException(mensagem, ex);
+
+                throw new Exception(mensagem, ex);
             }
         });
         

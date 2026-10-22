@@ -138,6 +138,9 @@ public class SalesController : ControllerBase
         {
             return BadRequest(new { erro = ex.Message });
         }
+        // ErroNegocioVendaException (regra de negócio dentro da transação, já
+        // revertida) herda de InvalidOperationException e cai no 400 acima.
+        // Falha inesperada NÃO é capturada: segue como 500.
     }
 
     /// <summary>Cancela uma venda. Estorna estoque automaticamente.</summary>

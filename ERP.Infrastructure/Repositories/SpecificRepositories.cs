@@ -52,6 +52,17 @@ public class ProductRepository : Repository<Product>, IProductRepository
         return rows > 0;
     }
 
+    // IgnoreQueryFilters remove JUNTO o filtro de tenant — por isso o
+    // TenantId é reaplicado à mão (mesma fonte usada em BaixarEstoqueAtomicoAsync).
+    public async Task<Product?> GetByIdIncludingDeletedAsync(Guid id)
+    {
+        var tenantId = AppDbContext.GetQueryTenantId();
+        return await _ctx.Products
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == id && p.TenantId == tenantId);
+    }
+
     public async Task<Product?> GetByBarcodeAsync(string barcode)
         => await _ctx.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Barcode == barcode);
 

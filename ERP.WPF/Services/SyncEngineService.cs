@@ -78,7 +78,7 @@ public class SyncEngineService
         var pendentes = await _offlineDb.GetEventosPendentesAsync();
         int sucessos = 0;
 
-        foreach (var (outboxId, payloadJson, _) in pendentes)
+        foreach (var (outboxId, payloadJson, _, criadoEm) in pendentes)
         {
             try
             {
@@ -88,6 +88,14 @@ public class SyncEngineService
                     Log.Warning("SyncEngine: evento {OutboxId} com payload inválido, pulando", outboxId);
                     continue;
                 }
+
+                // Quem decide que é venda offline é este motor (só ele lê a
+                // fila) — nunca o payload, que pode ser antigo (sem esses
+                // campos, como a venda já pendente) ou adulterado. Vale
+                // também para payloads gravados antes deste campo existir.
+                dto.OrigemOffline = true;
+                if (DateTime.TryParse(criadoEm, null, System.Globalization.DateTimeStyles.RoundtripKind, out var dataOriginal))
+                    dto.DataVendaOriginal = dataOriginal;
 
                 // Idempotência (§7) acontece DENTRO do SaleService.CreateAsync —
                 // se essa venda já existir no Azure (ex: sincronizou antes mas a
@@ -116,7 +124,7 @@ public class SyncEngineService
                 }
 
                 if (dto.Payments.Any(p => !p.Id.HasValue))
-                    throw new InvalidOperationException(
+                    throw new ERP.Application.Exceptions.ErroNegocioVendaException(
                         "CreateSalePaymentDto.Id precisa estar preenchido em toda linha antes de sincronizar — é a chave de idempotência financeira granular.");
 
                 await _motorFinanceiro.ProcessarRecebimentoVendaAsync(
@@ -150,15 +158,35 @@ public class SyncEngineService
                     "com o token que estiver em AppSession.JwtToken naquele momento)", outboxId);
                 break;
             }
-            catch (Exception ex)
+            catch (ERP.Application.Exceptions.ErroNegocioVendaException ex)
             {
-                // Best-effort por evento — uma venda com erro (ex: produto que
-                // não existe mais) não pode travar as outras vendas da fila.
+                // Erro de NEGÓCIO (servidor respondeu 400: produto inválido,
+                // estoque insuficiente, caixa fechado...). Retry automático não
+                // resolve: sai do ciclo, payload e motivo preservados, aparece
+                // em quarentena no diagnóstico (reenfileirável à mão).
                 var entidadeId = ExtrairEntidadeId(payloadJson);
                 if (entidadeId.HasValue)
-                    await _offlineDb.RegistrarFalhaEventoAsync(outboxId, entidadeId.Value, ex.Message);
+                    await _offlineDb.MarcarEventoFalhaNegocioAsync(outboxId, entidadeId.Value, ex.Message);
 
-                Log.Warning(ex, "SyncEngine: falha ao sincronizar evento {OutboxId}", outboxId);
+                Log.Warning(ex, "SyncEngine: venda do evento {OutboxId} recusada por regra de negócio — em quarentena", outboxId);
+            }
+            catch (Exception ex)
+            {
+                // Transitório (rede, timeout, 5xx) OU inesperado: continua
+                // Pendente e tenta no próximo ciclo, nunca descartado. Uma venda
+                // com erro não pode travar as outras vendas da fila. O tipo
+                // fica no UltimoErro para distinguir bug de indisponibilidade.
+                var entidadeId = ExtrairEntidadeId(payloadJson);
+                var transitorio = ex is System.Net.Http.HttpRequestException or TaskCanceledException or TimeoutException
+                                  || ERP.Application.Services.ConnectivityExceptionClassifier.EhFalhaDeConectividade(ex);
+                if (entidadeId.HasValue)
+                    await _offlineDb.RegistrarFalhaEventoAsync(outboxId, entidadeId.Value,
+                        $"[{(transitorio ? "Transitório" : "Inesperado")}] {ex.GetType().Name}: {ex.Message}");
+
+                if (transitorio)
+                    Log.Warning(ex, "SyncEngine: falha transitória ao sincronizar evento {OutboxId}", outboxId);
+                else
+                    Log.Error(ex, "SyncEngine: falha INESPERADA ao sincronizar evento {OutboxId} (venda preservada na fila)", outboxId);
             }
         }
 

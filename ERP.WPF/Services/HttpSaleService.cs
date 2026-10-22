@@ -128,7 +128,7 @@ public class HttpSaleService : ISaleService
             // negócio (ex: LimiteCreditoExcedidoException, que por sua vez
             // também não é conectividade) — o classificador já trata
             // InvalidOperationException como "nunca é offline", preservado aqui.
-            throw new InvalidOperationException(erro);
+            throw new ERP.Application.Exceptions.ErroNegocioVendaException(erro);
         }
 
         resp.EnsureSuccessStatusCode(); // qualquer outro erro (5xx etc.) sobe como HttpRequestException — propositalmente não capturado aqui

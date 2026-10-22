@@ -10,6 +10,14 @@ public interface IProductRepository : IRepository<Product>
     Task<IEnumerable<Product>> GetLowStockAsync();
 
     /// <summary>
+    /// Igual a GetByIdAsync, mas também devolve produto excluído logicamente
+    /// (IsDeleted). SEMPRE restrito ao tenant atual. Uso exclusivo: sincronizar
+    /// venda feita offline, que já aconteceu fisicamente mesmo que o produto
+    /// tenha sido excluído no servidor depois.
+    /// </summary>
+    Task<Product?> GetByIdIncludingDeletedAsync(Guid id);
+
+    /// <summary>
     /// Baixa o estoque atomicamente via SQL direto.
     /// Retorna false se o estoque for insuficiente (race condition seguro).
     /// </summary>

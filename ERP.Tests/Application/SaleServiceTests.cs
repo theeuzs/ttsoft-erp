@@ -322,11 +322,90 @@ namespace ERP.Tests.Application.Services
             _uowMock.Setup(u => u.BeginTransactionAsync()).ReturnsAsync(txMock.Object);
 
             // Act & Assert — SaleService envolve exceções do loop em Exception("ERRO NA VENDA (revertido): ...")
-            var ex = await Assert.ThrowsAsync<Exception>(
+            // Regra de negócio → ErroNegocioVendaException (API devolve 400).
+            var ex = await Assert.ThrowsAsync<ERP.Application.Exceptions.ErroNegocioVendaException>(
                 () => _saleService.CreateAsync(dto));
 
             Assert.IsType<InvalidOperationException>(ex.InnerException);
             Assert.Contains("excede o limite", ex.InnerException!.Message);
+        }
+
+        private (CreateSaleDto dto, Guid produtoId) PrepararVendaComProdutoExcluido(bool offline, bool comId)
+        {
+            var usuarioId = Guid.NewGuid();
+            var produtoId = Guid.NewGuid();
+            var excluido = new Product { Id = produtoId, Name = "Organizador", Stock = 10, IsDeleted = true, IsActive = false };
+
+            _uowMock.Setup(u => u.Caixas.GetCaixaAbertoByUsuarioAsync(usuarioId)).ReturnsAsync(new Caixa { Id = Guid.NewGuid() });
+            // Consulta normal (com filtro) NÃO acha o excluído; a que inclui excluídos acha.
+            _uowMock.Setup(u => u.Products.GetByIdAsync(produtoId)).ReturnsAsync((Product?)null);
+            _uowMock.Setup(u => u.Products.GetByIdIncludingDeletedAsync(produtoId)).ReturnsAsync(excluido);
+            _mapperMock.Setup(m => m.Map<SaleDto>(It.IsAny<Sale>())).Returns((SaleDto)null!);
+
+            var dto = new CreateSaleDto
+            {
+                Id = comId ? Guid.NewGuid() : null,
+                OrigemOffline = offline,
+                UsuarioId = usuarioId,
+                Items = new List<CreateSaleItemDto> { new() { ProductId = produtoId, Quantity = 1 } },
+                Payments = new List<CreateSalePaymentDto>()
+            };
+            return (dto, produtoId);
+        }
+
+        [Fact(DisplayName = "CriarVenda offline - aceita produto excluído logicamente")]
+        public async Task CriarVenda_Offline_AceitaProdutoExcluido()
+        {
+            var (dto, _) = PrepararVendaComProdutoExcluido(offline: true, comId: true);
+            dto.DataVendaOriginal = DateTime.Today.AddDays(-3);
+
+            await _saleService.CreateAsync(dto);
+
+            _uowMock.Verify(u => u.Sales.AddAsync(It.Is<Sale>(s => s.SaleDate == DateTime.Today.AddDays(-3))), Times.Once);
+        }
+
+        [Fact(DisplayName = "CriarVenda online com Id (PDV online) - NÃO aceita produto excluído")]
+        public async Task CriarVenda_OnlineComId_RejeitaProdutoExcluido()
+        {
+            var (dto, _) = PrepararVendaComProdutoExcluido(offline: false, comId: true);
+
+            var ex = await Assert.ThrowsAsync<ERP.Application.Exceptions.ErroNegocioVendaException>(
+                () => _saleService.CreateAsync(dto));
+
+            Assert.IsType<KeyNotFoundException>(ex.InnerException);
+            _uowMock.Verify(u => u.Products.GetByIdIncludingDeletedAsync(It.IsAny<Guid>()), Times.Never);
+        }
+
+        [Fact(DisplayName = "CriarVenda - OrigemOffline sem Id não habilita produto excluído")]
+        public async Task CriarVenda_OrigemOfflineSemId_RejeitaProdutoExcluido()
+        {
+            var (dto, _) = PrepararVendaComProdutoExcluido(offline: true, comId: false);
+
+            await Assert.ThrowsAsync<ERP.Application.Exceptions.ErroNegocioVendaException>(
+                () => _saleService.CreateAsync(dto));
+        }
+
+        [Fact(DisplayName = "CriarVenda offline - produto inexistente (ou de outro tenant) continua falhando")]
+        public async Task CriarVenda_Offline_ProdutoInexistenteContinuaFalhando()
+        {
+            var (dto, produtoId) = PrepararVendaComProdutoExcluido(offline: true, comId: true);
+            // O repositório filtra por tenant: produto de outro tenant volta null.
+            _uowMock.Setup(u => u.Products.GetByIdIncludingDeletedAsync(produtoId)).ReturnsAsync((Product?)null);
+
+            await Assert.ThrowsAsync<ERP.Application.Exceptions.ErroNegocioVendaException>(
+                () => _saleService.CreateAsync(dto));
+        }
+
+        [Fact(DisplayName = "CriarVenda - falha inesperada continua Exception genérica (500), não vira erro de negócio")]
+        public async Task CriarVenda_FalhaInesperada_NaoVirErroDeNegocio()
+        {
+            var (dto, produtoId) = PrepararVendaComProdutoExcluido(offline: true, comId: true);
+            _uowMock.Setup(u => u.Products.GetByIdIncludingDeletedAsync(produtoId))
+                    .ThrowsAsync(new TimeoutException("banco"));
+
+            var ex = await Assert.ThrowsAsync<Exception>(() => _saleService.CreateAsync(dto));
+
+            Assert.IsNotType<ERP.Application.Exceptions.ErroNegocioVendaException>(ex);
         }
     }
 }

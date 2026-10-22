@@ -196,6 +196,17 @@ public class CreateSaleDto
     /// cliente nessa venda A Prazo específica — mesmo padrão já usado pra
     /// autorizar desconto acima do permitido (SenhaGerenteView).</summary>
     public bool AutorizadoPorGerente { get; set; } = false;
+
+    /// <summary>Marcado SOMENTE pelo SyncEngine ao reenviar uma venda da fila
+    /// offline. O Id preenchido NÃO prova isso — o PDV online também gera Id.
+    /// Habilita o servidor a aceitar produto excluído logicamente (a venda já
+    /// aconteceu fisicamente). Exige Id (chave de idempotência); o tenant
+    /// continua sendo sempre respeitado.</summary>
+    public bool OrigemOffline { get; set; }
+
+    /// <summary>Momento em que a venda foi feita no PDV offline (hora do
+    /// Brasil). Ignorado se vier no futuro.</summary>
+    public DateTime? DataVendaOriginal { get; set; }
 }
 
 public class CreateSaleItemDto
