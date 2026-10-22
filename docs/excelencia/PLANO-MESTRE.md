@@ -184,10 +184,10 @@ ser considerado no planejamento (capacidade e revisão por pares).
 | # | Pergunta | Registro relacionado |
 |---|---|---|
 | 1 | ~~Onde estão os relatórios das auditorias anteriores?~~ Respondida em 2026-10-22 (35 relatórios entregues; faltam os do INVENTARIO §2.3) | EXC-DAD-001 |
-| 2 | Qual login SQL o WPF usa em cada loja e quais permissões ele tem? | EXC-SEG-001 |
+| 2 | Qual login SQL o WPF usa em cada loja e quais permissões ele tem? **Parcial (2026-10-22):** mesmo login em todas as lojas, com acesso a todos os tenants; privilégios além do banco pendentes ([roteiro](ROTEIRO-CONFIRMACOES-A0.md) 1.1 e 2) | EXC-SEG-001 |
 | 3 | Os segredos removidos do repositório em jun/2026 foram trocados? | EXC-SEG-003 |
-| 4 | Quantas lojas estão em produção, com qual versão do WPF, e o banco é compartilhado? A Vila Verde já usa o banco na Azure? (em 13/08 usava versão antiga com banco local) | EXC-SEG-001, EXC-OPS-004 |
-| 5 | Estado do interruptor de recuperação fiscal por tenant em produção | EXC-FIS-001, EXC-FIS-007 |
+| 4 | Quantas lojas estão em produção, com qual versão do WPF, e o banco é compartilhado? A Vila Verde já usa o banco na Azure? **Parcial (2026-10-22):** declarado que a Vila Verde usa 3 PCs com o último artefato e o `ERPTTSoftStaging`; build por PC e demais lojas pendentes (roteiro 3 e 4) | EXC-SEG-001, EXC-OPS-004, EXC-OPS-007 |
+| 5 | Estado do interruptor de recuperação fiscal por tenant em produção. **Parcial (2026-10-22):** interruptor localizado (`FiscalRecovery__TenantsHabilitados` no App Service); valor real pendente (roteiro 1.2, 1.4 e 4.6) | EXC-FIS-001, EXC-FIS-007 |
 | 6 | Política de backup e último teste de restauração do Azure SQL | EXC-OPS-003 |
 | 7 | Onde estão termos de uso, política de privacidade e contrato de licença? | EXC-FIS-002 |
 | 8 | O app Mobile segue no escopo do produto? | EXC-PRD-001 |
@@ -223,3 +223,4 @@ ser considerado no planejamento (capacidade e revisão por pares).
 |---|---|---|
 | 2026-10-22 | 1.0 | Criação na fase EXC-F0 |
 | 2026-10-22 | 1.1 | Relatórios anteriores recebidos; EXC-A0 atualizada; confirmações 10 e 11 |
+| 2026-10-22 | 1.2 | Confirmações 2, 4 e 5 parcialmente respondidas; roteiro de verificação somente leitura |

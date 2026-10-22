@@ -47,11 +47,13 @@
 
 | ID | Área | Título | Natureza | Gravidade | Confiança | Status | Responsável |
 |---|---|---|---|---|---|---|---|
-| EXC-SEG-001 | SEG | WPF acessa o banco diretamente com credencial armazenada na máquina da loja | Fato + Hipótese | A classificar | Média | Hipótese | A definir |
+| EXC-SEG-001 | SEG | WPF acessa o banco com uma credencial única, igual em todas as lojas, que lê e grava dados de todos os tenants | Fato | Alta | Alta | Confirmado | A definir |
 | EXC-SEG-002 | SEG | Dependência com vulnerabilidade conhecida de gravidade alta (`System.Security.Cryptography.Xml` 8.0.3) | Fato | A classificar | Alta (aviso) | Confirmado | A definir |
 | EXC-SEG-003 | SEG | Troca dos segredos removidos do repositório não confirmada | Lacuna | A classificar | Baixa | Lacuna | Matheus |
 | EXC-SEG-004 | SEG | Tokens OAuth do Mercado Livre gravados em texto plano | Fato | Média | Alta | Confirmado | A definir |
 | EXC-SEG-005 | SEG | JWT sem refresh token | Fato | Baixa | Alta | Confirmado | A definir |
+| EXC-SEG-006 | SEG | Senha do login SQL de produção compartilhada fora de um cofre de segredos | Fato | Alta | Alta | Confirmado | Matheus |
+| EXC-SEG-007 | SEG | Conexão do WPF ao SQL não valida o certificado do servidor (`TrustServerCertificate=True`) | Fato | Média | Alta | Confirmado | A definir |
 | EXC-ENG-001 | ENG | Testes não comprovam comportamento no SQL Server (SQL bruto e `IgnoreQueryFilters`) | Fato | Média | Alta | Confirmado | A definir |
 | EXC-ENG-002 | ENG | README desatualizado em relação à arquitetura atual | Fato | Baixa | Alta | Confirmado | A definir |
 | EXC-ENG-003 | ENG | 155 avisos de compilação | Fato | Baixa | Alta | Confirmado | A definir |
@@ -62,6 +64,7 @@
 | EXC-OPS-004 | OPS | Versão do produto sem fonte única; versões e bancos em campo desconhecidos | Fato + Lacuna | Baixa | Alta | Confirmado | A definir |
 | EXC-OPS-005 | OPS | Licenciamento depende de API externa fora deste repositório | Fato + Lacuna | A classificar | Alta | Confirmado | Matheus |
 | EXC-OPS-006 | OPS | Rate limit e cache em memória impedem escalar a API para mais de uma instância | Fato | Baixa | Média | Confirmado | A definir |
+| EXC-OPS-007 | OPS | Produção usa o banco `ERPTTSoftStaging`, que também recebe testes, num servidor compartilhado com o OutfiTT | Fato | Média | Média | Confirmado | Matheus |
 | EXC-FIS-001 | FIS | Estado da recuperação fiscal (interruptor por tenant) em produção desconhecido | Lacuna | A classificar | — | Lacuna | Matheus |
 | EXC-FIS-002 | FIS | Termos de uso, privacidade, contrato, DPA e limitação de responsabilidade não localizados | Lacuna | A classificar | — | Lacuna | Matheus |
 | EXC-FIS-003 | FIS | Serviços locais de emissão fiscal seguem registrados no WPF junto ao serviço via API | Hipótese | A classificar | Baixa | Hipótese | A definir |
@@ -75,33 +78,33 @@
 | EXC-ADM-001 | ADM | Custo de operação por cliente desconhecido | Lacuna | A classificar | — | Lacuna | Matheus |
 | EXC-VEN-001 | VEN | Preços e planos sem validação com clientes | Lacuna | A classificar | — | Lacuna | Matheus |
 
-**Contagem:** 27 registros — 0 Crítica, 0 Alta, 6 Média, 8 Baixa, 13 A classificar.
-Nenhum registro foi classificado como Crítico ou Alto porque nenhum risco grave foi
-**confirmado** no ambiente; vários aguardam evidência que pode elevá-los (ver campo *Impacto*).
+**Contagem:** 30 registros — 0 Crítica, 2 Alta, 8 Média, 8 Baixa, 12 A classificar.
+Nenhum registro é Crítico até agora; EXC-SEG-001 pode subir com o resultado do
+[roteiro](ROTEIRO-CONFIRMACOES-A0.md), passo 1.1 e 2.5 (acesso a outros bancos do servidor).
 
 ---
 
 ## Detalhe — Segurança (SEG)
 
-### EXC-SEG-001 — WPF acessa o banco diretamente com credencial armazenada na máquina da loja
+### EXC-SEG-001 — WPF acessa o banco com uma credencial única, que lê e grava dados de todos os tenants
 
 | Campo | Valor |
 |---|---|
 | Área | SEG (também ENG, DAD) |
-| Natureza | **Fato:** o WPF abre conexão SQL direta. **Hipótese:** a credencial permite acesso a dados de outros tenants. |
-| Descrição | O WPF carrega uma string de conexão cifrada com DPAPI (`DataProtectionScope.LocalMachine`, entropia fixa no binário) e registra um `AppDbContext` com SQL Server. Venda, Produto, Cliente, Caixa, Contas a Receber/Pagar e Fiscal já usam a API (em 13/08 só Venda usava). Auth, Usuários, Funções, Devolução, Orçamento, Haver, Motor Financeiro, SPED, Dashboard, emissão/cancelamento/contingência de NF-e e outros seguem acessando o banco diretamente. Nesses caminhos o isolamento entre tenants depende do filtro de consulta executado **no cliente**. |
-| Evidência | `ERP.WPF/App.xaml.cs:132`, `:298-303`, `:361-502`; `ERP.WPF/Helpers/SecureConfigService.cs:20,29,40` (verificado em 2026-10-22). DOC-31 (D, "até 10 clientes"), DOC-32 (A), DOC-33 (§5, "P0 estrutural") e DOC-34 descrevem o mesmo risco e afirmam que a credencial enxerga todos os tenants; essa afirmação vem da leitura do código, não de consulta às permissões no banco. |
-| Gravidade | **A classificar.** Crítica se o login distribuído às lojas tiver leitura/escrita em todos os tenants (DPAPI LocalMachine protege contra cópia para outra máquina, não contra quem usa a própria máquina). Média se o login for restrito. As auditorias anteriores o trataram como P0. |
-| Impacto | Exposição ou alteração de dados de outras lojas por quem tiver acesso administrativo a uma máquina de loja, incluindo os tokens de EXC-SEG-004. Não há indício de exploração. |
-| Confiança | Média (código lido; permissões do login não verificadas) |
-| Dependências | PLANO-MESTRE §7, confirmações 2 e 4; acesso ao Azure SQL |
+| Natureza | Fato |
+| Descrição | O WPF guarda a string de conexão em `conexao.dat`, ao lado do executável, cifrada com DPAPI de máquina e entropia fixa no binário; quem usa a máquina consegue decifrá-la. Segundo o responsável (2026-10-22), toda instalação usa o **mesmo login SQL** (`sa_ttsoft`) no banco `ERPTTSoftStaging`, que contém todos os tenants. Não há segurança por linha no banco: nenhuma política nem uso de `SESSION_CONTEXT` no código, que é o que permitiria ao banco distinguir lojas. Como o WPF lê e grava os próprios dados com esse login, o login necessariamente lê e grava os dados de **todas** as lojas. O isolamento existe só no filtro executado no cliente. Ainda passam pelo banco direto: Auth, Usuários, Funções, Devolução, Orçamento, Haver, Motor Financeiro, SPED, Dashboard, emissão/cancelamento/contingência de NF-e e outros. |
+| Evidência | `ERP.WPF/Helpers/SecureConfigService.cs:14-20,29,40`; `ERP.WPF/ViewModels/SetupViewModel.cs:100-101`; `ERP.WPF/App.xaml.cs:132`, `:298-303`, `:361-502`; busca por `SECURITY POLICY`/`SESSION_CONTEXT` sem resultados (2026-10-22); declaração do responsável (2026-10-22); DOC-31, DOC-32, DOC-33, DOC-34. |
+| Gravidade | **Alta.** Credencial com acesso a todas as lojas distribuída em máquinas de loja e extraível por quem tem acesso a elas. Não é Crítica hoje porque não há indício de exploração e a operação real é de uma loja. **Sobe para Crítica** se o roteiro mostrar que `sa_ttsoft` é administrador do servidor ou abre outros bancos (o do OutfiTT está no mesmo servidor), ou quando houver mais lojas em produção. |
+| Impacto | Quem obtiver a credencial a partir de um PC de loja (malware, funcionário, técnico) lê e altera dados de todas as lojas, inclusive os tokens de EXC-SEG-004, e possivelmente de outros bancos do servidor. |
+| Confiança | Alta (acesso a todos os tenants); Baixa (privilégios além do banco, até o passo 1.1/2.5) |
+| Dependências | [ROTEIRO-CONFIRMACOES-A0](ROTEIRO-CONFIRMACOES-A0.md), passos 1.1 e 2 |
 | Responsável | A definir |
-| Ação proposta | Na EXC-A1: identificar o login e as permissões; mapear cada serviço ainda local; avaliar a mitigação (continuação da migração WPF→API e/ou restrição do login). Não implementar antes da conclusão da EXC-A1. |
-| Status | Hipótese |
-| Critério de validação | Permissões do login documentadas; gravidade classificada com evidência. |
-| Origem | EXC-F0; INV-020; DOC-31, DOC-33 |
-| Relacionados | EXC-ENG-001, EXC-FIS-003, EXC-SEG-004 |
-| Datas | Registrado em 2026-10-22; atualizado em 2026-10-22 (relatórios anteriores) |
+| Ação proposta | Concluir o roteiro (passos 1.1 e 2). Na EXC-A1: definir a mitigação de curto prazo (login próprio do ConstruTTor com o mínimo de permissões, sem acesso a outros bancos) e a de longo prazo (continuar a migração WPF→API até o WPF não precisar de credencial do banco). Não implementar antes da conclusão da EXC-A1. |
+| Status | Confirmado |
+| Critério de validação | Nenhuma máquina de loja com credencial capaz de ler dados de outra loja; ou risco aceito formalmente com prazo. |
+| Origem | EXC-F0; INV-020; DOC-31, DOC-33; confirmação 2 |
+| Relacionados | EXC-ENG-001, EXC-FIS-003, EXC-SEG-004, EXC-SEG-006, EXC-SEG-007, EXC-OPS-007 |
+| Datas | Registrado em 2026-10-22; atualizado em 2026-10-22 (relatórios anteriores; declaração do login e do banco) |
 
 ### EXC-SEG-002 — Dependência com vulnerabilidade conhecida de gravidade alta
 
@@ -181,6 +184,46 @@ Nenhum registro foi classificado como Crítico ou Alto porque nenhum risco grave
 | Critério de validação | Decisão registrada; se houver renovação, testes de expiração e renovação. |
 | Origem | DOC-31, DOC-33 |
 | Relacionados | — |
+| Datas | Registrado em 2026-10-22 |
+
+### EXC-SEG-006 — Senha do login SQL de produção compartilhada fora de um cofre de segredos
+
+| Campo | Valor |
+|---|---|
+| Área | SEG |
+| Natureza | Fato |
+| Descrição | Em 2026-10-22 a senha do login usado pelo WPF foi enviada a esta conversa, numa captura de tela de uma anotação de instalação. A mesma senha está em todas as máquinas de loja (EXC-SEG-001). O valor **não** foi reproduzido em nenhum documento. |
+| Evidência | Conversa de 2026-10-22; cópia da imagem na pasta temporária da sessão do Claude Code no PC do responsável. |
+| Gravidade | Alta (credencial ativa de produção exposta fora de um cofre; mesma credencial em todas as lojas) |
+| Impacto | Quem tiver acesso à anotação, à imagem ou ao histórico da conversa pode acessar o banco de produção com os privilégios de EXC-SEG-001. |
+| Confiança | Alta |
+| Dependências | Trocar a senha exige reconfigurar o `conexao.dat` dos 3 PCs da Vila Verde (e a API, se usar o mesmo login — roteiro 1.3). |
+| Responsável | Matheus |
+| Ação proposta | Planejar a troca da senha junto com a mitigação de EXC-SEG-001 (criar o login restrito já com senha nova evita trocar duas vezes); apagar a imagem temporária; guardar a credencial num cofre (gerenciador de senhas ou Key Vault), não em anotação. |
+| Status | Confirmado |
+| Critério de validação | Senha antiga invalidada; nova senha guardada só em cofre; nenhuma cópia em anotação ou imagem. |
+| Origem | Confirmação 2 (2026-10-22) |
+| Relacionados | EXC-SEG-001, EXC-SEG-003 |
+| Datas | Registrado em 2026-10-22 |
+
+### EXC-SEG-007 — Conexão do WPF ao SQL não valida o certificado do servidor
+
+| Campo | Valor |
+|---|---|
+| Área | SEG |
+| Natureza | Fato |
+| Descrição | O assistente de instalação monta a connection string com `TrustServerCertificate=True`. A conexão é cifrada, mas o certificado do servidor não é verificado: um intermediário na rede da loja poderia se passar pelo servidor e capturar a credencial. O Azure SQL apresenta certificado válido, então a opção não é necessária para o servidor atual. |
+| Evidência | `ERP.WPF/ViewModels/SetupViewModel.cs:101` (2026-10-22) |
+| Gravidade | Média (exige posição na rede da loja; o ganho do atacante é a credencial de EXC-SEG-001) |
+| Impacto | Captura da credencial do banco em rede comprometida (por exemplo, Wi-Fi da loja). |
+| Confiança | Alta (código); Média (exploração, depende da rede) |
+| Dependências | — |
+| Responsável | A definir |
+| Ação proposta | Na EXC-A2: avaliar remover a opção para conexões ao Azure SQL; o efeito só chega às lojas quando o `conexao.dat` for recriado. |
+| Status | Confirmado |
+| Critério de validação | Conexões do WPF validam o certificado do servidor. |
+| Origem | Confirmação 2 (2026-10-22) |
+| Relacionados | EXC-SEG-001 |
 | Datas | Registrado em 2026-10-22 |
 
 ---
@@ -337,14 +380,14 @@ Nenhum registro foi classificado como Crítico ou Alto porque nenhum risco grave
 |---|---|
 | Área | OPS (também DAD) |
 | Natureza | Fato (divergência) + Lacuna (situação em campo) |
-| Descrição | `ERP.WPF.csproj` e `Scripts/versao.json` indicam 1.1.0; o Portal exibe "2.4.1" fixo no código. Em 13/08, o cliente piloto (Vila Verde) ainda rodava "a versão antiga com banco local", e o banco na Azure não havia sido criado por falta de orçamento (DOC-34, DOC-33 §20). Não se sabe a situação atual. |
-| Evidência | `ERP.WPF/ERP.WPF.csproj:3-5`; `Scripts/versao.json`; `ERP.Portal/Pages/Roadmap.razor:17`; DOC-33, DOC-34 |
-| Gravidade | Baixa (a divergência de versão). A situação do piloto pode alterar a priorização de várias auditorias. |
-| Impacto | Dificulta suporte e diagnóstico; se o piloto ainda usa a versão antiga, as correções recentes não o protegem. |
-| Confiança | Alta (versões no código); Baixa (situação em campo, relato de agosto) |
+| Descrição | `ERP.WPF.csproj` e `Scripts/versao.json` indicam 1.1.0; o Portal exibe "2.4.1" fixo no código. Em 13/08 a Vila Verde ainda rodava a versão antiga com banco local (DOC-34). Segundo o responsável (2026-10-22), hoje ela usa 3 PCs com o último artefato WPF publicado pelo GitHub Actions, ligados ao `ERPTTSoftStaging`. Como a versão do assembly é sempre 1.1.0 e o WPF não reporta versão a nenhum serviço, **não há como saber pelo sistema qual build está em cada PC**: só pela data ou hash do executável comparados com o artefato. A distribuição pelo artefato do GitHub também indica que o atualizador automático (Blob + `versao.json`) pode não estar em uso. |
+| Evidência | `ERP.WPF/ERP.WPF.csproj:3-5`; `Scripts/versao.json`; `ERP.Portal/Pages/Roadmap.razor:17`; nenhuma telemetria de versão no WPF; DOC-33, DOC-34; declaração do responsável (2026-10-22) |
+| Gravidade | Baixa (a divergência de versão) |
+| Impacto | Sem saber a build instalada, não dá para dizer se uma correção já chegou à loja. |
+| Confiança | Alta (versões no código); Média (situação em campo, declarada e não verificada) |
 | Dependências | PLANO-MESTRE §7, confirmação 4 |
 | Responsável | A definir |
-| Ação proposta | Confirmar versão e banco de cada loja; definir a fonte de versão na EXC-A8. |
+| Ação proposta | Roteiro, passos 3 e 4 (build por PC e lojas ativas no banco); definir a fonte de versão e o canal oficial de distribuição na EXC-A8. |
 | Status | Confirmado |
 | Critério de validação | CRITERIOS OPS-5 e DAD-4; inventário de instalações registrado. |
 | Origem | EXC-F0; DOC-33, DOC-34 |
@@ -391,6 +434,26 @@ Nenhum registro foi classificado como Crítico ou Alto porque nenhum risco grave
 | Relacionados | — |
 | Datas | Registrado em 2026-10-22 |
 
+### EXC-OPS-007 — Produção usa o banco `ERPTTSoftStaging`, que também recebe testes, num servidor compartilhado com o OutfiTT
+
+| Campo | Valor |
+|---|---|
+| Área | OPS (também DAD, SEG) |
+| Natureza | Fato |
+| Descrição | O banco do ConstruTTor em produção se chama `ERPTTSoftStaging` (declaração do responsável e comentário em `AppDbContextFactory`). O checklist do Mercado Livre usa um tenant de teste nesse mesmo banco, então dados de teste e de clientes convivem. O servidor `erp-ttsoft-server` também hospeda o `ERPTTSoft`, usado pelo OutfiTT. Não existe banco de staging separado. |
+| Evidência | Declaração do responsável (2026-10-22); `ERP.Persistence/Context/AppDbContextFactory.cs:11-14`; `CHECKLIST_REGRESSAO_MERCADO_LIVRE.md` (seção 0) |
+| Gravidade | Média |
+| Impacto | Testes podem alterar ou poluir dados de produção; o nome induz a operações erradas (achar que é ambiente de teste); problemas de capacidade ou de acesso em um produto afetam o outro. |
+| Confiança | Média (banco declarado; uso de testes documentado no checklist) |
+| Dependências | Roteiro, passos 1.3 e 4.1 |
+| Responsável | Matheus |
+| Ação proposta | Na EXC-A5: inventariar tenants de teste no banco de produção e definir ambientes separados (nomes, bancos e logins por produto e por ambiente). |
+| Status | Confirmado |
+| Critério de validação | Produção e testes em bancos distintos, com nomes que não induzam a erro; cada produto com login próprio. |
+| Origem | Confirmação 4 (2026-10-22) |
+| Relacionados | EXC-SEG-001, EXC-OPS-002 |
+| Datas | Registrado em 2026-10-22 |
+
 ---
 
 ## Detalhe — Fiscal, jurídico e conformidade (FIS)
@@ -401,14 +464,14 @@ Nenhum registro foi classificado como Crítico ou Alto porque nenhum risco grave
 |---|---|
 | Área | FIS |
 | Natureza | Lacuna |
-| Descrição | A Etapa 4 introduziu a recuperação de NFC-e pendentes (orquestrador e worker "inertes") e um interruptor por tenant. Para tenants com o interruptor ligado, a recuperação nova cuida das NFC-e; para os demais, o caminho antigo continua (ver EXC-FIS-007). Não se sabe quais tenants estão em qual modo. DOC-35 lista ainda as etapas 5 (concorrência multi-instância) e 6 (contingência de devoluções) como pendentes naquela data. |
-| Evidência | Commits `3a01d52`, `c387dab`, `f33a098`; `ERP.Api/BackgroundServices/NfeContingencyHostedService.cs:141-146`; testes em `ERP.Tests/Fiscal/Recovery` aprovados (2026-10-22); DOC-35 |
+| Descrição | A Etapa 4 introduziu a recuperação de NFC-e pendentes e um interruptor por tenant. O interruptor é a configuração `FiscalRecovery:TenantsHabilitados` (App Setting `FiscalRecovery__TenantsHabilitados` no App Service), uma lista de TenantIds separados por vírgula. Ausente ou vazia, nenhum tenant é habilitado; qualquer item inválido desabilita todos. A chave não está em nenhum `appsettings` versionado, então **o padrão é o caminho antigo para todas as lojas**, a menos que tenha sido definida no App Service. DOC-35 lista as etapas 5 (concorrência multi-instância) e 6 (contingência de devoluções) como pendentes naquela data. |
+| Evidência | `ERP.Application/Fiscal/Recovery/FiscalRecoverySwitch.cs`; `ERP.Api/Extensions/FiscalRecoveryServiceCollectionExtensions.cs:48-49`; `ERP.Api/BackgroundServices/NfeContingencyHostedService.cs:141-146`; `ERP.Api/BackgroundServices/NfeRecoveryHostedService.cs:56-58` (log da partida); busca em `ERP.Api/appsettings*.json`; commits `3a01d52`, `c387dab`, `f33a098`; DOC-35 |
 | Gravidade | **A classificar** |
 | Impacto | Define se EXC-FIS-007 está ativo em produção. |
 | Confiança | — |
-| Dependências | PLANO-MESTRE §7, confirmação 5 |
+| Dependências | [ROTEIRO-CONFIRMACOES-A0](ROTEIRO-CONFIRMACOES-A0.md), passos 1.2, 1.4 e 4.6 |
 | Responsável | Matheus |
-| Ação proposta | Na EXC-A4: levantar o estado por tenant, a fila de pendências e a situação das etapas 5 e 6. |
+| Ação proposta | Executar os passos do roteiro; na EXC-A4, levantar a situação das etapas 5 e 6. |
 | Status | Lacuna |
 | Critério de validação | Estado de cada tenant documentado e coerente com o plano da Etapa 4. |
 | Origem | EXC-F0; INV-022; DOC-35 |
