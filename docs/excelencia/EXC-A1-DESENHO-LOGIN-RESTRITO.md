@@ -113,9 +113,22 @@ papel (como a captura enviada em 2026-10-22), outros computadores e as instalaç
 | # | Resposta | Consequência para o plano |
 |---|---|---|
 | P1 | **A API usa `sa_ttsoft`.** O único host do App Service conectado (`904c12cca318`) entra com esse login. | A etapa E5 é obrigatória antes da E6: a API precisa de usuário próprio antes da troca de senha. |
-| P2 | **Inconclusiva.** A consulta usada não separava os bancos (corrigida acima). Nenhum PC do cliente do OutfiTT estava conectado no horário. | Repetir a consulta corrigida em horário de uso do OutfiTT. |
+| P2 | **Sim, por declaração:** as instalações do OutfiTT usam `sa_ttsoft` no `ERPTTSoft` (responsável, 2026-10-22). Na consulta corrigida (por volta de 22h45) nenhum PC do cliente do OutfiTT estava conectado; só o SSMS do responsável. | Usuário próprio para o OutfiTT na E5. O IP atual do cliente do OutfiTT continua desconhecido (necessário para E0b). |
 | P3 | **O servidor aceita conexões de qualquer IP da internet:** existe a regra `Liberar` de `0.0.0.0` a `255.255.255.255`. Há também `AllowAllWindowsAzureIps` (serviços do Azure, necessária para o App Service), regras com IP da loja, de clientes do OutfiTT, IPs adicionados pelo portal, duas regras com o nome de uma terceira pessoa ("Bruno", "BrunoCasa") e uma regra com IP de rede privada (`192.168.x.x`), que não tem efeito no Azure. | Novo registro EXC-SEG-009. Antes de remover a regra aberta, confirmar de quais IPs a loja e o cliente do OutfiTT conectam (coluna `ip_cliente` da consulta corrigida), para não derrubá-los. |
 | P4 | Neste PC: só o arquivo de *user secrets* do projeto. O PC `DESKTOP-3P3C5VH`, do responsável, aparece com sessões do SSMS usando `sa_ttsoft`. Os 3 PCs da Vila Verde e a API também. | Lista de atualização na E6: *user secrets*, SSMS e App Service (se a API ainda usar o login nessa hora). Falta o responsável confirmar outros locais. |
+
+**IPs atuais comparados com as regras (consulta corrigida, 2026-10-22):**
+
+| Origem | Conecta de | Regra específica correspondente? |
+|---|---|---|
+| 3 PCs da Vila Verde | Um único IP público da loja | **Não.** O IP atual é diferente do da regra `Loja`: o IP da loja mudou desde que a regra foi criada. Hoje a loja funciona só por causa da regra `Liberar`. |
+| API (App Service) | IP do Azure | Sim: `AllowAllWindowsAzureIps` |
+| PC do responsável (`DESKTOP-3P3C5VH`) | IP público de casa ou do escritório | **Não.** Nenhuma das regras `ClientIPAddress_…` corresponde ao IP atual. |
+| Cliente do OutfiTT | Não conectado no horário | Desconhecido: as regras `Jayne`/`Jayne1` podem estar desatualizadas, como a da loja. |
+
+Nota técnica: `DB_NAME(database_id)` retorna `NULL` para sessões de outro banco quando a
+consulta roda dentro de um banco de usuário; rodar uma vez em cada banco (como foi feito)
+ou no `master` resolve.
 
 Os IPs não são reproduzidos neste documento.
 
