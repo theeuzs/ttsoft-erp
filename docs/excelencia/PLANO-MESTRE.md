@@ -202,6 +202,17 @@ Itens Críticos e Altos. Decididos por Matheus, que aceitou as recomendações.
 
 Os demais registros seguem para as auditorias indicadas em cada um.
 
+#### Triagem 2 — 2026-10-22 (pré-verificações da EXC-A1)
+
+Decidida por Matheus.
+
+| Registro | Gravidade | Decisão | Tipo | Quando |
+|---|---|---|---|---|
+| EXC-SEG-009 | Crítica | (1) Rodar a consulta corrigida de sessões em horário de uso da loja e do cliente do OutfiTT e anotar o IP atual de cada um; (2) criar ou ajustar as regras específicas que faltarem; (3) remover a regra `Liberar` fora do horário das lojas, pronta para ser recriada se alguém perder acesso; (4) revisar as regras sem efeito ou de pessoas sem acesso previsto | Mudança de produção prioritária | Antes da etapa E1 do login restrito |
+
+Ordem resultante das ações de produção: firewall (EXC-SEG-009) → login restrito do WPF
+(E1 a E4) → usuários próprios da API e do OutfiTT (E5) → troca da senha de `sa_ttsoft` (E6).
+
 ---
 
 ## 7. Confirmações da EXC-A0 (todas respondidas em 2026-10-22)
@@ -255,3 +266,4 @@ Os demais registros seguem para as auditorias indicadas em cada um.
 | 2026-10-22 | 1.6 | Consultas E6 a E9 e painel da Focus: emitente das notas de teste confirmado; causa da NFC-e presa (EXC-FIS-011) |
 | 2026-10-22 | 1.7 | Confirmações 3 e 6 a 11 respondidas; papéis definidos; EXC-A0 aguardando a primeira triagem |
 | 2026-10-22 | 1.8 | Triagem 1 registrada (§6.5); EXC-A0 concluída; EXC-A1 é a próxima |
+| 2026-10-22 | 1.9 | Triagem 2: remoção da regra de firewall aberta (EXC-SEG-009) como ação prioritária |

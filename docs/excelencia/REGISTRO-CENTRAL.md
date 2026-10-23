@@ -55,6 +55,7 @@
 | EXC-SEG-006 | SEG | Senha do login SQL de produção compartilhada fora de um cofre de segredos | Fato | Alta | Alta | **Planejado** | Matheus |
 | EXC-SEG-007 | SEG | Conexão do WPF ao SQL não valida o certificado do servidor (`TrustServerCertificate=True`) | Fato | Média | Alta | Confirmado | A definir |
 | EXC-SEG-008 | SEG | Servidor SQL sem auditoria, sem Defender e sem administrador do Entra | Fato | Média | Alta | Confirmado | Matheus |
+| EXC-SEG-009 | SEG | Firewall do servidor SQL aberto para qualquer IP da internet | Fato | **Crítica** | Alta | **Planejado** | Matheus |
 | EXC-ENG-001 | ENG | Testes não comprovam comportamento no SQL Server (SQL bruto e `IgnoreQueryFilters`) | Fato | Média | Alta | Confirmado | A definir |
 | EXC-ENG-002 | ENG | README desatualizado em relação à arquitetura atual | Fato | Baixa | Alta | Confirmado | A definir |
 | EXC-ENG-003 | ENG | 155 avisos de compilação | Fato | Baixa | Alta | Confirmado | A definir |
@@ -85,7 +86,7 @@
 | EXC-ADM-002 | ADM | Todo o conhecimento e a operação concentrados em uma pessoa | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-VEN-001 | VEN | Preços e planos sem validação com clientes | Lacuna | A classificar | — | Lacuna | Matheus |
 
-**Contagem:** 37 registros (34 abertos, 3 encerrados) — abertos: 2 Crítica, 3 Alta, 15 Média, 9 Baixa, 5 A classificar.
+**Contagem:** 38 registros (35 abertos, 3 encerrados) — abertos: 3 Crítica, 3 Alta, 15 Média, 9 Baixa, 5 A classificar.
 Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.md)
 (passos 1.1, 1.2, 2, 4 e E1 a E9). Prioridade imediata: EXC-FIS-008, EXC-SEG-001 e EXC-FIS-009.
 
@@ -251,6 +252,26 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Critério de validação | Auditoria ativa com retenção definida; acesso administrativo humano distinto do usado pelas aplicações. |
 | Origem | Confirmação 2 (2026-10-22) |
 | Relacionados | EXC-SEG-001, EXC-OPS-003 |
+| Datas | Registrado em 2026-10-22 |
+
+### EXC-SEG-009 — Firewall do servidor SQL aberto para qualquer IP da internet
+
+| Campo | Valor |
+|---|---|
+| Área | SEG (também OPS) |
+| Natureza | Fato |
+| Descrição | O servidor `erp-ttsoft-server` tem a regra de firewall `Liberar`, de `0.0.0.0` a `255.255.255.255`: aceita conexões de qualquer IP da internet. Assim, a única barreira até os dois bancos (ConstruTTor e OutfiTT) é a senha do administrador, que está em todos os PCs das lojas (EXC-SEG-001) e foi exposta na conversa de 2026-10-22 (EXC-SEG-006). Há também a regra `AllowAllWindowsAzureIps` (serviços do Azure, necessária enquanto a API usar o endpoint público), regras por IP da loja e de clientes do OutfiTT, IPs adicionados pelo portal, duas regras com o nome de uma terceira pessoa e uma regra com IP de rede privada (`192.168.x.x`), que não tem efeito no Azure. É provável que a regra aberta esteja mantendo funcionando os clientes cujo IP mudou desde que a regra específica foi criada. |
+| Evidência | `sys.firewall_rules` consultada pelo responsável em 2026-10-22 (IPs não reproduzidos neste registro) |
+| Gravidade | **Crítica.** Junto com EXC-SEG-001 e EXC-SEG-006, qualquer pessoa na internet que tenha a senha controla todos os bancos do servidor. |
+| Impacto | Leitura, alteração ou destruição dos dados das duas operações a partir de qualquer lugar; sem auditoria (EXC-SEG-008), sem rastro. |
+| Confiança | Alta |
+| Dependências | IPs de onde a loja, o cliente do OutfiTT e o responsável conectam hoje (consulta corrigida em EXC-A1-DESENHO-LOGIN-RESTRITO, seção 3) |
+| Responsável | Matheus |
+| Ação proposta | Para a próxima triagem: (1) com a consulta corrigida, confirmar o IP atual de cada cliente; (2) criar ou ajustar as regras específicas que faltarem; (3) remover a regra `Liberar`; (4) remover as regras sem efeito ou de pessoas que não devem ter acesso (confirmar quem é "Bruno"). Mudança de produção: fazer fora do horário das lojas, com a regra pronta para ser recriada se algum cliente perder acesso. Se o IP da loja for dinâmico, registrar a limitação e tratar na EXC-A5. |
+| Status | **Planejado** (triagem 2, 2026-10-22): ação prioritária — confirmar os IPs atuais dos clientes com a consulta corrigida, ajustar as regras específicas e remover a regra `Liberar` fora do horário das lojas. Antecede a execução do login restrito. |
+| Critério de validação | Nenhuma regra ampla; cada regra com dono identificado; clientes conectando normalmente após a mudança. |
+| Origem | EXC-A1, pré-verificação P3 (2026-10-22) |
+| Relacionados | EXC-SEG-001, EXC-SEG-006, EXC-SEG-008 |
 | Datas | Registrado em 2026-10-22 |
 
 ---

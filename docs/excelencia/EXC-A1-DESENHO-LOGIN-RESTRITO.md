@@ -60,6 +60,65 @@ Conclusão: o WPF precisa de **leitura e escrita de dados** no esquema `dbo` e d
 | P3 | Regras de firewall do servidor | Portal → SQL server → Rede | Se houver regra aberta para qualquer IP, a credencial vazada funciona de qualquer lugar. Muda a urgência da troca de senha |
 | P4 | Outros lugares com `sa_ttsoft` | Conhecimento do responsável: user secrets do `dotnet ef`, scripts, SSMS, ferramentas | Tudo que usa a senha atual precisa ser atualizado na troca |
 
+### Como obter as respostas (todas somente leitura; nenhuma exige ver senha)
+
+**P1 e P2 — quem usa `sa_ttsoft`, pelas sessões abertas.** Conectado como administrador:
+
+```sql
+-- Versão corrigida (2026-10-22). Para o administrador do servidor, esta visão mostra as
+-- sessões do servidor inteiro; o banco de cada sessão vem de database_id, não de DB_NAME().
+SELECT DB_NAME(s.database_id) AS banco, s.login_name, s.host_name, s.program_name,
+       c.client_net_address AS ip_cliente,
+       COUNT(*) AS sessoes, MAX(s.login_time) AS ultimo_login
+FROM sys.dm_exec_sessions s
+LEFT JOIN sys.dm_exec_connections c ON c.session_id = s.session_id
+WHERE s.is_user_process = 1
+GROUP BY DB_NAME(s.database_id), s.login_name, s.host_name, s.program_name, c.client_net_address
+ORDER BY banco, s.login_name, s.host_name;
+```
+
+- Linhas com `host_name` de 12 caracteres hexadecimais (ex.: `904c12cca318`) são a API no
+  App Service: o `login_name` delas responde a P1.
+- Linhas com `banco = ERPTTSoft` e nomes de PC respondem a P2.
+- `ip_cliente` mostra de que IP cada PC conecta, para comparar com as regras de firewall (P3).
+- A consulta mostra só quem está conectado naquele momento: rodar em horário de uso das
+  duas operações (Vila Verde e cliente do OutfiTT).
+- A primeira versão desta consulta usava `DB_NAME()` e mostrava o banco da janela do SSMS
+  para todas as sessões; o resultado de 2026-10-22 não separa os bancos.
+
+Alternativa para P1 pelo portal: App Service `erp-ttsoft-api` → *Variáveis de ambiente* →
+*Cadeias de ligação* → `DefaultConnection`. Ao mostrar o valor, ler só o trecho `User ID=`;
+a senha aparece na mesma linha e não deve ser copiada.
+
+**P3 — firewall.** Portal → SQL server `erp-ttsoft-server` → *Segurança* → *Rede*: anotar o
+modo de *Acesso à rede pública*, a opção *Permitir que serviços e recursos do Azure acedam a
+este servidor* e cada regra (nome, IP inicial, IP final). Alternativa, conectado ao `master`:
+
+```sql
+SELECT name, start_ip_address, end_ip_address FROM sys.firewall_rules ORDER BY name;
+```
+
+Uma regra de `0.0.0.0` a `255.255.255.255` abre o servidor para a internet inteira.
+
+**P4 — onde a senha está guardada.** Verificado neste PC em 2026-10-22, só pelo nome do
+login, sem abrir conteúdo: o único arquivo encontrado foi o *user secrets* do projeto
+(`%APPDATA%\Microsoft\UserSecrets\4d376197-6ed8-41a2-9f94-2934a06559c6\secrets.json`), usado
+pela API em desenvolvimento e pelo `dotnet ef`. Nenhum `appsettings` em `C:\ERP`, nenhuma
+configuração do Azure Data Studio, e nada em texto nas pastas Documentos e Área de Trabalho.
+Falta conferir o que a busca não alcança: conexões salvas no SSMS, anotações em imagem ou
+papel (como a captura enviada em 2026-10-22), outros computadores e as instalações do OutfiTT.
+
+### Respostas (2026-10-22, por volta de 22h30 no horário de Brasília)
+
+| # | Resposta | Consequência para o plano |
+|---|---|---|
+| P1 | **A API usa `sa_ttsoft`.** O único host do App Service conectado (`904c12cca318`) entra com esse login. | A etapa E5 é obrigatória antes da E6: a API precisa de usuário próprio antes da troca de senha. |
+| P2 | **Inconclusiva.** A consulta usada não separava os bancos (corrigida acima). Nenhum PC do cliente do OutfiTT estava conectado no horário. | Repetir a consulta corrigida em horário de uso do OutfiTT. |
+| P3 | **O servidor aceita conexões de qualquer IP da internet:** existe a regra `Liberar` de `0.0.0.0` a `255.255.255.255`. Há também `AllowAllWindowsAzureIps` (serviços do Azure, necessária para o App Service), regras com IP da loja, de clientes do OutfiTT, IPs adicionados pelo portal, duas regras com o nome de uma terceira pessoa ("Bruno", "BrunoCasa") e uma regra com IP de rede privada (`192.168.x.x`), que não tem efeito no Azure. | Novo registro EXC-SEG-009. Antes de remover a regra aberta, confirmar de quais IPs a loja e o cliente do OutfiTT conectam (coluna `ip_cliente` da consulta corrigida), para não derrubá-los. |
+| P4 | Neste PC: só o arquivo de *user secrets* do projeto. O PC `DESKTOP-3P3C5VH`, do responsável, aparece com sessões do SSMS usando `sa_ttsoft`. Os 3 PCs da Vila Verde e a API também. | Lista de atualização na E6: *user secrets*, SSMS e App Service (se a API ainda usar o login nessa hora). Falta o responsável confirmar outros locais. |
+
+Os IPs não são reproduzidos neste documento.
+
 ---
 
 ## 4. Proposta técnica
@@ -120,6 +179,7 @@ REVERT;
 | Etapa | O quê | Reversão | Critério para seguir |
 |---|---|---|---|
 | E0 | Pré-verificações P1 a P4 | — | Respostas registradas |
+| E0b | Firewall (triagem 2): confirmar IPs dos clientes, ajustar regras específicas e remover a regra `Liberar` (EXC-SEG-009) | Recriar a regra | Clientes conectando pelas regras específicas |
 | E1 | Executar 4.2 e 4.3 no `ERPTTSoftStaging` | `DROP USER construttor_wpf; DROP ROLE construttor_app;` | 4.3 com todos os valores esperados |
 | E2 | **Piloto em 1 PC** fora do horário da loja: copiar `conexao.dat` para uma pasta de backup no próprio PC; renomear o original; abrir o ERP; no assistente, informar servidor, banco, `construttor_wpf` e a senha nova; testar o roteiro da seção 6 | Restaurar o `conexao.dat` copiado (a cifra é presa à máquina, então a cópia só vale no mesmo PC) | Roteiro sem erro de permissão |
 | E3 | Observar o PC piloto por 1 dia útil de operação real | Igual à E2 | Nenhum erro "permission was denied" no log do WPF (`Logs/log-*.json`); sessões do PC aparecem com `construttor_wpf` (consulta 7.1) |
@@ -158,13 +218,7 @@ uma tabela que o desenho deixou de fora. Reverter o PC (E2) e registrar a tabela
 
 No `ERPTTSoftStaging`, como administrador:
 
-```sql
-SELECT login_name, host_name, program_name, COUNT(*) AS sessoes, MAX(login_time) AS ultimo_login
-FROM sys.dm_exec_sessions
-WHERE is_user_process = 1
-GROUP BY login_name, host_name, program_name
-ORDER BY login_name, host_name;
-```
+Usar a consulta corrigida da seção 3 (P1 e P2), que separa as sessões por banco.
 
 Esperado ao final: PCs da loja (`DESKTOP-JQB0BIQ`, `SERVIDOR`, `COMPUTADOR03`) com
 `construttor_wpf`; API com seu próprio usuário; `sa_ttsoft` só a partir do PC do responsável.
