@@ -47,12 +47,12 @@
 
 | ID | Área | Título | Natureza | Gravidade | Confiança | Status | Responsável |
 |---|---|---|---|---|---|---|---|
-| EXC-SEG-001 | SEG | WPF acessa o banco com a credencial de administrador do servidor SQL, igual em todas as lojas | Fato | **Crítica** | Alta | Confirmado | A definir |
+| EXC-SEG-001 | SEG | WPF acessa o banco com a credencial de administrador do servidor SQL, igual em todas as lojas | Fato | **Crítica** | Alta | **Planejado** | A definir |
 | EXC-SEG-002 | SEG | Dependência com vulnerabilidade conhecida de gravidade alta (`System.Security.Cryptography.Xml` 8.0.3) | Fato | A classificar | Alta (aviso) | Confirmado | A definir |
-| EXC-SEG-003 | SEG | Troca dos segredos removidos do repositório não confirmada | Lacuna | A classificar | Baixa | Lacuna | Matheus |
+| EXC-SEG-003 | SEG | Troca dos segredos removidos do repositório | Lacuna | Informativa | Média | **Encerrado** (troca declarada) | Matheus |
 | EXC-SEG-004 | SEG | Tokens OAuth do Mercado Livre gravados em texto plano | Fato | Média | Alta | Confirmado | A definir |
 | EXC-SEG-005 | SEG | JWT sem refresh token | Fato | Baixa | Alta | Confirmado | A definir |
-| EXC-SEG-006 | SEG | Senha do login SQL de produção compartilhada fora de um cofre de segredos | Fato | Alta | Alta | Confirmado | Matheus |
+| EXC-SEG-006 | SEG | Senha do login SQL de produção compartilhada fora de um cofre de segredos | Fato | Alta | Alta | **Planejado** | Matheus |
 | EXC-SEG-007 | SEG | Conexão do WPF ao SQL não valida o certificado do servidor (`TrustServerCertificate=True`) | Fato | Média | Alta | Confirmado | A definir |
 | EXC-SEG-008 | SEG | Servidor SQL sem auditoria, sem Defender e sem administrador do Entra | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-ENG-001 | ENG | Testes não comprovam comportamento no SQL Server (SQL bruto e `IgnoreQueryFilters`) | Fato | Média | Alta | Confirmado | A definir |
@@ -61,30 +61,31 @@
 | EXC-ENG-004 | ENG | `ChangeTracker.Clear()` após todo `SaveChanges` | Fato | Média | Alta | Confirmado | A definir |
 | EXC-OPS-001 | OPS | Checklist de deploy e `versao.json` versionados desatualizados | Fato | Média | Alta | Confirmado | A definir |
 | EXC-OPS-002 | OPS | Deploy automático da `main` em produção; pipeline de staging nunca dispara | Fato | A classificar | Alta | Confirmado | A definir |
-| EXC-OPS-003 | OPS | Política de backup e teste de restauração sem evidência | Lacuna | A classificar | — | Lacuna | Matheus |
+| EXC-OPS-003 | OPS | Restauração do banco de produção nunca testada | Fato | **Alta** | Alta | **Planejado** | Matheus |
 | EXC-OPS-004 | OPS | Versão do produto sem fonte única; versões e bancos em campo desconhecidos | Fato + Lacuna | Baixa | Alta | Confirmado | A definir |
-| EXC-OPS-005 | OPS | Licenciamento depende de API externa fora deste repositório | Fato + Lacuna | A classificar | Alta | Confirmado | Matheus |
+| EXC-OPS-005 | OPS | Licenciamento depende de uma API cujo código está só no PC do responsável | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-OPS-006 | OPS | Rate limit e cache em memória impedem escalar a API para mais de uma instância | Fato | Baixa | Média | Confirmado | A definir |
 | EXC-OPS-007 | OPS | Produção usa o banco `ERPTTSoftStaging`, que também recebe testes, num servidor compartilhado com o OutfiTT | Fato | Média | Média | Confirmado | Matheus |
 | EXC-FIS-001 | FIS | Estado da recuperação fiscal (interruptor por tenant) em produção desconhecido | Lacuna | A classificar | Alta | **Encerrado** (nenhum tenant habilitado; consequência em EXC-FIS-007) | Matheus |
-| EXC-FIS-002 | FIS | Termos de uso, privacidade, contrato, DPA e limitação de responsabilidade não localizados | Lacuna | A classificar | — | Lacuna | Matheus |
+| EXC-FIS-002 | FIS | Não existem termos de uso, política de privacidade nem contrato com os clientes | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-FIS-003 | FIS | Serviços locais de emissão fiscal seguem registrados no WPF junto ao serviço via API | Hipótese | A classificar | Baixa | Hipótese | A definir |
 | EXC-FIS-004 | FIS | WPF lê a configuração fiscal (token Focus) de arquivo local; API lê do banco | Fato | Média | Alta | Confirmado | A definir |
 | EXC-FIS-005 | FIS | Nenhum tratamento da Reforma Tributária (IBS/CBS) no código | Fato + Lacuna | A classificar | Alta | Confirmado | A definir |
 | EXC-FIS-006 | FIS | SPED EFD ICMS/IPI gerado sem Bloco E | Fato | Baixa | Alta | Confirmado | A definir |
 | EXC-FIS-007 | FIS | Caminho antigo de contingência reenvia NFC-e com `DataEmissao` congelada (todas as lojas estão nele) | Fato | Média | Alta | Confirmado | A definir |
-| EXC-FIS-008 | FIS | Tenant de teste emitiu 11 documentos fiscais autorizados em produção, configurado com o CNPJ da Vila Verde | Fato | **Crítica** | Média | Confirmado | Matheus |
-| EXC-FIS-009 | FIS | Erros definitivos da Focus tratados como falha de comunicação: nota fica em contingência para sempre (NFC-e da Vila Verde presa desde 16/10) | Fato | **Alta** | Alta | Confirmado | A definir |
+| EXC-FIS-008 | FIS | Tenant de teste emitiu 11 documentos fiscais autorizados em produção, configurado com o CNPJ da Vila Verde | Fato | **Crítica** | Média | **Planejado** | Matheus |
+| EXC-FIS-009 | FIS | Erros definitivos da Focus tratados como falha de comunicação: nota fica em contingência para sempre (NFC-e da Vila Verde presa desde 16/10) | Fato | **Alta** | Alta | **Planejado** | A definir |
 | EXC-FIS-010 | FIS | Política de emissão fiscal da loja piloto | Lacuna | — | — | **Encerrado** (decisão do cliente, a tratar com o contador) | Matheus |
 | EXC-FIS-011 | FIS | Descrição de produto com aspas (polegada) faz a Focus recusar a NFC-e | Fato + Hipótese | Média | Média | Confirmado | A definir |
 | EXC-PRD-001 | PRD | Roadmap exibido no Portal não corresponde ao produto atual | Fato | Baixa | Alta | Confirmado | A definir |
 | EXC-DAD-001 | DAD | Parte dos relatórios anteriores não foi localizada | Lacuna | Baixa | Alta | Lacuna | Matheus |
 | EXC-DAD-002 | DAD | Sem concorrência otimista; créditos de Haver por leitura-e-gravação | Fato + Hipótese | Média | Média | Confirmado | A definir |
 | EXC-DAD-003 | DAD | Registros com `TenantId` vazio e filial matriz duplicada na Vila Verde | Fato | Baixa | Alta | Confirmado | A definir |
-| EXC-ADM-001 | ADM | Custo de operação por cliente desconhecido | Lacuna | A classificar | — | Lacuna | Matheus |
+| EXC-ADM-001 | ADM | Receita mensal declarada não cobre os custos de infraestrutura declarados | Fato | Média | Média | Confirmado | Matheus |
+| EXC-ADM-002 | ADM | Todo o conhecimento e a operação concentrados em uma pessoa | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-VEN-001 | VEN | Preços e planos sem validação com clientes | Lacuna | A classificar | — | Lacuna | Matheus |
 
-**Contagem:** 36 registros (34 abertos, 2 encerrados) — abertos: 2 Crítica, 2 Alta, 11 Média, 9 Baixa, 10 A classificar.
+**Contagem:** 37 registros (34 abertos, 3 encerrados) — abertos: 2 Crítica, 3 Alta, 15 Média, 9 Baixa, 5 A classificar.
 Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.md)
 (passos 1.1, 1.2, 2, 4 e E1 a E9). Prioridade imediata: EXC-FIS-008, EXC-SEG-001 e EXC-FIS-009.
 
@@ -106,7 +107,7 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Dependências | — |
 | Responsável | A definir |
 | Ação proposta | Mitigação de curto prazo, a desenhar na EXC-A1 antes de qualquer mudança: login próprio do ConstruTTor, restrito ao `ERPTTSoftStaging` e ao mínimo de permissões que o WPF usa (sem `db_owner`), com senha nova (resolve também EXC-SEG-006), reconfigurando os 3 PCs; o administrador do servidor deixa de sair da máquina do responsável. Longo prazo: continuar a migração WPF→API até o WPF não precisar de credencial do banco. |
-| Status | Confirmado |
+| Status | **Planejado** (triagem de 2026-10-22): desenhar no início da EXC-A1 um login exclusivo do ConstruTTor, restrito ao `ERPTTSoftStaging` e às permissões que o WPF usa, com senha nova; executar em janela fora do horário da loja, reconfigurando os 3 PCs. Resolve também EXC-SEG-006. |
 | Critério de validação | Nenhuma máquina de loja com credencial capaz de ler dados de outra loja; ou risco aceito formalmente com prazo. |
 | Origem | EXC-F0; INV-020; DOC-31, DOC-33; confirmação 2 |
 | Relacionados | EXC-ENG-001, EXC-FIS-003, EXC-SEG-004, EXC-SEG-006, EXC-SEG-007, EXC-OPS-007 |
@@ -140,13 +141,13 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Natureza | Lacuna |
 | Descrição | Commits de junho/2026 removeram do versionamento segredos (senha do banco, chave JWT, credenciais GCP, `config_recibo`, credenciais SEFAZ). O histórico do Git mantém o conteúdo anterior, salvo reescrita (sem indício de reescrita). Não se sabe se os segredos foram trocados. Os valores antigos **não** foram abertos. DOC-30 e DOC-31 confirmam que o código não tem segredos, mas não tratam da troca. |
 | Evidência | Commits `587a0ba`, `ee29179`, `48d7748`, `6b8ac31`; `appsettings` atuais só com placeholders (2026-10-22). |
-| Gravidade | **A classificar.** Alta se algum segredo antigo continuar válido; Informativa se todos foram trocados. |
+| Gravidade | Informativa (todos trocados, segundo o responsável). |
 | Impacto | Acesso indevido a banco, emissão de tokens ou serviços externos com credencial antiga. |
-| Confiança | Baixa |
-| Dependências | PLANO-MESTRE §7, confirmação 3 |
+| Confiança | Média (declaração do responsável, sem lista de datas) |
+| Dependências | — |
 | Responsável | Matheus |
-| Ação proposta | Listar os segredos que já estiveram no histórico e confirmar a troca de cada um. |
-| Status | Lacuna |
+| Ação proposta | Nenhuma. A senha atual do banco tem registro próprio (EXC-SEG-006). |
+| Status | **Encerrado** em 2026-10-22: o responsável declarou que os segredos removidos em junho foram trocados. |
 | Critério de validação | Lista de segredos com data de troca, ou confirmação de que nunca foram válidos. |
 | Origem | EXC-F0; INV-004 |
 | Relacionados | EXC-SEG-001 |
@@ -206,7 +207,7 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Dependências | Trocar a senha exige reconfigurar o `conexao.dat` dos 3 PCs da Vila Verde (e a API, se usar o mesmo login — roteiro 1.3). |
 | Responsável | Matheus |
 | Ação proposta | Planejar a troca da senha junto com a mitigação de EXC-SEG-001 (criar o login restrito já com senha nova evita trocar duas vezes); apagar a imagem temporária; guardar a credencial num cofre (gerenciador de senhas ou Key Vault), não em anotação. |
-| Status | Confirmado |
+| Status | **Planejado** (triagem de 2026-10-22): resolvido junto com EXC-SEG-001 (login novo com senha nova; a senha atual deixa de ser usada pelas lojas). |
 | Critério de validação | Senha antiga invalidada; nova senha guardada só em cofre; nenhuma cópia em anotação ou imagem. |
 | Origem | Confirmação 2 (2026-10-22) |
 | Relacionados | EXC-SEG-001, EXC-SEG-003 |
@@ -380,21 +381,21 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Relacionados | PLANO-MESTRE §6.3 |
 | Datas | Registrado em 2026-10-22 |
 
-### EXC-OPS-003 — Política de backup e teste de restauração sem evidência
+### EXC-OPS-003 — Restauração do banco de produção nunca testada
 
 | Campo | Valor |
 |---|---|
 | Área | OPS (também DAD) |
-| Natureza | Lacuna |
-| Descrição | Não há documentação nem evidência acessível sobre retenção de backup do Azure SQL ou teste de restauração. O WPF tem um `BackupService` ligado ao fechamento, logout e comando manual (DOC-31); o conteúdo e a utilidade desse backup não foram auditados. |
-| Evidência | Ausência no repositório; Azure não acessível; DOC-31 (B.1) |
-| Gravidade | **A classificar** — Alta se não houver restauração testada com dados de clientes em produção. |
-| Impacto | Perda de dados sem recuperação. |
-| Confiança | — |
-| Dependências | PLANO-MESTRE §7, confirmação 6 |
+| Natureza | Fato (restauração nunca testada) + Lacuna (configuração de backup) |
+| Descrição | O responsável acredita que existe backup, mas nunca testou uma restauração (2026-10-22). O Azure SQL faz backups automáticos, com retenção que depende do plano; os dois bancos estão no plano Básico, que tem a menor retenção. A configuração real não foi vista. O WPF tem um `BackupService` local (DOC-31), cujo conteúdo e utilidade não foram auditados. O `ERPTTSoftStaging` guarda os dados reais da loja piloto. |
+| Evidência | Declaração do responsável (2026-10-22); captura do Portal do Azure (plano Básico); DOC-31 (B.1) |
+| Gravidade | **Alta.** Sem restauração testada não há garantia de recuperar os dados reais de produção. |
+| Impacto | Perda de dados de vendas, financeiro e fiscal sem recuperação comprovada. |
+| Confiança | Alta (restauração nunca testada); Baixa (configuração de backup) |
+| Dependências | — |
 | Responsável | Matheus |
-| Ação proposta | Na EXC-A5: levantar a configuração e executar um teste de restauração documentado. |
-| Status | Lacuna |
+| Ação proposta | Na EXC-A5 (ou antes, se a triagem decidir): ver no portal a retenção configurada e fazer uma restauração de teste para um banco **novo**, sem tocar no de produção, conferindo os dados. Registrar data, duração e resultado. |
+| Status | **Planejado** (triagem de 2026-10-22): antecipado da EXC-A5 — ver a retenção configurada no portal e restaurar uma cópia para um banco novo, sem tocar no de produção, registrando data, duração e resultado. |
 | Critério de validação | CRITERIOS OPS-2. |
 | Origem | EXC-F0; DOC-31 |
 | Relacionados | — |
@@ -421,20 +422,20 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Relacionados | EXC-OPS-001, EXC-PRD-001 |
 | Datas | Registrado em 2026-10-22; atualizado em 2026-10-22 (relatórios anteriores) |
 
-### EXC-OPS-005 — Licenciamento depende de API externa fora deste repositório
+### EXC-OPS-005 — Licenciamento depende de uma API cujo código está só no PC do responsável
 
 | Campo | Valor |
 |---|---|
 | Área | OPS (também ADM) |
-| Natureza | Fato (dependência) + Lacuna (código e operação desconhecidos) |
-| Descrição | O `LicenseManager` do WPF consulta um App Service diferente da API do ERP. O código dessa API não está neste repositório nem documentado aqui. |
-| Evidência | `ERP.WPF/Security/LicenseManager.cs:13` (2026-10-22); DOC-31 (C, E) |
-| Gravidade | **A classificar** — depende do comportamento do WPF se a API de licenças estiver fora do ar e de onde está o código. |
-| Impacto | Possível bloqueio das lojas por falha de um serviço não versionado aqui; bus factor. |
-| Confiança | Alta (dependência); — (comportamento) |
-| Dependências | Acesso ao código da API de licenças |
+| Natureza | Fato |
+| Descrição | O `LicenseManager` do WPF consulta um App Service diferente da API do ERP. Segundo o responsável (2026-10-22), o código dessa API está apenas no PC dele, fora de um repositório remoto. |
+| Evidência | `ERP.WPF/Security/LicenseManager.cs:13`; DOC-31 (C, E); declaração do responsável (2026-10-22) |
+| Gravidade | Média. O serviço publicado continua funcionando, mas a perda do PC impediria mantê-lo ou corrigi-lo. Pode subir se o WPF bloquear as lojas quando a API de licenças estiver fora do ar (não verificado). |
+| Impacto | Sem como corrigir ou republicar o serviço de licenças se o PC for perdido; bus factor (EXC-ADM-002). |
+| Confiança | Alta (localização do código, declarada); — (comportamento em falha) |
+| Dependências | — |
 | Responsável | Matheus |
-| Ação proposta | Na EXC-A5: localizar o código, documentar o serviço e testar o comportamento do WPF com a API indisponível. |
+| Ação proposta | Versionar o código num repositório privado (decisão simples, sem mudança de produção). Na EXC-A5: documentar o serviço e testar o comportamento do WPF com a API indisponível. |
 | Status | Confirmado |
 | Critério de validação | Serviço documentado e comportamento em falha conhecido e aceito. |
 | Origem | DOC-31 |
@@ -505,21 +506,21 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Relacionados | EXC-FIS-003, EXC-FIS-007 |
 | Datas | Registrado em 2026-10-22; atualizado em 2026-10-22 (relatórios anteriores) |
 
-### EXC-FIS-002 — Termos de uso, privacidade, contrato, DPA e limitação de responsabilidade não localizados
+### EXC-FIS-002 — Não existem termos de uso, política de privacidade nem contrato com os clientes
 
 | Campo | Valor |
 |---|---|
 | Área | FIS (jurídico/LGPD) |
-| Natureza | Lacuna — **não** significa que não existam; podem estar fora do repositório. |
-| Descrição | Não foram encontrados no repositório termos de uso, política de privacidade ou contrato de licença. O Portal tem cadastro público self-service. DOC-25 recomenda contrato de tratamento de dados (DPA) com cada cliente, cláusula de limitação de responsabilidade fiscal revisada por advogado e avaliação da estrutura jurídica da operação. |
-| Evidência | Busca em 2026-10-22 em `.razor`, `.xaml`, `.cs`, `.html`; DOC-25 (F, "Risco jurídico") |
-| Gravidade | **A classificar** |
-| Impacto | Possível descumprimento da LGPD (dados de crédito de pessoas físicas de vários lojistas no mesmo sistema) e ausência de base contratual. |
-| Confiança | — |
-| Dependências | PLANO-MESTRE §7, confirmação 7 |
+| Natureza | Fato |
+| Descrição | O responsável confirmou (2026-10-22) que não existe nenhum termo: nem termos de uso, nem política de privacidade, nem contrato com os clientes. O sistema guarda dados pessoais dos clientes das lojas (inclusive crediário). O Portal tem cadastro público self-service. DOC-25 recomenda contrato de tratamento de dados (DPA) com cada cliente, cláusula de limitação de responsabilidade fiscal revisada por advogado e avaliação da estrutura jurídica da operação. |
+| Evidência | Declaração do responsável (2026-10-22); busca no código (2026-10-22); DOC-25 (F) |
+| Gravidade | Média com os 2 clientes atuais. **Sobe para Alta** antes de qualquer novo cliente ou do uso do cadastro público. |
+| Impacto | Sem base contratual para responsabilidade (inclusive fiscal), pagamento e tratamento de dados pessoais; obrigações da LGPD não formalizadas. |
+| Confiança | Alta |
+| Dependências | Assessoria jurídica |
 | Responsável | Matheus |
-| Ação proposta | Localizar os documentos; na EXC-A9, avaliar com assessoria jurídica. |
-| Status | Lacuna |
+| Ação proposta | Na EXC-A9: contratar orientação jurídica para termos de uso, política de privacidade, contrato de licença com DPA e limitação de responsabilidade. Antes disso, não abrir o cadastro público a novos clientes. |
+| Status | Confirmado |
 | Critério de validação | CRITERIOS FIS-4 e FIS-5. |
 | Origem | EXC-F0; INV-008; DOC-25 |
 | Relacionados | EXC-SEG-001 |
@@ -643,7 +644,7 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Dependências | Painel da Focus NFe; contador |
 | Responsável | Matheus |
 | Ação proposta | (1) No painel da Focus, listar as requisições da empresa Vila Verde em produção nas datas da E8 (17/08, 23 a 26/09 e 20/10) para identificar as 5 notas sem chave e verificar se alguma foi cancelada direto na Focus. (2) Levar ao contador a lista completa (número, data, valor, situação) para decidir o tratamento. (3) Até isso, não usar o tenant de teste para vendas nem para emissão. (4) Na EXC-A4/A5: isolar testes da produção fiscal (homologação, outro CNPJ ou outro banco — ver EXC-OPS-007). Não alterar dados nem configuração antes da decisão. |
-| Status | Confirmado |
+| Status | **Planejado** (triagem de 2026-10-22): ação imediata, sem código — parar de usar o tenant de teste com o CNPJ da Vila Verde e levar ao contador a lista das notas de teste (6 confirmadas e 5 a identificar no painel da Focus). |
 | Critério de validação | Nenhum tenant de teste com CNPJ de cliente ou ambiente de produção; notas indevidas, se houver, tratadas e documentadas. |
 | Origem | Confirmação 4 (2026-10-22) |
 | Relacionados | EXC-OPS-007, EXC-FIS-001, EXC-FIS-004 |
@@ -666,7 +667,7 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Dependências | Contador (emissão tardia da venda `1A7F2760…`) |
 | Responsável | A definir |
 | Ação proposta | (1) Decidir com o contador como regularizar a venda `1A7F2760…` (emitida em 16/10, sem NFC-e). (2) Só então retirar a pendência da fila; a mesma pendência nunca será aceita, porque o payload guardado contém o texto que a Focus recusa. (3) Na EXC-A4: classificar corretamente os erros definitivos, limitar tentativas e avisar o operador. |
-| Status | Confirmado |
+| Status | **Planejado** (triagem de 2026-10-22): ação imediata, sem código — decidir com o contador a regularização da venda `1A7F2760…`; a correção da classificação de erros fica para a EXC-A4. |
 | Critério de validação | Erros definitivos saem da fila com aviso; tentativas limitadas; venda `1A7F2760…` com situação fiscal resolvida e documentada. |
 | Origem | Confirmação 5 (consulta E2, 2026-10-22) |
 | Relacionados | EXC-FIS-007, EXC-FIS-001, EXC-FIS-011 |
@@ -728,9 +729,10 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Gravidade | Baixa |
 | Impacto | Comunicação ao cliente inconsistente com o produto. |
 | Confiança | Alta |
-| Dependências | Decisão sobre o escopo do Mobile (confirmação 8) |
-| Responsável | A definir |
-| Ação proposta | Na EXC-A7: definir o escopo de cada aplicativo e a fonte do roadmap. |
+| Escopo do Mobile (2026-10-22) | O responsável decidiu pausar o app Mobile: está nos planos, mas o desenvolvimento para iOS exige um Mac, que ele não tem. |
+| Dependências | — |
+| Responsável | Matheus |
+| Ação proposta | Na EXC-A7: atualizar o roadmap do Portal para refletir o que está entregue e o Mobile como pausado, e definir a fonte do roadmap. |
 | Status | Confirmado |
 | Critério de validação | CRITERIOS PRD-2 e PRD-4. |
 | Origem | EXC-F0; DOC-32, DOC-33 |
@@ -805,24 +807,44 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 
 ## Detalhe — Administração (ADM) e Vendas (VEN)
 
-### EXC-ADM-001 — Custo de operação por cliente desconhecido
+### EXC-ADM-001 — Receita mensal declarada não cobre os custos de infraestrutura declarados
 
 | Campo | Valor |
 |---|---|
 | Área | ADM |
-| Natureza | Lacuna |
-| Descrição | Não há dado sobre custo de infraestrutura (Azure), emissão fiscal (a Focus cobra por documento, segundo DOC-32) e suporte por cliente. DOC-25 recomenda modelar esse custo antes de fixar preço para muitos clientes. DOC-33 registra que o plano F1 do App Service já esgotou CPU com um cliente. |
-| Evidência | DOC-25 (F), DOC-32 (E), DOC-33 §15 |
-| Gravidade | **A classificar** |
-| Impacto | Preço abaixo do custo em clientes de alto volume. |
-| Confiança | — |
+| Natureza | Fato (números declarados pelo responsável em 2026-10-22) |
+| Descrição | **Custos:** Azure (2 bancos) e Focus NFe (plano para até 3 CNPJs), R$ 183,90/mês no total declarado; não foi detalhado se inclui o App Service e o armazenamento. **Receita:** R$ 89,90/mês da Vila Verde e R$ 30,00/mês do cliente do OutfiTT, que é outro produto e divide a mesma infraestrutura. Total R$ 119,90/mês, **R$ 64,00/mês abaixo dos custos declarados**, sem contar o tempo do responsável. Os dois preços são condições especiais (ver EXC-VEN-001). DOC-32 observa que a Focus cobra por documento acima do plano. |
+| Evidência | Declaração do responsável (2026-10-22); DOC-25 (F), DOC-32 (E), DOC-33 §15 |
+| Gravidade | Média (sustentabilidade financeira do produto; não afeta dados nem segurança) |
+| Impacto | A operação depende de aporte do responsável; crescer sem rever preços aumenta o déficit. |
+| Confiança | Média (valores declarados, sem faturas) |
 | Dependências | Faturas do Azure e da Focus |
 | Responsável | Matheus |
-| Ação proposta | Na EXC-A10: levantar custos reais dos últimos meses. |
-| Status | Lacuna |
+| Ação proposta | Na EXC-A10: conferir as faturas (inclusive App Service), separar o custo por produto (ConstruTTor e OutfiTT) e estimar o custo por cliente adicional. Não é tarefa técnica. |
+| Status | Confirmado |
 | Critério de validação | CRITERIOS ADM-1. |
-| Origem | DOC-25, DOC-32, DOC-33 |
-| Relacionados | EXC-VEN-001 |
+| Origem | DOC-25, DOC-32, DOC-33; confirmação 11 |
+| Relacionados | EXC-VEN-001, EXC-ADM-002 |
+| Datas | Registrado em 2026-10-22; atualizado em 2026-10-22 (confirmação 11) |
+
+### EXC-ADM-002 — Todo o conhecimento e a operação concentrados em uma pessoa
+
+| Campo | Valor |
+|---|---|
+| Área | ADM (também OPS, SUP) |
+| Natureza | Fato |
+| Descrição | O responsável é a única pessoa da empresa (2026-10-22): desenvolvimento, implantação, suporte, infraestrutura, fiscal e comercial. Parte do conhecimento não está versionada (código da API de licenças só no PC, procedimento real de publicação, configurações do Azure). DOC-25 e DOC-31 já apontavam bus factor 1. |
+| Evidência | Declaração do responsável (2026-10-22); EXC-OPS-005, EXC-OPS-001; DOC-25 (F), DOC-31 (E) |
+| Gravidade | Média |
+| Impacto | Uma ausência prolongada do responsável interrompe suporte, correções e a operação fiscal dos clientes; sem revisão por outra pessoa, erros passam direto para produção (EXC-OPS-002). |
+| Confiança | Alta |
+| Dependências | — |
+| Responsável | Matheus |
+| Ação proposta | Reduzir o que depende só da memória do responsável: versionar o que está só no PC, documentar publicação e recuperação (EXC-A5). A decisão de ter outra pessoa de apoio é de negócio (EXC-A10). |
+| Status | Confirmado |
+| Critério de validação | Código, configuração e procedimentos críticos versionados e documentados de forma que outra pessoa consiga operar. |
+| Origem | Confirmação 9 (2026-10-22) |
+| Relacionados | EXC-OPS-005, EXC-OPS-001, EXC-OPS-002, EXC-ADM-001 |
 | Datas | Registrado em 2026-10-22 |
 
 ### EXC-VEN-001 — Preços e planos sem validação com clientes
@@ -831,16 +853,16 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 |---|---|
 | Área | VEN |
 | Natureza | Lacuna |
-| Descrição | DOC-32 propõe planos e faixas de preço, todas marcadas pelo próprio documento como **[estimativa]**, e recomenda validá-las nas primeiras conversas com clientes. O único preço praticado documentado é o do piloto (R$ 2.000 de implantação + R$ 99,90/mês, segundo DOC-34), muito abaixo das faixas propostas. Existe um mecanismo de módulos por tenant (`TenantFeatureFlags`), mas não foi avaliado como controle de plano. |
-| Evidência | DOC-32 (E), DOC-34; `ERP.Domain/Entities/TenantFeatureFlags.cs` |
+| Descrição | DOC-32 propõe planos e faixas de preço, todas marcadas pelo próprio documento como **[estimativa]**, e recomenda validá-las nas primeiras conversas com clientes. Preços praticados hoje (declarados em 2026-10-22): Vila Verde **R$ 89,90/mês**, preço reduzido porque a loja recebe primeiro todas as atualizações do ConstruTTor (DOC-34, de agosto, citava R$ 99,90/mês e R$ 2.000 de implantação); o cliente do OutfiTT paga R$ 30,00/mês em condição especial de primeiro cliente. Nenhum preço foi testado com um cliente sem condição especial. Existe um mecanismo de módulos por tenant (`TenantFeatureFlags`), mas não foi avaliado como controle de plano. |
+| Evidência | DOC-32 (E), DOC-34; `ERP.Domain/Entities/TenantFeatureFlags.cs`; declaração do responsável (2026-10-22) |
 | Gravidade | **A classificar** |
 | Impacto | Sem preço validado, não há base para projeção comercial. |
 | Confiança | — |
 | Dependências | Conversas com clientes; EXC-ADM-001 |
 | Responsável | Matheus |
-| Ação proposta | Na EXC-A10: registrar preços praticados e propostas enviadas (ex.: Eldorado, DOC-29) e definir como validar. |
+| Ação proposta | Na EXC-A10: registrar as propostas enviadas (ex.: Eldorado, DOC-29), definir como validar preço com clientes sem condição especial e cruzar com o custo (EXC-ADM-001). |
 | Status | Lacuna |
 | Critério de validação | CRITERIOS VEN-2. |
-| Origem | DOC-32, DOC-34 |
+| Origem | DOC-32, DOC-34; confirmação 11 |
 | Relacionados | EXC-ADM-001 |
-| Datas | Registrado em 2026-10-22 |
+| Datas | Registrado em 2026-10-22; atualizado em 2026-10-22 (confirmação 11) |

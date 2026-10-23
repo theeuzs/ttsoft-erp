@@ -1,7 +1,7 @@
 # Plano Mestre — Programa de Excelência TTSoft
 
 > Produto: ConstruTTor ERP
-> Criado em: 2026-10-22 · Versão: 1.1 · Fase atual: **EXC-F0 concluída; EXC-A0 em execução**
+> Criado em: 2026-10-22 · Versão: 1.8 · Fase atual: **EXC-A0 concluída; EXC-A1 a iniciar**
 > Documentos relacionados: [CRITERIOS-DE-EXCELENCIA](CRITERIOS-DE-EXCELENCIA.md) · [INVENTARIO-AUDITORIAS](INVENTARIO-AUDITORIAS.md) · [REGISTRO-CENTRAL](REGISTRO-CENTRAL.md)
 
 ---
@@ -124,19 +124,22 @@ Saídas:                 registros EXC-… criados/atualizados
 ```
 
 #### EXC-A0 — Linha de base e reconciliação
-- **Status:** Em execução. Relatórios recebidos e reconciliados em 2026-10-22: 22 pendências
-  herdadas encerradas com evidência, 14 convertidas em registros, 9 adiadas para auditorias
-  específicas (INVENTARIO §4).
+- **Status:** **Concluída em 2026-10-22**, após a primeira triagem (§6.5).
+  Relatórios reconciliados (22 pendências herdadas encerradas com evidência, 14 convertidas em
+  registros, 9 adiadas para auditorias específicas — INVENTARIO §4). As 11 confirmações da
+  seção 7 foram respondidas em 2026-10-22.
 - **Escopo:** relatórios anteriores, commits, documentos versionados; confronto com o código atual.
-- **Evidências necessárias:** respostas às confirmações 2 a 9 da seção 7; relatórios
-  faltantes, se existirem (INVENTARIO §2.3).
+- **Evidências necessárias:** atendidas. Relatórios faltantes (INVENTARIO §2.3) seguem em
+  EXC-DAD-001, sem bloquear o encerramento.
 - **Critérios de aprovação:** cada item do INVENTARIO com estado *Confirmado*, *Divergente*
   ou *Sem relatório — não verificável*; pendências herdadas registradas sem duplicação.
 - **Encerramento:** inventário revisado pelo responsável; nenhuma pendência dos relatórios
   antigos sem destino.
 
 #### EXC-A1 — Isolamento entre clientes e acesso a dados
-- **Status:** Não iniciada.
+- **Status:** Próxima. Começa pelo desenho do login restrito decidido na triagem (§6.5).
+  Já há evidência coletada na EXC-A0: permissões do login atual, inventário de tenants e
+  registros sem `TenantId` (ROTEIRO-CONFIRMACOES-A0).
 - **Escopo:** filtros globais de tenant (`HasQueryFilter`), todos os usos de
   `IgnoreQueryFilters` e de SQL bruto fora dos testes, resolução de tenant na API,
   acesso direto do WPF ao banco (credencial, permissões do login SQL), armazenamento de
@@ -157,12 +160,18 @@ responsável.
 
 | Papel | Responsabilidade | Atribuído a |
 |---|---|---|
-| Patrocinador / decisor | Aprova fichas, prioriza e decide sobre riscos aceitos | Matheus (a confirmar) |
-| Auditor técnico | Executa auditorias das áreas 4–7, 9, 10 | Claude Code, sob revisão |
-| Responsáveis por área | Fornecem evidências e executam ações | A definir por área |
+| Patrocinador / decisor | Aprova fichas, prioriza e decide sobre riscos aceitos | Matheus |
+| Auditor técnico | Executa auditorias das áreas 4–7, 9, 10 | Claude Code, sob revisão de Matheus |
+| Responsáveis por área | Fornecem evidências e executam ações | Matheus (todas as áreas) |
+| Apoio externo | Validação fiscal e contábil; orientação jurídica | Contador da loja piloto (fiscal); assessoria jurídica a contratar (EXC-FIS-002) |
 
-O histórico de commits tem um único autor. Se não houver outros responsáveis, isso deve
-ser considerado no planejamento (capacidade e revisão por pares).
+Confirmado em 2026-10-22: a empresa tem uma pessoa (EXC-ADM-002). Consequências para o
+programa:
+- a capacidade é o principal limite: as auditorias seguem em sequência, sem paralelismo;
+- não há revisão por outra pessoa, então cada correção derivada do programa precisa de
+  critério de validação objetivo (teste, consulta ou evidência) antes de chegar à produção;
+- decisões fiscais e jurídicas dependem de apoio externo, e por isso aparecem como
+  dependência nos registros.
 
 ---
 
@@ -177,23 +186,38 @@ ser considerado no planejamento (capacidade e revisão por pares).
    `main`), correções derivadas do programa devem ser validadas antes do merge na `main`.
 4. **Versionamento destes documentos:** alterações via commit, com nota no histórico abaixo.
 
+### 6.5 Decisões de triagem
+
+#### Triagem 1 — 2026-10-22 (encerramento da EXC-A0)
+
+Itens Críticos e Altos. Decididos por Matheus, que aceitou as recomendações.
+
+| Registro | Gravidade | Decisão | Tipo | Quando |
+|---|---|---|---|---|
+| EXC-FIS-008 | Crítica | Parar de usar o tenant de teste com o CNPJ da Vila Verde; levar ao contador a lista das notas de teste (6 confirmadas e 5 a identificar no painel da Focus) | Ação imediata, sem código | Agora |
+| EXC-SEG-001 + EXC-SEG-006 | Crítica + Alta | Login exclusivo do ConstruTTor, restrito ao `ERPTTSoftStaging` e ao mínimo que o WPF usa, com senha nova; reconfigurar os 3 PCs fora do horário da loja | Mudança de produção planejada | Desenho no início da EXC-A1; execução em janela combinada |
+| EXC-FIS-009 | Alta | Decidir com o contador a regularização da venda `1A7F2760…`; correção da classificação de erros na EXC-A4 | Ação imediata sem código + correção futura | Agora / EXC-A4 |
+| EXC-OPS-003 | Alta | Ver a retenção no portal e restaurar uma cópia para um banco novo, sem tocar no de produção | Verificação antecipada da EXC-A5 | Antes da EXC-A1 terminar |
+
+Os demais registros seguem para as auditorias indicadas em cada um.
+
 ---
 
-## 7. Confirmações pendentes (para fechar a EXC-A0)
+## 7. Confirmações da EXC-A0 (todas respondidas em 2026-10-22)
 
 | # | Pergunta | Registro relacionado |
 |---|---|---|
 | 1 | ~~Onde estão os relatórios das auditorias anteriores?~~ Respondida em 2026-10-22 (35 relatórios entregues; faltam os do INVENTARIO §2.3) | EXC-DAD-001 |
 | 2 | Qual login SQL o WPF usa em cada loja e quais permissões ele tem? **Concluída (2026-10-22):** o login das lojas é o administrador do servidor SQL (`dbo`/`db_owner` no banco, acesso a todos os bancos do servidor) | EXC-SEG-001, EXC-SEG-008 |
-| 3 | Os segredos removidos do repositório em jun/2026 foram trocados? | EXC-SEG-003 |
+| 3 | Os segredos removidos do repositório em jun/2026 foram trocados? **Respondida (2026-10-22):** sim | EXC-SEG-003 (encerrado) |
 | 4 | Quantas lojas estão em produção, com qual versão do WPF, e o banco é compartilhado? A Vila Verde já usa o banco na Azure? **Concluída (2026-10-22):** uma loja real (Vila Verde, 3 PCs confirmados no banco) e 4 tenants de teste/sem uso no mesmo banco; API e WPF no `ERPTTSoftStaging`; PCs atualizados com o artefato do último push (declarado; hash por PC não verificado) | EXC-SEG-001, EXC-OPS-004, EXC-OPS-007, EXC-FIS-008 |
 | 5 | Estado do interruptor de recuperação fiscal por tenant em produção. **Concluída (2026-10-22):** `FiscalRecovery__TenantsHabilitados` não existe no App Service de produção; nenhuma loja usa a recuperação nova; 1 NFC-e da Vila Verde presa no caminho antigo | EXC-FIS-001 (encerrado), EXC-FIS-007 |
-| 6 | Política de backup e último teste de restauração do Azure SQL | EXC-OPS-003 |
-| 7 | Onde estão termos de uso, política de privacidade e contrato de licença? | EXC-FIS-002 |
-| 8 | O app Mobile segue no escopo do produto? | EXC-PRD-001 |
-| 9 | Quem são os responsáveis por área? | §5 |
-| 10 | Onde está o código da API de licenças? | EXC-OPS-005 |
-| 11 | Quais custos mensais (Azure, Focus) e preços praticados existem hoje? | EXC-ADM-001, EXC-VEN-001 |
+| 6 | Política de backup e último teste de restauração do Azure SQL. **Respondida (2026-10-22):** backup provavelmente existe; restauração nunca testada | EXC-OPS-003 |
+| 7 | Onde estão termos de uso, política de privacidade e contrato de licença? **Respondida (2026-10-22):** não existem | EXC-FIS-002 |
+| 8 | O app Mobile segue no escopo do produto? **Respondida (2026-10-22):** sim, pausado (iOS exige Mac) | EXC-PRD-001 |
+| 9 | Quem são os responsáveis por área? **Respondida (2026-10-22):** só o responsável | §5, EXC-ADM-002 |
+| 10 | Onde está o código da API de licenças? **Respondida (2026-10-22):** só no PC do responsável | EXC-OPS-005 |
+| 11 | Quais custos mensais (Azure, Focus) e preços praticados existem hoje? **Respondida (2026-10-22)** | EXC-ADM-001, EXC-VEN-001 |
 
 ---
 
@@ -210,9 +234,9 @@ ser considerado no planejamento (capacidade e revisão por pares).
 
 ## 9. Próximas ações
 
-1. Obter as respostas da seção 7, em especial 2, 4 e 5, que podem elevar a gravidade de
-   EXC-SEG-001 e EXC-FIS-007 (fecha EXC-A0).
-2. Revisar e aprovar a ficha da EXC-A1.
+1. Executar as ações imediatas da triagem 1 (§6.5), que não envolvem código: tenant de teste,
+   contador (notas de teste e venda presa) e teste de restauração.
+2. Revisar e aprovar a ficha da EXC-A1 e começar pelo desenho do login restrito.
 3. Executar a EXC-A1.
 
 ---
@@ -228,3 +252,5 @@ ser considerado no planejamento (capacidade e revisão por pares).
 | 2026-10-22 | 1.4 | Confirmação 5 concluída (interruptor ausente em produção); EXC-FIS-001 encerrado |
 | 2026-10-22 | 1.5 | Consultas E1 e E2: EXC-FIS-008 Crítica; novos EXC-FIS-009 e EXC-FIS-010; EXC-FIS-007 corrigido e rebaixado a Média |
 | 2026-10-22 | 1.6 | Consultas E6 a E9 e painel da Focus: emitente das notas de teste confirmado; causa da NFC-e presa (EXC-FIS-011) |
+| 2026-10-22 | 1.7 | Confirmações 3 e 6 a 11 respondidas; papéis definidos; EXC-A0 aguardando a primeira triagem |
+| 2026-10-22 | 1.8 | Triagem 1 registrada (§6.5); EXC-A0 concluída; EXC-A1 é a próxima |
