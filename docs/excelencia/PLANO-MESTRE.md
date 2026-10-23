@@ -137,7 +137,8 @@ Saídas:                 registros EXC-… criados/atualizados
   antigos sem destino.
 
 #### EXC-A1 — Isolamento entre clientes e acesso a dados
-- **Status:** Próxima. Começa pelo desenho do login restrito decidido na triagem (§6.5).
+- **Status:** Em execução. Desenho do login restrito aprovado (execução aguarda pré-verificações P1 a P4):
+  [EXC-A1-DESENHO-LOGIN-RESTRITO](EXC-A1-DESENHO-LOGIN-RESTRITO.md) (2026-10-22).
   Já há evidência coletada na EXC-A0: permissões do login atual, inventário de tenants e
   registros sem `TenantId` (ROTEIRO-CONFIRMACOES-A0).
 - **Escopo:** filtros globais de tenant (`HasQueryFilter`), todos os usos de
