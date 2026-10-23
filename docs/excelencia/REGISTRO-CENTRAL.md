@@ -55,7 +55,7 @@
 | EXC-SEG-006 | SEG | Senha do login SQL de produção compartilhada fora de um cofre de segredos | Fato | Alta | Alta | **Planejado** | Matheus |
 | EXC-SEG-007 | SEG | Conexão do WPF ao SQL não valida o certificado do servidor (`TrustServerCertificate=True`) | Fato | Média | Alta | Confirmado | A definir |
 | EXC-SEG-008 | SEG | Servidor SQL sem auditoria, sem Defender e sem administrador do Entra | Fato | Média | Alta | Confirmado | Matheus |
-| EXC-SEG-009 | SEG | Firewall do servidor SQL aberto para qualquer IP da internet | Fato | **Crítica** | Alta | **Planejado** | Matheus |
+| EXC-SEG-009 | SEG | Firewall do servidor SQL aberto para qualquer IP da internet | Fato | **Crítica** | Alta | **Risco aceito** (revisão: fim da E6) | Matheus |
 | EXC-ENG-001 | ENG | Testes não comprovam comportamento no SQL Server (SQL bruto e `IgnoreQueryFilters`) | Fato | Média | Alta | Confirmado | A definir |
 | EXC-ENG-002 | ENG | README desatualizado em relação à arquitetura atual | Fato | Baixa | Alta | Confirmado | A definir |
 | EXC-ENG-003 | ENG | 155 avisos de compilação | Fato | Baixa | Alta | Confirmado | A definir |
@@ -86,7 +86,7 @@
 | EXC-ADM-002 | ADM | Todo o conhecimento e a operação concentrados em uma pessoa | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-VEN-001 | VEN | Preços e planos sem validação com clientes | Lacuna | A classificar | — | Lacuna | Matheus |
 
-**Contagem:** 38 registros (35 abertos, 3 encerrados) — abertos: 3 Crítica, 3 Alta, 15 Média, 9 Baixa, 5 A classificar.
+**Contagem:** 38 registros (35 abertos, um deles em risco aceito; 3 encerrados) — abertos: 3 Crítica, 3 Alta, 15 Média, 9 Baixa, 5 A classificar.
 Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.md)
 (passos 1.1, 1.2, 2, 4 e E1 a E9). Prioridade imediata: EXC-FIS-008, EXC-SEG-001 e EXC-FIS-009.
 
@@ -242,7 +242,7 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Natureza | Fato |
 | Descrição | Na visão geral de `erp-ttsoft-server`, as funcionalidades *Auditoria*, *Microsoft Defender para SQL* e *Administrador do Microsoft Entra* aparecem como "Não configurado". O único acesso administrativo é o login SQL `sa_ttsoft`, o mesmo das lojas. |
 | Evidência | Captura do Portal do Azure enviada pelo responsável (2026-10-22) |
-| Gravidade | Média |
+| Gravidade | Média. Com a aceitação do EXC-SEG-009 (servidor aberto para a internet), passa a ser controle compensatório prioritário. |
 | Impacto | Um acesso indevido com a credencial de EXC-SEG-001 não deixa registro nem dispara alerta; não há como investigar depois. |
 | Confiança | Alta |
 | Dependências | EXC-SEG-001 (a separação de logins vem antes) |
@@ -268,8 +268,8 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Dependências | IP atual do cliente do OutfiTT; os da loja e do responsável já foram identificados (EXC-A1-DESENHO-LOGIN-RESTRITO, seção 3) |
 | Limitação conhecida | Com IP dinâmico na loja, cada troca de IP pelo provedor corta o acesso do WPF até a regra ser atualizada. A solução definitiva é o WPF não conectar direto no banco (migração WPF→API); alternativas intermediárias (IP fixo no provedor, rede privada) ficam para a EXC-A5. |
 | Responsável | Matheus |
-| Ação proposta | Para a próxima triagem: (1) com a consulta corrigida, confirmar o IP atual de cada cliente; (2) criar ou ajustar as regras específicas que faltarem; (3) remover a regra `Liberar`; (4) remover as regras sem efeito ou de pessoas que não devem ter acesso (confirmar quem é "Bruno"). Mudança de produção: fazer fora do horário das lojas, com a regra pronta para ser recriada se algum cliente perder acesso. Se o IP da loja for dinâmico, registrar a limitação e tratar na EXC-A5. |
-| Status | **Planejado** (triagem 2, 2026-10-22): ação prioritária — confirmar os IPs atuais dos clientes com a consulta corrigida, ajustar as regras específicas e remover a regra `Liberar` fora do horário das lojas. Antecede a execução do login restrito. |
+| Ação proposta | Enquanto o risco estiver aceito: remover só as regras sem efeito ou de pessoas que não devem ter acesso (confirmar quem é "Bruno"), sem impacto para as lojas. Na revisão: escolher entre as alternativas registradas no campo Status. |
+| Status | **Risco aceito** em 2026-10-22 por Matheus, revendo a triagem 2. **Justificativa:** os IPs públicos da região mudam cerca de 4 vezes por semana, o que torna inviável manter regras por IP no Azure. **Condições da aceitação:** (1) a execução do login restrito (E1 a E4) e a troca da senha de `sa_ttsoft` (E6) passam a ser a mitigação principal, porque com o servidor aberto a senha é a única barreira; (2) a auditoria e o Defender do servidor (EXC-SEG-008) passam a ser controles compensatórios a avaliar com prioridade. **Revisão:** ao final da E6, ou antes se houver indício de acesso indevido. **Alternativas para a revisão:** IP fixo no provedor da loja, rede privada (VPN) até o Azure, ou o WPF deixar de conectar direto no banco (migração WPF→API), que elimina a necessidade de expor o banco às lojas. |
 | Critério de validação | Nenhuma regra ampla; cada regra com dono identificado; clientes conectando normalmente após a mudança. |
 | Origem | EXC-A1, pré-verificação P3 (2026-10-22) |
 | Relacionados | EXC-SEG-001, EXC-SEG-006, EXC-SEG-008 |

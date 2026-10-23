@@ -210,8 +210,15 @@ Decidida por Matheus.
 |---|---|---|---|---|
 | EXC-SEG-009 | Crítica | (1) Rodar a consulta corrigida de sessões em horário de uso da loja e do cliente do OutfiTT e anotar o IP atual de cada um; (2) criar ou ajustar as regras específicas que faltarem; (3) remover a regra `Liberar` fora do horário das lojas, pronta para ser recriada se alguém perder acesso; (4) revisar as regras sem efeito ou de pessoas sem acesso previsto | Mudança de produção prioritária | Antes da etapa E1 do login restrito |
 
-Ordem resultante das ações de produção: firewall (EXC-SEG-009) → login restrito do WPF
-(E1 a E4) → usuários próprios da API e do OutfiTT (E5) → troca da senha de `sa_ttsoft` (E6).
+**Revisão da triagem 2 (2026-10-22):** Matheus decidiu manter a regra aberta, porque os IPs
+públicos da região mudam cerca de 4 vezes por semana. EXC-SEG-009 passou a **Risco aceito**,
+com revisão ao final da E6 e as condições registradas no próprio registro. Consequência: com o
+servidor aberto, a senha é a única barreira, e o login restrito e a troca de senha passam a ser
+a mitigação principal.
+
+Ordem resultante das ações de produção: login restrito do WPF (E1 a E4) → usuários próprios da
+API e do OutfiTT (E5) → troca da senha de `sa_ttsoft` (E6) → revisão do EXC-SEG-009.
+Avaliar a auditoria do servidor (EXC-SEG-008) em paralelo, como controle compensatório.
 
 ---
 
@@ -267,3 +274,4 @@ Ordem resultante das ações de produção: firewall (EXC-SEG-009) → login res
 | 2026-10-22 | 1.7 | Confirmações 3 e 6 a 11 respondidas; papéis definidos; EXC-A0 aguardando a primeira triagem |
 | 2026-10-22 | 1.8 | Triagem 1 registrada (§6.5); EXC-A0 concluída; EXC-A1 é a próxima |
 | 2026-10-22 | 1.9 | Triagem 2: remoção da regra de firewall aberta (EXC-SEG-009) como ação prioritária |
+| 2026-10-22 | 1.10 | Triagem 2 revista: EXC-SEG-009 em risco aceito (IPs dinâmicos); login restrito e troca de senha passam a ser a mitigação principal |

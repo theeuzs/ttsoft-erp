@@ -192,7 +192,7 @@ REVERT;
 | Etapa | O quê | Reversão | Critério para seguir |
 |---|---|---|---|
 | E0 | Pré-verificações P1 a P4 | — | Respostas registradas |
-| E0b | Firewall (triagem 2): confirmar IPs dos clientes, ajustar regras específicas e remover a regra `Liberar` (EXC-SEG-009) | Recriar a regra | Clientes conectando pelas regras específicas |
+| E0b | ~~Firewall~~ — **não será executada**: EXC-SEG-009 em risco aceito (IPs mudam cerca de 4 vezes por semana). Com o servidor aberto, E1 a E6 são a mitigação principal | — | — |
 | E1 | Executar 4.2 e 4.3 no `ERPTTSoftStaging` | `DROP USER construttor_wpf; DROP ROLE construttor_app;` | 4.3 com todos os valores esperados |
 | E2 | **Piloto em 1 PC** fora do horário da loja: copiar `conexao.dat` para uma pasta de backup no próprio PC; renomear o original; abrir o ERP; no assistente, informar servidor, banco, `construttor_wpf` e a senha nova; testar o roteiro da seção 6 | Restaurar o `conexao.dat` copiado (a cifra é presa à máquina, então a cópia só vale no mesmo PC) | Roteiro sem erro de permissão |
 | E3 | Observar o PC piloto por 1 dia útil de operação real | Igual à E2 | Nenhum erro "permission was denied" no log do WPF (`Logs/log-*.json`); sessões do PC aparecem com `construttor_wpf` (consulta 7.1) |
@@ -266,3 +266,4 @@ Esperado ao final: PCs da loja (`DESKTOP-JQB0BIQ`, `SERVIDOR`, `COMPUTADOR03`) c
 |---|---|---|
 | 2026-10-22 | 1.0 | Desenho inicial para revisão |
 | 2026-10-22 | 1.1 | Desenho aprovado pelo responsável; execução aguarda P1 a P4 |
+| 2026-10-22 | 1.2 | Respostas de P1 a P4; E0b (firewall) cancelada por risco aceito |
