@@ -47,13 +47,14 @@
 
 | ID | Área | Título | Natureza | Gravidade | Confiança | Status | Responsável |
 |---|---|---|---|---|---|---|---|
-| EXC-SEG-001 | SEG | WPF acessa o banco com uma credencial única, igual em todas as lojas, que lê e grava dados de todos os tenants | Fato | Alta | Alta | Confirmado | A definir |
+| EXC-SEG-001 | SEG | WPF acessa o banco com a credencial de administrador do servidor SQL, igual em todas as lojas | Fato | **Crítica** | Alta | Confirmado | A definir |
 | EXC-SEG-002 | SEG | Dependência com vulnerabilidade conhecida de gravidade alta (`System.Security.Cryptography.Xml` 8.0.3) | Fato | A classificar | Alta (aviso) | Confirmado | A definir |
 | EXC-SEG-003 | SEG | Troca dos segredos removidos do repositório não confirmada | Lacuna | A classificar | Baixa | Lacuna | Matheus |
 | EXC-SEG-004 | SEG | Tokens OAuth do Mercado Livre gravados em texto plano | Fato | Média | Alta | Confirmado | A definir |
 | EXC-SEG-005 | SEG | JWT sem refresh token | Fato | Baixa | Alta | Confirmado | A definir |
 | EXC-SEG-006 | SEG | Senha do login SQL de produção compartilhada fora de um cofre de segredos | Fato | Alta | Alta | Confirmado | Matheus |
 | EXC-SEG-007 | SEG | Conexão do WPF ao SQL não valida o certificado do servidor (`TrustServerCertificate=True`) | Fato | Média | Alta | Confirmado | A definir |
+| EXC-SEG-008 | SEG | Servidor SQL sem auditoria, sem Defender e sem administrador do Entra | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-ENG-001 | ENG | Testes não comprovam comportamento no SQL Server (SQL bruto e `IgnoreQueryFilters`) | Fato | Média | Alta | Confirmado | A definir |
 | EXC-ENG-002 | ENG | README desatualizado em relação à arquitetura atual | Fato | Baixa | Alta | Confirmado | A definir |
 | EXC-ENG-003 | ENG | 155 avisos de compilação | Fato | Baixa | Alta | Confirmado | A definir |
@@ -65,46 +66,51 @@
 | EXC-OPS-005 | OPS | Licenciamento depende de API externa fora deste repositório | Fato + Lacuna | A classificar | Alta | Confirmado | Matheus |
 | EXC-OPS-006 | OPS | Rate limit e cache em memória impedem escalar a API para mais de uma instância | Fato | Baixa | Média | Confirmado | A definir |
 | EXC-OPS-007 | OPS | Produção usa o banco `ERPTTSoftStaging`, que também recebe testes, num servidor compartilhado com o OutfiTT | Fato | Média | Média | Confirmado | Matheus |
-| EXC-FIS-001 | FIS | Estado da recuperação fiscal (interruptor por tenant) em produção desconhecido | Lacuna | A classificar | — | Lacuna | Matheus |
+| EXC-FIS-001 | FIS | Estado da recuperação fiscal (interruptor por tenant) em produção desconhecido | Lacuna | A classificar | Alta | **Encerrado** (nenhum tenant habilitado; consequência em EXC-FIS-007) | Matheus |
 | EXC-FIS-002 | FIS | Termos de uso, privacidade, contrato, DPA e limitação de responsabilidade não localizados | Lacuna | A classificar | — | Lacuna | Matheus |
 | EXC-FIS-003 | FIS | Serviços locais de emissão fiscal seguem registrados no WPF junto ao serviço via API | Hipótese | A classificar | Baixa | Hipótese | A definir |
 | EXC-FIS-004 | FIS | WPF lê a configuração fiscal (token Focus) de arquivo local; API lê do banco | Fato | Média | Alta | Confirmado | A definir |
 | EXC-FIS-005 | FIS | Nenhum tratamento da Reforma Tributária (IBS/CBS) no código | Fato + Lacuna | A classificar | Alta | Confirmado | A definir |
 | EXC-FIS-006 | FIS | SPED EFD ICMS/IPI gerado sem Bloco E | Fato | Baixa | Alta | Confirmado | A definir |
-| EXC-FIS-007 | FIS | Caminho antigo de contingência reenvia NFC-e com `DataEmissao` congelada | Fato | A classificar | Média | Confirmado | A definir |
+| EXC-FIS-007 | FIS | Caminho antigo de contingência reenvia NFC-e com `DataEmissao` congelada (todas as lojas estão nele) | Fato | Média | Alta | Confirmado | A definir |
+| EXC-FIS-008 | FIS | Tenant de teste emitiu 11 documentos fiscais autorizados em produção, configurado com o CNPJ da Vila Verde | Fato | **Crítica** | Média | Confirmado | Matheus |
+| EXC-FIS-009 | FIS | Erros definitivos da Focus tratados como falha de comunicação: nota fica em contingência para sempre (NFC-e da Vila Verde presa desde 16/10) | Fato | **Alta** | Alta | Confirmado | A definir |
+| EXC-FIS-010 | FIS | Política de emissão fiscal da loja piloto | Lacuna | — | — | **Encerrado** (decisão do cliente, a tratar com o contador) | Matheus |
+| EXC-FIS-011 | FIS | Descrição de produto com aspas (polegada) faz a Focus recusar a NFC-e | Fato + Hipótese | Média | Média | Confirmado | A definir |
 | EXC-PRD-001 | PRD | Roadmap exibido no Portal não corresponde ao produto atual | Fato | Baixa | Alta | Confirmado | A definir |
 | EXC-DAD-001 | DAD | Parte dos relatórios anteriores não foi localizada | Lacuna | Baixa | Alta | Lacuna | Matheus |
 | EXC-DAD-002 | DAD | Sem concorrência otimista; créditos de Haver por leitura-e-gravação | Fato + Hipótese | Média | Média | Confirmado | A definir |
+| EXC-DAD-003 | DAD | Registros com `TenantId` vazio e filial matriz duplicada na Vila Verde | Fato | Baixa | Alta | Confirmado | A definir |
 | EXC-ADM-001 | ADM | Custo de operação por cliente desconhecido | Lacuna | A classificar | — | Lacuna | Matheus |
 | EXC-VEN-001 | VEN | Preços e planos sem validação com clientes | Lacuna | A classificar | — | Lacuna | Matheus |
 
-**Contagem:** 30 registros — 0 Crítica, 2 Alta, 8 Média, 8 Baixa, 12 A classificar.
-Nenhum registro é Crítico até agora; EXC-SEG-001 pode subir com o resultado do
-[roteiro](ROTEIRO-CONFIRMACOES-A0.md), passo 1.1 e 2.5 (acesso a outros bancos do servidor).
+**Contagem:** 36 registros (34 abertos, 2 encerrados) — abertos: 2 Crítica, 2 Alta, 11 Média, 9 Baixa, 10 A classificar.
+Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.md)
+(passos 1.1, 1.2, 2, 4 e E1 a E9). Prioridade imediata: EXC-FIS-008, EXC-SEG-001 e EXC-FIS-009.
 
 ---
 
 ## Detalhe — Segurança (SEG)
 
-### EXC-SEG-001 — WPF acessa o banco com uma credencial única, que lê e grava dados de todos os tenants
+### EXC-SEG-001 — WPF acessa o banco com a credencial de administrador do servidor SQL, igual em todas as lojas
 
 | Campo | Valor |
 |---|---|
 | Área | SEG (também ENG, DAD) |
 | Natureza | Fato |
 | Descrição | O WPF guarda a string de conexão em `conexao.dat`, ao lado do executável, cifrada com DPAPI de máquina e entropia fixa no binário; quem usa a máquina consegue decifrá-la. Segundo o responsável (2026-10-22), toda instalação usa o **mesmo login SQL** (`sa_ttsoft`) no banco `ERPTTSoftStaging`, que contém todos os tenants. Não há segurança por linha no banco: nenhuma política nem uso de `SESSION_CONTEXT` no código, que é o que permitiria ao banco distinguir lojas. Como o WPF lê e grava os próprios dados com esse login, o login necessariamente lê e grava os dados de **todas** as lojas. O isolamento existe só no filtro executado no cliente. Ainda passam pelo banco direto: Auth, Usuários, Funções, Devolução, Orçamento, Haver, Motor Financeiro, SPED, Dashboard, emissão/cancelamento/contingência de NF-e e outros. |
-| Evidência | `ERP.WPF/Helpers/SecureConfigService.cs:14-20,29,40`; `ERP.WPF/ViewModels/SetupViewModel.cs:100-101`; `ERP.WPF/App.xaml.cs:132`, `:298-303`, `:361-502`; busca por `SECURITY POLICY`/`SESSION_CONTEXT` sem resultados (2026-10-22); declaração do responsável (2026-10-22); DOC-31, DOC-32, DOC-33, DOC-34. |
-| Gravidade | **Alta.** Credencial com acesso a todas as lojas distribuída em máquinas de loja e extraível por quem tem acesso a elas. Não é Crítica hoje porque não há indício de exploração e a operação real é de uma loja. **Sobe para Crítica** se o roteiro mostrar que `sa_ttsoft` é administrador do servidor ou abre outros bancos (o do OutfiTT está no mesmo servidor), ou quando houver mais lojas em produção. |
-| Impacto | Quem obtiver a credencial a partir de um PC de loja (malware, funcionário, técnico) lê e altera dados de todas as lojas, inclusive os tokens de EXC-SEG-004, e possivelmente de outros bancos do servidor. |
-| Confiança | Alta (acesso a todos os tenants); Baixa (privilégios além do banco, até o passo 1.1/2.5) |
-| Dependências | [ROTEIRO-CONFIRMACOES-A0](ROTEIRO-CONFIRMACOES-A0.md), passos 1.1 e 2 |
+| Evidência | `ERP.WPF/Helpers/SecureConfigService.cs:14-20,29,40`; `ERP.WPF/ViewModels/SetupViewModel.cs:100-101`; `ERP.WPF/App.xaml.cs:132`, `:298-303`, `:361-502`; busca por `SECURITY POLICY`/`SESSION_CONTEXT` sem resultados; declaração do responsável. **Verificado no ambiente em 2026-10-22:** Portal do Azure mostra `sa_ttsoft` como *Administrador do servidor* de `erp-ttsoft-server`; no `ERPTTSoftStaging` o login é `dbo`, membro de `db_owner` e tem `CONTROL`, `ALTER ANY USER`, `BACKUP DATABASE`, `UNMASK` e `CREATE DATABASE` (roteiro 2.1–2.3). Os PCs `DESKTOP-JQB0BIQ`, `SERVIDOR` e `COMPUTADOR03` da Vila Verde gravaram diretamente no banco em 22/10 (roteiro 4.4). DOC-31, DOC-32, DOC-33, DOC-34. |
+| Gravidade | **Crítica.** O administrador do servidor lógico tem controle total de todos os bancos do servidor, inclusive o `ERPTTSoft` do OutfiTT, e pode criar logins e bancos. Essa credencial está em cada PC de loja, decifrável por quem usa a máquina. |
+| Impacto | Quem obtiver a credencial a partir de um PC de loja (malware, funcionário, técnico) lê, altera ou apaga dados de todas as lojas dos dois produtos, inclusive os tokens de EXC-SEG-004, e pode criar acessos persistentes. Sem auditoria no servidor (EXC-SEG-008), o uso indevido não deixaria rastro. Não há indício de exploração. |
+| Confiança | Alta. O acesso ao `ERPTTSoft` decorre do papel de administrador do servidor; a consulta 2.5 foi executada no contexto do `ERPTTSoftStaging` (que só lista o próprio banco e o `master`) e pode ser repetida no `master` apenas para documentar. |
+| Dependências | — |
 | Responsável | A definir |
-| Ação proposta | Concluir o roteiro (passos 1.1 e 2). Na EXC-A1: definir a mitigação de curto prazo (login próprio do ConstruTTor com o mínimo de permissões, sem acesso a outros bancos) e a de longo prazo (continuar a migração WPF→API até o WPF não precisar de credencial do banco). Não implementar antes da conclusão da EXC-A1. |
+| Ação proposta | Mitigação de curto prazo, a desenhar na EXC-A1 antes de qualquer mudança: login próprio do ConstruTTor, restrito ao `ERPTTSoftStaging` e ao mínimo de permissões que o WPF usa (sem `db_owner`), com senha nova (resolve também EXC-SEG-006), reconfigurando os 3 PCs; o administrador do servidor deixa de sair da máquina do responsável. Longo prazo: continuar a migração WPF→API até o WPF não precisar de credencial do banco. |
 | Status | Confirmado |
 | Critério de validação | Nenhuma máquina de loja com credencial capaz de ler dados de outra loja; ou risco aceito formalmente com prazo. |
 | Origem | EXC-F0; INV-020; DOC-31, DOC-33; confirmação 2 |
 | Relacionados | EXC-ENG-001, EXC-FIS-003, EXC-SEG-004, EXC-SEG-006, EXC-SEG-007, EXC-OPS-007 |
-| Datas | Registrado em 2026-10-22; atualizado em 2026-10-22 (relatórios anteriores; declaração do login e do banco) |
+| Datas | Registrado em 2026-10-22; atualizado em 2026-10-22 (relatórios anteriores; declaração do login; verificação no Azure e no banco) |
 
 ### EXC-SEG-002 — Dependência com vulnerabilidade conhecida de gravidade alta
 
@@ -224,6 +230,26 @@ Nenhum registro é Crítico até agora; EXC-SEG-001 pode subir com o resultado d
 | Critério de validação | Conexões do WPF validam o certificado do servidor. |
 | Origem | Confirmação 2 (2026-10-22) |
 | Relacionados | EXC-SEG-001 |
+| Datas | Registrado em 2026-10-22 |
+
+### EXC-SEG-008 — Servidor SQL sem auditoria, sem Defender e sem administrador do Entra
+
+| Campo | Valor |
+|---|---|
+| Área | SEG (também OPS) |
+| Natureza | Fato |
+| Descrição | Na visão geral de `erp-ttsoft-server`, as funcionalidades *Auditoria*, *Microsoft Defender para SQL* e *Administrador do Microsoft Entra* aparecem como "Não configurado". O único acesso administrativo é o login SQL `sa_ttsoft`, o mesmo das lojas. |
+| Evidência | Captura do Portal do Azure enviada pelo responsável (2026-10-22) |
+| Gravidade | Média |
+| Impacto | Um acesso indevido com a credencial de EXC-SEG-001 não deixa registro nem dispara alerta; não há como investigar depois. |
+| Confiança | Alta |
+| Dependências | EXC-SEG-001 (a separação de logins vem antes) |
+| Responsável | Matheus |
+| Ação proposta | Na EXC-A2/A5: avaliar custo e configuração da auditoria do servidor e de um administrador do Entra para uso humano, separado do login das aplicações. |
+| Status | Confirmado |
+| Critério de validação | Auditoria ativa com retenção definida; acesso administrativo humano distinto do usado pelas aplicações. |
+| Origem | Confirmação 2 (2026-10-22) |
+| Relacionados | EXC-SEG-001, EXC-OPS-003 |
 | Datas | Registrado em 2026-10-22 |
 
 ---
@@ -380,11 +406,12 @@ Nenhum registro é Crítico até agora; EXC-SEG-001 pode subir com o resultado d
 |---|---|
 | Área | OPS (também DAD) |
 | Natureza | Fato (divergência) + Lacuna (situação em campo) |
-| Descrição | `ERP.WPF.csproj` e `Scripts/versao.json` indicam 1.1.0; o Portal exibe "2.4.1" fixo no código. Em 13/08 a Vila Verde ainda rodava a versão antiga com banco local (DOC-34). Segundo o responsável (2026-10-22), hoje ela usa 3 PCs com o último artefato WPF publicado pelo GitHub Actions, ligados ao `ERPTTSoftStaging`. Como a versão do assembly é sempre 1.1.0 e o WPF não reporta versão a nenhum serviço, **não há como saber pelo sistema qual build está em cada PC**: só pela data ou hash do executável comparados com o artefato. A distribuição pelo artefato do GitHub também indica que o atualizador automático (Blob + `versao.json`) pode não estar em uso. |
+| Descrição | `ERP.WPF.csproj` e `Scripts/versao.json` indicam 1.1.0; o Portal exibe "2.4.1" fixo no código. Em 13/08 a Vila Verde ainda rodava a versão antiga com banco local (DOC-34). Segundo o responsável (2026-10-22), hoje ela usa 3 PCs com o último artefato WPF publicado pelo GitHub Actions, ligados ao `ERPTTSoftStaging`; os registros de auditoria confirmam 3 máquinas ativas em 22/10 (`DESKTOP-JQB0BIQ`, `SERVIDOR`, `COMPUTADOR03`) e vendas diárias. Como a versão do assembly é sempre 1.1.0 e o WPF não reporta versão a nenhum serviço, **não há como saber pelo sistema qual build está em cada PC**: só pela data ou hash do executável comparados com o artefato. A distribuição pelo artefato do GitHub também indica que o atualizador automático (Blob + `versao.json`) pode não estar em uso. |
 | Evidência | `ERP.WPF/ERP.WPF.csproj:3-5`; `Scripts/versao.json`; `ERP.Portal/Pages/Roadmap.razor:17`; nenhuma telemetria de versão no WPF; DOC-33, DOC-34; declaração do responsável (2026-10-22) |
 | Gravidade | Baixa (a divergência de versão) |
 | Impacto | Sem saber a build instalada, não dá para dizer se uma correção já chegou à loja. |
-| Confiança | Alta (versões no código); Média (situação em campo, declarada e não verificada) |
+| Atualização (2026-10-22) | O responsável declarou que os 3 PCs foram atualizados com o artefato WPF do último push e que a API usa o `ERPTTSoftStaging`. A atualização é manual, pelo artefato do GitHub Actions, e não pelo atualizador automático. |
+| Confiança | Alta (versões no código); Média (situação em campo, declarada e não verificada por hash) |
 | Dependências | PLANO-MESTRE §7, confirmação 4 |
 | Responsável | A definir |
 | Ação proposta | Roteiro, passos 3 e 4 (build por PC e lojas ativas no banco); definir a fonte de versão e o canal oficial de distribuição na EXC-A8. |
@@ -440,12 +467,12 @@ Nenhum registro é Crítico até agora; EXC-SEG-001 pode subir com o resultado d
 |---|---|
 | Área | OPS (também DAD, SEG) |
 | Natureza | Fato |
-| Descrição | O banco do ConstruTTor em produção se chama `ERPTTSoftStaging` (declaração do responsável e comentário em `AppDbContextFactory`). O checklist do Mercado Livre usa um tenant de teste nesse mesmo banco, então dados de teste e de clientes convivem. O servidor `erp-ttsoft-server` também hospeda o `ERPTTSoft`, usado pelo OutfiTT. Não existe banco de staging separado. |
-| Evidência | Declaração do responsável (2026-10-22); `ERP.Persistence/Context/AppDbContextFactory.cs:11-14`; `CHECKLIST_REGRESSAO_MERCADO_LIVRE.md` (seção 0) |
-| Gravidade | Média |
-| Impacto | Testes podem alterar ou poluir dados de produção; o nome induz a operações erradas (achar que é ambiente de teste); problemas de capacidade ou de acesso em um produto afetam o outro. |
-| Confiança | Média (banco declarado; uso de testes documentado no checklist) |
-| Dependências | Roteiro, passos 1.3 e 4.1 |
+| Descrição | O banco do ConstruTTor em produção se chama `ERPTTSoftStaging` (declaração do responsável e comentário em `AppDbContextFactory`). O checklist do Mercado Livre usa um tenant de teste nesse mesmo banco, então dados de teste e de clientes convivem. O servidor `erp-ttsoft-server` também hospeda o `ERPTTSoft`, usado pelo OutfiTT (ambos no plano Básico). Não existe banco de staging separado. Tenants encontrados no banco em 2026-10-22 (TenantId calculado a partir do CNPJ): **Vila Verde** (`B7F9F866…`, 4 usuários, em operação diária); **teste** CNPJ `11222333000181` (`8FB9FC74…`, 3 usuários, 22 vendas em 30 dias — ver EXC-FIS-008); CNPJ **`00000000000000`**, o valor padrão do `licenca.json` (`A3156E2E…`, 1 usuário, gravações da máquina `DESKTOP-3P3C5VH` em 26/09); CNPJ **`65183796000100`**, da própria TTSoft (`5AA4DA8B…`, 1 usuário); e `FDF3CD72…`, sem CNPJ identificado (1 usuário). |
+| Evidência | Declaração do responsável (2026-10-22); `ERP.Persistence/Context/AppDbContextFactory.cs:11-14`; `CHECKLIST_REGRESSAO_MERCADO_LIVRE.md` (seção 0); captura do Portal do Azure; roteiro 4.1, 4.3, 4.4 (2026-10-22) |
+| Gravidade | Média (a consequência fiscal mais grave está separada em EXC-FIS-008) |
+| Impacto | Testes alteram e poluem dados de produção; o nome induz a operações erradas (achar que é ambiente de teste); problemas de capacidade ou de acesso em um produto afetam o outro. |
+| Confiança | Alta (tenants de teste em produção verificados no banco) |
+| Dependências | Roteiro, passo 1.3 (banco usado pela API) |
 | Responsável | Matheus |
 | Ação proposta | Na EXC-A5: inventariar tenants de teste no banco de produção e definir ambientes separados (nomes, bancos e logins por produto e por ambiente). |
 | Status | Confirmado |
@@ -469,11 +496,11 @@ Nenhum registro é Crítico até agora; EXC-SEG-001 pode subir com o resultado d
 | Gravidade | **A classificar** |
 | Impacto | Define se EXC-FIS-007 está ativo em produção. |
 | Confiança | — |
-| Dependências | [ROTEIRO-CONFIRMACOES-A0](ROTEIRO-CONFIRMACOES-A0.md), passos 1.2, 1.4 e 4.6 |
+| Dependências | — |
 | Responsável | Matheus |
-| Ação proposta | Executar os passos do roteiro; na EXC-A4, levantar a situação das etapas 5 e 6. |
-| Status | Lacuna |
-| Critério de validação | Estado de cada tenant documentado e coerente com o plano da Etapa 4. |
+| Ação proposta | Nenhuma neste registro. A decisão de habilitar a recuperação nova e a situação das etapas 5 e 6 seguem em EXC-FIS-007. |
+| Status | **Encerrado** em 2026-10-22. O responsável verificou nas configurações de aplicativo do App Service `erp-ttsoft-api` (slot de produção) que `FiscalRecovery__TenantsHabilitados` não existe. Pela regra do código (ausente = nenhum tenant), **nenhuma loja usa a recuperação nova; todas usam o caminho antigo**. Coerente com a NFC-e presa com 10.653 tentativas (roteiro 4.6). O slot `staging`, se existir, não foi verificado. |
+| Critério de validação | Estado de cada tenant documentado e coerente com o plano da Etapa 4 — atendido: a recuperação está desligada para todos, como previsto ("inerte") até decisão de habilitar. |
 | Origem | EXC-F0; INV-022; DOC-35 |
 | Relacionados | EXC-FIS-003, EXC-FIS-007 |
 | Datas | Registrado em 2026-10-22; atualizado em 2026-10-22 (relatórios anteriores) |
@@ -583,20 +610,108 @@ Nenhum registro é Crítico até agora; EXC-SEG-001 pode subir com o resultado d
 | Campo | Valor |
 |---|---|
 | Área | FIS |
-| Natureza | Fato (no código); exposição em produção depende de EXC-FIS-001 |
+| Natureza | Fato (no código); todas as lojas expostas |
+| Situação em produção (2026-10-22) | `FiscalRecovery__TenantsHabilitados` não existe no App Service: todas as lojas estão no caminho antigo (EXC-FIS-001). **Correção:** a NFC-e da Vila Verde presa desde 16/10 tinha sido atribuída a este registro; a consulta E2 mostrou que ela falha por outro motivo (JSON recusado pela Focus) e foi movida para EXC-FIS-009. Não há, até agora, ocorrência confirmada da rejeição por data. |
 | Descrição | DOC-35 (3B) diagnosticou que a pendência fiscal guarda o payload com `DataEmissao` do momento da falha e o reenvio não a atualiza. Para NFC-e, a SEFAZ rejeita (704) quando a diferença passa de ~5 minutos, segundo a fonte citada no documento. A Etapa 4 corrige isso no caminho novo (`4A-5a`), que é inerte e ligado por tenant. Para tenants sem o interruptor ligado, o caminho antigo (`NfeContingencyHostedService` → `NfeContingencyService`) continua reenviando o payload original. |
 | Evidência | `ERP.Application/Services/NfeContingencyService.cs:50` (payload gravado, sem regeneração da data); `ERP.Api/BackgroundServices/NfeContingencyHostedService.cs:141-146` (decisão por interruptor); commit `f312a77` (correção no caminho novo); DOC-35 |
-| Gravidade | **A classificar** — Alta se algum tenant em produção estiver no caminho antigo com NFC-e pendentes (vendas sem documento fiscal válido); Baixa se todos estiverem no caminho novo. |
-| Impacto | NFC-e rejeitadas no reenvio; vendas sem documento fiscal autorizado. |
-| Confiança | Média (comportamento lido no código e no diagnóstico; não reproduzido) |
-| Dependências | EXC-FIS-001 |
+| Gravidade | Média (rebaixada de Alta em 2026-10-22, após a correção acima). Exposição confirmada para todas as lojas, mas só ocorre quando a Focus fica inalcançável por alguns minutos, e a nota rejeitada pode ser reemitida manualmente. |
+| Impacto | Após uma falha real de comunicação, a NFC-e reenviada com a data original tende a ser rejeitada e a venda fica sem documento fiscal até ação manual. |
+| Confiança | Alta (código e configuração); Média (efeito, baseado no diagnóstico de DOC-35, não reproduzido) |
+| Dependências | — |
 | Responsável | A definir |
-| Ação proposta | Na EXC-A4: confirmar o modo de cada tenant e as pendências existentes; não alterar o caminho antigo sem o plano da Etapa 4. |
+| Ação proposta | Na EXC-A4: decidir se e quando habilitar a recuperação nova (criar a configuração no App Service é mudança de produção, a planejar e validar antes) e levantar a situação das etapas 5 e 6 de DOC-35. Tratar junto com EXC-FIS-009, que afeta o mesmo caminho. |
 | Status | Confirmado |
 | Critério de validação | Nenhum tenant em produção exposto, ou correção validada em homologação. |
 | Origem | INV-022; DOC-35 |
-| Relacionados | EXC-FIS-001 |
-| Datas | Registrado em 2026-10-22 |
+| Relacionados | EXC-FIS-001, EXC-FIS-009 |
+| Datas | Registrado em 2026-10-22; corrigido em 2026-10-22 (consulta E2) |
+
+### EXC-FIS-008 — Tenant de teste emitiu 11 documentos fiscais autorizados em produção, configurado com o CNPJ da Vila Verde
+
+| Campo | Valor |
+|---|---|
+| Área | FIS (também OPS, SEG) |
+| Natureza | Fato (notas autorizadas em produção com o CNPJ da Vila Verde). A confirmar: o emitente das 5 notas sem chave gravada e se alguma corresponde a operação real. |
+| Emitente (consulta E8, 2026-10-22) | **6 documentos confirmados com o CNPJ da Vila Verde (12820608000141)** pela chave de acesso: NFC-e nº 3303, 3315, 3318, 3319 e 3322 (24 a 26/09) e NF-e de devolução nº 314 (26/09, referente à venda da NFC-e 3319). As NFC-e usam a **numeração real da loja**. Outras 5 autorizadas não têm chave gravada (17/08 e 23/09, antes da correção de `1a62fee`; e 2 NF-e de 20/10 sem venda vinculada, data dos commits S28 de NF-e única/avulsa); o emitente delas não foi confirmado. As vendas `547696AA…` e `5D5E1AC1…` são citadas em DOC-35 como registros do diagnóstico fiscal, o que indica testes deliberados em produção durante o desenvolvimento. |
+| Situação em produção (consulta E1, 2026-10-22) | O tenant de teste tem, em **ambiente de produção**: **7 NFC-e autorizadas** (2026-08-17 a 2026-09-26), **4 NF-e autorizadas** (2026-09-23 a 2026-10-20) e 2 NFC-e em "Contingência" (2026-09-26) que não aparecem em `NfePendentes` (estado divergente: nem autorizadas nem na fila). Em homologação: 1 NFC-e e 1 NF-e autorizadas, 1 NF-e rejeitada. Nas vendas do tenant, só 5 têm chave de NFC-e de produção (contra 7 notas), e `NfceEmitidaEm` está vazio em todas. Nenhuma nota aparece como cancelada no sistema. |
+| Descrição | O TenantId `8FB9FC74-BBF7-8418-C6D6-48B7F1EB5466` corresponde ao CNPJ de teste `11222333000181` (o do checklist do Mercado Livre). Em `TenantFiscalConfigurations`, esse tenant tem `Cnpj = 12820608000141` (o da Vila Verde) e `UsarAmbienteProducao = 1`, igual ao tenant real da Vila Verde. Ele registrou **22 vendas nos últimos 30 dias** (a última em 2026-10-20), feitas pela API e pela máquina `DESKTOP-3P3C5VH`. Se essas vendas emitiram NFC-e, foram documentos fiscais **reais**, de produção, em nome da Vila Verde, para vendas que não aconteceram. Não se sabe qual token da Focus essa configuração usa. |
+| Evidência | Roteiro 4.1, 4.3, 4.4, 4.5 e E1 (2026-10-22); TenantId calculado a partir do CNPJ com o algoritmo de `CadastroService.CnpjParaTenantId`; `CHECKLIST_REGRESSAO_MERCADO_LIVRE.md` |
+| Gravidade | **Crítica.** Documentos fiscais autorizados em produção a partir de vendas de teste, com configuração que aponta para o CNPJ de um cliente. Só deixa de ser Crítica se a consulta E8 e o painel da Focus mostrarem que nenhuma dessas notas saiu com o CNPJ da Vila Verde, ou se o responsável documentar que correspondem a operações reais. |
+| Impacto | Notas e obrigações tributárias indevidas para a Vila Verde (ou para outro CNPJ emitente); os prazos normais de cancelamento das notas mais antigas provavelmente já passaram (a confirmar com o contador). |
+| Confiança | Alta (6 documentos com o CNPJ da Vila Verde); Média (5 sem chave) |
+| Fluxo contábil (declarado em 2026-10-22) | O responsável baixa na Focus todos os XML do CNPJ e os envia ao contador, que não distingue notas de teste das demais. Ou seja, os documentos de teste entram na escrituração da loja como operações reais. O responsável considera aceitável continuar emitindo em produção nos testes. Isso **não** foi registrado como *Risco aceito*: aceitar exige avaliação do contador, porque são documentos fiscais sem operação real, e a decisão afeta a escrituração da loja. |
+| Dependências | Painel da Focus NFe; contador |
+| Responsável | Matheus |
+| Ação proposta | (1) No painel da Focus, listar as requisições da empresa Vila Verde em produção nas datas da E8 (17/08, 23 a 26/09 e 20/10) para identificar as 5 notas sem chave e verificar se alguma foi cancelada direto na Focus. (2) Levar ao contador a lista completa (número, data, valor, situação) para decidir o tratamento. (3) Até isso, não usar o tenant de teste para vendas nem para emissão. (4) Na EXC-A4/A5: isolar testes da produção fiscal (homologação, outro CNPJ ou outro banco — ver EXC-OPS-007). Não alterar dados nem configuração antes da decisão. |
+| Status | Confirmado |
+| Critério de validação | Nenhum tenant de teste com CNPJ de cliente ou ambiente de produção; notas indevidas, se houver, tratadas e documentadas. |
+| Origem | Confirmação 4 (2026-10-22) |
+| Relacionados | EXC-OPS-007, EXC-FIS-001, EXC-FIS-004 |
+| Datas | Registrado em 2026-10-22; atualizado em 2026-10-22 (consultas E1 e E8) |
+
+### EXC-FIS-009 — Erros definitivos da Focus tratados como falha de comunicação: a nota fica em contingência para sempre
+
+| Campo | Valor |
+|---|---|
+| Área | FIS (também ENG) |
+| Natureza | Fato (no código e em produção) |
+| Descrição | `FocusNfeHttpClient.PostAsync` transforma **qualquer** resposta HTTP sem sucesso em falha, e `NfceEmissionService` prefixa a mensagem com "Erro de Comunicação". `FiscalService` e o worker antigo só reconhecem como erro definitivo as mensagens com `UnprocessableEntity` ou `erro_validacao_schema`; todo o resto (400, 401, 403, 415, 5xx de regra) é tratado como falha de comunicação. A venda vai para contingência, o operador vê "a nota será transmitida automaticamente", e o worker reenvia sem limite de tentativas. |
+| Situação em produção (consulta E2, 2026-10-22) | NFC-e da Vila Verde, venda `1A7F2760-01DD-4A47-A3FF-BC18B75BAE33`, falha desde 2026-10-16 09:12, **10.661 tentativas** (10.653 algumas horas antes: a fila continua tentando). Última resposta da Focus: `UnsupportedMediaType` com `formato_invalido` — "Erro no JSON … expected ',' or '}' after object value, got: 'EMB' at line 1 column 1473". A Focus está recusando o conteúdo; reenviar o mesmo conteúdo nunca vai funcionar. |
+| Causa do JSON inválido | Separada em **EXC-FIS-011**: o item `TRINCHA MEDIA TIGRE 695 4" EMB 12 PC` tem aspas de polegada (E6, E7). |
+| Situação na Focus (2026-10-22) | Painel da Focus, empresa Vila Verde, referência `1a7f2760-01dd-4a47-a3ff-bc18b75bae33`, período 10/09 a 23/10: **nenhuma requisição registrada**. A nota nunca foi recebida pela Focus: a venda está sem NFC-e e não há risco de duplicidade num envio futuro. |
+| Evidência | `ERP.Infrastructure/HttpClients/FocusNfeHttpClient.cs:38-48`; `ERP.Application/Services/NfceEmissionService.cs:31-32`; `ERP.Infrastructure/Services/FiscalService.cs:113-123`; `ERP.Api/BackgroundServices/NfeContingencyHostedService.cs:320-368`; roteiro 4.6 e E2 |
+| Gravidade | **Alta.** Venda real sem NFC-e há 6 dias, sem aviso efetivo ao operador; qualquer outro erro definitivo da Focus tem o mesmo destino. |
+| Impacto | Vendas sem documento fiscal; o operador acredita que a nota sairá sozinha; milhares de chamadas inúteis à Focus. |
+| Confiança | Alta |
+| Dependências | Contador (emissão tardia da venda `1A7F2760…`) |
+| Responsável | A definir |
+| Ação proposta | (1) Decidir com o contador como regularizar a venda `1A7F2760…` (emitida em 16/10, sem NFC-e). (2) Só então retirar a pendência da fila; a mesma pendência nunca será aceita, porque o payload guardado contém o texto que a Focus recusa. (3) Na EXC-A4: classificar corretamente os erros definitivos, limitar tentativas e avisar o operador. |
+| Status | Confirmado |
+| Critério de validação | Erros definitivos saem da fila com aviso; tentativas limitadas; venda `1A7F2760…` com situação fiscal resolvida e documentada. |
+| Origem | Confirmação 5 (consulta E2, 2026-10-22) |
+| Relacionados | EXC-FIS-007, EXC-FIS-001, EXC-FIS-011 |
+| Datas | Registrado em 2026-10-22; atualizado em 2026-10-22 (E6, E7, painel da Focus) |
+
+### EXC-FIS-010 — Política de emissão fiscal da loja piloto
+
+| Campo | Valor |
+|---|---|
+| Área | FIS |
+| Natureza | Lacuna |
+| Descrição | A consulta E9 levantou a distribuição das vendas da loja piloto por status fiscal. O responsável esclareceu a questão em 2026-10-22. A política de emissão fiscal da loja é do cliente, fora do escopo técnico do produto, e deve ser tratada pelo cliente com o contador. |
+| Evidência | Consulta E9 e esclarecimento do responsável (2026-10-22) |
+| Gravidade | — (fora do escopo do produto) |
+| Impacto | — |
+| Confiança | — |
+| Dependências | — |
+| Responsável | Matheus |
+| Ação proposta | Nenhuma no programa. A observação de dados que surgiu nesta consulta (chave da NFC-e ausente na venda) foi movida para EXC-DAD-003. |
+| Status | **Encerrado** em 2026-10-22 |
+| Critério de validação | Lacuna respondida. |
+| Origem | Confirmação 4/5 (2026-10-22) |
+| Relacionados | EXC-FIS-008 |
+| Datas | Registrado em 2026-10-22; encerrado em 2026-10-22 |
+
+### EXC-FIS-011 — Descrição de produto com aspas (polegada) faz a Focus recusar a NFC-e
+
+| Campo | Valor |
+|---|---|
+| Área | FIS (também ENG, PRD) |
+| Natureza | **Fato:** uma NFC-e real foi recusada exatamente no ponto das aspas. **Hipótese:** o mecanismo é a Focus interpretar mal o escape `"`. |
+| Descrição | O item `TRINCHA MEDIA TIGRE 695 4" EMB 12 PC` contém aspas para indicar polegadas. O payload guardado (Newtonsoft) escapa as aspas como `\"`; o envio é feito com `System.Text.Json`, que as escapa como `"`. As duas formas são JSON válido. Mesmo assim, a Focus responde "expected ',' or '}' after object value, got: 'EMB'", isto é, termina o texto nas aspas, o que é compatível com o escape `"` sendo convertido em aspas antes da leitura do JSON no lado da Focus. Acentos também saem escapados (`Ç`); não foi verificado se notas com acentos na descrição foram autorizadas (E11 ajuda a medir). Medidas em polegadas são comuns em material de construção. |
+| Evidência | E6 e E7 (2026-10-22); mensagem da Focus em E2; execução local em 2026-10-22: `System.Text.Json` serializa `4" EMB` como `4" EMB`; `ERP.Infrastructure/HttpClients/FocusNfeHttpClient.cs:42`; `ERP.Infrastructure/Services/FiscalService.cs:603` (descrição vem do nome do produto na venda) |
+| Alcance (E10, E11, 2026-10-22) | **3 produtos ativos** da Vila Verde têm aspas no nome. Nos últimos 90 dias, **4 vendas** tiveram esses produtos, todas com status "sem nota"; nenhuma com nota emitida. Não há contraexemplo à hipótese, mas também não é prova: as outras 3 vendas podem não ter tentado emitir (ver EXC-FIS-010). |
+| Gravidade | Média. Frequência baixa (4 vendas em 90 dias), mas cada ocorrência com tentativa de emissão deixa a venda sem NFC-e e presa em contingência (EXC-FIS-009). |
+| Impacto | Vendas com esses 3 produtos não recebem NFC-e. |
+| Confiança | Alta (ocorrência e alcance); Média (mecanismo, depende do comportamento da Focus) |
+| Dependências | Confirmação com o suporte da Focus |
+| Responsável | A definir |
+| Ação proposta | Confirmar o comportamento com o suporte da Focus. Na EXC-A4: decidir a correção (forma do escape no envio ou tratamento do caractere na descrição) com teste de regressão usando esse produto. Até lá, renomear os 3 produtos (ex.: `4 POL`) é decisão operacional do responsável: evitaria novas ocorrências, mas não resolve a venda já presa. |
+| Status | Confirmado |
+| Critério de validação | NFC-e com descrição contendo aspas autorizada em homologação; teste automatizado cobrindo o caso. |
+| Origem | Consultas E2, E6, E7, E10, E11 (2026-10-22) |
+| Relacionados | EXC-FIS-009, EXC-FIS-010 |
+| Datas | Registrado em 2026-10-22; atualizado em 2026-10-22 (E10, E11) |
 
 ---
 
@@ -664,6 +779,26 @@ Nenhum registro é Crítico até agora; EXC-SEG-001 pode subir com o resultado d
 | Critério de validação | Operações monetárias atômicas ou protegidas por concorrência, com teste de concorrência. |
 | Origem | INV-012; DOC-31, DOC-33 |
 | Relacionados | EXC-ENG-004 |
+| Datas | Registrado em 2026-10-22 |
+
+### EXC-DAD-003 — Registros com `TenantId` vazio e filial matriz duplicada na Vila Verde
+
+| Campo | Valor |
+|---|---|
+| Área | DAD (também SEG) |
+| Natureza | Fato |
+| Descrição | (1) `AuditLogs` tem 2 eventos com `TenantId` `00000000-0000-0000-0000-000000000000`, gravados pela API (host `dd6460df80f2`) em 2026-09-23. É o tipo de defeito que DOC-30 encontrou (gravação sem tenant); a entidade afetada não foi identificada. (2) A Vila Verde tem duas filiais "Matriz (Loja Principal)" ativas, ambas sem CNPJ. (3) Quase todas as vendas com nota emitida não têm `NfceChave` gravada na própria venda; a chave existe só em `NotasFiscais` (consultas E8 e E9). |
+| Evidência | Roteiro 4.2 e 4.4 (2026-10-22) |
+| Gravidade | Baixa (2 eventos antigos; duplicidade sem efeito conhecido) |
+| Impacto | Registros sem dono de tenant ficam invisíveis para todos; filial duplicada pode dividir estoque por filial ou relatórios. |
+| Confiança | Alta |
+| Dependências | Consultas E4 e E5 |
+| Responsável | A definir |
+| Ação proposta | Na EXC-A1: identificar a entidade dos eventos sem tenant e procurar outras tabelas com `TenantId` vazio. Na EXC-A3: verificar se a matriz duplicada afeta estoque por filial e decidir se `Sale.NfceChave` continua existindo ou se `NotasFiscais` é a fonte única. |
+| Status | Confirmado |
+| Critério de validação | Origem dos registros sem tenant explicada; nenhum registro novo sem tenant; uma matriz por loja. |
+| Origem | Confirmação 4 (2026-10-22) |
+| Relacionados | EXC-ENG-001 |
 | Datas | Registrado em 2026-10-22 |
 
 ---

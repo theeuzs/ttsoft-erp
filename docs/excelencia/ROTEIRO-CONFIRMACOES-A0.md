@@ -204,18 +204,136 @@ Como interpretar:
 
 ---
 
-## Registro dos resultados
+## Passo 5 — Consultas de acompanhamento (após os resultados de 2026-10-22)
 
-Preencha e devolva; o registro central será atualizado a partir daqui.
+Conectado a `ERPTTSoftStaging`, somente `SELECT`.
+
+```sql
+-- E1 (EXC-FIS-008) Notas do tenant de teste e da Vila Verde, por ambiente e status
+SELECT TenantId, Tipo, Ambiente, Status, COUNT(*) AS qtd,
+       MIN(DataEmissao) AS primeira, MAX(DataEmissao) AS ultima
+FROM NotasFiscais
+WHERE TenantId IN ('8FB9FC74-BBF7-8418-C6D6-48B7F1EB5466', 'B7F9F866-0695-EF92-E546-52C20EFE57D6')
+GROUP BY TenantId, Tipo, Ambiente, Status
+ORDER BY TenantId, Tipo, Ambiente, Status;
+
+SELECT TenantId, NfceAmbiente, NfceStatusFocus, COUNT(*) AS qtd,
+       MIN(NfceEmitidaEm) AS primeira, MAX(NfceEmitidaEm) AS ultima
+FROM Sales
+WHERE TenantId = '8FB9FC74-BBF7-8418-C6D6-48B7F1EB5466' AND NfceChave IS NOT NULL
+GROUP BY TenantId, NfceAmbiente, NfceStatusFocus;
+
+-- E2 (EXC-FIS-007) A pendência ativa, sem o payload
+SELECT Id, VendaId, TipoNota, Referencia, DataFalha, Tentativas, Estado,
+       ProximaTentativaEm, UltimaDecisao, LEFT(UltimaMensagemErro, 300) AS ultima_mensagem
+FROM NfePendentes
+WHERE Estado = 'Ativa';
+
+-- E3 (EXC-SEG-001) Repetir conectado ao banco master, apenas para documentar
+SELECT name, HAS_DBACCESS(name) AS tem_acesso FROM sys.databases ORDER BY name;
+
+-- E4 (EXC-DAD-003) Eventos de auditoria sem tenant
+SELECT EntityType, Action, MachineName, [Timestamp]
+FROM AuditLogs
+WHERE TenantId = '00000000-0000-0000-0000-000000000000';
+
+-- E5 (EXC-SEG-001) Resultado da 2.4 não informado
+SELECT name, is_enabled FROM sys.security_policies;
+```
+
+### Rodada 2 (após E1 e E2)
+
+Mesma conexão e mesmo banco (`ERPTTSoftStaging`), somente `SELECT`. Na tela de resultados,
+copie como texto ou tire um print.
+
+```sql
+-- E6 (EXC-FIS-009) Itens da venda presa: procure nomes com aspas ou "EMB"
+SELECT ProductName, Quantity, UnitPrice
+FROM SaleItems
+WHERE SaleId = '1A7F2760-01DD-4A47-A3FF-BC18B75BAE33';
+
+-- E7 (EXC-FIS-009) Trecho do payload guardado em volta de "EMB" (só o trecho, não o payload inteiro)
+SELECT SUBSTRING(PayloadJson, CHARINDEX('EMB', PayloadJson) - 120, 200) AS trecho
+FROM NfePendentes
+WHERE Id = '342ED764-1F86-4AFD-B6AB-3310394993D8';
+
+-- E8 (EXC-FIS-008) Notas de produção do tenant de teste com o CNPJ emitente tirado da chave de acesso
+--   (posições 7 a 20 da chave de 44 dígitos = CNPJ do emitente)
+SELECT Tipo, Status, Finalidade, Numero, Serie, DataEmissao,
+       SUBSTRING(Chave, 7, 14) AS cnpj_emitente, VendaId
+FROM NotasFiscais
+WHERE TenantId = '8FB9FC74-BBF7-8418-C6D6-48B7F1EB5466' AND Ambiente = 'Produção'
+ORDER BY DataEmissao;
+
+-- E9 (EXC-FIS-010) Vendas da Vila Verde nos últimos 30 dias por status
+--   (0 = sem nota, 1 = nota emitida, 2 = cancelada) e por existência de chave de NFC-e
+SELECT Status,
+       CASE WHEN NfceChave IS NULL OR NfceChave = '' THEN 'sem chave' ELSE 'com chave' END AS chave_nfce,
+       COUNT(*) AS vendas
+FROM Sales
+WHERE TenantId = 'B7F9F866-0695-EF92-E546-52C20EFE57D6'
+  AND CreatedAt >= DATEADD(day, -30, SYSUTCDATETIME())
+GROUP BY Status, CASE WHEN NfceChave IS NULL OR NfceChave = '' THEN 'sem chave' ELSE 'com chave' END
+ORDER BY Status;
+```
+
+Na Focus (painel web, somente consulta): procure a referência
+`1a7f2760-01dd-4a47-a3ff-bc18b75bae33` (EXC-FIS-009) e as notas listadas pela E8 (EXC-FIS-008).
+
+### Rodada 3 (após E6 a E9)
+
+```sql
+-- E10 (EXC-FIS-011) Produtos ativos da Vila Verde com aspas no nome
+SELECT COUNT(*) AS produtos_com_aspas
+FROM Products
+WHERE TenantId = 'B7F9F866-0695-EF92-E546-52C20EFE57D6'
+  AND IsDeleted = 0
+  AND Name LIKE '%"%';
+
+-- E11 (EXC-FIS-011) Vendas dos últimos 90 dias com itens que têm aspas, por status da venda
+--   (0 = sem nota, 1 = nota emitida, 2 = cancelada)
+SELECT s.Status, COUNT(DISTINCT s.Id) AS vendas
+FROM Sales s
+JOIN SaleItems i ON i.SaleId = s.Id
+WHERE s.TenantId = 'B7F9F866-0695-EF92-E546-52C20EFE57D6'
+  AND s.CreatedAt >= DATEADD(day, -90, SYSUTCDATETIME())
+  AND i.ProductName LIKE '%"%'
+GROUP BY s.Status;
+```
+
+Se E11 mostrar vendas com status 1 (nota emitida) contendo aspas, a hipótese de que a Focus
+sempre recusa aspas fica enfraquecida e o caso precisa de outra explicação.
+
+Na Focus (somente consulta): Requisições → empresa Vila Verde → ambiente produção → períodos
+17/08, 23 a 26/09 e 20/10, para identificar as notas do tenant de teste sem chave (EXC-FIS-008).
+
+---
+
+## Registro dos resultados
 
 | Passo | Resultado | Data | Quem verificou |
 |---|---|---|---|
-| 1.1 Administrador do servidor | | | |
-| 1.2 `FiscalRecovery__TenantsHabilitados` (produção / slot) | | | |
-| 1.3 Banco e login da API | | | |
-| 1.4 Log da partida | | | |
-| 2.1–2.4 Permissões no `ERPTTSoftStaging` | | | |
-| 2.5 Bancos acessíveis | | | |
-| 3 Builds instaladas (por PC) | | | |
-| 4.1–4.5 Lojas e atividade | | | |
-| 4.6 Pendências fiscais | | | |
+| 1.1 Administrador do servidor | `sa_ttsoft` (mesmo login das lojas); Entra admin, Auditoria e Defender "Não configurado"; 2 bancos no servidor: `ERPTTSoftStaging` e `ERPTTSoft` (Básico) | 2026-10-22 | Matheus (captura do portal) |
+| 1.2 `FiscalRecovery__TenantsHabilitados` (produção / slot) | Produção: **não existe** → nenhum tenant habilitado, todas as lojas no caminho antigo. Slot `staging`: não verificado | 2026-10-22 | Matheus |
+| 1.3 Banco e login da API | Banco `ERPTTSoftStaging` (declarado); login da API não informado | 2026-10-22 | Matheus |
+| 1.4 Log da partida | Pendente | | |
+| 2.1–2.3 Permissões no `ERPTTSoftStaging` | `dbo`; `db_owner`, `db_datareader`, `db_datawriter`, `db_ddladmin` = 1; inclui `CONTROL`, `ALTER ANY USER`, `BACKUP DATABASE`, `UNMASK`, `CREATE DATABASE` | 2026-10-22 | Matheus |
+| 2.4 Políticas de segurança por linha | Não informado (E5) | | |
+| 2.5 Bancos acessíveis | Executada no contexto do `ERPTTSoftStaging` (lista só ele e `master`); inconclusiva, repetir no `master` (E3). O papel de administrador do servidor já implica acesso ao `ERPTTSoft` | 2026-10-22 | Matheus |
+| 3 Builds instaladas (por PC) | Os 3 PCs atualizados com o artefato WPF do último push (declarado; data e hash por PC não verificados) | 2026-10-22 | Matheus |
+| 4.1 Tenants | 5: Vila Verde, teste `11222333000181`, CNPJ zerado, TTSoft `65183796000100`, `FDF3CD72…` não identificado | 2026-10-22 | Matheus |
+| 4.2 Filiais | Vila Verde com 2 matrizes ativas; teste com 1; nenhuma com CNPJ | 2026-10-22 | Matheus |
+| 4.3 Vendas 30 dias | Vila Verde em operação diária; teste 22 | 2026-10-22 | Matheus |
+| 4.4 Máquinas | Vila Verde: `DESKTOP-JQB0BIQ`, `SERVIDOR`, `COMPUTADOR03` (+ hosts da API); teste e CNPJ zerado: `DESKTOP-3P3C5VH`; 2 eventos com TenantId vazio | 2026-10-22 | Matheus |
+| 4.5 Configuração fiscal | Vila Verde e **tenant de teste** com CNPJ da Vila Verde e produção | 2026-10-22 | Matheus |
+| 4.6 Pendências fiscais | 1 NFC-e da Vila Verde, `Ativa`, desde 2026-10-16 09:12, 10.653 tentativas | 2026-10-22 | Matheus |
+| E1 Notas do tenant de teste | Produção: 7 NFC-e e 4 NF-e autorizadas, 2 NFC-e em "Contingência"; homologação: 2 autorizadas, 1 rejeitada; 5 vendas com chave de produção | 2026-10-22 | Matheus |
+| E2 Pendência ativa | Venda `1A7F2760…`, 10.661 tentativas; Focus responde `UnsupportedMediaType` / `formato_invalido` (JSON inválido na coluna 1473, perto de "EMB") | 2026-10-22 | Matheus |
+| E3, E5 | Pendentes (opcionais) | | |
+| E6 Itens da venda presa | 4 itens; `TRINCHA MEDIA TIGRE 695 4" EMB 12 PC` tem aspas | 2026-10-22 | Matheus |
+| E7 Trecho do payload | Aspas guardadas escapadas (`4\" EMB`), JSON válido no banco | 2026-10-22 | Matheus |
+| Focus — referência da venda presa | Nenhuma requisição registrada (empresa Vila Verde, 10/09 a 23/10) | 2026-10-22 | Matheus (captura do painel) |
+| E8 Emitente das notas do tenant de teste | 6 com CNPJ da Vila Verde (NFC-e 3303, 3315, 3318, 3319, 3322; NF-e devolução 314); 5 autorizadas sem chave gravada | 2026-10-22 | Matheus |
+| E9 Vendas da Vila Verde por status (30 dias) | Executada; tratada como política do cliente (EXC-FIS-010, encerrado). Observação de dados registrada em EXC-DAD-003 | 2026-10-22 | Matheus |
+| E10 Produtos com aspas | 3 produtos ativos | 2026-10-22 | Matheus |
+| E11 Vendas com esses produtos (90 dias) | 4 vendas, todas "sem nota" | 2026-10-22 | Matheus |
