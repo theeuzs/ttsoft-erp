@@ -1,7 +1,7 @@
 # Registro Central de Descobertas
 
 > Programa de Excelência TTSoft
-> Criado em: 2026-10-22 · Última atualização: 2026-10-22 (v1.1) · Base: commit `ec6d177`
+> Criado em: 2026-10-22 · Última atualização: 2026-10-26 (v1.2) · Base: commit `ec6d177`
 > Classificação conforme [CRITERIOS-DE-EXCELENCIA](CRITERIOS-DE-EXCELENCIA.md) · Plano: [PLANO-MESTRE](PLANO-MESTRE.md) · Origem dos itens: [INVENTARIO-AUDITORIAS](INVENTARIO-AUDITORIAS.md)
 
 ---
@@ -84,9 +84,13 @@
 | EXC-DAD-003 | DAD | Registros com `TenantId` vazio e filial matriz duplicada na Vila Verde | Fato | Baixa | Alta | Confirmado | A definir |
 | EXC-ADM-001 | ADM | Receita mensal declarada não cobre os custos de infraestrutura declarados | Fato | Média | Média | Confirmado | Matheus |
 | EXC-ADM-002 | ADM | Todo o conhecimento e a operação concentrados em uma pessoa | Fato | Média | Alta | Confirmado | Matheus |
+| EXC-ADM-003 | ADM | Margem por cliente depende do volume de notas fiscais, que não está medido | Hipótese | A classificar | Baixa | Hipótese | Matheus |
+| EXC-ADM-004 | ADM | Dados administrativos e tributários da TTSoft ausentes (forma jurídica, regime, cobrança, custos fixos) | Lacuna | A classificar | — | Lacuna | Matheus |
+| EXC-ADM-005 | ADM | Asaas usa uma única chave da aplicação; uso em produção desconhecido | Hipótese | A classificar | Baixa | Hipótese | Matheus |
 | EXC-VEN-001 | VEN | Preços e planos sem validação com clientes | Lacuna | A classificar | — | Lacuna | Matheus |
 
-**Contagem:** 38 registros (35 abertos, um deles em risco aceito; 3 encerrados) — abertos: 3 Crítica, 3 Alta, 15 Média, 9 Baixa, 5 A classificar.
+**Contagem:** 41 registros (38 abertos, um deles em risco aceito; 3 encerrados) — abertos: 3 Crítica, 3 Alta, 15 Média, 9 Baixa, 8 A classificar.
+Em 2026-10-26: acrescentados EXC-ADM-003 a 005 pela [avaliação administrativa e financeira](EXC-A10-ADMINISTRATIVO-FINANCEIRO.md).
 Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.md)
 (passos 1.1, 1.2, 2, 4 e E1 a E9). Prioridade imediata: EXC-FIS-008, EXC-SEG-001 e EXC-FIS-009.
 
@@ -888,3 +892,63 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Origem | DOC-32, DOC-34; confirmação 11 |
 | Relacionados | EXC-ADM-001 |
 | Datas | Registrado em 2026-10-22; atualizado em 2026-10-22 (confirmação 11) |
+
+### EXC-ADM-003 — Margem por cliente depende do volume de notas fiscais, que não está medido
+
+| Campo | Valor |
+|---|---|
+| Área | ADM (também FIS) |
+| Natureza | **Hipótese** (cálculo sobre tabela pública e premissas de volume; nenhum dado real de volume) |
+| Descrição | Pela tabela pública da Focus NFe (2026-10-26), o custo por nota e por CNPJ é o principal custo variável por cliente. Com premissas de 100, 500 e 1.500 NFC-e por loja/mês e preço de R$ 89,90, a margem por cliente é positiva com 100 e 500, e **negativa com 1.500 em todas as escalas de 10 a 300 clientes** (preço de equilíbrio de R$ 108 a R$ 134 conforme o imposto). Vale **se** a TTSoft pagar a Focus pelas notas dos clientes, como no custo declarado hoje. O volume real da Vila Verde não consta em nenhum documento do programa. |
+| Evidência | [EXC-A10-ADMINISTRATIVO-FINANCEIRO](EXC-A10-ADMINISTRATIVO-FINANCEIRO.md) §6; `EXC-ADM-modelo-cenarios.py` (execução em 2026-10-26); tabela pública https://focusnfe.com.br/precos/ (consulta em 2026-10-26); declaração do responsável (2026-10-22) |
+| Gravidade | A classificar. Se o volume real for alto e o contrato não repassar o excedente: Média a Alta (cada loja nova aumenta o prejuízo). Se o volume for baixo ou o excedente for repassado: Baixa |
+| Impacto | Crescer sem rever preço ou repasse pode piorar o resultado em vez de melhorá-lo. |
+| Confiança | Baixa (premissas de volume e contrato Focus não verificados) |
+| Dependências | Contagem de notas por loja (consulta da §8 do relatório); contrato e fatura da Focus |
+| Responsável | Matheus |
+| Ação proposta | Rodar a consulta de volume fiscal e conferir o contrato da Focus (franquia, excedente, revenda). Depois, decidir se o excedente é repassado. Não é tarefa técnica. |
+| Status | Hipótese |
+| Critério de validação | CRITERIOS ADM-1, ADM-2 e VEN-2: volume real por loja e custo real por nota documentados, e o modelo refeito com eles. |
+| Origem | EXC-A10 (parte ADM) |
+| Relacionados | EXC-ADM-001, EXC-VEN-001, EXC-FIS-008 (separar notas de teste do volume real) |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-ADM-004 — Dados administrativos e tributários da TTSoft ausentes
+
+| Campo | Valor |
+|---|---|
+| Área | ADM (também FIS) |
+| Natureza | Lacuna |
+| Descrição | Não constam em nenhum documento do programa: forma jurídica e CNPJ da TTSoft, regime tributário e alíquota efetiva, forma de cobrança da mensalidade e histórico de inadimplência, custos fixos fora da nuvem (domínio, assinatura de código, ferramentas, contador), horas gastas por tipo de trabalho e fornecedores críticos com plano de contingência. O código não tem entidade de plano, assinatura ou cobrança recorrente. |
+| Evidência | Busca no repositório e nos documentos do programa (2026-10-26); [EXC-A10-ADMINISTRATIVO-FINANCEIRO](EXC-A10-ADMINISTRATIVO-FINANCEIRO.md) §4.1, §5 e §8 |
+| Gravidade | A classificar. Depende do que o contador e as faturas mostrarem (ex.: teto de receita do enquadramento, que pode ser ultrapassado a partir de ~75 clientes a R$ 89,90 se o regime for MEI) |
+| Impacto | Sem esses dados não há custo por cliente, ponto de equilíbrio nem previsão de tributo confiáveis. |
+| Confiança | — |
+| Dependências | Contador; faturas; extrato de recebimentos |
+| Responsável | Matheus |
+| Ação proposta | Seguir a lista de coleta da §8 do relatório (itens 4, 5, 8 e 9). |
+| Status | Lacuna |
+| Critério de validação | CRITERIOS ADM-1 a ADM-4. |
+| Origem | EXC-A10 (parte ADM) |
+| Relacionados | EXC-ADM-001, EXC-ADM-002, EXC-FIS-002, EXC-FIS-005 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-ADM-005 — Asaas usa uma única chave da aplicação; uso em produção desconhecido
+
+| Campo | Valor |
+|---|---|
+| Área | ADM (também FIS, SEG) |
+| Natureza | **Hipótese** |
+| Descrição | `AsaasService` lê `Asaas:ApiKey` e `Asaas:Environment` da configuração da aplicação, não de um dado por tenant. Se `Asaas__Environment=production` estiver no App Service e algum cliente gerar boleto pela API, o boleto sairia na conta Asaas da TTSoft, com a TTSoft como recebedora do valor devido à loja. O padrão do código é `sandbox`. Não foi verificado se há uso em produção. |
+| Evidência | `ERP.Infrastructure/Services/AsaasService.cs:23-24`; `ERP.Api/Program.cs:121`; `ERP.Api/Controllers/ContasReceberController.cs:154-172`; `ERP.Api/appsettings.json` (`Asaas.Environment` = `sandbox`) |
+| Gravidade | A classificar. Sem uso em produção: Informativa. Com uso: pode ser Alta (dinheiro de terceiros na conta da TTSoft, obrigação tributária e de intermediação) |
+| Impacto | Efeito financeiro, fiscal e contratual sobre recebimentos das lojas. |
+| Confiança | Baixa (só leitura de código) |
+| Dependências | Configuração do App Service; painel do Asaas; contador |
+| Responsável | Matheus |
+| Ação proposta | Conferir a configuração de produção e o histórico de cobranças no painel do Asaas. Se houver uso, tratar com o contador antes de qualquer mudança de código. |
+| Status | Hipótese |
+| Critério de validação | Configuração de produção registrada; e, se houver uso, decisão documentada sobre quem é o recebedor. |
+| Origem | EXC-A10 (parte ADM) |
+| Relacionados | EXC-ADM-004, EXC-FIS-002 |
+| Datas | Registrado em 2026-10-26 |
