@@ -1,7 +1,7 @@
 # Registro Central de Descobertas
 
 > Programa de Excelência TTSoft
-> Criado em: 2026-10-22 · Última atualização: 2026-10-26 (v1.2) · Base: commit `ec6d177`
+> Criado em: 2026-10-22 · Última atualização: 2026-10-26 (v1.3) · Base: commit `ec6d177`
 > Classificação conforme [CRITERIOS-DE-EXCELENCIA](CRITERIOS-DE-EXCELENCIA.md) · Plano: [PLANO-MESTRE](PLANO-MESTRE.md) · Origem dos itens: [INVENTARIO-AUDITORIAS](INVENTARIO-AUDITORIAS.md)
 
 ---
@@ -78,6 +78,7 @@
 | EXC-FIS-009 | FIS | Erros definitivos da Focus tratados como falha de comunicação: nota fica em contingência para sempre (NFC-e da Vila Verde presa desde 16/10) | Fato | **Alta** | Alta | **Planejado** | A definir |
 | EXC-FIS-010 | FIS | Política de emissão fiscal da loja piloto | Lacuna | — | — | **Encerrado** (decisão do cliente, a tratar com o contador) | Matheus |
 | EXC-FIS-011 | FIS | Descrição de produto com aspas (polegada) faz a Focus recusar a NFC-e | Fato + Hipótese | Média | Média | Confirmado | A definir |
+| EXC-FIS-012 | FIS | SPED gerado pelo Portal usa razão social e CNPJ fixos (`Vila Verde Materiais`, CNPJ fictício) | Fato | Média | Alta | Confirmado | A definir |
 | EXC-PRD-001 | PRD | Roadmap exibido no Portal não corresponde ao produto atual | Fato | Baixa | Alta | Confirmado | A definir |
 | EXC-DAD-001 | DAD | Parte dos relatórios anteriores não foi localizada | Lacuna | Baixa | Alta | Lacuna | Matheus |
 | EXC-DAD-002 | DAD | Sem concorrência otimista; créditos de Haver por leitura-e-gravação | Fato + Hipótese | Média | Média | Confirmado | A definir |
@@ -88,9 +89,13 @@
 | EXC-ADM-004 | ADM | Dados administrativos e tributários da TTSoft ausentes (forma jurídica, regime, cobrança, custos fixos) | Lacuna | A classificar | — | Lacuna | Matheus |
 | EXC-ADM-005 | ADM | Asaas usa uma única chave da aplicação; uso em produção desconhecido | Hipótese | A classificar | Baixa | Hipótese | Matheus |
 | EXC-VEN-001 | VEN | Preços e planos sem validação com clientes | Lacuna | A classificar | — | Lacuna | Matheus |
+| EXC-MKT-001 | MKT | Público-alvo e proposta de valor sem validação com clientes | Lacuna | A classificar | — | Lacuna | Matheus |
+| EXC-MKT-002 | MKT | Nome da loja piloto fixo na interface do WPF | Fato | Baixa | Alta | Confirmado | A definir |
+| EXC-MKT-003 | MKT | Relatórios anteriores recomendam afirmações de divulgação que o estado atual não sustenta | Fato | Média | Alta | Confirmado | Matheus |
+| EXC-MKT-004 | MKT | Nenhum canal de aquisição ou funil medido | Lacuna | A classificar | — | Lacuna | Matheus |
 
-**Contagem:** 41 registros (38 abertos, um deles em risco aceito; 3 encerrados) — abertos: 3 Crítica, 3 Alta, 15 Média, 9 Baixa, 8 A classificar.
-Em 2026-10-26: acrescentados EXC-ADM-003 a 005 pela [avaliação administrativa e financeira](EXC-A10-ADMINISTRATIVO-FINANCEIRO.md).
+**Contagem:** 46 registros (43 abertos, um deles em risco aceito; 3 encerrados) — abertos: 3 Crítica, 3 Alta, 17 Média, 10 Baixa, 10 A classificar.
+Em 2026-10-26: acrescentados EXC-ADM-003 a 005 pela [avaliação administrativa e financeira](EXC-A10-ADMINISTRATIVO-FINANCEIRO.md), e EXC-MKT-001 a 004 e EXC-FIS-012 pela [avaliação de marketing](EXC-A10-MARKETING.md).
 Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.md)
 (passos 1.1, 1.2, 2, 4 e E1 a E9). Prioridade imediata: EXC-FIS-008, EXC-SEG-001 e EXC-FIS-009.
 
@@ -740,6 +745,26 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Relacionados | EXC-FIS-009, EXC-FIS-010 |
 | Datas | Registrado em 2026-10-22; atualizado em 2026-10-22 (E10, E11) |
 
+### EXC-FIS-012 — SPED gerado pelo Portal usa razão social e CNPJ fixos
+
+| Campo | Valor |
+|---|---|
+| Área | FIS |
+| Natureza | Fato |
+| Descrição | A tela de relatórios do Portal monta a chamada ao gerador de SPED com `razaoSocial=Vila Verde Materiais` e `cnpj=11222333000181` escritos no código, para qualquer tenant. O endpoint aceita os dois valores da requisição sem conferir com o cadastro do tenant e gera os blocos C e H vazios (`Array.Empty`). O arquivo baixado pelo Portal identifica sempre a mesma empresa, com um CNPJ que não é o da loja. Encontrado de passagem na avaliação de marketing. |
+| Evidência | `ERP.Portal/Pages/Relatorios.razor:344`; `ERP.Api/Controllers/FiscalController.cs:99-125` (2026-10-26) |
+| Gravidade | Média (arquivo fiscal com identificação errada; o validador oficial deve rejeitar, mas um usuário pode entregá-lo ao contador como se fosse da loja) |
+| Impacto | Qualquer loja que gere o SPED pelo Portal recebe um arquivo de outra empresa e sem movimento. |
+| Confiança | Alta |
+| Dependências | Contador (se algum arquivo já foi entregue) |
+| Responsável | A definir |
+| Ação proposta | Na EXC-A4, junto com EXC-FIS-006: ler razão social, CNPJ, IE e município do cadastro do tenant no servidor e decidir se o SPED do Portal fica disponível enquanto os blocos estiverem vazios. Perguntar ao contador da Vila Verde se algum arquivo do Portal foi usado. |
+| Status | Confirmado |
+| Critério de validação | Arquivo gerado pelo Portal com os dados do tenant autenticado, sem parâmetro de empresa vindo do navegador; teste automatizado cobrindo o caso. |
+| Origem | EXC-A10 (parte MKT) |
+| Relacionados | EXC-FIS-006, EXC-MKT-002 |
+| Datas | Registrado em 2026-10-26 |
+
 ---
 
 ## Detalhe — Produto (PRD)
@@ -951,4 +976,88 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Critério de validação | Configuração de produção registrada; e, se houver uso, decisão documentada sobre quem é o recebedor. |
 | Origem | EXC-A10 (parte ADM) |
 | Relacionados | EXC-ADM-004, EXC-FIS-002 |
+| Datas | Registrado em 2026-10-26 |
+
+---
+
+## Detalhe — Marketing (MKT)
+
+### EXC-MKT-001 — Público-alvo e proposta de valor sem validação com clientes
+
+| Campo | Valor |
+|---|---|
+| Área | MKT (também VEN) |
+| Natureza | Lacuna |
+| Descrição | Não há entrevista estruturada com lojistas registrada, nem dado de quais módulos a Vila Verde usa. O perfil de cliente ideal, as dores e o posicionamento da avaliação de marketing foram construídos a partir das restrições do produto e da empresa e de pesquisa pública, e estão marcados como hipótese. DOC-25 e DOC-32 propunham posicionamento e canais sem validação. |
+| Evidência | [EXC-A10-MARKETING](EXC-A10-MARKETING.md) §4, §5 e §8; busca nos documentos do programa (2026-10-26); DOC-25 (E), DOC-32 (E) |
+| Gravidade | A classificar |
+| Impacto | Esforço de aquisição pode ir para o público ou a mensagem errados; com uma pessoa, o custo de errar é o tempo de suporte e desenvolvimento. |
+| Confiança | — |
+| Dependências | Conversa com a Vila Verde; entrevistas X1 |
+| Responsável | Matheus |
+| Ação proposta | Coletar os dados 1 a 3 da §14 do relatório (conversa com a Vila Verde, consulta de uso por módulo, 10 entrevistas). |
+| Status | Lacuna |
+| Critério de validação | CRITERIOS MKT-1: pelo menos 5 lojas do perfil confirmando a dor principal e a disposição de pagar, registradas. |
+| Origem | EXC-A10 (parte MKT) |
+| Relacionados | EXC-VEN-001, EXC-MKT-004 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-MKT-002 — Nome da loja piloto fixo na interface do WPF
+
+| Campo | Valor |
+|---|---|
+| Área | MKT (também PRD) |
+| Natureza | Fato |
+| Descrição | O texto "Vila Verde" aparece em 8 títulos de mensagem e em uma dica de tela do WPF que qualquer loja veria, incluindo o aviso de modo offline e o fechamento de caixa. O produto também aparece com dois outros nomes: "ConstruTTor ERP" no login do WPF e "TTSoft ERP — Portal Gerencial" no Portal. |
+| Evidência | `ERP.WPF/ViewModels/FinalizarVendaViewModel.cs:64,418,449,671,681`; `ERP.WPF/ViewModels/ResumoCaixaViewModel.cs:242`; `ERP.WPF/ViewModels/ContaPagarViewModel.cs:112`; `ERP.WPF/ViewModels/UserViewModel.cs:87`; `ERP.WPF/Views/NfeImportView.xaml:100`; `ERP.WPF/Views/LoginView.xaml:4`; `ERP.Portal/wwwroot/index.html:6` (2026-10-26) |
+| Gravidade | Baixa (não afeta dados; afeta a credibilidade numa demonstração ou numa segunda loja) |
+| Impacto | Uma segunda loja vê o nome de outra loja no próprio caixa. |
+| Confiança | Alta |
+| Dependências | Decisão sobre a marca do produto |
+| Responsável | A definir |
+| Ação proposta | Antes da primeira demonstração para uma segunda loja: trocar os títulos pelo nome do produto ou da loja do tenant. |
+| Status | Confirmado |
+| Critério de validação | Busca por "Vila Verde" nos textos de interface do WPF e do Portal sem resultados (comentários e a configuração do e-commerce da própria loja não contam). |
+| Origem | EXC-A10 (parte MKT) |
+| Relacionados | EXC-FIS-012; CRITERIOS MKT-2 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-MKT-003 — Relatórios anteriores recomendam afirmações de divulgação que o estado atual não sustenta
+
+| Campo | Valor |
+|---|---|
+| Área | MKT |
+| Natureza | Fato |
+| Descrição | DOC-25 recomenda usar "transparência técnica" e as rodadas de teste de segurança como argumento de venda e de conteúdo, e cita "offline nativo" como resposta a objeção. Com EXC-SEG-001 e EXC-SEG-009 abertos como Críticos, sem termos nem política de privacidade (EXC-FIS-002) e com a contingência fiscal com defeitos abertos (EXC-FIS-007, EXC-FIS-009), essas afirmações seriam enganosas hoje. A avaliação de marketing lista as afirmações proibidas e a condição para cada uma voltar a ser usada. |
+| Evidência | DOC-25 (D, E); [EXC-A10-MARKETING](EXC-A10-MARKETING.md) §6.2 |
+| Gravidade | Média (risco de publicidade enganosa e de perda de confiança se usadas) |
+| Impacto | Uma afirmação desmentida por um incidente ou por um cliente atrasa a aquisição mais do que qualquer canal ajuda. |
+| Confiança | Alta |
+| Dependências | EXC-SEG-001, EXC-SEG-009, EXC-FIS-002, EXC-FIS-009 |
+| Responsável | Matheus |
+| Ação proposta | Usar em material só o que estiver como "Sim" na coluna "Pode usar hoje?" da §6.1 do relatório; revisar a lista a cada registro relacionado encerrado. |
+| Status | Confirmado |
+| Critério de validação | CRITERIOS MKT-2: cada afirmação de material publicado tem evidência de código e de uso ou teste real registrada. |
+| Origem | EXC-A10 (parte MKT) |
+| Relacionados | EXC-SEG-001, EXC-SEG-009, EXC-FIS-002, EXC-FIS-007, EXC-FIS-009 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-MKT-004 — Nenhum canal de aquisição ou funil medido
+
+| Campo | Valor |
+|---|---|
+| Área | MKT (também VEN) |
+| Natureza | Lacuna |
+| Descrição | Não há registro de contatos, origem, etapas, motivos de perda, custo ou horas por cliente. Não se sabe se existe site, perfil em rede social ou material de divulgação. Os canais propostos em DOC-25 e DOC-32 nunca foram medidos. |
+| Evidência | Busca nos documentos do programa e no repositório (2026-10-26); [EXC-A10-MARKETING](EXC-A10-MARKETING.md) §13 |
+| Gravidade | A classificar |
+| Impacto | Sem medição não há como escolher canal nem saber se uma campanha funciona; números estimados acabariam tratados como fatos. |
+| Confiança | — |
+| Dependências | — |
+| Responsável | Matheus |
+| Ação proposta | Criar a planilha de funil com os campos da §13 do relatório antes do primeiro experimento. |
+| Status | Lacuna |
+| Critério de validação | CRITERIOS MKT-3: pelo menos um ciclo de experimento registrado com origem, etapas e custo por contato. |
+| Origem | EXC-A10 (parte MKT) |
+| Relacionados | EXC-MKT-001, EXC-VEN-001 |
 | Datas | Registrado em 2026-10-26 |

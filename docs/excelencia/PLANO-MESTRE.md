@@ -276,3 +276,4 @@ Avaliar a auditoria do servidor (EXC-SEG-008) em paralelo, como controle compens
 | 2026-10-22 | 1.9 | Triagem 2: remoção da regra de firewall aberta (EXC-SEG-009) como ação prioritária |
 | 2026-10-22 | 1.10 | Triagem 2 revista: EXC-SEG-009 em risco aceito (IPs dinâmicos); login restrito e troca de senha passam a ser a mitigação principal |
 | 2026-10-26 | 1.11 | Avaliação administrativa e financeira (EXC-A10, parte ADM): relatório, modelo de cenários e registros EXC-ADM-003 a 005 |
+| 2026-10-26 | 1.12 | Avaliação de marketing (EXC-A10, parte MKT): posicionamento, perfil de cliente, experimentos e registros EXC-MKT-001 a 004 e EXC-FIS-012 |
