@@ -1,7 +1,7 @@
 # Registro Central de Descobertas
 
 > Programa de Excelência TTSoft
-> Criado em: 2026-10-22 · Última atualização: 2026-10-26 (v1.5) · Base: commit `ec6d177` (EXC-A6: `8801d9c`)
+> Criado em: 2026-10-22 · Última atualização: 2026-10-26 (v1.6) · Base: commit `ec6d177` (EXC-A6: `8801d9c`; EXC-A7: `47a4b0a`)
 > Classificação conforme [CRITERIOS-DE-EXCELENCIA](CRITERIOS-DE-EXCELENCIA.md) · Plano: [PLANO-MESTRE](PLANO-MESTRE.md) · Origem dos itens: [INVENTARIO-AUDITORIAS](INVENTARIO-AUDITORIAS.md)
 
 ---
@@ -77,6 +77,7 @@
 | EXC-OPS-005 | OPS | Licenciamento depende de uma API cujo código está só no PC do responsável | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-OPS-006 | OPS | Rate limit e cache em memória impedem escalar a API para mais de uma instância | Fato | Baixa | Média | Confirmado | A definir |
 | EXC-OPS-007 | OPS | Produção usa o banco `ERPTTSoftStaging`, que também recebe testes, num servidor compartilhado com o OutfiTT | Fato | Média | Média | Confirmado | Matheus |
+| EXC-OPS-008 | OPS | Backup local noturno do WPF usa `BACKUP DATABASE ... TO DISK`, que o Azure SQL Database não aceita; roda em modo silencioso | Fato + Hipótese | Baixa | Alta (código) | Confirmado | A definir |
 | EXC-FIS-001 | FIS | Estado da recuperação fiscal (interruptor por tenant) em produção desconhecido | Lacuna | A classificar | Alta | **Encerrado** (nenhum tenant habilitado; consequência em EXC-FIS-007) | Matheus |
 | EXC-FIS-002 | FIS | Não existem termos de uso, política de privacidade nem contrato com os clientes | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-FIS-003 | FIS | Serviços locais de emissão fiscal seguem registrados no WPF junto ao serviço via API | Hipótese | A classificar | Baixa | Hipótese | A definir |
@@ -90,7 +91,18 @@
 | EXC-FIS-011 | FIS | Descrição de produto com aspas (polegada) faz a Focus recusar a NFC-e | Fato + Hipótese | Média | Média | Confirmado | A definir |
 | EXC-FIS-012 | FIS | SPED gerado pelo Portal usa razão social e CNPJ fixos (`Vila Verde Materiais`, CNPJ fictício) | Fato | Média | Alta | Confirmado | A definir |
 | EXC-FIS-013 | FIS | CNPJ do emitente fixo no envio de notas à Focus: toda nota sai com o CNPJ da Vila Verde | Fato + Hipótese | **Alta** | Alta (código) | Confirmado | A definir |
+| EXC-FIS-014 | FIS | Motor fiscal atende só o Simples Nacional (CSOSN); loja de Lucro Presumido ou Real não pode ser implantada | Fato | A classificar | Alta (código) | Confirmado | Matheus |
 | EXC-PRD-001 | PRD | Roadmap exibido no Portal não corresponde ao produto atual | Fato | Baixa | Alta | Confirmado | A definir |
+| EXC-PRD-002 | PRD | Multi-filial existe só no cadastro: venda, caixa, usuário, nota e estoque operacional sem filial; transferência move saldo que nada usa | Fato | Média | Alta (código) | Confirmado | Matheus |
+| EXC-PRD-003 | PRD | Importar o mesmo XML de compra duas vezes duplica estoque e contas a pagar; pedido recebido + XML da mesma compra também soma duas vezes | Fato + Lacuna | Média | Alta (código) | Confirmado | A definir |
+| EXC-PRD-004 | PRD | Custo pela última entrada, sem custo médio nem histórico de movimentação de estoque (kardex) | Fato | Média | Alta (código) | Confirmado | A definir |
+| EXC-PRD-005 | PRD | Fechamento de caixa sem valor contado nem diferença registrada | Fato | Média | Alta (código) | Confirmado | A definir |
+| EXC-PRD-006 | PRD | Devolução sem cliente identificado não registra o reembolso; devolução nunca sai em dinheiro ou Pix | Fato | Média | Alta (código) | Confirmado | A definir |
+| EXC-PRD-007 | PRD | Fornecedor só tem nome; importação de XML localiza fornecedor pelo nome exato | Fato | Baixa | Alta (código) | Confirmado | A definir |
+| EXC-PRD-008 | PRD | Venda a prazo gera conta única com vencimento fixo em 30 dias; sem parcelas na venda, juros nem multa | Fato | Baixa | Alta (código) | Confirmado | Matheus |
+| EXC-PRD-009 | PRD | Papel de cada aplicativo (WPF, Portal) não definido; funções repetidas com regras diferentes | Fato | Média | Alta | Confirmado | Matheus |
+| EXC-PRD-010 | PRD | Uso real de cada módulo não medido | Lacuna | A classificar | — | Lacuna | Matheus |
+| EXC-PRD-011 | PRD | Não existe exportação completa dos dados de uma loja | Fato | Média | Alta (código) | Confirmado | Matheus |
 | EXC-DAD-001 | DAD | Parte dos relatórios anteriores não foi localizada | Lacuna | Baixa | Alta | Lacuna | Matheus |
 | EXC-DAD-002 | DAD | Sem concorrência otimista; créditos de Haver por leitura-e-gravação | Fato + Hipótese | Média | Média | Confirmado | A definir |
 | EXC-DAD-003 | DAD | Registros com `TenantId` vazio e filial matriz duplicada na Vila Verde | Fato | Baixa | Alta | Confirmado | A definir |
@@ -108,7 +120,8 @@
 | EXC-MKT-003 | MKT | Relatórios anteriores recomendam afirmações de divulgação que o estado atual não sustenta | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-MKT-004 | MKT | Nenhum canal de aquisição ou funil medido | Lacuna | A classificar | — | Lacuna | Matheus |
 
-**Contagem:** 60 registros (57 abertos, um deles em risco aceito; 3 encerrados) — abertos: 3 Crítica, 7 Alta, 23 Média, 13 Baixa, 11 A classificar.
+**Contagem:** 72 registros (69 abertos, um deles em risco aceito; 3 encerrados) — abertos: 3 Crítica, 7 Alta, 30 Média, 16 Baixa, 13 A classificar.
+Em 2026-10-26 (EXC-A7, primeira passada): acrescentados EXC-PRD-002 a 011, EXC-FIS-014 e EXC-OPS-008 pelo [inventário funcional](EXC-A7-INVENTARIO-FUNCIONAL.md).
 Em 2026-10-26 (EXC-A6): acrescentados EXC-ENG-005 a 013 e EXC-SEG-010 pela [avaliação de arquitetura e engenharia](EXC-A6-ARQUITETURA-ENGENHARIA.md); EXC-ENG-001, 003 e 004 atualizados.
 Em 2026-10-26: acrescentados EXC-ADM-003 a 005 pela [avaliação administrativa e financeira](EXC-A10-ADMINISTRATIVO-FINANCEIRO.md), EXC-MKT-001 a 004 e EXC-FIS-012 pela [avaliação de marketing](EXC-A10-MARKETING.md), e EXC-VEN-002 a 004 pela [avaliação de vendas](EXC-A10-VENDAS.md); EXC-FIS-013 encontrado na correção do EXC-MKT-002, que passou a *Em validação*.
 Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.md)
@@ -731,6 +744,26 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Relacionados | EXC-SEG-001, EXC-OPS-002 |
 | Datas | Registrado em 2026-10-22 |
 
+### EXC-OPS-008 — Backup local noturno incompatível com o Azure SQL Database
+
+| Campo | Valor |
+|---|---|
+| Área | OPS (também PRD) |
+| Natureza | Fato (código) + Hipótese (falha em campo) |
+| Descrição | O WPF agenda, entre 2h e 3h, um backup em `C:\TTSoft_Backups` com `BACKUP DATABASE [...] TO DISK`, em modo silencioso. O Azure SQL Database não aceita `BACKUP DATABASE` para disco; os backups dele são automáticos e geridos pela plataforma. Com o banco na Azure, o comando deve falhar todas as noites sem aviso. Só funcionaria num PC configurado para um SQL Server local. |
+| Evidência | `ERP.WPF/MainWindow.xaml.cs:150-170`; `ERP.WPF/Helpers/BackupService.cs:93-132`; banco de produção no Azure SQL (confirmação 4, EXC-OPS-007) |
+| Gravidade | Baixa (o backup real é o da Azure, EXC-OPS-003; o problema é uma funcionalidade que aparenta proteger e não protege) |
+| Impacto | Falsa sensação de cópia local; quem confiar na pasta para restaurar não encontrará arquivo. |
+| Confiança | Alta (código e limitação documentada da plataforma); Baixa (resultado em cada PC, não verificado) |
+| Dependências | EXC-OPS-003 |
+| Responsável | A definir |
+| Ação proposta | Verificar a pasta `C:\TTSoft_Backups` e o log de um PC da loja; remover o agendamento (ou trocar por exportação útil, ligada a EXC-PRD-011) e não citar backup local na oferta. |
+| Status | Confirmado |
+| Critério de validação | Pasta e log de um PC verificados e registrados; agendamento removido ou substituído por mecanismo que funcione na Azure, com teste. |
+| Origem | EXC-A7 (primeira passada) |
+| Relacionados | EXC-OPS-003, EXC-PRD-011 |
+| Datas | Registrado em 2026-10-26 |
+
 ---
 
 ## Detalhe — Fiscal, jurídico e conformidade (FIS)
@@ -1003,6 +1036,26 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Relacionados | EXC-FIS-008, EXC-FIS-012, EXC-FIS-004 |
 | Datas | Registrado em 2026-10-26 |
 
+### EXC-FIS-014 — Motor fiscal atende só o Simples Nacional
+
+| Campo | Valor |
+|---|---|
+| Área | FIS (também PRD, VEN) |
+| Natureza | Fato |
+| Descrição | O cálculo e a montagem das notas usam só CSOSN (Simples Nacional): o padrão é `102`, a substituição tributária é reconhecida pelos CSOSN 201-203, e PIS/COFINS seguem o regime do Simples. Não há regime tributário configurável por loja nem CST de ICMS, PIS e COFINS para Lucro Presumido ou Real. |
+| Evidência | `ERP.Infrastructure/Services/MotorFiscalBrasileiro.cs:51-87, 139-148`; `ERP.Infrastructure/Services/FiscalService.cs:591-614, 771-822`; `ERP.Domain/Entities/TenantFiscalConfiguration.cs` (sem regime); busca por `Regime` e `LucroPresumido` |
+| Gravidade | A classificar: **Crítica** se uma loja fora do Simples for implantada (notas com tributação errada autorizadas); **Informativa** enquanto todas as lojas forem do Simples |
+| Impacto | Restringe o mercado às lojas do Simples Nacional; lojas médias de materiais de construção costumam estar no Lucro Presumido (hipótese de mercado, EXC-MKT-001). |
+| Confiança | Alta (código) |
+| Dependências | Contador; EXC-A4 |
+| Responsável | Matheus |
+| Ação proposta | Agora: incluir "regime tributário" na qualificação comercial (EXC-A10-VENDAS §5.1) e não vender a quem não é do Simples. R3: suporte a outros regimes, validado com contador. |
+| Status | Confirmado |
+| Critério de validação | Qualificação com o filtro registrada; se o suporte for feito, CRITERIOS FIS-1 para o novo regime. |
+| Origem | EXC-A7 (primeira passada) |
+| Relacionados | EXC-FIS-005, EXC-FIS-013, EXC-VEN-004 |
+| Datas | Registrado em 2026-10-26 |
+
 ---
 
 ## Detalhe — Produto (PRD)
@@ -1027,6 +1080,206 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Origem | EXC-F0; DOC-32, DOC-33 |
 | Relacionados | EXC-OPS-004 |
 | Datas | Registrado em 2026-10-22 |
+
+### EXC-PRD-002 — Multi-filial existe só no cadastro
+
+| Campo | Valor |
+|---|---|
+| Área | PRD (também DAD, FIS) |
+| Natureza | Fato |
+| Descrição | `Branch` tem cadastro (nome, CNPJ, matriz) e uma tabela de saldo por filial (`ProductBranchStock`). Nenhuma outra entidade aponta para a filial: `Sale`, `Caixa`, `User`, `NotaFiscal` e `TenantFiscalConfiguration` não têm `BranchId`. A venda baixa `Product.Stock`, saldo único do tenant. O único código que lê ou grava `ProductBranchStock` é a confirmação de transferência, que debita a origem e credita o destino nessa tabela sem tocar em `Product.Stock`. Resultado: a transferência registra um movimento que nenhuma tela de venda, estoque ou relatório usa; não há relatório, caixa, permissão ou emitente por filial. |
+| Evidência | `ERP.Domain/Entities/Branch.cs:11-47`; `Sale.cs:8-39`; busca por `BranchId` no domínio (só `ProductBranchStock`); `ERP.Infrastructure/Services/TransferenciaService.cs:100-110, 162-175`; busca por `ProductBranchStock` (só `TransferenciaService` e `AppDbContext`) |
+| Gravidade | Média (funcionalidade apresentada como existente que não entrega o resultado; transferências feitas hoje não têm efeito no estoque que a loja vê) |
+| Impacto | Uma rede que compre o produto para várias lojas não terá estoque, caixa nem nota por loja. Quem usar transferências acredita ter movido estoque. A matriz duplicada da Vila Verde (EXC-DAD-003) não afeta saldo, porque o saldo por filial não é usado. |
+| Confiança | Alta (código) |
+| Dependências | EXC-FIS-013 (emitente por loja) |
+| Responsável | Matheus |
+| Ação proposta | Decidir: (a) tirar multi-filial e transferências da oferta e rotular as telas, ou (b) projetar filial de ponta a ponta (venda, caixa, usuário, estoque, emitente) só quando houver cliente pagante pedindo. Até a decisão, não demonstrar como funcionalidade. Verificar se há transferências confirmadas no banco (consulta da EXC-A7 §11). |
+| Status | Confirmado |
+| Critério de validação | Decisão registrada; se (a), telas ocultas ou rotuladas e roadmap do Portal atualizado; se (b), teste de fluxo venda → estoque da filial certa. |
+| Origem | EXC-A7 (primeira passada) |
+| Relacionados | EXC-DAD-003, EXC-FIS-013, EXC-PRD-001, EXC-MKT-003 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-PRD-003 — Importar o mesmo XML de compra duas vezes duplica estoque e contas a pagar
+
+| Campo | Valor |
+|---|---|
+| Área | PRD (também ENG, DAD) |
+| Natureza | Fato (código) + Lacuna (ocorrência em produção) |
+| Descrição | `SalvarEAtualizarEstoqueAsync` não verifica se a chave de acesso já foi importada: cria um pedido de compra novo (número com data e hora), soma a quantidade conferida ao estoque e cria as contas a pagar das duplicatas outra vez. A chave fica só no texto de `Observacoes`. A tela (`NfeImportViewModel`) também não verifica. Além disso, receber um pedido de compra (`PedidoCompraService.ReceberAsync`) e importar o XML da mesma mercadoria somam o estoque duas vezes, porque os dois fluxos não se conhecem. A soma usa leitura-e-gravação (`Stock +=`), não `UPDATE` atômico. |
+| Evidência | `ERP.Application/Services/NfeImportService.cs:298-345, 384-410`; `ERP.Application/Services/PedidoCompraService.cs:119-157`; busca por verificação de chave em `NfeImportService` e `NfeImportViewModel` sem resultado; nenhum teste de `NfeImportService` |
+| Gravidade | Média (corrompe estoque e contas a pagar, mas exige repetir a importação e tem contorno manual) |
+| Impacto | Estoque inflado, pedido de compra e contas a pagar em dobro; o dono pode pagar a mesma duplicata duas vezes. |
+| Confiança | Alta (código). Ocorrência real desconhecida: a consulta da EXC-A7 §11 conta pedidos com a mesma observação |
+| Dependências | — |
+| Responsável | A definir |
+| Ação proposta | Gravar a chave de acesso em campo próprio com índice único por tenant e recusar a segunda importação com mensagem clara; vincular o XML ao pedido de compra existente em vez de criar outro. Entregar à EXC-A3 a parte de leitura-e-gravação. |
+| Status | Confirmado |
+| Critério de validação | Teste automatizado: a segunda importação da mesma chave é recusada e estoque e contas a pagar não mudam; consulta de duplicidades em produção registrada. |
+| Origem | EXC-A7 (primeira passada) |
+| Relacionados | EXC-PRD-004, EXC-PRD-007, EXC-DAD-002 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-PRD-004 — Custo pela última entrada, sem custo médio nem histórico de movimentação de estoque
+
+| Campo | Valor |
+|---|---|
+| Área | PRD |
+| Natureza | Fato |
+| Descrição | A entrada por XML e o recebimento de pedido gravam o preço da compra como `CostPrice` e `OriginalCost`, substituindo o anterior. Não há custo médio ponderado. Margem, vendas × custo e DRE usam esse custo. Não há registro de movimentação de estoque por produto (entrada, venda, devolução, ajuste, transferência, com saldo antes e depois); só a auditoria genérica de alterações. |
+| Evidência | `NfeImportService.cs:338-341`; `PedidoCompraService.cs:142-151`; busca por `Kardex`, `MovimentoEstoque`, `HistoricoEstoque` sem resultado (2026-10-26) |
+| Gravidade | Média (relatórios de margem e lucro distorcidos, com contorno manual; divergências de inventário sem explicação) |
+| Impacto | Uma compra promocional ou com frete diferente muda a margem de todo o estoque; o dono não consegue explicar por que o estoque de um item está errado. |
+| Confiança | Alta (código) |
+| Dependências | — |
+| Responsável | A definir |
+| Ação proposta | No roadmap R2 (EXC-A7 §10): tabela de movimentos de estoque gravada em cada baixa e entrada, e custo médio calculado na entrada. Decidir com o contador qual custo usar nos relatórios. |
+| Status | Confirmado |
+| Critério de validação | Testes: duas entradas a preços diferentes resultam no custo médio esperado; cada operação de estoque gera um movimento com saldo antes e depois. |
+| Origem | EXC-A7 (primeira passada) |
+| Relacionados | EXC-PRD-003 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-PRD-005 — Fechamento de caixa sem valor contado nem diferença
+
+| Campo | Valor |
+|---|---|
+| Área | PRD |
+| Natureza | Fato |
+| Descrição | `Caixa` guarda abertura, fechamento, valor de abertura e movimentos, mas não o valor contado pelo operador nem a diferença. O fechamento no WPF pede só a confirmação ("não poderá ser reaberto") e grava com o resumo calculado pelo sistema. |
+| Evidência | `ERP.Domain/Entities/Caixa.cs:11-22`; `ERP.WPF/ViewModels/ResumoCaixaViewModel.cs:242-265`; `ERP.Application/Services/CaixaService.cs:142` |
+| Gravidade | Média (ausência de controle importante; somada a EXC-ENG-005, o valor esperado pode estar errado sem que ninguém perceba) |
+| Impacto | O dono não tem registro de quebra de caixa por operador e dia; a diferença entre gaveta e sistema fica fora do sistema. |
+| Confiança | Alta (código) |
+| Dependências | EXC-ENG-005 (o esperado precisa estar certo antes) |
+| Responsável | A definir |
+| Ação proposta | Pedir o valor contado por forma de pagamento (pelo menos dinheiro) no fechamento, gravar a diferença e mostrá-la no histórico e no Portal. Avaliar contagem cega (o operador não vê o esperado). |
+| Status | Confirmado |
+| Critério de validação | Teste: fechamento grava contado e diferença; relatório lista as diferenças por operador e dia. Observação na loja (EXC-A7 §9.2) confirma o uso. |
+| Origem | EXC-A7 (primeira passada) |
+| Relacionados | EXC-ENG-005 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-PRD-006 — Devolução sem cliente não registra o reembolso; devolução nunca sai em dinheiro
+
+| Campo | Valor |
+|---|---|
+| Área | PRD (também ENG) |
+| Natureza | Fato |
+| Descrição | `DevolverItensAsync` devolve o estoque e grava os itens devolvidos; o crédito só é lançado **se a devolução tiver cliente**, e sempre como haver. Não há opção de devolver em dinheiro, Pix ou estorno de cartão, nem movimento de caixa. Na venda a consumidor não identificado, o estoque volta e nada registra o valor devolvido. |
+| Evidência | `ERP.Application/Services/DevolucaoService.cs:93-110`; `ERP.WPF/ViewModels/DevolucaoViewModel.cs` (sem referência a caixa ou sangria) |
+| Gravidade | Média (o caixa não fecha em dia de devolução a consumidor; o operador precisa lançar sangria à parte, sem vínculo com a devolução) |
+| Impacto | Diferença de caixa sem explicação; valor devolvido sem trilha; cliente sem cadastro não recebe o dinheiro de volta pelo sistema. |
+| Confiança | Alta (código) |
+| Dependências | EXC-ENG-008 (devolução sem transação) |
+| Responsável | A definir |
+| Ação proposta | Permitir escolher a forma do reembolso (haver, dinheiro, Pix); para dinheiro, lançar saída de caixa vinculada à devolução na mesma transação. |
+| Status | Confirmado |
+| Critério de validação | Teste de fluxo: devolução em dinheiro sem cliente gera saída de caixa do valor recalculado; o resumo do caixa confere. |
+| Origem | EXC-A7 (primeira passada) |
+| Relacionados | EXC-ENG-007, EXC-ENG-008, EXC-PRD-005 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-PRD-007 — Fornecedor só tem nome
+
+| Campo | Valor |
+|---|---|
+| Área | PRD |
+| Natureza | Fato |
+| Descrição | `Supplier` tem só `Name` e `IsActive`: sem CNPJ, IE, contato, endereço ou condições de pagamento. A importação de XML localiza o fornecedor pelo nome exato da nota e cria outro quando a grafia muda, embora o XML traga o CNPJ do emitente. |
+| Evidência | `ERP.Domain/Entities/Supplier.cs:8-9`; `NfeImportService.cs:303-311` |
+| Gravidade | Baixa |
+| Impacto | Fornecedores duplicados; histórico de compras e contas a pagar divididos; sem dados para cotar ou cobrar. |
+| Confiança | Alta (código) |
+| Dependências | — |
+| Responsável | A definir |
+| Ação proposta | Acrescentar CNPJ (chave de busca na importação), contato e prazo padrão. |
+| Status | Confirmado |
+| Critério de validação | Teste: duas notas do mesmo CNPJ com nomes diferentes ficam no mesmo fornecedor. |
+| Origem | EXC-A7 (primeira passada) |
+| Relacionados | EXC-PRD-003 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-PRD-008 — Venda a prazo: conta única com vencimento fixo em 30 dias, sem juros nem multa
+
+| Campo | Valor |
+|---|---|
+| Área | PRD |
+| Natureza | Fato |
+| Descrição | A forma "a prazo" no PDV gera uma conta a receber com vencimento em hoje + 30 dias. Parcelas e vencimentos combinados só podem ser criados à parte, no financeiro (parcelamento manual). Não há cálculo de juros ou multa por atraso em nenhum ponto do código. |
+| Evidência | `ERP.Application/Services/MotorFinanceiroService.cs:55-56, 139-150`; `ERP.Infrastructure/Services/ContaReceberService.cs:62, 320-335`; busca por `Juros` e `Multa` sem resultado |
+| Gravidade | Baixa (lacuna de produto, com contorno manual) |
+| Impacto | O combinado com o cliente fica fora do sistema; cobrança de atraso feita à mão. Fiado é central no segmento (EXC-A10-MARKETING). |
+| Confiança | Alta (código) |
+| Dependências | — |
+| Responsável | Matheus |
+| Ação proposta | R1: escolher número de parcelas e primeiro vencimento na própria venda. R2: juros e multa configuráveis, aplicados na baixa. |
+| Status | Confirmado |
+| Critério de validação | Teste: venda a prazo em 3 parcelas gera 3 contas com os vencimentos escolhidos; baixa em atraso aplica a regra configurada. |
+| Origem | EXC-A7 (primeira passada) |
+| Relacionados | EXC-ADM-005 (boleto) |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-PRD-009 — Papel de cada aplicativo não definido; funções repetidas no WPF e no Portal
+
+| Campo | Valor |
+|---|---|
+| Área | PRD (também ENG) |
+| Natureza | Fato |
+| Descrição | Não há documento que defina o que é feito no WPF e o que é feito no Portal (CRITERIOS PRD-4). PDV, caixa, devolução, orçamentos, produtos, clientes, inventário e financeiro existem nos dois, com regras diferentes (o PDV do Portal não tem fila offline; a edição de produto e cliente do Portal apaga campos, EXC-ENG-006). Entregas, transferências, tintométrico, metas, CRM e painel de TV existem só no Portal; DRE, fluxo de caixa, importação de XML e SPED, só no WPF. |
+| Evidência | `ERP.WPF/MainWindow.xaml` (43 entradas de menu); `ERP.Portal/Layout/MainLayout.razor` (36 rotas); [EXC-A7](EXC-A7-INVENTARIO-FUNCIONAL.md) §3 |
+| Gravidade | Média (origem de defeitos como EXC-ENG-006; dobra a superfície mantida por uma pessoa) |
+| Impacto | O lojista não sabe onde fazer cada coisa; cada regra corrigida num aplicativo continua errada no outro. |
+| Confiança | Alta |
+| Dependências | — |
+| Responsável | Matheus |
+| Ação proposta | Decidir e registrar o papel de cada aplicativo (por exemplo: WPF = operação da loja; Portal = acompanhamento do dono e módulos externos), e retirar ou deixar só leitura as funções repetidas fora do papel. Decidir antes de corrigir EXC-ENG-006. |
+| Status | Confirmado |
+| Critério de validação | CRITERIOS PRD-4: decisão escrita, com a lista de funções por aplicativo, e as repetidas fora do papel retiradas ou em modo leitura. |
+| Origem | EXC-A7 (primeira passada) |
+| Relacionados | EXC-ENG-006, EXC-ENG-010, EXC-PRD-001 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-PRD-010 — Uso real de cada módulo não medido
+
+| Campo | Valor |
+|---|---|
+| Área | PRD (também VEN, MKT) |
+| Natureza | Lacuna |
+| Descrição | Só seis funcionalidades têm uso comprovado (venda no PDV, NFC-e, cancelamento, login, licenciamento, cadastro de filial). Para as demais, não se sabe se a Vila Verde usa, com que frequência, nem quais formas de pagamento predominam. |
+| Evidência | [EXC-A7](EXC-A7-INVENTARIO-FUNCIONAL.md) §4 (coluna "Operação") |
+| Gravidade | A classificar |
+| Impacto | Sem medição, a prioridade de correção e o roadmap se baseiam em suposição; defeitos em módulos usados e não usados pesam igual. |
+| Confiança | — |
+| Dependências | Acesso de leitura ao banco |
+| Responsável | Matheus |
+| Ação proposta | Rodar a consulta da EXC-A7 §11 agora e de novo após 30 dias; observar a loja (§9.2). |
+| Status | Lacuna |
+| Critério de validação | Consulta executada e registrada com data; coluna "Operação" da matriz atualizada. |
+| Origem | EXC-A7 (primeira passada) |
+| Relacionados | EXC-MKT-003, EXC-VEN-004 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-PRD-011 — Não existe exportação completa dos dados de uma loja
+
+| Campo | Valor |
+|---|---|
+| Área | PRD (também FIS, VEN) |
+| Natureza | Fato |
+| Descrição | Não há função que entregue ao lojista todos os dados da loja (cadastros, vendas, financeiro, estoque, notas) num formato legível. Existem exportações pontuais (XML das notas, SPED). A [EXC-A10-VENDAS](EXC-A10-VENDAS.md) §3.1 já citava a ausência, sem registro próprio. |
+| Evidência | Busca por exportação de dados em 2026-10-26 (EXC-A10-VENDAS §3.1); [EXC-A7](EXC-A7-INVENTARIO-FUNCIONAL.md) §4.13 |
+| Gravidade | Média (exigência de contrato e de portabilidade; objeção O1 da EXC-A10-VENDAS sem resposta) |
+| Impacto | O lojista não pode sair com os próprios dados; o contrato não pode prometer devolução dos dados; a dependência de uma pessoa pesa mais na decisão de compra. |
+| Confiança | Alta |
+| Dependências | EXC-FIS-002 (contrato e privacidade) |
+| Responsável | Matheus |
+| Ação proposta | R1: exportação por tenant em CSV (uma planilha por entidade) mais os XML fiscais, acionada pelo dono no Portal ou pela TTSoft. |
+| Status | Confirmado |
+| Critério de validação | Exportação de um tenant de teste gerada e conferida contra as contagens do banco. |
+| Origem | EXC-A7 (primeira passada); EXC-A10 (parte VEN) |
+| Relacionados | EXC-FIS-002, EXC-ADM-002, EXC-VEN-004 |
+| Datas | Registrado em 2026-10-26 |
 
 ---
 

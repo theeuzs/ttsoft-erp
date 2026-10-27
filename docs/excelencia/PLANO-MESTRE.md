@@ -1,7 +1,7 @@
 # Plano Mestre — Programa de Excelência TTSoft
 
 > Produto: ConstruTTor ERP
-> Criado em: 2026-10-22 · Versão: 1.15 · Fase atual: **EXC-A1 em execução; primeira passada da EXC-A6 concluída**
+> Criado em: 2026-10-22 · Versão: 1.16 · Fase atual: **EXC-A1 em execução; primeiras passadas da EXC-A6 e da EXC-A7 concluídas**
 > Documentos relacionados: [CRITERIOS-DE-EXCELENCIA](CRITERIOS-DE-EXCELENCIA.md) · [INVENTARIO-AUDITORIAS](INVENTARIO-AUDITORIAS.md) · [REGISTRO-CENTRAL](REGISTRO-CENTRAL.md)
 
 ---
@@ -166,7 +166,23 @@ Saídas:                 registros EXC-… criados/atualizados
 - **Encerramento:** consultas C1–C4 executadas e registradas; triagem dos três registros Altos
   (EXC-ENG-005, EXC-ENG-006, EXC-SEG-010).
 
-As fichas de EXC-A2 a EXC-A5 e EXC-A7 a EXC-A10 serão preenchidas antes de cada auditoria e
+#### EXC-A7 — Produto e UX dos fluxos críticos
+- **Status:** **Primeira passada concluída em 2026-10-26** (inventário funcional pelo código),
+  antecipada a pedido do responsável: [EXC-A7-INVENTARIO-FUNCIONAL](EXC-A7-INVENTARIO-FUNCIONAL.md),
+  commit `47a4b0a`. A segunda passada depende de observar usuários da loja piloto.
+- **Escopo:** matriz funcional por módulo (implementação, teste e uso em operação mantidos
+  separados), jornadas ponta a ponta, regras e casos excepcionais, necessidades do segmento,
+  lacunas para vender a lojas independentes e roadmap orientado ao cliente.
+- **Fora do escopo (primeira passada):** usabilidade e mensagens de erro (PRD-3), regras
+  tributárias em detalhe (A4), integridade transacional (A3).
+- **Evidências necessárias para a segunda passada:** consulta somente leitura de uso por módulo
+  (relatório §11); duas visitas de observação à loja piloto (relatório §9.2).
+- **Critérios de aprovação:** PRD-1 a PRD-4 (situação na seção 12 do relatório).
+- **Saídas:** EXC-PRD-002 a 011, EXC-FIS-014, EXC-OPS-008.
+- **Encerramento:** consulta de uso executada; observação registrada; decisão sobre o papel de
+  cada aplicativo (EXC-PRD-009) e triagem dos registros novos.
+
+As fichas de EXC-A2 a EXC-A5 e EXC-A8 a EXC-A10 serão preenchidas antes de cada auditoria e
 aprovadas pelo responsável.
 
 ---
@@ -294,3 +310,4 @@ Avaliar a auditoria do servidor (EXC-SEG-008) em paralelo, como controle compens
 | 2026-10-26 | 1.13 | EXC-MKT-002 corrigido no código e em validação (teste `TextosInterfaceTests`); novo EXC-FIS-013 (Alta): CNPJ do emitente fixo no envio à Focus |
 | 2026-10-26 | 1.14 | Avaliação de vendas (EXC-A10, parte VEN): processo comercial, roteiro de demonstração, funil com fórmulas e registros EXC-VEN-002 a 004 |
 | 2026-10-26 | 1.15 | Primeira passada da EXC-A6 (arquitetura e engenharia), antecipada: diagnóstico, fluxos rastreados, dívida priorizada, plano em 5 ondas; registros EXC-ENG-005 a 013 e EXC-SEG-010 (três Altos: estorno de caixa duplicado, edição parcial pelo Portal, *seeder* que promove a Administrador) |
+| 2026-10-26 | 1.16 | Primeira passada da EXC-A7 (inventário funcional), antecipada: matriz por módulo com implementação, teste e operação separados, jornadas, lacunas para lojas independentes e roadmap R0 a R3; registros EXC-PRD-002 a 011, EXC-FIS-014 e EXC-OPS-008 |
