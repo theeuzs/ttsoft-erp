@@ -256,7 +256,7 @@ public class OrcamentosViewModel : BaseViewModel
         if (orcamento == null) return;
         try
         {
-            string texto = $"*VILA VERDE MATERIAIS DE CONSTRUÇÃO*\n\n";
+            string texto = $"*{ERP.WPF.Helpers.ConfiguracaoService.Carregar().NomeFantasia}*\n\n";
             texto += $"Olá, {orcamento.CustomerName ?? "Cliente"}! Aqui está a sua cotação solicitada:\n\n";
             texto += $"*Orçamento:* {orcamento.Numero}\n";
             texto += $"*Validade:* {orcamento.DataEmissao.AddDays(3):dd/MM/yyyy}\n\n";

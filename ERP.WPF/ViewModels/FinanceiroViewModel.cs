@@ -492,7 +492,7 @@ public class FinanceiroViewModel : BaseViewModel
                 FontSize = 12
             };
 
-            doc.Blocks.Add(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run("VILA VERDE MATERIAIS DE CONSTRUCAO")) { TextAlignment = TextAlignment.Center, FontWeight = FontWeights.Bold });
+            doc.Blocks.Add(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run(ERP.WPF.Helpers.ConfiguracaoService.Carregar().NomeFantasia)) { TextAlignment = TextAlignment.Center, FontWeight = FontWeights.Bold });
             doc.Blocks.Add(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run("COMPROVANTE DE PAGAMENTO")) { TextAlignment = TextAlignment.Center });
             doc.Blocks.Add(new System.Windows.Documents.Paragraph(new System.Windows.Documents.Run("-----------------------------------------")) { TextAlignment = TextAlignment.Center });
 

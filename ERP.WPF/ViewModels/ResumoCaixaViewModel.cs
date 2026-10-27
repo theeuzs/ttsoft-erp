@@ -239,7 +239,7 @@ public class ResumoCaixaViewModel : BaseViewModel
 
     private async Task Encerrar()
     {
-        var confirm = MessageBox.Show("Tem certeza que deseja encerrar o caixa do dia?\nEle não poderá ser reaberto.", "Vila Verde - Fechar Caixa", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        var confirm = MessageBox.Show("Tem certeza que deseja encerrar o caixa do dia?\nEle não poderá ser reaberto.", "ConstruTTor - Fechar Caixa", MessageBoxButton.YesNo, MessageBoxImage.Question);
         
         if (confirm == MessageBoxResult.Yes)
         {

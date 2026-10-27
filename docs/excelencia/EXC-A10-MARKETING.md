@@ -1,7 +1,7 @@
 # EXC-A10 (parte MKT) — Posicionamento e plano de aquisição
 
 > Programa de Excelência TTSoft · Área MKT (com insumos de VEN, ADM e PRD)
-> Criado em: 2026-10-26 · Versão: 1.0 · Base de código: commit `39e811c` (main)
+> Criado em: 2026-10-26 · Versão: 1.1 · Base de código: commit `39e811c` (main)
 > Documentos relacionados: [PLANO-MESTRE](PLANO-MESTRE.md) · [CRITERIOS-DE-EXCELENCIA](CRITERIOS-DE-EXCELENCIA.md) · [REGISTRO-CENTRAL](REGISTRO-CENTRAL.md) · [EXC-A10-ADMINISTRATIVO-FINANCEIRO](EXC-A10-ADMINISTRATIVO-FINANCEIRO.md)
 
 Esta é a primeira passada sobre a área MKT. Ela **não** valida o público-alvo (isso exige
@@ -172,7 +172,8 @@ Para um fornecedor de uma pessoa, uma promessa quebrada também corre a cidade (
 Hoje o produto aparece com três nomes: **ConstruTTor ERP** (login do WPF,
 `ERP.WPF/Views/LoginView.xaml:4`), **TTSoft ERP — Portal Gerencial** (`ERP.Portal/wwwroot/index.html:6`,
 `manifest.json`) e **Vila Verde** em 8 títulos de mensagem e uma dica de tela do WPF que
-qualquer loja veria (EXC-MKT-002). Antes de mostrar o sistema para uma segunda loja, o nome da
+qualquer loja veria (EXC-MKT-002; corrigido no código em 2026-10-26, com mais 4 ocorrências em
+documentos que chegam ao cliente final, aguardando publicação). Antes de mostrar o sistema para uma segunda loja, o nome da
 loja piloto precisa sair da interface. A escolha da marca de produto (ConstruTTor) e da marca
 da empresa (TTSoft) é decisão de Matheus; não foi verificado se alguma delas tem registro no INPI
 (lacuna).
@@ -238,7 +239,7 @@ Separar o que pode começar agora do que deve esperar:
 | Entrevistas de problema (sem vender) | **Sim** | Nada |
 | Demonstrações com dados de exemplo | **Sim**, depois de tirar "Vila Verde" das mensagens (EXC-MKT-002) e preparar um tenant de demonstração **sem CNPJ real** (lição de EXC-FIS-008) | EXC-MKT-002 |
 | Proposta de preço | Sim, como teste (X5) | Decisão sobre repasse de notas (EXC-ADM-003) |
-| Implantar uma segunda loja | **Não** | Login restrito do WPF (EXC-SEG-001, E1 a E4), contrato e termos (EXC-FIS-002), preço decidido |
+| Implantar uma segunda loja | **Não** | Login restrito do WPF (EXC-SEG-001, E1 a E4), CNPJ do emitente por tenant (EXC-FIS-013), contrato e termos (EXC-FIS-002), preço decidido |
 | Anúncio pago, material impresso, feira | **Não** | Tudo acima + pelo menos 1 canal orgânico com resultado medido |
 
 Motivo: cada loja nova entra no mesmo banco onde hoje qualquer PC tem acesso de administrador a
@@ -429,3 +430,4 @@ está nas tabelas acima **não foi estimado**.
 | Data | Versão | Alteração |
 |---|---|---|
 | 2026-10-26 | 1.0 | Criação: mercado, perfil de cliente ideal, diferenciais comprováveis e proibidos, concorrentes, posicionamento, canais, conteúdo, experimentos X1 a X8 e indicadores |
+| 2026-10-26 | 1.1 | EXC-MKT-002 corrigido no código (em validação); EXC-FIS-013 (CNPJ do emitente fixo) passa a ser pré-condição para uma segunda loja (seção 9) |

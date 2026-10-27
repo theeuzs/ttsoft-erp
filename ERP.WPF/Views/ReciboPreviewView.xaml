@@ -19,9 +19,9 @@
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel TextElement.FontFamily="Consolas" TextElement.FontSize="13" TextElement.Foreground="{DynamicResource TextDark}">
                     
-                    <TextBlock Text="VILA VERDE" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="NOME FANTASIA" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center"/>
                     <TextBlock Text="MATERIAIS DE CONSTRUÇÃO" HorizontalAlignment="Center"/>
-                    <TextBlock Text="CNPJ: 12.820.608/0001-41" HorizontalAlignment="Center"/>
+                    <TextBlock Text="CNPJ: 00.000.000/0000-00" HorizontalAlignment="Center"/>
                     <TextBlock Text="----------------------------------------" HorizontalAlignment="Center" Margin="0,5"/>
                     
                     <TextBlock Text="{Binding Data, StringFormat='DATA: dd/MM/yyyy HH:mm'}"/>

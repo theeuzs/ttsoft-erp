@@ -277,3 +277,4 @@ Avaliar a auditoria do servidor (EXC-SEG-008) em paralelo, como controle compens
 | 2026-10-22 | 1.10 | Triagem 2 revista: EXC-SEG-009 em risco aceito (IPs dinâmicos); login restrito e troca de senha passam a ser a mitigação principal |
 | 2026-10-26 | 1.11 | Avaliação administrativa e financeira (EXC-A10, parte ADM): relatório, modelo de cenários e registros EXC-ADM-003 a 005 |
 | 2026-10-26 | 1.12 | Avaliação de marketing (EXC-A10, parte MKT): posicionamento, perfil de cliente, experimentos e registros EXC-MKT-001 a 004 e EXC-FIS-012 |
+| 2026-10-26 | 1.13 | EXC-MKT-002 corrigido no código e em validação (teste `TextosInterfaceTests`); novo EXC-FIS-013 (Alta): CNPJ do emitente fixo no envio à Focus |

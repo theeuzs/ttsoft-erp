@@ -97,7 +97,7 @@
                         <DataTrigger Binding="{Binding ProdutoJaCadastrado}" Value="True">
                             <Setter Property="Background" Value="#EAFAF1"/> 
                             <Setter Property="Foreground" Value="#1D8348"/>
-                            <Setter Property="ToolTip" Value="Produto já cadastrado no sistema da Vila Verde!"/>
+                            <Setter Property="ToolTip" Value="Produto já cadastrado no sistema!"/>
                         </DataTrigger>
                         
                         <DataTrigger Binding="{Binding ProdutoJaCadastrado}" Value="False">

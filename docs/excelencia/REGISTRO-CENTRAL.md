@@ -79,6 +79,7 @@
 | EXC-FIS-010 | FIS | Política de emissão fiscal da loja piloto | Lacuna | — | — | **Encerrado** (decisão do cliente, a tratar com o contador) | Matheus |
 | EXC-FIS-011 | FIS | Descrição de produto com aspas (polegada) faz a Focus recusar a NFC-e | Fato + Hipótese | Média | Média | Confirmado | A definir |
 | EXC-FIS-012 | FIS | SPED gerado pelo Portal usa razão social e CNPJ fixos (`Vila Verde Materiais`, CNPJ fictício) | Fato | Média | Alta | Confirmado | A definir |
+| EXC-FIS-013 | FIS | CNPJ do emitente fixo no envio de notas à Focus: toda nota sai com o CNPJ da Vila Verde | Fato + Hipótese | **Alta** | Alta (código) | Confirmado | A definir |
 | EXC-PRD-001 | PRD | Roadmap exibido no Portal não corresponde ao produto atual | Fato | Baixa | Alta | Confirmado | A definir |
 | EXC-DAD-001 | DAD | Parte dos relatórios anteriores não foi localizada | Lacuna | Baixa | Alta | Lacuna | Matheus |
 | EXC-DAD-002 | DAD | Sem concorrência otimista; créditos de Haver por leitura-e-gravação | Fato + Hipótese | Média | Média | Confirmado | A definir |
@@ -90,12 +91,12 @@
 | EXC-ADM-005 | ADM | Asaas usa uma única chave da aplicação; uso em produção desconhecido | Hipótese | A classificar | Baixa | Hipótese | Matheus |
 | EXC-VEN-001 | VEN | Preços e planos sem validação com clientes | Lacuna | A classificar | — | Lacuna | Matheus |
 | EXC-MKT-001 | MKT | Público-alvo e proposta de valor sem validação com clientes | Lacuna | A classificar | — | Lacuna | Matheus |
-| EXC-MKT-002 | MKT | Nome da loja piloto fixo na interface do WPF | Fato | Baixa | Alta | Confirmado | A definir |
+| EXC-MKT-002 | MKT | Nome da loja piloto fixo na interface do WPF | Fato | Baixa | Alta | **Em validação** (corrigido no código; falta publicar) | Matheus |
 | EXC-MKT-003 | MKT | Relatórios anteriores recomendam afirmações de divulgação que o estado atual não sustenta | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-MKT-004 | MKT | Nenhum canal de aquisição ou funil medido | Lacuna | A classificar | — | Lacuna | Matheus |
 
-**Contagem:** 46 registros (43 abertos, um deles em risco aceito; 3 encerrados) — abertos: 3 Crítica, 3 Alta, 17 Média, 10 Baixa, 10 A classificar.
-Em 2026-10-26: acrescentados EXC-ADM-003 a 005 pela [avaliação administrativa e financeira](EXC-A10-ADMINISTRATIVO-FINANCEIRO.md), e EXC-MKT-001 a 004 e EXC-FIS-012 pela [avaliação de marketing](EXC-A10-MARKETING.md).
+**Contagem:** 47 registros (44 abertos, um deles em risco aceito; 3 encerrados) — abertos: 3 Crítica, 4 Alta, 17 Média, 10 Baixa, 10 A classificar.
+Em 2026-10-26: acrescentados EXC-ADM-003 a 005 pela [avaliação administrativa e financeira](EXC-A10-ADMINISTRATIVO-FINANCEIRO.md), e EXC-MKT-001 a 004 e EXC-FIS-012 pela [avaliação de marketing](EXC-A10-MARKETING.md); EXC-FIS-013 encontrado na correção do EXC-MKT-002, que passou a *Em validação*.
 Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.md)
 (passos 1.1, 1.2, 2, 4 e E1 a E9). Prioridade imediata: EXC-FIS-008, EXC-SEG-001 e EXC-FIS-009.
 
@@ -765,6 +766,26 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Relacionados | EXC-FIS-006, EXC-MKT-002 |
 | Datas | Registrado em 2026-10-26 |
 
+### EXC-FIS-013 — CNPJ do emitente fixo no envio de notas à Focus: toda nota sai com o CNPJ da Vila Verde
+
+| Campo | Valor |
+|---|---|
+| Área | FIS (também SEG) |
+| Natureza | Fato (código) + Hipótese (efeito na Focus) |
+| Descrição | `FocusNfceRequest.CnpjEmitente` tem como valor padrão `12820608000141`, o CNPJ da Vila Verde, e nenhum dos três montadores de requisição do `FiscalService` (NFC-e, NF-e A4 e NF-e de devolução) o substitui pelo CNPJ do tenant. Toda nota enviada à Focus leva `cnpj_emitente` da Vila Verde, seja qual for a loja. Hoje só a Vila Verde emite, então não há dano conhecido. Com uma segunda loja, há dois efeitos possíveis, não verificados: a Focus recusa a nota (token de outra empresa) ou, se o token der acesso a mais de um CNPJ da conta da TTSoft, a nota é autorizada **em nome da Vila Verde**. **Hipótese a conferir:** pode ser a causa, ou parte da causa, das notas do tenant de teste emitidas com o CNPJ da Vila Verde (EXC-FIS-008). Encontrado de passagem na correção do EXC-MKT-002. |
+| Evidência | `ERP.Application/DTOs/FocusNfe/FocusNfceRequest.cs:10`; `ERP.Infrastructure/Services/FiscalService.cs:626`, `:868` e `MontarRequestNfeA4` (busca por `CnpjEmitente` sem atribuição em 2026-10-26) |
+| Gravidade | Alta (impede ou desvia a emissão fiscal de qualquer loja além da Vila Verde) |
+| Impacto | Bloqueia a implantação de uma segunda loja; no pior caso, notas de uma loja emitidas com o CNPJ de outra. |
+| Confiança | Alta (código); Baixa (comportamento da Focus) |
+| Dependências | Documentação da Focus sobre `cnpj_emitente` e tokens por empresa; configuração da conta Focus da TTSoft |
+| Responsável | A definir |
+| Ação proposta | Na EXC-A4, antes de qualquer segunda loja emitir: preencher `CnpjEmitente` com o CNPJ da configuração fiscal do tenant (`TenantFiscalConfiguration`) e tirar o valor padrão; conferir no painel da Focus se as notas do tenant de teste usaram este padrão. |
+| Status | Confirmado |
+| Critério de validação | Teste automatizado: requisição montada para um tenant com CNPJ diferente leva o CNPJ desse tenant; nenhum CNPJ fixo em `FocusNfceRequest`. |
+| Origem | Correção do EXC-MKT-002 (2026-10-26) |
+| Relacionados | EXC-FIS-008, EXC-FIS-012, EXC-FIS-004 |
+| Datas | Registrado em 2026-10-26 |
+
 ---
 
 ## Detalhe — Produto (PRD)
@@ -1008,19 +1029,19 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 |---|---|
 | Área | MKT (também PRD) |
 | Natureza | Fato |
-| Descrição | O texto "Vila Verde" aparece em 8 títulos de mensagem e em uma dica de tela do WPF que qualquer loja veria, incluindo o aviso de modo offline e o fechamento de caixa. O produto também aparece com dois outros nomes: "ConstruTTor ERP" no login do WPF e "TTSoft ERP — Portal Gerencial" no Portal. |
+| Descrição | O texto "Vila Verde" aparecia em 8 títulos de mensagem e em uma dica de tela do WPF que qualquer loja veria, incluindo o aviso de modo offline e o fechamento de caixa. Na correção, o teste automatizado achou mais 4 ocorrências em maiúsculas, que chegam ao **cliente final** da loja: o cabeçalho do comprovante de pagamento, o texto de venda e o de orçamento enviados por WhatsApp, e a tela `ReciboPreviewView` (sem uso no código), que tinha também o CNPJ da Vila Verde fixo. O produto também aparece com dois outros nomes: "ConstruTTor ERP" no login do WPF e "TTSoft ERP — Portal Gerencial" no Portal (não alterado: depende da decisão de marca). |
 | Evidência | `ERP.WPF/ViewModels/FinalizarVendaViewModel.cs:64,418,449,671,681`; `ERP.WPF/ViewModels/ResumoCaixaViewModel.cs:242`; `ERP.WPF/ViewModels/ContaPagarViewModel.cs:112`; `ERP.WPF/ViewModels/UserViewModel.cs:87`; `ERP.WPF/Views/NfeImportView.xaml:100`; `ERP.WPF/Views/LoginView.xaml:4`; `ERP.Portal/wwwroot/index.html:6` (2026-10-26) |
 | Gravidade | Baixa (não afeta dados; afeta a credibilidade numa demonstração ou numa segunda loja) |
 | Impacto | Uma segunda loja vê o nome de outra loja no próprio caixa. |
 | Confiança | Alta |
 | Dependências | Decisão sobre a marca do produto |
 | Responsável | A definir |
-| Ação proposta | Antes da primeira demonstração para uma segunda loja: trocar os títulos pelo nome do produto ou da loja do tenant. |
-| Status | Confirmado |
-| Critério de validação | Busca por "Vila Verde" nos textos de interface do WPF e do Portal sem resultados (comentários e a configuração do e-commerce da própria loja não contam). |
+| Ação proposta | **Feita em 2026-10-26:** títulos de mensagem e dica de tela passaram a "ConstruTTor"; comprovante e textos de WhatsApp usam o `NomeFantasia` do `config_recibo.json` da loja, como os recibos já usavam; `ReciboPreviewView` ficou com textos de exemplo. Na Vila Verde, o cabeçalho do WhatsApp muda de "VILA VERDE MATERIAIS DE CONSTRUÇÃO" para o nome fantasia configurado. Falta publicar a versão do WPF. O texto fixo do SPED no Portal segue em EXC-FIS-012. |
+| Status | Em validação |
+| Critério de validação | (1) Teste `ERP.Tests/WPF/TextosInterfaceTests` aprovado: nenhum literal de string nos `.cs` nem texto fora de comentário nos `.xaml` do ERP.WPF contém "Vila Verde" ou o CNPJ da Vila Verde. **Atendido em 2026-10-26** (falhava antes da correção; suíte completa: 1337 aprovados, 0 falhas). (2) Versão publicada e um comprovante de pagamento conferido num PC da Vila Verde com o nome fantasia correto. |
 | Origem | EXC-A10 (parte MKT) |
-| Relacionados | EXC-FIS-012; CRITERIOS MKT-2 |
-| Datas | Registrado em 2026-10-26 |
+| Relacionados | EXC-FIS-012, EXC-FIS-013; CRITERIOS MKT-2 |
+| Datas | Registrado em 2026-10-26; atualizado em 2026-10-26 (correção no código) |
 
 ### EXC-MKT-003 — Relatórios anteriores recomendam afirmações de divulgação que o estado atual não sustenta
 

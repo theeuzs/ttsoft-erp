@@ -109,7 +109,7 @@ public class ContaPagarViewModel : BaseViewModel
 
         LimparForm();
         await CarregarContasAsync();
-        MessageBox.Show("Despesa adicionada com sucesso!", "Vila Verde");
+        MessageBox.Show("Despesa adicionada com sucesso!", "ConstruTTor");
     }
 
     /// <summary>Item 1.2 do roadmap: carrega a conta selecionada no formulário para edição.</summary>

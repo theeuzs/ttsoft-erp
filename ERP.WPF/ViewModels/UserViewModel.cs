@@ -84,7 +84,7 @@ public class UserViewModel : BaseViewModel
     {
         if (string.IsNullOrWhiteSpace(Senha)) 
         {
-            MessageBox.Show("A senha é obrigatória para novos usuários.", "Vila Verde");
+            MessageBox.Show("A senha é obrigatória para novos usuários.", "ConstruTTor");
             return;
         }
 

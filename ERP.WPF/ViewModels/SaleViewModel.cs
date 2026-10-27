@@ -463,7 +463,7 @@ public class SaleViewModel : BaseViewModel
             var detalhes = await ExecuteWithFreshSaleServiceAsync(s => s.GetDetailAsync(vendaListagem.Id));
             if (detalhes == null) return;
 
-            string texto = $"*VILA VERDE MATERIAIS DE CONSTRUÇÃO*\n\n";
+            string texto = $"*{ERP.WPF.Helpers.ConfiguracaoService.Carregar().NomeFantasia}*\n\n";
             texto += $"*Recibo da Venda:* {detalhes.SaleNumber}\n";
             texto += $"*Data:* {detalhes.SaleDate:dd/MM/yyyy HH:mm}\n";
             texto += $"*Cliente:* {detalhes.CustomerName ?? "Consumidor Final"}\n\n";

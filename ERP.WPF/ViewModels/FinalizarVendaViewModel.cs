@@ -61,7 +61,7 @@ public class FinalizarVendaViewModel : BaseViewModel
                 v.Username?.ToUpper() == nomeLogado || 
                 v.Name?.ToUpper() == nomeLogado);
         }
-        catch (Exception ex) { MessageBox.Show($"Erro ao carregar vendedores: {ex.Message}", "Aviso Vila Verde"); }
+        catch (Exception ex) { MessageBox.Show($"Erro ao carregar vendedores: {ex.Message}", "Aviso ConstruTTor"); }
     }
 
     // ==========================================================
@@ -415,7 +415,7 @@ public class FinalizarVendaViewModel : BaseViewModel
         if (FormaPagamento == PaymentMethod.APrazo && SelectedCustomer == null)
         {
             MessageBox.Show("Para vender A Prazo, é OBRIGATÓRIO selecionar um cliente cadastrado!",
-                "Atenção - Vila Verde", MessageBoxButton.OK, MessageBoxImage.Warning);
+                "Atenção - ConstruTTor", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -446,7 +446,7 @@ public class FinalizarVendaViewModel : BaseViewModel
         if (FormaPagamento != PaymentMethod.Dinheiro && ValorDigitado > FaltaPagar)
         {
             MessageBox.Show($"Pagamentos no {FormaPagamento} não podem gerar troco.\nO valor será ajustado automaticamente.",
-                "Vila Verde - Aviso");
+                "ConstruTTor - Aviso");
             ValorDigitado = Math.Round(FaltaPagar, 2);
         }
 
@@ -668,7 +668,7 @@ public class FinalizarVendaViewModel : BaseViewModel
                     "🟠 Sem conexão — venda registrada nesse computador e será " +
                     "sincronizada automaticamente quando a internet voltar.\n\n" +
                     "Deseja imprimir o recibo mesmo assim?",
-                    "Vila Verde - Modo Offline",
+                    "ConstruTTor - Modo Offline",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Warning);
 
@@ -678,7 +678,7 @@ public class FinalizarVendaViewModel : BaseViewModel
             else if (tipoEmissao == "NORMAL")
             {
                 var resposta = MessageBox.Show("✅ Venda finalizada com sucesso!\n\nDeseja imprimir o recibo da venda?", 
-                                               "Vila Verde - Impressão", 
+                                               "ConstruTTor - Impressão", 
                                                MessageBoxButton.YesNo, 
                                                MessageBoxImage.Question);
                 
