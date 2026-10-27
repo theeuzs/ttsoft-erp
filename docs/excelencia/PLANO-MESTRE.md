@@ -1,7 +1,7 @@
 # Plano Mestre — Programa de Excelência TTSoft
 
 > Produto: ConstruTTor ERP
-> Criado em: 2026-10-22 · Versão: 1.17 · Fase atual: **EXC-A1 em execução; primeiras passadas da EXC-A2, da EXC-A6 e da EXC-A7 concluídas**
+> Criado em: 2026-10-22 · Versão: 1.18 · Fase atual: **EXC-A1 em execução; primeiras passadas da EXC-A2, da EXC-A5, da EXC-A6 e da EXC-A7 concluídas**
 > Documentos relacionados: [CRITERIOS-DE-EXCELENCIA](CRITERIOS-DE-EXCELENCIA.md) · [INVENTARIO-AUDITORIAS](INVENTARIO-AUDITORIAS.md) · [REGISTRO-CENTRAL](REGISTRO-CENTRAL.md)
 
 ---
@@ -167,6 +167,24 @@ Saídas:                 registros EXC-… criados/atualizados
   "A classificar" (EXC-SEG-002, 011, 012, 015, 017, 020); segunda passada com as validações
   pendentes e o WPF.
 
+#### EXC-A5 — Infraestrutura, implantação e operações
+- **Status:** **Primeira passada concluída em 2026-10-26**, antecipada a pedido do responsável,
+  por leitura de código e configuração, documentação pública da Microsoft e API pública de preços
+  da Azure, **sem acesso ao Portal do Azure nem às configurações do GitHub**:
+  [EXC-A5-INFRAESTRUTURA-OPERACOES](EXC-A5-INFRAESTRUTURA-OPERACOES.md), commit `297e3a7`.
+- **Escopo:** inventário dos recursos, dependências por fluxo crítico e pontos únicos de falha,
+  conexões e *retry*, limites do Azure SQL, backups e restauração, monitoramento e alertas, deploy
+  e rollback, contingência, plano de recuperação, testes de recuperação, capacidade e custos.
+- **Fora do escopo:** contingência fiscal em detalhe (A4), isolamento e login restrito (A1),
+  segurança de aplicação (A2).
+- **Evidências necessárias para encerrar:** verificações V1 a V11 no portal e no GitHub; consultas
+  C-A5-1 a C-A5-3 (somente leitura); teste T1 de restauração.
+- **Critérios de aprovação:** OPS-1 a OPS-5 (situação na seção 11 do relatório: nenhum atendido).
+- **Saídas:** EXC-OPS-009 a 014 e EXC-SEG-025; EXC-OPS-002, 003, 006 e 007 atualizados.
+- **Encerramento:** verificações e consultas registradas; T1 executado; triagem de EXC-SEG-025,
+  EXC-OPS-009 e dos itens "A classificar" (EXC-OPS-012, 014); objetivos de recuperação (§7.1 do
+  relatório) aprovados; procedimento de publicação e rollback escrito.
+
 #### EXC-A6 — Arquitetura e engenharia
 - **Status:** **Primeira passada concluída em 2026-10-26**, antecipada a pedido do responsável
   (antes do fim de A1–A3): [EXC-A6-ARQUITETURA-ENGENHARIA](EXC-A6-ARQUITETURA-ENGENHARIA.md),
@@ -197,7 +215,7 @@ Saídas:                 registros EXC-… criados/atualizados
 - **Encerramento:** consulta de uso executada; observação registrada; decisão sobre o papel de
   cada aplicativo (EXC-PRD-009) e triagem dos registros novos.
 
-As fichas de EXC-A3 a EXC-A5 e EXC-A8 a EXC-A10 serão preenchidas antes de cada auditoria e
+As fichas de EXC-A3, EXC-A4 e EXC-A8 a EXC-A10 serão preenchidas antes de cada auditoria e
 aprovadas pelo responsável.
 
 ---
@@ -298,6 +316,8 @@ Avaliar a auditoria do servidor (EXC-SEG-008) em paralelo, como controle compens
 
 ## 9. Próximas ações
 
+0. **EXC-SEG-025 (2026-10-26): tornar o repositório do GitHub privado antes de qualquer push.**
+   A `main` local tem 13 commits não enviados com relatórios de segurança; o repositório é público.
 1. Executar as ações imediatas da triagem 1 (§6.5), que não envolvem código: tenant de teste,
    contador (notas de teste e venda presa) e teste de restauração.
 2. Revisar e aprovar a ficha da EXC-A1 e começar pelo desenho do login restrito.
@@ -327,3 +347,4 @@ Avaliar a auditoria do servidor (EXC-SEG-008) em paralelo, como controle compens
 | 2026-10-26 | 1.15 | Primeira passada da EXC-A6 (arquitetura e engenharia), antecipada: diagnóstico, fluxos rastreados, dívida priorizada, plano em 5 ondas; registros EXC-ENG-005 a 013 e EXC-SEG-010 (três Altos: estorno de caixa duplicado, edição parcial pelo Portal, *seeder* que promove a Administrador) |
 | 2026-10-26 | 1.16 | Primeira passada da EXC-A7 (inventário funcional), antecipada: matriz por módulo com implementação, teste e operação separados, jornadas, lacunas para lojas independentes e roadmap R0 a R3; registros EXC-PRD-002 a 011, EXC-FIS-014 e EXC-OPS-008 |
 | 2026-10-26 | 1.17 | Primeira passada da EXC-A2 (segurança de aplicação e qualidade), antecipada, por leitura de código e varredura de dependências, sem testes de reprodução: matriz de riscos, plano de mitigação em 4 ondas; registros EXC-SEG-011 a 024 (três Altos: tokens auxiliares fora da revogação, XSS nos relatórios do Portal, chave fixa do `TokenProtector`; EXC-SEG-011 a classificar pela consulta C-A2-1) e EXC-SEG-002 reclassificado para Alta |
+| 2026-10-26 | 1.18 | Primeira passada da EXC-A5 (infraestrutura e operações), antecipada, sem acesso ao Portal do Azure: inventário, dependências e pontos únicos de falha, plano de recuperação, testes T1 a T7, consultas de capacidade e projeção de custos com preços de tabela; registros EXC-OPS-009 a 014 e EXC-SEG-025 (repositório público, Alta; login bloqueado pela API de licenças, Alta) |

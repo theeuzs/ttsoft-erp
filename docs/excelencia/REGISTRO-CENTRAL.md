@@ -1,7 +1,7 @@
 # Registro Central de Descobertas
 
 > Programa de Excelência TTSoft
-> Criado em: 2026-10-22 · Última atualização: 2026-10-26 (v1.7) · Base: commit `ec6d177` (EXC-A6: `8801d9c`; EXC-A7: `47a4b0a`; EXC-A2: `1de867b`)
+> Criado em: 2026-10-22 · Última atualização: 2026-10-26 (v1.8) · Base: commit `ec6d177` (EXC-A6: `8801d9c`; EXC-A7: `47a4b0a`; EXC-A2: `1de867b`; EXC-A5: `297e3a7`)
 > Classificação conforme [CRITERIOS-DE-EXCELENCIA](CRITERIOS-DE-EXCELENCIA.md) · Plano: [PLANO-MESTRE](PLANO-MESTRE.md) · Origem dos itens: [INVENTARIO-AUDITORIAS](INVENTARIO-AUDITORIAS.md)
 
 ---
@@ -71,6 +71,7 @@
 | EXC-SEG-022 | SEG | Configuração sem guarda contra *placeholders*; Swagger público se o ambiente for `Staging`; CORS de produção com origens locais | Fato + Lacuna | Baixa | Média | Confirmado | Matheus |
 | EXC-SEG-023 | SEG | OAuth do Mercado Livre usa o Id do canal como `state`, fixo e reutilizável | Fato | Baixa | Alta | Confirmado | A definir |
 | EXC-SEG-024 | SEG | Tokens em *query string* possivelmente gravados pela telemetria; e-mail completo em log | Hipótese | Baixa | Baixa | Hipótese | A definir |
+| EXC-SEG-025 | SEG | Repositório do produto público no GitHub desde 2026-04-10, com o código (chave do `TokenProtector`, *hash* do administrador padrão) e os documentos do programa até `0139cd7` | Fato | **Alta** | Alta | Confirmado | Matheus |
 | EXC-ENG-001 | ENG | Testes não comprovam comportamento no SQL Server (SQL bruto e `IgnoreQueryFilters`) | Fato | Média | Alta | Confirmado | A definir |
 | EXC-ENG-002 | ENG | README desatualizado em relação à arquitetura atual | Fato | Baixa | Alta | Confirmado | A definir |
 | EXC-ENG-003 | ENG | 155 avisos de compilação | Fato | Baixa | Alta | Confirmado (classificados na EXC-A6) | A definir |
@@ -92,6 +93,12 @@
 | EXC-OPS-006 | OPS | Rate limit e cache em memória impedem escalar a API para mais de uma instância | Fato | Baixa | Média | Confirmado | A definir |
 | EXC-OPS-007 | OPS | Produção usa o banco `ERPTTSoftStaging`, que também recebe testes, num servidor compartilhado com o OutfiTT | Fato | Média | Média | Confirmado | Matheus |
 | EXC-OPS-008 | OPS | Backup local noturno do WPF usa `BACKUP DATABASE ... TO DISK`, que o Azure SQL Database não aceita; roda em modo silencioso | Fato + Hipótese | Baixa | Alta (código) | Confirmado | A definir |
+| EXC-OPS-009 | OPS | WPF bloqueia o login quando a API de licenças responde com erro HTTP; o cache offline só vale para falha de rede | Fato | **Alta** | Alta (código) | Confirmado | A definir |
+| EXC-OPS-010 | OPS | Nenhum alerta configurado; telemetria possivelmente desligada pelo *placeholder* do `appsettings.json` | Fato + Hipótese | Média | Média | Confirmado | Matheus |
+| EXC-OPS-011 | OPS | Sem procedimento de rollback; migrations aplicadas à mão do PC do desenvolvedor; pacote da API não guardado; artefato do WPF expira em 30 dias | Fato | Média | Alta | Confirmado | A definir |
+| EXC-OPS-012 | OPS | Limites do Azure SQL Basic (2 GB, 5 DTU, 30 *workers*) sem medição de uso; banco cheio desvia as vendas para a fila offline sem aviso | Fato + Lacuna | A classificar | Alta (limites) | Lacuna | Matheus |
+| EXC-OPS-013 | OPS | Proteção dos dados limitada a ≤ 7 dias de PITR no mesmo servidor lógico; sem LTR conhecida, cópia externa nem trava contra exclusão | Fato + Lacuna | Média | Média | Confirmado | Matheus |
+| EXC-OPS-014 | OPS | Serviços fiscais em segundo plano só rodam com a API carregada; *Always On* não verificado | Fato + Lacuna | A classificar | Alta (código) | Lacuna | Matheus |
 | EXC-FIS-001 | FIS | Estado da recuperação fiscal (interruptor por tenant) em produção desconhecido | Lacuna | A classificar | Alta | **Encerrado** (nenhum tenant habilitado; consequência em EXC-FIS-007) | Matheus |
 | EXC-FIS-002 | FIS | Não existem termos de uso, política de privacidade nem contrato com os clientes | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-FIS-003 | FIS | Serviços locais de emissão fiscal seguem registrados no WPF junto ao serviço via API | Hipótese | A classificar | Baixa | Hipótese | A definir |
@@ -134,7 +141,8 @@
 | EXC-MKT-003 | MKT | Relatórios anteriores recomendam afirmações de divulgação que o estado atual não sustenta | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-MKT-004 | MKT | Nenhum canal de aquisição ou funil medido | Lacuna | A classificar | — | Lacuna | Matheus |
 
-**Contagem:** 86 registros (83 abertos, um deles em risco aceito; 3 encerrados) — abertos: 3 Crítica, 11 Alta, 35 Média, 20 Baixa, 14 A classificar.
+**Contagem:** 93 registros (90 abertos, um deles em risco aceito; 3 encerrados) — abertos: 3 Crítica, 13 Alta, 38 Média, 20 Baixa, 16 A classificar.
+Em 2026-10-26 (EXC-A5, primeira passada): acrescentados EXC-OPS-009 a 014 e EXC-SEG-025 pela [avaliação de infraestrutura e operações](EXC-A5-INFRAESTRUTURA-OPERACOES.md); EXC-OPS-002, 003, 006 e 007 atualizados.
 Em 2026-10-26 (EXC-A2, primeira passada): acrescentados EXC-SEG-011 a 024 pela [avaliação de segurança e qualidade](EXC-A2-SEGURANCA-QUALIDADE.md); EXC-SEG-002 reclassificado de A classificar para Alta após a varredura completa de dependências.
 Em 2026-10-26 (EXC-A7, primeira passada): acrescentados EXC-PRD-002 a 011, EXC-FIS-014 e EXC-OPS-008 pelo [inventário funcional](EXC-A7-INVENTARIO-FUNCIONAL.md).
 Em 2026-10-26 (EXC-A6): acrescentados EXC-ENG-005 a 013 e EXC-SEG-010 pela [avaliação de arquitetura e engenharia](EXC-A6-ARQUITETURA-ENGENHARIA.md); EXC-ENG-001, 003 e 004 atualizados.
@@ -632,6 +640,26 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Relacionados | EXC-SEG-012 |
 | Datas | Registrado em 2026-10-26 |
 
+### EXC-SEG-025 — Repositório do produto público no GitHub
+
+| Campo | Valor |
+|---|---|
+| Área | SEG (também OPS) |
+| Natureza | Fato |
+| Descrição | O repositório `theeuzs/ttsoft-erp` é público desde 2026-04-10. Estão publicados o código inteiro, incluindo a chave fixa do `TokenProtector` (EXC-SEG-017), o *hash* bcrypt do administrador criado pelo *seeder* (EXC-SEG-010), as URLs da API e da API de licenças e o histórico com os segredos removidos em junho (EXC-SEG-003). Também estão publicados os documentos do programa até `0139cd7`: nome do servidor SQL, login `sa_ttsoft` usado nas lojas e forma de guardar a conexão nos PCs. A `main` local está 13 commits à frente; o próximo push publicaria a matriz de vulnerabilidades da EXC-A2, com arquivo:linha, e a triagem do firewall aberto (EXC-SEG-009). |
+| Evidência | `GET https://api.github.com/repos/theeuzs/ttsoft-erp` (2026-10-26): `visibility: public`, `created_at: 2026-04-10`, 0 *forks*; `git log origin/main..main` = 13 commits; `git ls-tree origin/main docs/excelencia` (2026-10-26). [EXC-A5 §6](EXC-A5-INFRAESTRUTURA-OPERACOES.md) |
+| Gravidade | **Alta** — segredo ativo exposto (a chave do `TokenProtector` protege tokens da Focus em uso). **Sobe para Crítica** se a consulta C4 da EXC-A6 encontrar tenant com o administrador do *seeder* e a senha padrão (entrada pela API sem credencial). |
+| Impacto | Facilita explorar EXC-SEG-010 (CNPJ público → TenantId; *hash* padrão no código), EXC-SEG-017 (quem ler o banco decifra os tokens da Focus) e EXC-SEG-001/009 (servidor aberto e login conhecidos; a senha é a única barreira). Tornar privado não desfaz cópias já feitas. |
+| Confiança | Alta |
+| Dependências | Decisão do responsável (configuração do GitHub) |
+| Responsável | Matheus |
+| Ação proposta | (1) Tornar o repositório privado; (2) não fazer push antes disso; (3) tratar como exposta a chave do `TokenProtector` e o *hash* padrão (trocar na correção do EXC-SEG-017 e do EXC-SEG-010; avaliar trocar os tokens da Focus); (4) varredura de segredos no histórico inteiro (por exemplo, `gitleaks`), com o resultado anexado aqui. |
+| Status | Confirmado |
+| Critério de validação | API do GitHub devolve `private: true` (ou 404 sem autenticação); varredura do histórico registrada; chaves expostas trocadas ou risco aceito. |
+| Origem | EXC-A5 (2026-10-26) |
+| Relacionados | EXC-SEG-001, EXC-SEG-003, EXC-SEG-009, EXC-SEG-010, EXC-SEG-017 |
+| Datas | Registrado em 2026-10-26 |
+
 ---
 
 ## Detalhe — Engenharia (ENG)
@@ -941,7 +969,8 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Critério de validação | CRITERIOS OPS-1 atendido ou risco aceito. |
 | Origem | EXC-F0; DOC-31, DOC-34 |
 | Relacionados | PLANO-MESTRE §6.3 |
-| Datas | Registrado em 2026-10-22 |
+| Atualização (2026-10-26, EXC-A5) | O workflow não tem `workflow_dispatch` e não guarda o pacote da API; rollback tratado em EXC-OPS-011. Se o slot `staging` existir, o plano é Standard ou superior (verificação V1). A gravidade segue dependendo da V11 (proteção de branch). |
+| Datas | Registrado em 2026-10-22 |; atualizado em 2026-10-26 (EXC-A5)
 
 ### EXC-OPS-003 — Restauração do banco de produção nunca testada
 
@@ -961,7 +990,8 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Critério de validação | CRITERIOS OPS-2. |
 | Origem | EXC-F0; DOC-31 |
 | Relacionados | — |
-| Datas | Registrado em 2026-10-22 |
+| Atualização (2026-10-26, EXC-A5) | Documentação Microsoft: no Basic, retenção de 1 a 7 dias; a restauração cria banco novo no mesmo servidor. Procedimento e critérios no teste T1 da EXC-A5. **Cuidado:** a cópia restaurada contém tokens da Focus e notas pendentes; nenhuma API ou WPF pode apontar para ela (o serviço de contingência reenviaria notas reais). Proteção além da retenção: EXC-OPS-013. |
+| Datas | Registrado em 2026-10-22 |; atualizado em 2026-10-26 (EXC-A5)
 
 ### EXC-OPS-004 — Versão do produto sem fonte única; versões e bancos em campo desconhecidos
 
@@ -1022,7 +1052,8 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Critério de validação | Restrição documentada; solução antes de habilitar escala horizontal. |
 | Origem | DOC-31 |
 | Relacionados | — |
-| Datas | Registrado em 2026-10-22 |
+| Atualização (2026-10-26, EXC-A5) | Além do cache e dos limitadores, os serviços em segundo plano (contingência, reconciliação, limpeza, retenção) rodariam em cada instância, com reenvio fiscal concorrente. Número de instâncias: verificação V1. |
+| Datas | Registrado em 2026-10-22 |; atualizado em 2026-10-26 (EXC-A5)
 
 ### EXC-OPS-007 — Produção usa o banco `ERPTTSoftStaging`, que também recebe testes, num servidor compartilhado com o OutfiTT
 
@@ -1042,7 +1073,8 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Critério de validação | Produção e testes em bancos distintos, com nomes que não induzam a erro; cada produto com login próprio. |
 | Origem | Confirmação 4 (2026-10-22) |
 | Relacionados | EXC-SEG-001, EXC-OPS-002 |
-| Datas | Registrado em 2026-10-22 |
+| Atualização (2026-10-26, EXC-A5) | Correção: bancos únicos no mesmo servidor lógico **não** dividem DTU (cada um tem os seus 5), salvo *elastic pool* (verificação V9). O que os produtos compartilham é o servidor: firewall, login administrador, nome DNS, região e a exclusão do servidor (EXC-OPS-013). Desempenho de um não afeta o outro; acesso, credencial e exclusão afetam os dois. |
+| Datas | Registrado em 2026-10-22 |; atualizado em 2026-10-26 (EXC-A5)
 
 ### EXC-OPS-008 — Backup local noturno incompatível com o Azure SQL Database
 
@@ -1062,6 +1094,126 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Critério de validação | Pasta e log de um PC verificados e registrados; agendamento removido ou substituído por mecanismo que funcione na Azure, com teste. |
 | Origem | EXC-A7 (primeira passada) |
 | Relacionados | EXC-OPS-003, EXC-PRD-011 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-OPS-009 — WPF bloqueia o login quando a API de licenças responde com erro HTTP
+
+| Campo | Valor |
+|---|---|
+| Área | OPS (também SEG) |
+| Natureza | Fato (código) |
+| Descrição | `LicenseManager` só aceita resposta 2xx. Qualquer outra (5xx de App Service parado ou com erro, cota de plano gratuito excedida, falha de deploy) mostra "SISTEMA NÃO AUTORIZADO" e aborta o login, **mesmo com cache válido**. O cache offline (carência de 3 dias) só é usado quando a chamada lança exceção (rede, DNS, *timeout* de 30 s). |
+| Evidência | `ERP.WPF/Security/LicenseManager.cs:15`, `:32`, `:59-80`, `:83-89`; `ERP.WPF/ViewModels/LoginViewModel.cs:110-127` (2026-10-26, `297e3a7`) |
+| Gravidade | **Alta** — falha em fluxo crítico (login) sem contorno para o operador. PCs já logados continuam funcionando; na abertura da loja ou na troca de turno, a operação para. |
+| Impacto | Todos os PCs de todas as lojas sem acesso até o serviço voltar; o código do serviço está só no PC do responsável (EXC-OPS-005). |
+| Confiança | Alta (código); comportamento real a confirmar no teste T4 |
+| Dependências | — |
+| Responsável | A definir |
+| Ação proposta | Tratar 5xx, 408 e 429 como indisponibilidade (usar o cache); bloquear só com resposta explícita de licença inválida. Teste T4 da EXC-A5 antes e depois. |
+| Status | Confirmado |
+| Critério de validação | T4: com cache válido, 503 do serviço → login permitido; resposta de licença inválida → bloqueio. Teste automatizado do classificador de resposta. |
+| Origem | EXC-A5 (2026-10-26) |
+| Relacionados | EXC-OPS-005 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-OPS-010 — Nenhum alerta configurado; telemetria possivelmente inativa
+
+| Campo | Valor |
+|---|---|
+| Área | OPS |
+| Natureza | Fato (sem alertas no repositório) + Hipótese (telemetria) |
+| Descrição | Não há regra de alerta, *action group*, teste de disponibilidade nem IaC no repositório. Os "alertas" do código são linhas de log (`BruteForceAlertMiddleware`, avisos dos serviços fiscais). **Hipótese:** `appsettings.json` traz uma *connection string* do Application Insights com chave zerada, atribuída explicitamente em `Program.cs`. Se o App Service definir só `APPLICATIONINSIGHTS_CONNECTION_STRING` (a variável da integração do portal) e não `ApplicationInsights__ConnectionString`, a telemetria vai para uma chave inexistente, sem erro visível. |
+| Evidência | `ERP.Api/appsettings.json:93`; `ERP.Api/Program.cs:303-306`; `ERP.Api/Middleware/BruteForceAlertMiddleware.cs:65`; `ERP.Api/BackgroundServices/NfeContingencyHostedService.cs:40`. Indício: a NFC-e presa desde 16/10 (EXC-FIS-009) só foi vista pelas consultas de 22/10. |
+| Gravidade | Média — ausência de controle importante (CRITERIOS OPS-3). |
+| Impacto | Falhas da API, da API de licenças, do banco e da emissão fiscal só são percebidas quando a loja reclama. |
+| Confiança | Alta (ausência no repositório); Média (telemetria) |
+| Dependências | Verificações V5, V6 e V8 da EXC-A5 |
+| Responsável | Matheus |
+| Ação proposta | Alertas mínimos da EXC-A5 §7.3 com notificação no celular; confirmar a chegada da telemetria; versão real no `/health`. |
+| Status | Confirmado |
+| Critério de validação | Teste T7: falha provocada gera notificação em ≤ 10 min; telemetria visível no portal (CRITERIOS OPS-3). |
+| Origem | EXC-A5 (2026-10-26) |
+| Relacionados | EXC-FIS-009, EXC-OPS-014, EXC-SEG-024 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-OPS-011 — Sem procedimento de rollback; migrations aplicadas à mão
+
+| Campo | Valor |
+|---|---|
+| Área | OPS (também DAD) |
+| Natureza | Fato |
+| Descrição | O CI dispara só em push e PR (sem `workflow_dispatch`); o pacote da API é publicado sem ser guardado; o artefato do WPF expira em 30 dias. As migrations rodam por `dotnet ef` no PC do desenvolvedor, fora do pipeline e sem ordem definida em relação ao deploy da API. Desfazer um deploy exige `revert` + push; desfazer uma migration, restauração ou script manual. |
+| Evidência | `.github/workflows/ci-cd.yml:3-8`, `:105-109`, `:131-158`; `docs/excelencia/EXC-A1-DESENHO-LOGIN-RESTRITO.md:43`; `README.md:29-30` (2026-10-26) |
+| Gravidade | Média — falha com contorno (`revert`), mas lento e não ensaiado; migration destrutiva sem caminho de volta além da restauração. |
+| Impacto | Janela de incompatibilidade entre API, esquema e WPF dos PCs (ligados direto ao banco); reinstalar um PC depois de 30 dias sem push exige recompilar. |
+| Confiança | Alta |
+| Dependências | Ambiente separado (EXC-OPS-007) para ensaiar |
+| Responsável | A definir |
+| Ação proposta | Procedimento escrito (EXC-A5 §7.2, R5 e R6); guardar o pacote da API como artefato; `workflow_dispatch` com SHA; script idempotente de migration revisado antes de aplicar; ensaio T6. |
+| Status | Confirmado |
+| Critério de validação | Procedimento aplicado num ensaio, com tempo medido (CRITERIOS OPS-4). |
+| Origem | EXC-A5 (2026-10-26) |
+| Relacionados | EXC-OPS-001, EXC-OPS-002 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-OPS-012 — Limites do Azure SQL Basic sem medição de uso
+
+| Campo | Valor |
+|---|---|
+| Área | OPS (também ENG) |
+| Natureza | Fato (limites documentados e código) + Lacuna (uso) |
+| Descrição | O banco de produção está no plano Basic: 5 DTU, **2 GB de tamanho máximo**, 30 *workers*, 30 logins simultâneos, 300 sessões, armazenamento em HDD (documentação Microsoft, 2026-10-26). O uso atual não foi medido. Com o banco cheio, as gravações falham; o classificador do PDV trata `SqlException` e erro HTTP como falta de conexão, então a venda vai para a fila offline sem aviso, e a fila falha a cada minuto. |
+| Evidência | [Limites DTU](https://learn.microsoft.com/azure/azure-sql/database/resource-limits-dtu-single-databases); `ERP.Application/Services/ConnectivityExceptionClassifier.cs:70`, `:77`; `ERP.Api/appsettings.json:59` (auditoria retida por 180 dias) |
+| Gravidade | **A classificar** — Crítica se o banco estiver acima de ~80% de 2 GB ou a caminho disso em poucos meses; Média entre 50% e 80%; Baixa abaixo. |
+| Impacto | Loja vende "offline" sem NFC-e nem financeiro até alguém perceber; restauração pode exigir mais recursos que o Basic. |
+| Confiança | Alta (limites e código); — (uso) |
+| Dependências | Consultas C-A5-1 e C-A5-2 |
+| Responsável | Matheus |
+| Ação proposta | Rodar C-A5-1 e C-A5-2; repetir C-A5-1 mensalmente; alerta de armazenamento > 70%. |
+| Status | Lacuna |
+| Critério de validação | Tamanho e pico de DTU registrados; gravidade definida. |
+| Origem | EXC-A5 (2026-10-26) |
+| Relacionados | EXC-OPS-013, EXC-OPS-010 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-OPS-013 — Retenção curta e nenhuma cópia fora do servidor lógico
+
+| Campo | Valor |
+|---|---|
+| Área | OPS (também DAD) |
+| Natureza | Fato (documentação) + Lacuna (configuração) |
+| Descrição | No Basic, a restauração a um ponto no tempo é configurável de 1 a 7 dias e sempre cria banco novo no mesmo servidor. Excluir o servidor lógico exclui todos os bancos sem recuperação, salvo LTR, que não vem ligada. O *geo-restore* só existe com redundância geográfica do backup. Não há BACPAC nem outra cópia fora do servidor; o backup local do WPF não funciona (EXC-OPS-008). O servidor hospeda os dois produtos. |
+| Evidência | [Backups automáticos](https://learn.microsoft.com/azure/azure-sql/database/automated-backups-overview) (2026-10-26); EXC-OPS-007, EXC-OPS-008 |
+| Gravidade | Média — ausência de controle importante; perda total depende de exclusão do servidor ou de erro descoberto após 7 dias. |
+| Impacto | Dado corrompido percebido após 7 dias (EXC-ENG-005, EXC-ENG-006) sem ponto de restauração; exclusão do servidor perde ConstruTTor e OutfiTT. |
+| Confiança | Alta (documentação); Baixa (configuração real) |
+| Dependências | Verificações V7 e V8 |
+| Responsável | Matheus |
+| Ação proposta | Ver retenção, redundância e LTR; LTR mensal ou BACPAC mensal fora do servidor (teste T3); trava `CanNotDelete` no servidor; avaliar S0 (PITR até 35 dias). |
+| Status | Confirmado |
+| Critério de validação | Cópia fora do servidor restaurada com sucesso (T3); trava ativa; retenção decidida e registrada. |
+| Origem | EXC-A5 (2026-10-26) |
+| Relacionados | EXC-OPS-003, EXC-OPS-007, EXC-OPS-008, EXC-PRD-011 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-OPS-014 — Serviços fiscais em segundo plano dependem de a API estar carregada
+
+| Campo | Valor |
+|---|---|
+| Área | OPS (também FIS) |
+| Natureza | Fato (código) + Lacuna (*Always On*) |
+| Descrição | Contingência (2 min), reconciliação (1 min), limpeza de cadastros (6 h) e retenção de auditoria rodam como `HostedService` dentro do processo da API; não há outro executor. Sem *Always On*, o App Service descarrega a aplicação após um período sem requisições e os ciclos param até a próxima chamada. |
+| Evidência | `ERP.Api/Program.cs:212-214`, `:272-273`; `ERP.Api/BackgroundServices/NfeContingencyHostedService.cs:35`; `NfeStatusReconciliationHostedService.cs:43` (2026-10-26) |
+| Gravidade | **A classificar** — Média se *Always On* estiver desligado ou indisponível no plano (nota em contingência no fim do dia só é reenviada na abertura seguinte); Informativa se ligado. |
+| Impacto | Atraso de reenvio e de reconciliação fiscal fora do horário de uso. |
+| Confiança | Alta (código) |
+| Dependências | Verificações V1 e V2 |
+| Responsável | Matheus |
+| Ação proposta | Confirmar plano e *Always On*; se indisponível, decidir entre subir de plano (EXC-A5 §10, cenário D) e aceitar o risco. |
+| Status | Lacuna |
+| Critério de validação | Configuração registrada; gravidade definida. |
+| Origem | EXC-A5 (2026-10-26) |
+| Relacionados | EXC-FIS-007, EXC-FIS-009, EXC-OPS-006 |
 | Datas | Registrado em 2026-10-26 |
 
 ---
