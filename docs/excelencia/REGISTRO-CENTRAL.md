@@ -1,7 +1,7 @@
 # Registro Central de Descobertas
 
 > Programa de Excelência TTSoft
-> Criado em: 2026-10-22 · Última atualização: 2026-10-26 (v1.3) · Base: commit `ec6d177`
+> Criado em: 2026-10-22 · Última atualização: 2026-10-26 (v1.4) · Base: commit `ec6d177`
 > Classificação conforme [CRITERIOS-DE-EXCELENCIA](CRITERIOS-DE-EXCELENCIA.md) · Plano: [PLANO-MESTRE](PLANO-MESTRE.md) · Origem dos itens: [INVENTARIO-AUDITORIAS](INVENTARIO-AUDITORIAS.md)
 
 ---
@@ -90,13 +90,16 @@
 | EXC-ADM-004 | ADM | Dados administrativos e tributários da TTSoft ausentes (forma jurídica, regime, cobrança, custos fixos) | Lacuna | A classificar | — | Lacuna | Matheus |
 | EXC-ADM-005 | ADM | Asaas usa uma única chave da aplicação; uso em produção desconhecido | Hipótese | A classificar | Baixa | Hipótese | Matheus |
 | EXC-VEN-001 | VEN | Preços e planos sem validação com clientes | Lacuna | A classificar | — | Lacuna | Matheus |
+| EXC-VEN-002 | VEN | Cadastro público "Criar conta gratuita" cria loja no banco de produção sem plano, prazo, termos nem contrato | Fato | Média | Alta (código) | Confirmado | Matheus |
+| EXC-VEN-003 | VEN | Implantação de loja nova depende de passos técnicos manuais e não documentados | Fato | Média | Alta | Confirmado | Matheus |
+| EXC-VEN-004 | VEN | Não existe processo comercial documentado nem registro de propostas | Lacuna | A classificar | — | Lacuna | Matheus |
 | EXC-MKT-001 | MKT | Público-alvo e proposta de valor sem validação com clientes | Lacuna | A classificar | — | Lacuna | Matheus |
 | EXC-MKT-002 | MKT | Nome da loja piloto fixo na interface do WPF | Fato | Baixa | Alta | **Em validação** (corrigido no código; falta publicar) | Matheus |
 | EXC-MKT-003 | MKT | Relatórios anteriores recomendam afirmações de divulgação que o estado atual não sustenta | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-MKT-004 | MKT | Nenhum canal de aquisição ou funil medido | Lacuna | A classificar | — | Lacuna | Matheus |
 
-**Contagem:** 47 registros (44 abertos, um deles em risco aceito; 3 encerrados) — abertos: 3 Crítica, 4 Alta, 17 Média, 10 Baixa, 10 A classificar.
-Em 2026-10-26: acrescentados EXC-ADM-003 a 005 pela [avaliação administrativa e financeira](EXC-A10-ADMINISTRATIVO-FINANCEIRO.md), e EXC-MKT-001 a 004 e EXC-FIS-012 pela [avaliação de marketing](EXC-A10-MARKETING.md); EXC-FIS-013 encontrado na correção do EXC-MKT-002, que passou a *Em validação*.
+**Contagem:** 50 registros (47 abertos, um deles em risco aceito; 3 encerrados) — abertos: 3 Crítica, 4 Alta, 19 Média, 10 Baixa, 11 A classificar.
+Em 2026-10-26: acrescentados EXC-ADM-003 a 005 pela [avaliação administrativa e financeira](EXC-A10-ADMINISTRATIVO-FINANCEIRO.md), EXC-MKT-001 a 004 e EXC-FIS-012 pela [avaliação de marketing](EXC-A10-MARKETING.md), e EXC-VEN-002 a 004 pela [avaliação de vendas](EXC-A10-VENDAS.md); EXC-FIS-013 encontrado na correção do EXC-MKT-002, que passou a *Em validação*.
 Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.md)
 (passos 1.1, 1.2, 2, 4 e E1 a E9). Prioridade imediata: EXC-FIS-008, EXC-SEG-001 e EXC-FIS-009.
 
@@ -936,8 +939,8 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Status | Lacuna |
 | Critério de validação | CRITERIOS VEN-2. |
 | Origem | DOC-32, DOC-34; confirmação 11 |
-| Relacionados | EXC-ADM-001 |
-| Datas | Registrado em 2026-10-22; atualizado em 2026-10-22 (confirmação 11) |
+| Relacionados | EXC-ADM-001, EXC-ADM-003, EXC-VEN-004; estrutura de plano recomendada (plano único com franquia e excedente de notas, PC adicional e implantação) em [EXC-A10-VENDAS](EXC-A10-VENDAS.md) §9.2, como hipótese a testar no experimento X5 |
+| Datas | Registrado em 2026-10-22; atualizado em 2026-10-22 (confirmação 11) e em 2026-10-26 (avaliação de vendas) |
 
 ### EXC-ADM-003 — Margem por cliente depende do volume de notas fiscais, que não está medido
 
@@ -997,6 +1000,66 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Critério de validação | Configuração de produção registrada; e, se houver uso, decisão documentada sobre quem é o recebedor. |
 | Origem | EXC-A10 (parte ADM) |
 | Relacionados | EXC-ADM-004, EXC-FIS-002 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-VEN-002 — Cadastro público "Criar conta gratuita" cria loja no banco de produção sem plano, prazo, termos nem contrato
+
+| Campo | Valor |
+|---|---|
+| Área | VEN (também FIS, SEG) |
+| Natureza | Fato (código); presença em produção não verificada |
+| Descrição | A tela de login do Portal oferece "Criar conta gratuita". O cadastro cria tenant, cargos, permissões e usuário `admin` no banco compartilhado, para qualquer CNPJ ativo na Receita. Não há plano, prazo de teste, limite de uso, aceite de termos nem contrato; o e-mail de boas-vindas não indica próximo passo comercial. As proteções contra uso do CNPJ de outra empresa são boas (confirmação pelo e-mail da Receita quando o e-mail diverge, 3 tentativas por hora por IP, resposta igual para CNPJ novo e existente). O PDV continua exigindo licença da API externa, então a conta gratuita dá acesso ao Portal, não ao caixa. Em 2026-10-22 não havia indício de cadastros espontâneos (1 loja real e 4 tenants de teste). |
+| Evidência | `ERP.Portal/Pages/Login.razor:43-48`; `ERP.Api/Controllers/CadastroController.cs:29-80`; `ERP.Infrastructure/Services/CadastroService.cs:39-211`; confirmação 4 (2026-10-22) |
+| Gravidade | Média (promessa comercial sem regra; dados de terceiros entram no banco de produção sem termos nem política de privacidade, EXC-FIS-002; suporte não planejado para uma pessoa) |
+| Impacto | Quem se cadastra espera um teste gratuito sem condições conhecidas; a TTSoft passa a tratar dados de uma empresa sem contrato; contas sem dono se acumulam no banco compartilhado. |
+| Confiança | Alta (código). Não verificado se a página está publicada em `app.ttsofts.com.br/cadastro` nem se houve cadastros depois de 2026-10-22 |
+| Dependências | Decisão sobre o período de teste ([EXC-A10-VENDAS](EXC-A10-VENDAS.md) §10.2) |
+| Responsável | Matheus |
+| Ação proposta | Decidir entre retirar o link, trocá-lo por "Fale conosco" ou manter com regras (prazo, aceite de termos, aviso ao responsável). Enquanto existir, ligar para cada cadastro em até 2 dias úteis. Consultar se há tenants criados pelo cadastro depois de 2026-10-22. |
+| Status | Confirmado |
+| Critério de validação | Decisão registrada; se mantido, termos aceitos no cadastro e prazo do teste aplicado; consulta de tenants criados pelo cadastro registrada. |
+| Origem | EXC-A10 (parte VEN) |
+| Relacionados | EXC-FIS-002, EXC-OPS-007, EXC-VEN-003, EXC-MKT-002 (marca "TTSoft ERP" no cadastro e no e-mail) |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-VEN-003 — Implantação de loja nova depende de passos técnicos manuais e não documentados
+
+| Campo | Valor |
+|---|---|
+| Área | VEN (também OPS, SUP) |
+| Natureza | Fato |
+| Descrição | Implantar uma loja exige passos que só o responsável sabe fazer e que não estão escritos: cadastrar a licença na API de licenças (código só no PC dele), configurar o fiscal do tenant, editar o `licenca.json` com o CNPJ em cada PC, digitar servidor, banco, usuário e senha do SQL na tela de primeiro uso, configurar o `config_recibo.json`. O único roteiro versionado é o checklist de deploy, desatualizado e com dados da Vila Verde. Há bom apoio para os dados: importador CSV de produtos e clientes com saldo de fiado e haver (o fiado entra como uma conta por cliente, sem os vencimentos originais; nenhum teste automatizado encontrado). Hipótese a conferir: o cadastro do Portal cria 26 permissões e o *seeder* do PDV conhece 28 (faltam `importacao.view` e `legacyimport.view`); o *seeder* parece completar ao abrir o PDV. |
+| Evidência | `ERP.WPF/ViewModels/SetupViewModel.cs:18-45,131-135`; `ERP.WPF/Services/TenantService.cs:28-40`; `ERP.WPF/Security/LicenseManager.cs:13-29`; `Scripts/CHECKLIST_DEPLOY.md` §1-2; `ERP.Infrastructure/Services/ImportacaoService.cs:41-62,347-352` (commit `1980593`); `ERP.Persistence/Context/DbSeeder.cs:249-250` |
+| Gravidade | Média (não afeta dados; bloqueia crescimento e concentra a operação em uma pessoa) |
+| Impacto | Cada implantação depende da presença e da memória do responsável; não há como medir nem delegar; CRITERIOS VEN-3 não atendido. |
+| Confiança | Alta |
+| Dependências | EXC-SEG-001 (credencial no primeiro uso), EXC-OPS-005 (API de licenças), EXC-OPS-001 (checklist), EXC-FIS-013 (emitente por loja) |
+| Responsável | Matheus |
+| Ação proposta | Escrever o roteiro de implantação genérico ([EXC-A10-VENDAS](EXC-A10-VENDAS.md) §11.2) e registrar horas por atividade na próxima implantação; os passos técnicos somem com as correções das dependências. |
+| Status | Confirmado |
+| Critério de validação | CRITERIOS VEN-3: uma implantação feita seguindo só o roteiro escrito, com os critérios de §11.3 atendidos e as horas registradas. |
+| Origem | EXC-A10 (parte VEN) |
+| Relacionados | EXC-ADM-002, EXC-SEG-001, EXC-OPS-001, EXC-OPS-005, EXC-FIS-013 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-VEN-004 — Não existe processo comercial documentado nem registro de propostas
+
+| Campo | Valor |
+|---|---|
+| Área | VEN |
+| Natureza | Lacuna |
+| Descrição | Não há etapas, critérios de passagem, roteiro de demonstração, modelo de proposta, termo de piloto, ritmo de acompanhamento nem regra de renovação. A situação da proposta à Eldorado (DOC-29) é desconhecida. A licença do PDV tem vencimento e aviso, mas a renovação não tem regra comercial (reajuste, aviso, exportação de dados no cancelamento). |
+| Evidência | Busca nos documentos do programa e no repositório (2026-10-26); [EXC-A10-VENDAS](EXC-A10-VENDAS.md) §3 |
+| Gravidade | A classificar |
+| Impacto | Sem processo e registro, não há funil, taxa de ganho nem motivo de perda para decidir preço, canal e produto. |
+| Confiança | — |
+| Dependências | EXC-FIS-002 (contrato), EXC-VEN-001 (preço) |
+| Responsável | Matheus |
+| Ação proposta | Aprovar o processo E1 a E11 ([EXC-A10-VENDAS](EXC-A10-VENDAS.md) §4) e começar a planilha de funil (§13.3) com os contatos existentes, incluindo a Eldorado. |
+| Status | Lacuna |
+| Critério de validação | CRITERIOS VEN-1: processo aprovado e pelo menos um ciclo completo (do contato à decisão) registrado com datas por etapa. |
+| Origem | EXC-A10 (parte VEN) |
+| Relacionados | EXC-VEN-001, EXC-MKT-004, EXC-FIS-002 |
 | Datas | Registrado em 2026-10-26 |
 
 ---

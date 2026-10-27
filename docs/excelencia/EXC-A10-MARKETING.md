@@ -1,7 +1,7 @@
 # EXC-A10 (parte MKT) — Posicionamento e plano de aquisição
 
 > Programa de Excelência TTSoft · Área MKT (com insumos de VEN, ADM e PRD)
-> Criado em: 2026-10-26 · Versão: 1.1 · Base de código: commit `39e811c` (main)
+> Criado em: 2026-10-26 · Versão: 1.2 · Base de código: commit `39e811c` (main)
 > Documentos relacionados: [PLANO-MESTRE](PLANO-MESTRE.md) · [CRITERIOS-DE-EXCELENCIA](CRITERIOS-DE-EXCELENCIA.md) · [REGISTRO-CENTRAL](REGISTRO-CENTRAL.md) · [EXC-A10-ADMINISTRATIVO-FINANCEIRO](EXC-A10-ADMINISTRATIVO-FINANCEIRO.md)
 
 Esta é a primeira passada sobre a área MKT. Ela **não** valida o público-alvo (isso exige
@@ -125,7 +125,7 @@ em entrevista, a dor principal e a disposição de pagar (critério MKT-1).
 | D4 | Dono não sabe se a loja dá lucro | DRE, fluxo de caixa, margem, curva ABC no WPF; BI e dashboard no Portal | Entrevista: "que número você olha toda semana?" |
 | D5 | Balconista perde tempo calculando material para o pedreiro | Calculadora de materiais pública, sem cadastro, que gera orçamento (`ERP.Portal/Pages/CalculadoraPublica.razor`, `CalculadoraController` com `gerar-orcamento`) | Entrevista + uso real da calculadora (logs) |
 | D6 | Vender no Mercado Livre sem planilha e sem vender o que não tem | Integração com pedidos, estoque reservado e mapeamento de SKU (INV-011) | Só para os ~20% com e-commerce (seção 3) |
-| D7 | Trocar de sistema dá medo de perder cadastro e fiado | Importação legada por pasta (`ILegacyImportService.ImportFromFolderAsync`); importação de XML de compra | **Não verificado** o que a importação legada aceita, nem se traz saldos de fiado: lacuna antes de prometer |
+| D7 | Trocar de sistema dá medo de perder cadastro e fiado | Importador CSV de produtos e clientes **com saldo de fiado e haver**, com prévia (`ERP.Infrastructure/Services/ImportacaoService.cs`); importação de XML de compra. A importação legada por pasta só traz histórico de vendas de um formato de texto, com todos os itens ligados ao primeiro produto | Verificado em 2026-10-26 ([EXC-A10-VENDAS](EXC-A10-VENDAS.md) §3.1): o fiado entra como um valor por cliente, **sem os vencimentos originais**; falta testar com exportações reais |
 
 Dores **não** atendidas que podem aparecer nas entrevistas e devem ser registradas, não
 prometidas: TEF, app de vendedor, SPED completo, multiempresa com contabilidade.
@@ -160,7 +160,7 @@ Uma afirmação só vai para material de divulgação quando tem **código** e *
 | "Funciona 100% offline" | Só a venda tem fila local; consultas e cadastros dependem de rede; contingência fiscal com defeitos | Teste em campo + EXC-FIS-009 corrigido |
 | "Gera o SPED" | Bloco E ausente (EXC-FIS-006); SPED do Portal com empresa fixa (EXC-FIS-012) | EXC-A4 |
 | "App para celular" | Mobile pausado (EXC-PRD-001) | — |
-| "Migração completa do sistema antigo, inclusive o fiado" | Escopo da importação legada não verificado | Verificação da importação |
+| "Migração completa do sistema antigo, inclusive o fiado" | O importador traz produtos, clientes e o saldo de fiado, mas não os vencimentos nem o histórico de cada cliente; sem teste com exportações reais | Teste com 2 ou 3 sistemas comuns. Em demonstração, pode-se dizer "produtos e clientes, com o saldo do fiado, entram por planilha" |
 | Números de resultado ("reduz perdas em X%") | Nenhuma medição existe | Medição antes/depois em um cliente |
 | Comparações nominais com concorrentes ("melhor que o Bling") | Risco jurídico e de credibilidade; os dados públicos são parciais | Não usar; comparar por necessidade ("tem fiado com limite?"), não por marca |
 
@@ -363,7 +363,7 @@ seria número inventado (PLANO-MESTRE §8).
 | 6 | Existe site, perfil de Instagram ou material da TTSoft/ConstruTTor? | Matheus | Ponto de partida de C4; MKT-2 | EXC-MKT-004 |
 | 7 | Registro de marca (INPI) de "ConstruTTor" e "TTSoft" | Busca no INPI | Risco de ter de trocar de nome depois de investir | — |
 | 8 | Situação da proposta à Eldorado (DOC-29) e de outros contatos | Matheus | Funil existente | EXC-VEN-001 |
-| 9 | O que a importação legada aceita e se traz saldos de fiado | Teste com uma pasta de exemplo | Afirmação de migração (D7) | — |
+| 9 | ~~O que a importação legada aceita e se traz saldos de fiado~~ Respondido pelo código em 2026-10-26 (D7). Falta: testar o importador CSV com a exportação de 2 ou 3 sistemas da região | Planilhas de lojistas | Afirmação de migração (D7) | EXC-VEN-003 |
 
 **Consulta de uso por módulo, últimos 90 dias** (somente leitura; filtrar o tenant da Vila
 Verde e excluir os tenants de teste, conforme ROTEIRO-CONFIRMACOES-A0):
@@ -431,3 +431,4 @@ está nas tabelas acima **não foi estimado**.
 |---|---|---|
 | 2026-10-26 | 1.0 | Criação: mercado, perfil de cliente ideal, diferenciais comprováveis e proibidos, concorrentes, posicionamento, canais, conteúdo, experimentos X1 a X8 e indicadores |
 | 2026-10-26 | 1.1 | EXC-MKT-002 corrigido no código (em validação); EXC-FIS-013 (CNPJ do emitente fixo) passa a ser pré-condição para uma segunda loja (seção 9) |
+| 2026-10-26 | 1.2 | Lacuna D7 respondida pelo código na avaliação de vendas: importador CSV com saldo de fiado, sem vencimentos originais |
