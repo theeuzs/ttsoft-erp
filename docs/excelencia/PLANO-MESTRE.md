@@ -1,7 +1,7 @@
 # Plano Mestre — Programa de Excelência TTSoft
 
 > Produto: ConstruTTor ERP
-> Criado em: 2026-10-22 · Versão: 1.8 · Fase atual: **EXC-A0 concluída; EXC-A1 a iniciar**
+> Criado em: 2026-10-22 · Versão: 1.15 · Fase atual: **EXC-A1 em execução; primeira passada da EXC-A6 concluída**
 > Documentos relacionados: [CRITERIOS-DE-EXCELENCIA](CRITERIOS-DE-EXCELENCIA.md) · [INVENTARIO-AUDITORIAS](INVENTARIO-AUDITORIAS.md) · [REGISTRO-CENTRAL](REGISTRO-CENTRAL.md)
 
 ---
@@ -152,8 +152,22 @@ Saídas:                 registros EXC-… criados/atualizados
 - **Encerramento:** cada ponto de acesso classificado (seguro / risco / defeito) com
   evidência; EXC-SEG-001 e EXC-ENG-001 confirmados ou descartados.
 
-As fichas de EXC-A2 a EXC-A10 serão preenchidas antes de cada auditoria e aprovadas pelo
-responsável.
+#### EXC-A6 — Arquitetura e engenharia
+- **Status:** **Primeira passada concluída em 2026-10-26**, antecipada a pedido do responsável
+  (antes do fim de A1–A3): [EXC-A6-ARQUITETURA-ENGENHARIA](EXC-A6-ARQUITETURA-ENGENHARIA.md),
+  commit `8801d9c`. O que depende de A1–A3 foi registrado e devolvido a elas.
+- **Escopo:** separação entre WPF, API, Portal, persistência e serviços; dependências entre
+  camadas; erros, concorrência, transações, consistência, testabilidade, complexidade; fluxos de
+  venda, cancelamento, devolução, edição de produto/cliente e abertura do WPF.
+- **Fora do escopo:** isolamento (A1), segredos e dependências (A2), mapa completo de
+  leitura-e-gravação (A3), regras fiscais (A4), desempenho.
+- **Critérios de aprovação:** ENG-1 a ENG-5 (situação na seção 11 do relatório).
+- **Saídas:** EXC-ENG-005 a 013 e EXC-SEG-010; EXC-ENG-001, 003 e 004 atualizados.
+- **Encerramento:** consultas C1–C4 executadas e registradas; triagem dos três registros Altos
+  (EXC-ENG-005, EXC-ENG-006, EXC-SEG-010).
+
+As fichas de EXC-A2 a EXC-A5 e EXC-A7 a EXC-A10 serão preenchidas antes de cada auditoria e
+aprovadas pelo responsável.
 
 ---
 
@@ -279,3 +293,4 @@ Avaliar a auditoria do servidor (EXC-SEG-008) em paralelo, como controle compens
 | 2026-10-26 | 1.12 | Avaliação de marketing (EXC-A10, parte MKT): posicionamento, perfil de cliente, experimentos e registros EXC-MKT-001 a 004 e EXC-FIS-012 |
 | 2026-10-26 | 1.13 | EXC-MKT-002 corrigido no código e em validação (teste `TextosInterfaceTests`); novo EXC-FIS-013 (Alta): CNPJ do emitente fixo no envio à Focus |
 | 2026-10-26 | 1.14 | Avaliação de vendas (EXC-A10, parte VEN): processo comercial, roteiro de demonstração, funil com fórmulas e registros EXC-VEN-002 a 004 |
+| 2026-10-26 | 1.15 | Primeira passada da EXC-A6 (arquitetura e engenharia), antecipada: diagnóstico, fluxos rastreados, dívida priorizada, plano em 5 ondas; registros EXC-ENG-005 a 013 e EXC-SEG-010 (três Altos: estorno de caixa duplicado, edição parcial pelo Portal, *seeder* que promove a Administrador) |

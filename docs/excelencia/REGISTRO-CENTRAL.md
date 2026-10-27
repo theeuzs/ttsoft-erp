@@ -1,7 +1,7 @@
 # Registro Central de Descobertas
 
 > Programa de Excelência TTSoft
-> Criado em: 2026-10-22 · Última atualização: 2026-10-26 (v1.4) · Base: commit `ec6d177`
+> Criado em: 2026-10-22 · Última atualização: 2026-10-26 (v1.5) · Base: commit `ec6d177` (EXC-A6: `8801d9c`)
 > Classificação conforme [CRITERIOS-DE-EXCELENCIA](CRITERIOS-DE-EXCELENCIA.md) · Plano: [PLANO-MESTRE](PLANO-MESTRE.md) · Origem dos itens: [INVENTARIO-AUDITORIAS](INVENTARIO-AUDITORIAS.md)
 
 ---
@@ -56,10 +56,20 @@
 | EXC-SEG-007 | SEG | Conexão do WPF ao SQL não valida o certificado do servidor (`TrustServerCertificate=True`) | Fato | Média | Alta | Confirmado | A definir |
 | EXC-SEG-008 | SEG | Servidor SQL sem auditoria, sem Defender e sem administrador do Entra | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-SEG-009 | SEG | Firewall do servidor SQL aberto para qualquer IP da internet | Fato | **Crítica** | Alta | **Risco aceito** (revisão: fim da E6) | Matheus |
+| EXC-SEG-010 | SEG | *Seeder* do WPF promove usuários a Administrador pelo nome a cada abertura e cria administrador com senha fixa no código | Fato + Hipótese | **Alta** | Alta (código) | Confirmado | A definir |
 | EXC-ENG-001 | ENG | Testes não comprovam comportamento no SQL Server (SQL bruto e `IgnoreQueryFilters`) | Fato | Média | Alta | Confirmado | A definir |
 | EXC-ENG-002 | ENG | README desatualizado em relação à arquitetura atual | Fato | Baixa | Alta | Confirmado | A definir |
-| EXC-ENG-003 | ENG | 155 avisos de compilação | Fato | Baixa | Alta | Confirmado | A definir |
+| EXC-ENG-003 | ENG | 155 avisos de compilação | Fato | Baixa | Alta | Confirmado (classificados na EXC-A6) | A definir |
 | EXC-ENG-004 | ENG | `ChangeTracker.Clear()` após todo `SaveChanges` | Fato | Média | Alta | Confirmado | A definir |
+| EXC-ENG-005 | ENG | Cancelar venda em dinheiro pelo histórico do WPF estorna o caixa duas vezes (servidor e cliente) | Fato + Lacuna | **Alta** | Alta (código) | Confirmado | A definir |
+| EXC-ENG-006 | ENG | Edição de produto e de cliente pelo Portal apaga os campos que o formulário não envia (NCM, CSOSN, IE, UF…) e sobrescreve o estoque | Fato + Lacuna | **Alta** | Alta (código) | Confirmado | A definir |
+| EXC-ENG-007 | ENG | Produto filho (fracionado): cancelamento e devolução devolvem o estoque ao produto errado; NFC-e sai com a quantidade do pai | Fato + Lacuna | Média | Alta (código) | Confirmado | A definir |
+| EXC-ENG-008 | ENG | Cancelamento e devolução gravam em várias etapas sem transação; nova tentativa repete estoque e Haver | Fato | Média | Alta (código) | Confirmado | A definir |
+| EXC-ENG-009 | ENG | WPF compartilha um único `AppDbContext` entre telas (serviços *Scoped* resolvidos pela raiz; PDV *singleton*) | Fato + Hipótese | Média | Alta (código) | Confirmado | A definir |
+| EXC-ENG-010 | ENG | WPF opera em dois caminhos (API e banco direto) e divide regras de negócio entre cliente e servidor | Fato | Média | Alta | Confirmado | A definir |
+| EXC-ENG-011 | ENG | Tenant e usuário resolvidos por estado estático mutável; autor da mudança de preço fica vazio na API | Fato | Baixa | Alta | Confirmado | A definir |
+| EXC-ENG-012 | ENG | Regras de negócio espalhadas e duplicadas (três criações de venda, 30 serviços com `AppDbContext` direto, status em texto livre) | Recomendação | Baixa | Alta | Confirmado | A definir |
+| EXC-ENG-013 | ENG | URL da API fixa no binário do WPF; arquivo temporário de build, pasta residual e pacote sem uso no repositório | Fato | Baixa | Alta | Confirmado | A definir |
 | EXC-OPS-001 | OPS | Checklist de deploy e `versao.json` versionados desatualizados | Fato | Média | Alta | Confirmado | A definir |
 | EXC-OPS-002 | OPS | Deploy automático da `main` em produção; pipeline de staging nunca dispara | Fato | A classificar | Alta | Confirmado | A definir |
 | EXC-OPS-003 | OPS | Restauração do banco de produção nunca testada | Fato | **Alta** | Alta | **Planejado** | Matheus |
@@ -98,7 +108,8 @@
 | EXC-MKT-003 | MKT | Relatórios anteriores recomendam afirmações de divulgação que o estado atual não sustenta | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-MKT-004 | MKT | Nenhum canal de aquisição ou funil medido | Lacuna | A classificar | — | Lacuna | Matheus |
 
-**Contagem:** 50 registros (47 abertos, um deles em risco aceito; 3 encerrados) — abertos: 3 Crítica, 4 Alta, 19 Média, 10 Baixa, 11 A classificar.
+**Contagem:** 60 registros (57 abertos, um deles em risco aceito; 3 encerrados) — abertos: 3 Crítica, 7 Alta, 23 Média, 13 Baixa, 11 A classificar.
+Em 2026-10-26 (EXC-A6): acrescentados EXC-ENG-005 a 013 e EXC-SEG-010 pela [avaliação de arquitetura e engenharia](EXC-A6-ARQUITETURA-ENGENHARIA.md); EXC-ENG-001, 003 e 004 atualizados.
 Em 2026-10-26: acrescentados EXC-ADM-003 a 005 pela [avaliação administrativa e financeira](EXC-A10-ADMINISTRATIVO-FINANCEIRO.md), EXC-MKT-001 a 004 e EXC-FIS-012 pela [avaliação de marketing](EXC-A10-MARKETING.md), e EXC-VEN-002 a 004 pela [avaliação de vendas](EXC-A10-VENDAS.md); EXC-FIS-013 encontrado na correção do EXC-MKT-002, que passou a *Em validação*.
 Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.md)
 (passos 1.1, 1.2, 2, 4 e E1 a E9). Prioridade imediata: EXC-FIS-008, EXC-SEG-001 e EXC-FIS-009.
@@ -288,6 +299,26 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Relacionados | EXC-SEG-001, EXC-SEG-006, EXC-SEG-008 |
 | Datas | Registrado em 2026-10-22 |
 
+### EXC-SEG-010 — *Seeder* do WPF promove usuários a Administrador pelo nome e cria administrador com senha fixa
+
+| Campo | Valor |
+|---|---|
+| Área | SEG (também ENG, DAD) |
+| Natureza | Fato (código) + Hipótese (efeito em produção) |
+| Descrição | `DbSeeder.Seed` roda **a cada abertura do WPF**, contra o banco de produção, no tenant do `licenca.json` do PC. (1) Se o tenant tem o cargo Administrador, troca para esse cargo todo usuário cujo login seja `admin` ou `mahenrique`, ou cujo nome contenha `matheus` ou `administrador`, desfazendo qualquer rebaixamento manual. (2) Se não tem, cria o cargo e um usuário `admin` com **hash bcrypt fixo no código-fonte**, sem `MustChangePassword`. Também cria cargos e permissões para qualquer tenant novo. **Hipótese:** os tenants de 1 usuário de EXC-OPS-007 (CNPJ `00000000000000`, CNPJ da TTSoft e `FDF3CD72…`) foram criados por esse caminho ao abrir um WPF com outro `licenca.json`. |
+| Evidência | `ERP.WPF/App.xaml.cs:170-174`; `ERP.Persistence/Context/DbSeeder.cs:13`, `:16-108`, `:157-180`, `:181-198`; `ERP.Domain/Entities/User.cs:12` (2026-10-26, `8801d9c`). [EXC-A6 §4.5](EXC-A6-ARQUITETURA-ENGENHARIA.md) |
+| Gravidade | **Alta** — escalada de privilégio dentro do tenant (CRITERIOS §3), reaplicada a cada abertura; credencial padrão conhecida por quem tem o código. |
+| Impacto | Um operador de loja cujo nome contenha "Matheus" vira administrador (cancelar vendas, sangria ilimitada, usuários e cargos) sem ninguém decidir. Em tenant criado pelo caminho (2), quem conhece a senha do hash entra como administrador. Isolamento entre tenants não é afetado. |
+| Confiança | Alta (código); Baixa (quais usuários e tenants foram afetados) |
+| Dependências | Consulta C4 da EXC-A6 |
+| Responsável | A definir |
+| Ação proposta | Remover a promoção por nome; criar o administrador inicial só por procedimento explícito, com senha aleatória e `MustChangePassword`; tirar o *seeder* da abertura do WPF (cargos e permissões criados pela API na criação do tenant). Antes, escrever o procedimento de recuperação de acesso. Encaminhar à EXC-A2. |
+| Status | Confirmado |
+| Critério de validação | Nenhum código que altere cargo por nome; nenhuma senha fixa no código; consulta C4 sem usuário promovido indevidamente; teste que garante que a abertura do WPF não altera cargos. |
+| Origem | EXC-A6 (2026-10-26) |
+| Relacionados | EXC-SEG-001, EXC-OPS-007, EXC-VEN-003 |
+| Datas | Registrado em 2026-10-26 |
+
 ---
 
 ## Detalhe — Engenharia (ENG)
@@ -306,11 +337,12 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Dependências | — |
 | Responsável | A definir |
 | Ação proposta | Na EXC-A1: revisar cada uso de `IgnoreQueryFilters` e SQL bruto; avaliar testes contra SQL Server para os pontos críticos. |
+| Atualização (2026-10-26, EXC-A6) | Reconferido no commit `8801d9c`: 1337 testes aprovados; 7 configurações InMemory e 9 SQLite, nenhuma SQL Server; 53 usos de `IgnoreQueryFilters` em 17 arquivos e 39 de SQL bruto em 15 arquivos do código de servidor. Lacuna adicional: **nenhum teste exercita um fluxo composto cliente + servidor** — foi o que deixou passar EXC-ENG-005. A EXC-A6 propõe a onda O2 (testes contra SQL Server e de fluxo composto para venda, cancelamento e devolução). |
 | Status | Confirmado |
 | Critério de validação | Usos revisados e classificados; pontos críticos cobertos por teste contra SQL Server ou risco aceito. |
 | Origem | EXC-F0; INV-001, INV-015; DOC-30, DOC-34 |
-| Relacionados | EXC-SEG-001 |
-| Datas | Registrado em 2026-10-22 |
+| Relacionados | EXC-SEG-001, EXC-ENG-005 |
+| Datas | Registrado em 2026-10-22; atualizado em 2026-10-26 (EXC-A6) |
 
 ### EXC-ENG-002 — README desatualizado
 
@@ -346,11 +378,12 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Dependências | — |
 | Responsável | A definir |
 | Ação proposta | Na EXC-A6: separar avisos com risco real dos cosméticos. |
+| Atualização (2026-10-26, EXC-A6) | Classificados no build de `8801d9c` (155 linhas de aviso): **com risco** — NU1903 ×10 (EXC-SEG-002); CS4014 ×2 (chamada assíncrona não aguardada em `FinalizarVendaViewModel.cs:137`, exceção perdida); CS0618 ×8 (`System.Data.SqlClient` obsoleto em `SetupViewModel.cs:113`; API `Canvas` do QuestPDF obsoleta em `CarnePdfReport.cs`); NU1701 ×20 (LiveCharts `2.0.0-rc6.1`, OpenTK e `SkiaSharp.Views.WPF` restaurados para .NET Framework). **Cosméticos** — anulabilidade (CS86xx) ≈115; CS1998 ×4; CS0108 ×2; SYSLIB0050 ×1 (teste). Proposta: tratar CS4014 e CS0618 já; NU1701 na próxima atualização de gráficos; anulabilidade por arquivo tocado. |
 | Status | Confirmado |
 | Critério de validação | Avisos restantes conhecidos e justificados (CRITERIOS ENG-2). |
 | Origem | EXC-F0 |
 | Relacionados | EXC-SEG-002 |
-| Datas | Registrado em 2026-10-22 |
+| Datas | Registrado em 2026-10-22; atualizado em 2026-10-26 (EXC-A6) |
 
 ### EXC-ENG-004 — `ChangeTracker.Clear()` após todo `SaveChanges`
 
@@ -366,11 +399,192 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Dependências | EXC-A6 |
 | Responsável | A definir |
 | Ação proposta | Na EXC-A6: mapear métodos que salvam e continuam mutando; decidir entre manter o padrão com salvaguardas (teste, análise estática, documentação) ou mudá-lo. Não mudar sem esse mapa. |
+| Atualização (2026-10-26, EXC-A6) | Mapa parcial: o padrão perigoso hoje não é só "salvar e continuar mutando", mas **um serviço chamado no meio de uma operação maior gravar por conta própria**. `HaverService.RegistrarMovimentoVendaAsync` (`RelatorioServices.cs:420-432`) chama `SaveChanges`, que grava tudo o que estava pendente no contexto compartilhado e limpa o rastreamento; é chamado no meio de `SaleService.CancelAsync` e de `DevolucaoService.DevolverItensAsync`, dividindo cada operação em duas gravações (EXC-ENG-008). Não foi encontrada gravação perdida nesses dois métodos (as entidades seguintes são reanexadas por `Update`/`Add`). O mapa completo fica com a EXC-A3. Decisão sobre o padrão continua pendente. |
 | Status | Confirmado |
 | Critério de validação | Decisão registrada com mapa de impacto; salvaguarda implementada se o padrão for mantido. |
 | Origem | DOC-31, DOC-33 |
-| Relacionados | EXC-DAD-002 |
-| Datas | Registrado em 2026-10-22 |
+| Relacionados | EXC-DAD-002, EXC-ENG-008 |
+| Datas | Registrado em 2026-10-22; atualizado em 2026-10-26 (EXC-A6) |
+
+### EXC-ENG-005 — Cancelar venda em dinheiro pelo histórico do WPF estorna o caixa duas vezes
+
+| Campo | Valor |
+|---|---|
+| Área | ENG (também DAD) |
+| Natureza | Fato (código) + Lacuna (quantas vendas foram afetadas) |
+| Descrição | Ao cancelar uma venda pelo histórico, o WPF chama a API, cujo `SaleService.CancelAsync` cria para cada pagamento não-Haver um movimento `CancelamentoVenda` com valor `−pagamento.Amount`. Em seguida o próprio WPF chama `MotorFinanceiroService.EstornarVendaAsync`, que para dinheiro registra uma **sangria** "ESTORNO VENDA …" de `valor − troco`. Os dois reduzem o saldo em dinheiro e o resumo do caixa. Além disso, o estorno do servidor não desconta o troco (o lançamento original foi `valor − troco`). Se a sangria for recusada pela política (saldo ou limite do cargo), o operador vê erro de cancelamento depois de a venda já estar cancelada. Estorno pelo cliente desde 21/07 (`16daf9a`); estorno no servidor desde 11/09 (`ae2adde`), sem remover o do cliente. PIX e cartão não duplicam (o cliente estorna em conta bancária e recebíveis, não no caixa). |
+| Evidência | `ERP.Application/Services/SaleService.cs:398-418` (`:409`); `ERP.WPF/ViewModels/SaleViewModel.cs:174-213`; `ERP.Application/Services/MotorFinanceiroService.cs:99-117`, `:158`; `ERP.WPF/Services/HttpCaixaService.cs:64-105`; `ERP.Infrastructure/Repositories/CaixaRepository.cs:106-116`; `ERP.Application/Services/CaixaService.cs:113-119`, `:235-275`; `git blame` (2026-10-26). [EXC-A6 §4.2](EXC-A6-ARQUITETURA-ENGENHARIA.md) |
+| Gravidade | **Alta** — dado financeiro do caixa incorreto em fluxo crítico (CRITERIOS §7, itens 2 e 3), sem aviso ao operador; correção manual possível. Subiria para Crítica se o fechamento de caixa alimentar conciliação ou contabilidade. |
+| Impacto | Cada cancelamento de venda em dinheiro deixa o caixa com o valor da venda (mais o troco) a menos; o fechamento mostra falta que não existe. Cancelamentos reais ocorrem na Vila Verde (comentário de 17/09 em `SaleService.cs:385-397`). |
+| Confiança | Alta (código); ocorrências em produção a confirmar (consulta C1) |
+| Dependências | Consulta C1 da EXC-A6 |
+| Responsável | A definir |
+| Ação proposta | O servidor passa a ser o único dono do estorno (dinheiro, PIX e cartão, idempotentes por `SalePaymentId`; valor do lançamento original, com troco); o WPF deixa de estornar. Ordem: API primeiro, WPF depois (EXC-A6 §8). Teste de integração do fluxo composto. Correção dos caixas afetados decidida pelo responsável a partir da C1. |
+| Status | Confirmado |
+| Critério de validação | Teste automatizado: abrir caixa → vender em dinheiro com troco → cancelar → saldo em dinheiro igual ao da abertura; consulta C1 sem ocorrências novas após a publicação. |
+| Origem | EXC-A6 (2026-10-26) |
+| Relacionados | EXC-ENG-008, EXC-ENG-010, EXC-ENG-001 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-ENG-006 — Edição de produto e de cliente pelo Portal apaga campos e sobrescreve o estoque
+
+| Campo | Valor |
+|---|---|
+| Área | ENG (também FIS, DAD) |
+| Natureza | Fato (código) + Lacuna (uso do Portal para editar) |
+| Descrição | O Portal edita produto com um objeto anônimo de 14 campos; a API recebe `UpdateProductDto` (40 campos herdados de `CreateProductDto`) e copia **todos** para a entidade com AutoMapper, sem ignorar ausentes. Os campos não enviados viram nulo, zero ou padrão: NCM, CEST, CFOP, CSOSN, categoria, marca, fornecedor, IPI, ICMS, atacado, produto pai e fator, unidade de venda, `AllowNegativeStock`, descrição, campanha. Sem NCM/CSOSN a NFC-e sai com `00000000`/`102`. Cliente: o Portal envia 10 de 14 campos e a API apaga IE, UF, bairro e complemento. Nos dois clientes o estoque é gravado com o valor do formulário; o WPF relê antes de salvar quando o estoque não foi alterado, o Portal não. Causa: o Portal não compartilha contratos com a API e o PUT é substituição total. |
+| Evidência | `ERP.Portal/Pages/Produtos.razor:662-685`; `ERP.Portal/Pages/Clientes.razor:260-278`; `ERP.Application/DTOs/Dtos.cs:58-104`; `ERP.Application/Mappings/MappingProfile.cs:44-48`, `:72`; `ERP.Application/Services/ProductService.cs:128-150`; `ERP.Application/Services/CustomerService.cs:107`; `ERP.Infrastructure/Services/FiscalService.cs:804-805`; `ERP.WPF/ViewModels/ProductViewModel.cs:361-366` (2026-10-26). [EXC-A6 §4.4](EXC-A6-ARQUITETURA-ENGENHARIA.md) |
+| Gravidade | **Alta** — cadastro fiscal apagado sem aviso, levando a notas rejeitadas ou com dados errados (CRITERIOS §3: risco fiscal); estoque sobrescrito. Cai para Baixa se o Portal não for usado para editar. |
+| Impacto | Uma edição de preço pelo Portal tira o NCM do produto e a IE/UF do cliente; a próxima nota sai errada ou é rejeitada; vendas feitas enquanto o formulário estava aberto somem do estoque. |
+| Confiança | Alta (código); uso em produção desconhecido |
+| Dependências | Consulta C2 da EXC-A6; confirmação de uso do Portal pela loja |
+| Responsável | A definir |
+| Ação proposta | Etapa 1 (só Portal): ler o registro e reenviar o objeto completo, ou retirar a edição do Portal até a etapa 2. Etapa 2: contrato de edição com só os campos editáveis; estoque alterado apenas por ajuste/movimento, com o WPF migrado junto. Teste de contrato: PUT parcial não altera NCM nem IE. |
+| Status | Confirmado |
+| Critério de validação | Teste automatizado de PUT parcial; consulta C2 sem ocorrências novas; registros afetados corrigidos. |
+| Origem | EXC-A6 (2026-10-26) |
+| Relacionados | EXC-FIS-011, EXC-ENG-012 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-ENG-007 — Produto filho: estoque devolvido ao produto errado e NFC-e com a quantidade do pai
+
+| Campo | Valor |
+|---|---|
+| Área | ENG (também DAD, FIS) |
+| Natureza | Fato (código) + Lacuna (uso de produto filho) |
+| Descrição | Na venda de produto filho (`ParentProductId` + `ConversionFactor`), `SaleService.CreateAsync` baixa o estoque do **pai** e grava em `SaleItem` o `ProductId` do **filho** com a quantidade **na unidade do pai**. O cancelamento (`CancelAsync`) e a devolução (`DevolverItensAsync`) devolvem essa quantidade ao **filho**. A NFC-e usa `SaleItem.Quantity`, saindo com a quantidade do pai e a descrição do filho (total correto, quantidade e unitário errados). O e-commerce grava na unidade vendida e documenta a divergência. |
+| Evidência | `ERP.Application/Services/SaleService.cs:144-159`, `:204-214`, `:345-357`; `ERP.Application/Services/DevolucaoService.cs:57-62`; `ERP.Infrastructure/Services/FiscalService.cs:791-805`; `ERP.Api/Ecommerce/EcommercePedidoService.cs:33-34`; teste só da baixa (`ProductServiceTests.cs:168-175`) (2026-10-26) |
+| Gravidade | Média — estoque de dois produtos errado após cancelamento/devolução e quantidade fiscal incorreta; só ocorre com produto filho vendido. |
+| Impacto | Rolo fica com estoque a menos e a barra com estoque a mais a cada cancelamento; devolução fiscal referencia quantidades na unidade errada. |
+| Confiança | Alta (código); uso desconhecido |
+| Dependências | Consulta C3 da EXC-A6; EXC-A4 para o efeito fiscal |
+| Responsável | A definir |
+| Ação proposta | Se C3 mostrar uso: gravar no item o produto de estoque e o fator (colunas novas anuláveis; vendas antigas pela regra antiga) e corrigir cancelamento, devolução e NFC-e. Se não houver uso: bloquear cancelamento/devolução automática desses itens até a correção. |
+| Status | Confirmado |
+| Critério de validação | Teste: vender filho → cancelar → estoques do pai e do filho iguais aos de antes; NFC-e com a quantidade vendida. |
+| Origem | EXC-A6 (2026-10-26) |
+| Relacionados | EXC-ENG-008, EXC-ENG-012 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-ENG-008 — Cancelamento e devolução gravam em várias etapas sem transação
+
+| Campo | Valor |
+|---|---|
+| Área | ENG (também DAD) |
+| Natureza | Fato |
+| Descrição | Diferente da criação da venda, o cancelamento e a devolução não usam transação. `CancelAsync` grava em duas etapas: o `SaveChanges` interno do `HaverService` (estoque e Haver) e o `CommitAsync` final (estorno do caixa, contas a receber, status da venda). `DevolverItensAsync` grava em três: estoque por `UPDATE` em autocommit, devoluções + movimento de Haver, e saldo do cliente. Falha entre as etapas deixa estado parcial; como a trava contra repetição conta registros gravados depois, uma nova tentativa devolve estoque e Haver outra vez. O estoque no cancelamento é por leitura e gravação (`product.Stock +=`), não pelo `UPDATE` atômico usado na venda. |
+| Evidência | `ERP.Application/Services/SaleService.cs:337-440`; `ERP.Application/Services/DevolucaoService.cs:42-114`; `ERP.Infrastructure/Services/RelatorioServices.cs:420-432`; `ERP.Persistence/Context/AppDbContext.cs:810-818`; padrão correto em `SaleService.cs:114-118` (2026-10-26) |
+| Gravidade | Média — dinheiro e estoque; exige falha no meio da operação. |
+| Impacto | Venda com estoque devolvido e status ainda ativa; cliente com Haver creditado duas vezes após nova tentativa. |
+| Confiança | Alta (código); frequência desconhecida |
+| Dependências | EXC-ENG-001 (testes contra SQL Server) |
+| Responsável | A definir |
+| Ação proposta | Na EXC-A3: aplicar o padrão da venda (estratégia de repetição + transação explícita); `HaverService` recebendo a unidade de trabalho em vez de gravar sozinho; estoque por `UPDATE` atômico. |
+| Status | Confirmado |
+| Critério de validação | Teste contra SQL Server com falha injetada entre as etapas: nada gravado; nova tentativa não duplica. |
+| Origem | EXC-A6 (2026-10-26) |
+| Relacionados | EXC-DAD-002, EXC-ENG-004, EXC-ENG-005 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-ENG-009 — WPF compartilha um único `AppDbContext` entre telas
+
+| Campo | Valor |
+|---|---|
+| Área | ENG |
+| Natureza | Fato (configuração) + Hipótese (frequência do erro) |
+| Descrição | O WPF monta o contêiner sem escopos por tela. `PdvViewModel` é *singleton* e recebe serviços *Scoped* locais; o `MainWindow` resolve `IUnitOfWork` e as ViewModels pela raiz. Resolvidos pela raiz, todos recebem o mesmo `AppDbContext`, que dura até o programa fechar e não aceita operações simultâneas. O erro "A second operation was started on this context" já ocorreu (15/09); o semáforo criado protege só as tarefas de inicialização do PDV. |
+| Evidência | `ERP.WPF/App.xaml.cs:298-303`, `:537`; `ERP.WPF/ViewModels/PdvViewModel.cs:331-348`; `ERP.WPF/MainWindow.xaml.cs:71-75`, `:448` (2026-10-26) |
+| Gravidade | Média — operações falham de forma intermitente; há contorno (repetir). |
+| Impacto | Erros esporádicos em telas que acessam o banco enquanto o PDV ou outra tela também acessa. |
+| Confiança | Alta (configuração); Baixa (frequência) |
+| Dependências | Logs dos PCs da loja |
+| Responsável | A definir |
+| Ação proposta | Fábrica de escopo por operação/tela; ViewModel do PDV continua *singleton* sem guardar serviços de banco; `ValidateScopes` em desenvolvimento. Perde relevância à medida que a migração WPF→API avança (EXC-ENG-010). |
+| Status | Confirmado |
+| Critério de validação | Contêiner com `ValidateScopes` sem erro; nenhum serviço *Scoped* resolvido pela raiz. |
+| Origem | EXC-A6 (2026-10-26) |
+| Relacionados | EXC-ENG-010 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-ENG-010 — WPF em dois caminhos (API e banco direto), com regras divididas entre cliente e servidor
+
+| Campo | Valor |
+|---|---|
+| Área | ENG (também SEG) |
+| Natureza | Fato |
+| Descrição | Sete serviços do WPF já usam a API (venda, cliente, produto, caixa, contas a pagar e a receber, emissão fiscal); cerca de 70 continuam locais, e 25 arquivos usam `AppDbContext`/`IUnitOfWork` diretamente. Fluxos que cruzam os dois caminhos ficam com a regra dividida: a venda roda o motor financeiro no servidor e de novo no cliente; o cancelamento é orquestrado pela tela. A prática de troca por DI com reversão documentada é boa; falta ordem por risco (dinheiro e segurança ficaram para trás). |
+| Evidência | `ERP.WPF/App.xaml.cs:327-526`; `ERP.WPF/ViewModels/SaleViewModel.cs:169-219`; `ERP.WPF/ViewModels/FinalizarVendaViewModel.cs:640-644`; contagens de 2026-10-26 em [EXC-A6 §3.4](EXC-A6-ARQUITETURA-ENGENHARIA.md) |
+| Gravidade | Média — causa estrutural de EXC-SEG-001 e EXC-ENG-005. |
+| Impacto | Cada módulo migrado pela metade pode gerar regra duplicada ou conflitante. |
+| Confiança | Alta |
+| Dependências | — |
+| Responsável | A definir |
+| Ação proposta | Onda O4 da EXC-A6: Haver/devolução/motor financeiro → auth/usuários/cargos → fiscal restante → relatórios. Critério de pronto por módulo: toda escrita no servidor, nenhuma orquestração no cliente, teste de fluxo composto. |
+| Status | Confirmado |
+| Critério de validação | WPF sem `conexao.dat` (CRITERIOS ENG-1). |
+| Origem | EXC-A6 (2026-10-26) |
+| Relacionados | EXC-SEG-001, EXC-ENG-005, EXC-ENG-009 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-ENG-011 — Tenant e usuário resolvidos por estado estático mutável
+
+| Campo | Valor |
+|---|---|
+| Área | ENG (também SEG) |
+| Natureza | Fato |
+| Descrição | O tenant vem de três fontes (`AsyncLocal` estático, campo estático do WPF, `IRequestTenant` com *setters* públicos) com ordens diferentes para filtro (`CurrentFilterTenantId`) e gravação (`GetTenantId`). O usuário vem também de `ERP.Domain.CurrentUser` (estático), que só o WPF preenche; `ProductService` o usa para gravar quem mudou o preço, e na API, que edita produtos desde a Fase C, o campo fica vazio. |
+| Evidência | `ERP.Persistence/Context/AppDbContext.cs:19-28`, `:43-55`, `:101-107`, `:219-220`; `ERP.Api/Services/RequestTenant.cs`; `ERP.Domain/CurrentUser.cs:6`; `ERP.Application/Services/ProductService.cs:140`; `ERP.WPF/State/AppSession.cs:62-63` (2026-10-26) |
+| Gravidade | Baixa (o defeito concreto é o autor vazio); o risco ao isolamento é avaliado na EXC-A1 |
+| Impacto | Trilha de alteração de preço sem autor; correção do isolamento dependente de convenções não verificadas pelo compilador. |
+| Confiança | Alta |
+| Dependências | EXC-A1 |
+| Responsável | A definir |
+| Ação proposta | Usar `IRequestTenant.UserName` em `ProductService` (correção pequena). Depois da EXC-A1: fonte única e imutável de tenant/usuário por requisição. |
+| Status | Confirmado |
+| Critério de validação | Alteração de preço pela API grava o autor; nenhum estático de tenant/usuário no código de servidor. |
+| Origem | EXC-A6 (2026-10-26) |
+| Relacionados | EXC-SEG-001, EXC-ENG-001 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-ENG-012 — Regras de negócio espalhadas e duplicadas
+
+| Campo | Valor |
+|---|---|
+| Área | ENG |
+| Natureza | Recomendação |
+| Descrição | Regras estão em Application, em Infrastructure (30 de 41 serviços com `AppDbContext` direto), na API (e-commerce cria venda direto no contexto) e em ViewModels do WPF. Há três implementações de criação de venda, com unidades diferentes em `SaleItem.Quantity`. Status são texto livre com grafias diferentes para o mesmo estado (`"Cancelado"`/`"Cancelada"`). Arquivos de alta complexidade: `PdvViewModel` (1830 linhas), `PDV.razor` (1794), `NotaAvulsaViewModel` (1187). |
+| Evidência | Contagens e arquivos em [EXC-A6 §3.3 e §5](EXC-A6-ARQUITETURA-ENGENHARIA.md); `ERP.Application/Services/SaleService.cs:423`; `ERP.WPF/ViewModels/SaleViewModel.cs:193` (2026-10-26) |
+| Gravidade | Baixa |
+| Impacto | Correção feita em um caminho não chega aos outros (como em EXC-ENG-007). |
+| Confiança | Alta |
+| Dependências | — |
+| Responsável | A definir |
+| Ação proposta | Onda O5: um serviço por operação de negócio; status como enum; quebrar PDV em componentes. Fazer ao tocar cada módulo, sem projeto dedicado. |
+| Status | Confirmado |
+| Critério de validação | Cada operação de negócio com um único ponto de implementação. |
+| Origem | EXC-A6 (2026-10-26) |
+| Relacionados | EXC-ENG-006, EXC-ENG-007, EXC-ENG-010 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-ENG-013 — URL da API fixa no WPF; arquivos e pacotes órfãos
+
+| Campo | Valor |
+|---|---|
+| Área | ENG (também OPS) |
+| Natureza | Fato |
+| Descrição | A URL da API de produção está fixa em dois pontos do `App.xaml.cs`, então um WPF não pode apontar para staging sem recompilar. O arquivo temporário de build `ERP.WPF/ERP.WPF_1qyhnkib_wpftmp.csproj` está versionado (com versão de QuestPDF diferente da do projeto). Existe na raiz uma pasta residual `{ERP.Domain\{Entities,…` (não versionada). `ERP.Application` referencia Dapper sem usar. `UnitOfWork.Dispose` descarta o `AppDbContext` que pertence ao contêiner. Classes órfãs mantidas de propósito (`NfeContingencyWorker`, `WpfEstoqueSyncService`, `FiscalService` no WPF). |
+| Evidência | `ERP.WPF/App.xaml.cs:534`, `:553`; `git ls-files`; `ERP.Application/ERP.Application.csproj`; `ERP.Infrastructure/UnitOfWork/UnitOfWork.cs:92` (2026-10-26) |
+| Gravidade | Baixa |
+| Impacto | Testes do WPF contra staging exigem build especial; ruído no repositório. |
+| Confiança | Alta |
+| Dependências | EXC-OPS-002, EXC-OPS-007 (ambiente de staging) |
+| Responsável | A definir |
+| Ação proposta | URL em `appsettings.json` do WPF; remover arquivos e pacote órfãos; decidir prazo para apagar classes órfãs. |
+| Status | Confirmado |
+| Critério de validação | WPF configurável por arquivo; repositório sem arquivos temporários de build. |
+| Origem | EXC-A6 (2026-10-26) |
+| Relacionados | EXC-OPS-002 |
+| Datas | Registrado em 2026-10-26 |
 
 ---
 
