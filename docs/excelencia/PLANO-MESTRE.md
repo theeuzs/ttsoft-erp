@@ -1,7 +1,7 @@
 # Plano Mestre — Programa de Excelência TTSoft
 
 > Produto: ConstruTTor ERP
-> Criado em: 2026-10-22 · Versão: 1.16 · Fase atual: **EXC-A1 em execução; primeiras passadas da EXC-A6 e da EXC-A7 concluídas**
+> Criado em: 2026-10-22 · Versão: 1.17 · Fase atual: **EXC-A1 em execução; primeiras passadas da EXC-A2, da EXC-A6 e da EXC-A7 concluídas**
 > Documentos relacionados: [CRITERIOS-DE-EXCELENCIA](CRITERIOS-DE-EXCELENCIA.md) · [INVENTARIO-AUDITORIAS](INVENTARIO-AUDITORIAS.md) · [REGISTRO-CENTRAL](REGISTRO-CENTRAL.md)
 
 ---
@@ -152,6 +152,21 @@ Saídas:                 registros EXC-… criados/atualizados
 - **Encerramento:** cada ponto de acesso classificado (seguro / risco / defeito) com
   evidência; EXC-SEG-001 e EXC-ENG-001 confirmados ou descartados.
 
+#### EXC-A2 — Segurança de aplicação, segredos e dependências
+- **Status:** **Primeira passada concluída em 2026-10-26**, antecipada a pedido do responsável
+  (antes do fim da A1), por leitura de código e varredura de dependências, **sem testes de
+  reprodução**: [EXC-A2-SEGURANCA-QUALIDADE](EXC-A2-SEGURANCA-QUALIDADE.md), commit `1de867b`.
+- **Escopo:** autenticação e ciclo de vida dos tokens, autorização por endpoint, isolamento na
+  API, cadastro público, webhooks e OAuth, e-commerce, SignalR, storage, Portal, proteção de
+  segredos, atualizador do WPF, configuração, dependências, logs e testes.
+- **Fora do escopo:** EXC-SEG-001/006/009 (já planejados), regras fiscais (A4), integridade
+  transacional (A3), WPF além do atualizador (segunda passada).
+- **Critérios de aprovação:** SEG-1 a SEG-5 (situação na seção 6 do relatório).
+- **Saídas:** EXC-SEG-011 a 024; EXC-SEG-002 reclassificado para Alta.
+- **Encerramento:** consultas C-A2-1 a C-A2-3 registradas; triagem dos itens Alta e
+  "A classificar" (EXC-SEG-002, 011, 012, 015, 017, 020); segunda passada com as validações
+  pendentes e o WPF.
+
 #### EXC-A6 — Arquitetura e engenharia
 - **Status:** **Primeira passada concluída em 2026-10-26**, antecipada a pedido do responsável
   (antes do fim de A1–A3): [EXC-A6-ARQUITETURA-ENGENHARIA](EXC-A6-ARQUITETURA-ENGENHARIA.md),
@@ -182,7 +197,7 @@ Saídas:                 registros EXC-… criados/atualizados
 - **Encerramento:** consulta de uso executada; observação registrada; decisão sobre o papel de
   cada aplicativo (EXC-PRD-009) e triagem dos registros novos.
 
-As fichas de EXC-A2 a EXC-A5 e EXC-A8 a EXC-A10 serão preenchidas antes de cada auditoria e
+As fichas de EXC-A3 a EXC-A5 e EXC-A8 a EXC-A10 serão preenchidas antes de cada auditoria e
 aprovadas pelo responsável.
 
 ---
@@ -311,3 +326,4 @@ Avaliar a auditoria do servidor (EXC-SEG-008) em paralelo, como controle compens
 | 2026-10-26 | 1.14 | Avaliação de vendas (EXC-A10, parte VEN): processo comercial, roteiro de demonstração, funil com fórmulas e registros EXC-VEN-002 a 004 |
 | 2026-10-26 | 1.15 | Primeira passada da EXC-A6 (arquitetura e engenharia), antecipada: diagnóstico, fluxos rastreados, dívida priorizada, plano em 5 ondas; registros EXC-ENG-005 a 013 e EXC-SEG-010 (três Altos: estorno de caixa duplicado, edição parcial pelo Portal, *seeder* que promove a Administrador) |
 | 2026-10-26 | 1.16 | Primeira passada da EXC-A7 (inventário funcional), antecipada: matriz por módulo com implementação, teste e operação separados, jornadas, lacunas para lojas independentes e roadmap R0 a R3; registros EXC-PRD-002 a 011, EXC-FIS-014 e EXC-OPS-008 |
+| 2026-10-26 | 1.17 | Primeira passada da EXC-A2 (segurança de aplicação e qualidade), antecipada, por leitura de código e varredura de dependências, sem testes de reprodução: matriz de riscos, plano de mitigação em 4 ondas; registros EXC-SEG-011 a 024 (três Altos: tokens auxiliares fora da revogação, XSS nos relatórios do Portal, chave fixa do `TokenProtector`; EXC-SEG-011 a classificar pela consulta C-A2-1) e EXC-SEG-002 reclassificado para Alta |

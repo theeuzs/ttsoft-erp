@@ -1,7 +1,7 @@
 # Registro Central de Descobertas
 
 > Programa de Excelência TTSoft
-> Criado em: 2026-10-22 · Última atualização: 2026-10-26 (v1.6) · Base: commit `ec6d177` (EXC-A6: `8801d9c`; EXC-A7: `47a4b0a`)
+> Criado em: 2026-10-22 · Última atualização: 2026-10-26 (v1.7) · Base: commit `ec6d177` (EXC-A6: `8801d9c`; EXC-A7: `47a4b0a`; EXC-A2: `1de867b`)
 > Classificação conforme [CRITERIOS-DE-EXCELENCIA](CRITERIOS-DE-EXCELENCIA.md) · Plano: [PLANO-MESTRE](PLANO-MESTRE.md) · Origem dos itens: [INVENTARIO-AUDITORIAS](INVENTARIO-AUDITORIAS.md)
 
 ---
@@ -48,7 +48,7 @@
 | ID | Área | Título | Natureza | Gravidade | Confiança | Status | Responsável |
 |---|---|---|---|---|---|---|---|
 | EXC-SEG-001 | SEG | WPF acessa o banco com a credencial de administrador do servidor SQL, igual em todas as lojas | Fato | **Crítica** | Alta | **Planejado** | A definir |
-| EXC-SEG-002 | SEG | Dependência com vulnerabilidade conhecida de gravidade alta (`System.Security.Cryptography.Xml` 8.0.3) | Fato | A classificar | Alta (aviso) | Confirmado | A definir |
+| EXC-SEG-002 | SEG | Dependências com vulnerabilidades conhecidas de gravidade alta (6 pacotes; `System.Security.Cryptography.Xml` 8.0.3 usado na verificação de XML de fornecedor) | Fato | **Alta** | Alta (varredura) | Confirmado | A definir |
 | EXC-SEG-003 | SEG | Troca dos segredos removidos do repositório | Lacuna | Informativa | Média | **Encerrado** (troca declarada) | Matheus |
 | EXC-SEG-004 | SEG | Tokens OAuth do Mercado Livre gravados em texto plano | Fato | Média | Alta | Confirmado | A definir |
 | EXC-SEG-005 | SEG | JWT sem refresh token | Fato | Baixa | Alta | Confirmado | A definir |
@@ -57,6 +57,20 @@
 | EXC-SEG-008 | SEG | Servidor SQL sem auditoria, sem Defender e sem administrador do Entra | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-SEG-009 | SEG | Firewall do servidor SQL aberto para qualquer IP da internet | Fato | **Crítica** | Alta | **Risco aceito** (revisão: fim da E6) | Matheus |
 | EXC-SEG-010 | SEG | *Seeder* do WPF promove usuários a Administrador pelo nome a cada abertura e cria administrador com senha fixa no código | Fato + Hipótese | **Alta** | Alta (código) | Confirmado | A definir |
+| EXC-SEG-011 | SEG | Cadastro público decide se a loja existe pela presença de um usuário `admin`; sem ele, cria cargos e administrador dentro do tenant existente | Fato + Lacuna | A classificar | Alta (código) | Confirmado | A definir |
+| EXC-SEG-012 | SEG | Tokens de chat e de redefinição de senha aceitos como token de sessão, fora da revogação; token de chat emite outro token de chat | Fato | **Alta** | Alta (código) | Confirmado | A definir |
+| EXC-SEG-013 | SEG | Redefinição de senha não revoga sessões; troca de e-mail do perfil sem a senha atual | Fato | Média | Alta (código) | Confirmado | A definir |
+| EXC-SEG-014 | SEG | Autorização de sangria por token de gerente: revogação provavelmente não checada; vale o limite do solicitante, e `0` = sem limite | Fato + Hipótese | Média | Média | Confirmado | A definir |
+| EXC-SEG-015 | SEG | XSS armazenado nos relatórios do Portal, com token de sessão em `localStorage` | Fato + Hipótese | **Alta** | Alta (código) | Confirmado | A definir |
+| EXC-SEG-016 | SEG | Leituras sensíveis exigem só login; permissões `*.view` liberam escrita; sem política *fallback* | Fato | Média | Alta | Confirmado | A definir |
+| EXC-SEG-017 | SEG | Tokens da Focus NFe cifrados com chave fixa no código-fonte e no binário do WPF (`TokenProtector`) | Fato | **Alta** | Alta | Confirmado | A definir |
+| EXC-SEG-018 | SEG | Limites por IP usam cabeçalhos do cliente; limite de login por CNPJ permite bloquear o login de uma loja pela API | Fato | Média | Alta | Confirmado | A definir |
+| EXC-SEG-019 | SEG | Webhook da Shopee aceita chave vazia ou *placeholder*; integração inexistente com rota anônima | Fato | Baixa | Alta (código) | Confirmado | A definir |
+| EXC-SEG-020 | SEG | Nome do arquivo da foto de entrega entra sem validação no nome do blob | Fato + Hipótese | A classificar | Média | Hipótese | A definir |
+| EXC-SEG-021 | SEG | Atualizador do WPF verifica integridade (SHA-256 do mesmo container), não autenticidade | Fato | Média | Alta | Confirmado | A definir |
+| EXC-SEG-022 | SEG | Configuração sem guarda contra *placeholders*; Swagger público se o ambiente for `Staging`; CORS de produção com origens locais | Fato + Lacuna | Baixa | Média | Confirmado | Matheus |
+| EXC-SEG-023 | SEG | OAuth do Mercado Livre usa o Id do canal como `state`, fixo e reutilizável | Fato | Baixa | Alta | Confirmado | A definir |
+| EXC-SEG-024 | SEG | Tokens em *query string* possivelmente gravados pela telemetria; e-mail completo em log | Hipótese | Baixa | Baixa | Hipótese | A definir |
 | EXC-ENG-001 | ENG | Testes não comprovam comportamento no SQL Server (SQL bruto e `IgnoreQueryFilters`) | Fato | Média | Alta | Confirmado | A definir |
 | EXC-ENG-002 | ENG | README desatualizado em relação à arquitetura atual | Fato | Baixa | Alta | Confirmado | A definir |
 | EXC-ENG-003 | ENG | 155 avisos de compilação | Fato | Baixa | Alta | Confirmado (classificados na EXC-A6) | A definir |
@@ -120,7 +134,8 @@
 | EXC-MKT-003 | MKT | Relatórios anteriores recomendam afirmações de divulgação que o estado atual não sustenta | Fato | Média | Alta | Confirmado | Matheus |
 | EXC-MKT-004 | MKT | Nenhum canal de aquisição ou funil medido | Lacuna | A classificar | — | Lacuna | Matheus |
 
-**Contagem:** 72 registros (69 abertos, um deles em risco aceito; 3 encerrados) — abertos: 3 Crítica, 7 Alta, 30 Média, 16 Baixa, 13 A classificar.
+**Contagem:** 86 registros (83 abertos, um deles em risco aceito; 3 encerrados) — abertos: 3 Crítica, 11 Alta, 35 Média, 20 Baixa, 14 A classificar.
+Em 2026-10-26 (EXC-A2, primeira passada): acrescentados EXC-SEG-011 a 024 pela [avaliação de segurança e qualidade](EXC-A2-SEGURANCA-QUALIDADE.md); EXC-SEG-002 reclassificado de A classificar para Alta após a varredura completa de dependências.
 Em 2026-10-26 (EXC-A7, primeira passada): acrescentados EXC-PRD-002 a 011, EXC-FIS-014 e EXC-OPS-008 pelo [inventário funcional](EXC-A7-INVENTARIO-FUNCIONAL.md).
 Em 2026-10-26 (EXC-A6): acrescentados EXC-ENG-005 a 013 e EXC-SEG-010 pela [avaliação de arquitetura e engenharia](EXC-A6-ARQUITETURA-ENGENHARIA.md); EXC-ENG-001, 003 e 004 atualizados.
 Em 2026-10-26: acrescentados EXC-ADM-003 a 005 pela [avaliação administrativa e financeira](EXC-A10-ADMINISTRATIVO-FINANCEIRO.md), EXC-MKT-001 a 004 e EXC-FIS-012 pela [avaliação de marketing](EXC-A10-MARKETING.md), e EXC-VEN-002 a 004 pela [avaliação de vendas](EXC-A10-VENDAS.md); EXC-FIS-013 encontrado na correção do EXC-MKT-002, que passou a *Em validação*.
@@ -151,25 +166,25 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Relacionados | EXC-ENG-001, EXC-FIS-003, EXC-SEG-004, EXC-SEG-006, EXC-SEG-007, EXC-OPS-007 |
 | Datas | Registrado em 2026-10-22; atualizado em 2026-10-22 (relatórios anteriores; declaração do login; verificação no Azure e no banco) |
 
-### EXC-SEG-002 — Dependência com vulnerabilidade conhecida de gravidade alta
+### EXC-SEG-002 — Dependências com vulnerabilidades conhecidas de gravidade alta
 
 | Campo | Valor |
 |---|---|
 | Área | SEG |
-| Natureza | Fato (o aviso existe); impacto real ainda não avaliado |
-| Descrição | O restore reporta `NU1903` para `System.Security.Cryptography.Xml` 8.0.3 no projeto `ERP.Application`. O pacote é provavelmente usado na assinatura/validação de XML fiscal. Nenhum relatório anterior registra este aviso. |
-| Evidência | Build de 2026-10-22, `ec6d177`: `ERP.Application.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.3 has a known high severity vulnerability`. |
-| Gravidade | **A classificar** — depende do advisory e do uso da funcionalidade afetada. |
-| Impacto | A determinar na EXC-A2. |
-| Confiança | Alta para o aviso; Baixa para o impacto |
-| Dependências | — |
+| Natureza | Fato |
+| Descrição | A varredura completa (EXC-A2) encontrou avisos *High* em 6 pacotes, nenhum *Critical*: `System.Security.Cryptography.Xml` 8.0.3 (9 avisos; referência direta em `ERP.Application`), `System.Security.Cryptography.Pkcs` 8.0.1, `AutoMapper` 14.0.0, `Microsoft.AspNetCore.SignalR.Common` 8.0.0 (WPF), `System.Text.Json` 8.0.0 e `SQLitePCLRaw.lib.e_sqlite3` 2.1.6. `ERP.Domain` e `ERP.Updater` sem avisos. O `Cryptography.Xml` é usado em `SignedXml` sobre XML recebido de fornecedor, ou seja, processa entrada externa. |
+| Evidência | Build de 2026-10-22, `ec6d177` (aviso `NU1903`); `dotnet list ERP.sln package --vulnerable --include-transitive` em 2026-10-26, `1de867b`; `ERP.Application/ERP.Application.csproj:9`; `ERP.Application/Services/NfeImportService.cs:228`. [EXC-A2 §3](EXC-A2-SEGURANCA-QUALIDADE.md) |
+| Gravidade | **Alta** (`Cryptography.Xml` processa XML externo); demais pacotes a classificar pelo uso. |
+| Impacto | Depende de cada aviso; o caminho mais exposto é a importação de XML de compra, alimentada por arquivos de terceiros. |
+| Confiança | Alta (varredura); Média (alcance de cada aviso no uso real) |
+| Dependências | Decisão sobre o AutoMapper (versões corrigidas têm licença diferente) |
 | Responsável | A definir |
-| Ação proposta | Na EXC-A2: identificar o advisory, onde o pacote é usado (direto ou transitivo) e a versão corrigida; rodar `dotnet list package --vulnerable --include-transitive` em todos os projetos. |
+| Ação proposta | Atualizar para os patches 8.0.x correntes (`Cryptography.Xml`, `Pkcs`, `System.Text.Json`, `SignalR.Common`) e o `SQLitePCLRaw`; decidir sobre o AutoMapper; falhar o CI com `NU1903`/`NU1904`. |
 | Status | Confirmado |
 | Critério de validação | Nenhuma vulnerabilidade alta/crítica, ou risco aceito com justificativa. |
-| Origem | EXC-F0 |
+| Origem | EXC-F0; EXC-A2 |
 | Relacionados | INV-007 |
-| Datas | Registrado em 2026-10-22 |
+| Datas | Registrado em 2026-10-22; atualizado em 2026-10-26 (varredura completa, reclassificado para Alta) |
 
 ### EXC-SEG-003 — Troca dos segredos removidos do repositório não confirmada
 
@@ -330,6 +345,291 @@ Atualizado em 2026-10-22 com os resultados do [roteiro](ROTEIRO-CONFIRMACOES-A0.
 | Critério de validação | Nenhum código que altere cargo por nome; nenhuma senha fixa no código; consulta C4 sem usuário promovido indevidamente; teste que garante que a abertura do WPF não altera cargos. |
 | Origem | EXC-A6 (2026-10-26) |
 | Relacionados | EXC-SEG-001, EXC-OPS-007, EXC-VEN-003 |
+| Datas | Registrado em 2026-10-26 |
+
+> Os registros EXC-SEG-011 a 024 vêm da primeira passada da EXC-A2 (commit `1de867b`), feita
+> por leitura de código, **sem testes de reprodução**. O detalhe e a evidência completa estão em
+> [EXC-A2-SEGURANCA-QUALIDADE](EXC-A2-SEGURANCA-QUALIDADE.md) (§3); os testes R1–R11 e as
+> consultas C-A2-1 a C-A2-3 citados abaixo estão definidos na §5 do mesmo relatório.
+
+### EXC-SEG-011 — Cadastro público decide se a loja existe pela presença de um usuário `admin`
+
+| Campo | Valor |
+|---|---|
+| Área | SEG (também DAD, VEN) |
+| Natureza | Fato (código) + Lacuna (quais tenants não têm `admin`) |
+| Descrição | O cadastro público considera a loja existente só se o tenant derivado do CNPJ tiver um usuário `admin` não excluído. Sem ele, cria cargos, permissões e um usuário `admin` com o `TenantId` da loja existente. Não há índice único em `Users(TenantId, Username)` nem em cargos/permissões por tenant. A conferência na Receita usa dados públicos e falha aberta enquanto o circuito da BrasilAPI está fechado. |
+| Evidência | `ERP.Infrastructure/Services/CadastroService.cs:114`, `:122-162`; `ERP.Api/Models/TenantHelper.cs`; `ERP.Infrastructure/Services/BrasilApiService.cs:124-155`; ausência de índice único em `AppDbContext.cs` (2026-10-26) |
+| Gravidade | **A classificar** — Crítica se algum tenant ativo não tiver `admin` não excluído; Alta (latente) caso contrário, porque basta excluir ou renomear o `admin` para abrir o caminho. |
+| Impacto | Terceiros obtêm um administrador dentro de uma loja existente, com acesso pela API aos dados e às operações fiscais dela. |
+| Confiança | Alta (código); dados de produção não consultados |
+| Dependências | Consulta C-A2-1 |
+| Responsável | A definir |
+| Ação proposta | Desligar o cadastro público por configuração até a correção; verificar existência por qualquer registro do tenant (inclusive excluídos); índice único `(TenantId, Username)`; ativação manual de loja nova enquanto não houver contrato (EXC-FIS-002). Se a C-A2-1 encontrar tenant ativo sem `admin`, tratar como incidente. |
+| Status | Confirmado |
+| Critério de validação | Teste R1; consulta C-A2-1 registrada. |
+| Origem | EXC-A2 (2026-10-26) |
+| Relacionados | EXC-VEN-002, EXC-SEG-010, EXC-ENG-001 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-SEG-012 — Tokens de chat e de redefinição aceitos como token de sessão
+
+| Campo | Valor |
+|---|---|
+| Área | SEG |
+| Natureza | Fato (código) |
+| Descrição | Sessão, chat e redefinição de senha usam a mesma chave, emissor e audiência. O *bearer* da API não distingue o tipo e só checa revogação quando há `token_version`, que os tokens de chat e de redefinição não têm. O endpoint `chat-token` exige só autenticação, logo aceita o próprio token de chat. |
+| Evidência | `ERP.Api/Controllers/AuthController.cs:162-185`, `:365-407`; `ERP.Api/Controllers/ChatTokenController.cs:44-79`; `ERP.Api/Program.cs:372` (2026-10-26) |
+| Gravidade | **Alta** — a revogação (logout, desativação, troca de senha) deixa de ser garantia. |
+| Impacto | Um token auxiliar dá acesso às ações que exigem só login (EXC-SEG-016) mesmo depois da revogação. Não há escalada de permissão: esses tokens não carregam permissões. |
+| Confiança | Alta (código) |
+| Dependências | — |
+| Responsável | A definir |
+| Ação proposta | Audiência ou claim `typ` distinta por tipo; *bearer* da API só aceita sessão e exige `token_version`; `chat-token` emitido só a partir de sessão; token de chat também validado contra `TokenVersion`. |
+| Status | Confirmado |
+| Critério de validação | Testes R2 e R3. |
+| Origem | EXC-A2 (2026-10-26) |
+| Relacionados | EXC-SEG-005, EXC-SEG-013, EXC-SEG-016 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-SEG-013 — Redefinição de senha não revoga sessões; troca de e-mail sem senha atual
+
+| Campo | Valor |
+|---|---|
+| Área | SEG |
+| Natureza | Fato (código) |
+| Descrição | A redefinição por e-mail grava a senha nova sem incrementar `TokenVersion` (a troca autenticada incrementa). A troca do e-mail do perfil não pede a senha atual nem avisa o e-mail anterior. |
+| Evidência | `ERP.Api/Controllers/AuthController.cs:262`, `:342-363`; `ERP.Application/Services/AuthService.cs` (`ChangePasswordAsync` chama `RevokeSessionsAsync`) (2026-10-26) |
+| Gravidade | Média |
+| Impacto | Sessões antigas seguem válidas por até 12 h depois de uma redefinição feita por suspeita de acesso; quem tem só uma sessão pode trocar o e-mail de recuperação. |
+| Confiança | Alta (código) |
+| Dependências | — |
+| Responsável | A definir |
+| Ação proposta | Revogar sessões na redefinição; exigir a senha atual para trocar o e-mail e avisar o endereço anterior. |
+| Status | Confirmado |
+| Critério de validação | Testes R4 e R5. |
+| Origem | EXC-A2 (2026-10-26) |
+| Relacionados | EXC-SEG-012 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-SEG-014 — Autorização de sangria por token de gerente
+
+| Campo | Valor |
+|---|---|
+| Área | SEG (também ENG) |
+| Natureza | Fato (código) + Hipótese (mapeamento da claim `sub`) |
+| Descrição | A validação do token do autorizador procura a claim `sub`, que o `JwtSecurityTokenHandler` remapeia por padrão (o próprio projeto contorna isso na redefinição de senha); sem a claim, a checagem de revogação é pulada. O limite aplicado é o do solicitante, e `SangriaPolicy` trata `0` como "sem limite" — o valor que o *seeder* dá ao Vendedor. |
+| Evidência | `ERP.Api/Controllers/CaixaController.cs:118`, `:254`; `ERP.Api/Controllers/AuthController.cs:215`; `ERP.Application/Helpers/SangriaPolicy.cs:32`; `ERP.Persistence/Context/DbSeeder.cs:214` (2026-10-26) |
+| Gravidade | Média |
+| Impacto | Gerente desligado segue autorizando até o token expirar; um autorizador com limite menor libera sangria acima do próprio limite. |
+| Confiança | Média |
+| Dependências | — |
+| Responsável | A definir |
+| Ação proposta | Limpar o mapeamento de claims nessa validação; aplicar o limite do autorizador; separar "sem limite" de "zero". |
+| Status | Confirmado |
+| Critério de validação | Testes R6 e R7. |
+| Origem | EXC-A2 (2026-10-26) |
+| Relacionados | EXC-SEG-012, EXC-PRD-005 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-SEG-015 — XSS armazenado nos relatórios do Portal
+
+| Campo | Valor |
+|---|---|
+| Área | SEG |
+| Natureza | Fato (código) + Hipótese (exploração) |
+| Descrição | A página de relatórios monta HTML com nomes de cliente, vendedor e produto sem codificação e o renderiza como `MarkupString`. O token de sessão do Portal fica em `localStorage`. |
+| Evidência | `ERP.Portal/Pages/Relatorios.razor:103`, `:158-159`, `:286` (nenhum `HtmlEncode` no arquivo); `ERP.Portal/Services/ApiClient.cs:23`, `:160` (2026-10-26) |
+| Gravidade | **Alta** — escalada de privilégio dentro do tenant (CRITERIOS §3). |
+| Impacto | Quem edita nomes de cliente (o Vendedor tem `customers.edit`) ou de produto, inclusive por XML de compra importado, injeta conteúdo executado no navegador de quem abre o relatório, ao alcance do token desse usuário. Isolamento entre tenants não é afetado. |
+| Confiança | Alta (código) |
+| Dependências | — |
+| Responsável | A definir |
+| Ação proposta | Codificar todo valor interpolado ou trocar o `MarkupString` por componentes Razor; avaliar CSP no Static Web App; a médio prazo, token fora do `localStorage`. |
+| Status | Confirmado |
+| Critério de validação | Teste R8. |
+| Origem | EXC-A2 (2026-10-26) |
+| Relacionados | EXC-SEG-016 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-SEG-016 — Autorização por recurso incompleta
+
+| Campo | Valor |
+|---|---|
+| Área | SEG (também PRD) |
+| Natureza | Fato |
+| Descrição | Das 189 ações da API, cerca de 70 leituras exigem só login (contas a receber e a pagar, SPED, clientes, notas, relatório de vendas). Permissões `*.view` liberam escrita (emitir/cancelar nota, baixa e cancelamento de contas, PUT de configuração, canais de venda). Não há política *fallback*: ação sem atributo fica anônima. |
+| Evidência | Levantamento de atributos por script em 2026-10-26; exemplos: `ERP.Api/Controllers/ConfigController.cs:36-38`, `NotasFiscaisController.cs`, `ContasReceberController.cs`; `ERP.Api/Program.cs:396-403` |
+| Gravidade | Média |
+| Impacto | Qualquer cargo lê dados financeiros e fiscais da loja; não é possível dar acesso de consulta sem dar acesso de alteração. |
+| Confiança | Alta |
+| Dependências | Matriz de permissões aprovada pelo responsável |
+| Responsável | A definir |
+| Ação proposta | Matriz cargo × recurso × operação; permissões de leitura e escrita separadas; `FallbackPolicy = RequireAuthenticatedUser`; teste que falha se uma ação nova não tiver atributo de autorização. |
+| Status | Confirmado |
+| Critério de validação | Matriz aprovada; testes negativos por cargo; teste de enumeração das ações. |
+| Origem | EXC-A2 (2026-10-26) |
+| Relacionados | EXC-SEG-012, EXC-PRD-009 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-SEG-017 — Tokens da Focus NFe cifrados com chave fixa no código
+
+| Campo | Valor |
+|---|---|
+| Área | SEG (também FIS) |
+| Natureza | Fato |
+| Descrição | O `TokenProtector` deriva a chave AES de um texto fixo no código-fonte, presente também no binário do WPF. Em caso de erro, `Desproteger` devolve a entrada sem alteração. |
+| Evidência | `ERP.Application/Helpers/TokenProtector.cs:20-21`, `:61-64` (2026-10-26) |
+| Gravidade | **Alta** junto com EXC-SEG-001 (qualquer PC de loja lê o banco); Média isolado. |
+| Impacto | Quem lê o banco e tem o binário decifra os tokens da Focus de todas as lojas e pode emitir ou cancelar documentos fiscais em nome delas. A ação proposta em EXC-SEG-004 herdaria o mesmo problema. |
+| Confiança | Alta |
+| Dependências | EXC-FIS-004 (WPF ainda lê configuração fiscal) |
+| Responsável | A definir |
+| Ação proposta | Chave fora do código (Key Vault ou configuração do App Service), com rotação e recifragem dos registros; o WPF deixa de decifrar tokens fiscais; revisar a ação de EXC-SEG-004. |
+| Status | Confirmado |
+| Critério de validação | V7: nenhuma chave de cifragem no código; registros recifrados. |
+| Origem | EXC-A2 (2026-10-26) |
+| Relacionados | EXC-SEG-001, EXC-SEG-004, EXC-FIS-004 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-SEG-018 — Limites de requisição contornáveis e bloqueio de login por CNPJ
+
+| Campo | Valor |
+|---|---|
+| Área | SEG (também OPS) |
+| Natureza | Fato |
+| Descrição | O limite por IP usa `X-Real-IP` e aceita `X-Forwarded-For` de qualquer origem (redes e proxies conhecidos esvaziados). O limite de login de 5/min é por CNPJ, informado no cabeçalho e público, e vale também para quem não está autenticado. |
+| Evidência | `ERP.Api/Program.cs:188`, `:580-585`; `ERP.Api/Middleware/TenantRateLimitMiddleware.cs:36`, `:62`; teste existente `ControllersIntegrationTests.cs:2884-2930` (baldes separados por `X-Forwarded-For`) (2026-10-26) |
+| Gravidade | Média |
+| Impacto | Os limites de recuperação de senha e de cadastro não seguram um cliente que varie os cabeçalhos; o limite por CNPJ pode impedir o login legítimo da loja pela API. O bloqueio por conta (`LockoutPolicy`) segue protegendo contra força bruta por usuário. |
+| Confiança | Alta (código) |
+| Dependências | EXC-OPS-006 (limites em memória) |
+| Responsável | A definir |
+| Ação proposta | Confiar só no proxy do App Service; remover `X-Real-IP`; limite de login por (CNPJ, usuário) combinado com o IP real. |
+| Status | Confirmado |
+| Critério de validação | Teste R9. |
+| Origem | EXC-A2 (2026-10-26) |
+| Relacionados | EXC-OPS-006, EXC-VEN-002 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-SEG-019 — Webhook da Shopee aceita chave vazia
+
+| Campo | Valor |
+|---|---|
+| Área | SEG |
+| Natureza | Fato (código) |
+| Descrição | A validação de assinatura da Shopee não recusa chave vazia nem o *placeholder* do `appsettings.json` (a do Mercado Livre recusa). A rota é anônima e a integração com a Shopee não existe. Hoje a confirmação do pedido na Shopee falha, então nenhum estoque é alterado. |
+| Evidência | `ERP.Api/Security/WebhookSignatureValidator.cs:83-117`; `ERP.Api/Controllers/MarketplaceController.cs` (rota `shopee/webhook`); `ERP.Infrastructure/Services/MarketplaceService.cs:37-65` (2026-10-26) |
+| Gravidade | Baixa |
+| Impacto | Proteção depende de uma falha acidental da confirmação; se a integração for implementada sem corrigir a validação, o corpo do webhook passa a alterar estoque. |
+| Confiança | Alta (código) |
+| Dependências | Consulta C-A2-2 (configuração da Shopee no App Service) |
+| Responsável | A definir |
+| Ação proposta | Desativar a rota até existir a integração; recusar chave vazia ou *placeholder*; usar as quantidades do pedido confirmado, não do corpo do webhook. |
+| Status | Confirmado |
+| Critério de validação | Rota desativada ou guarda de configuração com teste. |
+| Origem | EXC-A2 (2026-10-26) |
+| Relacionados | EXC-SEG-022 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-SEG-020 — Nome do arquivo da foto de entrega sem validação
+
+| Campo | Valor |
+|---|---|
+| Área | SEG |
+| Natureza | Fato (código) + Hipótese (alcance fora do prefixo do tenant) |
+| Descrição | O nome do arquivo vindo da rota entra sem validação no nome do blob `{tenant}/{entrega}/{fileName}`, usado para gerar a URL SAS. Não foi verificado se o SDK ou o servidor normalizam segmentos de caminho a ponto de sair do prefixo do tenant. |
+| Evidência | `ERP.Infrastructure/Services/StorageService.cs:162`; `ERP.Api/Controllers/StorageController.cs` (rota `entrega/{entregaId}/foto/{*fileName}`) (2026-10-26) |
+| Gravidade | **A classificar** — Média se o caminho puder sair do prefixo do tenant; Baixa se não. |
+| Impacto | No pior caso, URL de leitura para foto de entrega de outro tenant. |
+| Confiança | Média |
+| Dependências | — |
+| Responsável | A definir |
+| Ação proposta | Aceitar só nome simples (sem `/`, `\` nem `..`). |
+| Status | Hipótese |
+| Critério de validação | Teste R10. |
+| Origem | EXC-A2 (2026-10-26) |
+| Relacionados | — |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-SEG-021 — Atualizador do WPF sem verificação de autenticidade
+
+| Campo | Valor |
+|---|---|
+| Área | SEG (também OPS) |
+| Natureza | Fato |
+| Descrição | O WPF baixa o manifesto `versao.json` e o executável do mesmo container e confere só o SHA-256 informado no próprio manifesto. Não há assinatura verificada. |
+| Evidência | `ERP.WPF/Services/UpdateService.cs:31`, `:88`, `:138-139` (2026-10-26) |
+| Gravidade | Média |
+| Impacto | Quem conseguir escrever no container de *releases* distribui um executável aceito por todos os PCs das lojas. Critério SEG-5 não atendido. |
+| Confiança | Alta |
+| Dependências | Quem tem acesso de escrita ao container (lacuna, EXC-A5) |
+| Responsável | A definir |
+| Ação proposta | Assinar o executável (Authenticode) e verificar antes de instalar, ou assinar o manifesto com chave assimétrica cuja pública vai no WPF; restringir a escrita no container. |
+| Status | Confirmado |
+| Critério de validação | V9: WPF recusa executável sem assinatura válida. |
+| Origem | EXC-A2 (2026-10-26) |
+| Relacionados | EXC-OPS-004 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-SEG-022 — Configuração sem guarda contra *placeholders*; Swagger e CORS
+
+| Campo | Valor |
+|---|---|
+| Área | SEG (também OPS) |
+| Natureza | Fato + Lacuna (ambiente do App Service) |
+| Descrição | A API parte com qualquer valor em `Jwt:Key` e nas chaves da Shopee, inclusive o *placeholder* `CONFIGURADO_VIA_AZURE_APP_SERVICE`. O Swagger é publicado quando o ambiente é `Staging` ou `Development`. O CORS de produção inclui `localhost` e um IP de rede local. |
+| Evidência | `ERP.Api/appsettings.json`; `ERP.Api/Program.cs:316-331`, `:406-420`, `:630` (2026-10-26) |
+| Gravidade | Baixa |
+| Impacto | Uma configuração esquecida no App Service vira chave conhecida por quem tem o código. |
+| Confiança | Média |
+| Dependências | Consulta C-A2-2 |
+| Responsável | Matheus |
+| Ação proposta | Validar a configuração na partida e abortar com *placeholder* ou chave curta; Swagger só em `Development`; CORS de produção só com domínios de produção. |
+| Status | Confirmado |
+| Critério de validação | Teste de partida com *placeholder*; consulta C-A2-2 registrada. |
+| Origem | EXC-A2 (2026-10-26) |
+| Relacionados | EXC-SEG-019, EXC-OPS-007 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-SEG-023 — `state` do OAuth do Mercado Livre fixo e reutilizável
+
+| Campo | Valor |
+|---|---|
+| Área | SEG |
+| Natureza | Fato |
+| Descrição | O `state` do OAuth é o Id do canal de venda; o callback anônimo aceita qualquer `state` que corresponda a um canal existente, sem vínculo com quem iniciou a autorização. |
+| Evidência | `ERP.Infrastructure/Services/MercadoLivreAuthService.cs:44`, `:52` (2026-10-26) |
+| Gravidade | Baixa (exige conhecer o Id do canal) |
+| Impacto | Um canal pode ser vinculado a uma conta do Mercado Livre que não é da loja. |
+| Confiança | Alta |
+| Dependências | — |
+| Responsável | A definir |
+| Ação proposta | `state` aleatório de uso único, guardado no início da autorização e conferido no callback. |
+| Status | Confirmado |
+| Critério de validação | Teste R11. |
+| Origem | EXC-A2 (2026-10-26) |
+| Relacionados | EXC-SEG-004 |
+| Datas | Registrado em 2026-10-26 |
+
+### EXC-SEG-024 — Tokens em *query string* e e-mail em log
+
+| Campo | Valor |
+|---|---|
+| Área | SEG (também DAD) |
+| Natureza | Hipótese |
+| Descrição | Os tokens do SignalR (`access_token`) e do chat (`chatToken`) vão na *query string*; a telemetria de requisições do Application Insights pode guardar a URL completa. A falha de envio do e-mail de recuperação registra o endereço completo. |
+| Evidência | `ERP.Api/Program.cs:340-348`; `ERP.Api/Hubs/ERPHub.cs` (`chatToken`); `ERP.Api/Controllers/AuthController.cs:310` (2026-10-26) |
+| Gravidade | Baixa |
+| Impacto | Quem lê a telemetria obtém tokens válidos; combinado com EXC-SEG-012, o token de chat pode ser renovado. Dado pessoal em log (DAD-2, FIS-5). |
+| Confiança | Baixa |
+| Dependências | Consulta C-A2-3 |
+| Responsável | A definir |
+| Ação proposta | Filtrar a *query string* na telemetria; mascarar o e-mail como `CadastroService.MascararEmail`. |
+| Status | Hipótese |
+| Critério de validação | Consulta C-A2-3 sem tokens; log sem e-mail completo. |
+| Origem | EXC-A2 (2026-10-26) |
+| Relacionados | EXC-SEG-012 |
 | Datas | Registrado em 2026-10-26 |
 
 ---
