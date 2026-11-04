@@ -52,6 +52,23 @@ public class CartItem : BaseViewModel
     // Sprint C: preços por grupo de cliente
     public decimal  PrecoBRevendedor     { get; set; } = 0;
     public decimal  PrecoCAtacadista     { get; set; } = 0;
+
+    // S{N} FIX: preco de varejo original (SalePrice) guardado a parte.
+    // NormalUnitPrice passa a ser o preco BASE do item para o cliente atual
+    // (varejo, B ou C) - e o que o Total e o atacado usam, igual ao servidor
+    // (SaleService usa GetPrecoParaGrupo como preco normal). Sem isto nao da
+    // pra voltar ao varejo quando o cliente e trocado/removido.
+    public decimal  PrecoVarejo          { get; set; } = 0;
+
+    /// <summary>S{N} FIX: troca o preco base do item e recalcula UnitPrice/Total
+    /// pelo mesmo caminho do atacado (UpdatePriceBasedOnQuantity).</summary>
+    public void DefinirPrecoBase(decimal precoBase)
+    {
+        NormalUnitPrice = precoBase;
+        UpdatePriceBasedOnQuantity();
+        OnPropertyChanged(nameof(Total));
+    }
+
     public bool IsWholesaleActive => WholesaleMinQuantity.HasValue && WholesalePrice.HasValue && Quantity >= WholesaleMinQuantity.Value;
 
     private void UpdatePriceBasedOnQuantity()
@@ -196,6 +213,8 @@ public class PdvViewModel : BaseViewModel
     private static Guid? _clienteIdMemoria = null;
     private static string _clienteNomeMemoria = "Consumidor Final";
     private static decimal _descontoMemoria = 0;
+    // S{N} FIX: grupo de preco sumia ao sair e voltar pro PDV (VM nova volta pra A).
+    private static ERP.Domain.Enums.GrupoPreco _grupoPrecoMemoria = ERP.Domain.Enums.GrupoPreco.A;
 
     // 👇 PASSO 1: A variável que lembra a venda EXCLUSIVA deste terminal
     private Guid? _idUltimaVendaDesteCaixa = null;
@@ -207,12 +226,16 @@ public class PdvViewModel : BaseViewModel
         _clienteIdMemoria = _selectedCustomerId;
         _clienteNomeMemoria = SelectedCustomerName;
         _descontoMemoria = DiscountAmount;
+        _grupoPrecoMemoria = _grupoPrecoCliente;
     }
 
     private void RestaurarEstadoCarrinho()
     {
         if (_carrinhoMemoria.Any() || _clienteIdMemoria.HasValue)
         {
+            // S{N} FIX: copia antes - RefreshTotals chama SalvarEstadoCarrinho e
+            // regravaria a memoria com o grupo A desta VM nova.
+            var grupoSalvo = _grupoPrecoMemoria;
             CartItems.Clear();
             foreach (var item in _carrinhoMemoria)
             {
@@ -222,6 +245,9 @@ public class PdvViewModel : BaseViewModel
             _selectedCustomerId = _clienteIdMemoria;
             SelectedCustomerName = _clienteNomeMemoria;
             DiscountAmount = _descontoMemoria;
+            // S{N} FIX: itens restaurados ja vem com o preco base certo; o setter
+            // reaplica (sem efeito nos itens) e devolve o badge roxo.
+            GrupoPrecoCliente = grupoSalvo;
         }
     }
 
@@ -543,22 +569,32 @@ public class PdvViewModel : BaseViewModel
     private string _labelGrupoPreco = "";
     public string LabelGrupoPreco { get => _labelGrupoPreco; private set => SetProperty(ref _labelGrupoPreco, value); }
 
+    // S{N} FIX: mesma regra do Product.GetPrecoParaGrupo (servidor) - preco
+    // do grupo quando > 0, senao varejo.
+    private static decimal PrecoParaGrupo(ERP.Domain.Enums.GrupoPreco grupo,
+        decimal precoVarejo, decimal precoB, decimal precoC) => grupo switch
+    {
+        ERP.Domain.Enums.GrupoPreco.B when precoB > 0 => precoB,
+        ERP.Domain.Enums.GrupoPreco.C when precoC > 0 => precoC,
+        _ => precoVarejo
+    };
+
     private void AplicarPrecosGrupoAoCarrinho()
     {
-        // Re-aplica o preço de grupo em todos os itens do carrinho que ainda têm preço padrão
+        // S{N} FIX: antes so trocava UnitPrice (texto "R$ x/un"); o Total usa
+        // NormalUnitPrice, entao o carrinho continuava cobrando varejo e
+        // qualquer +/- na quantidade desfazia ate o UnitPrice. Agora troca o
+        // preco base. Item sem PrecoVarejo (veio de orcamento/suspensa/historico,
+        // preco negociado) nao e tocado.
         foreach (var item in CartItems)
         {
-            var precoGrupo = item.PrecoBRevendedor > 0 || item.PrecoCAtacadista > 0
-                ? _grupoPrecoCliente switch
-                {
-                    ERP.Domain.Enums.GrupoPreco.B when item.PrecoBRevendedor > 0 => item.PrecoBRevendedor,
-                    ERP.Domain.Enums.GrupoPreco.C when item.PrecoCAtacadista > 0 => item.PrecoCAtacadista,
-                    _ => item.NormalUnitPrice
-                }
-                : item.NormalUnitPrice;
+            if (item.PrecoVarejo <= 0) continue;
 
-            if (precoGrupo != item.UnitPrice)
-                item.UnitPrice = precoGrupo;
+            var precoBase = PrecoParaGrupo(_grupoPrecoCliente,
+                item.PrecoVarejo, item.PrecoBRevendedor, item.PrecoCAtacadista);
+
+            if (precoBase != item.NormalUnitPrice)
+                item.DefinirPrecoBase(precoBase);
         }
         RefreshTotals();
 
@@ -828,8 +864,11 @@ public class PdvViewModel : BaseViewModel
             {
                 _selectedCustomerId = customer.Id;
                 SelectedCustomerName = customer.Name;
-                CustomerSearchTerm = string.Empty; 
-                
+                CustomerSearchTerm = string.Empty;
+                // S{N} FIX: este caminho (Enter/BUSCAR) nunca aplicava o grupo -
+                // so o SelectCustomer aplicava. Servidor cobra o grupo de qualquer jeito.
+                GrupoPrecoCliente = (ERP.Domain.Enums.GrupoPreco)customer.GrupoPreco;
+
                 // 👇 GUARDA O CLIENTE NO BOLSO 👇
                 SalvarEstadoCarrinho();
             }
@@ -956,17 +995,18 @@ public class PdvViewModel : BaseViewModel
             { 
                 ProductId = product.Id, 
                 ProductName = product.Name, 
-                NormalUnitPrice = product.SalePrice,
+                // S{N} FIX: o preco do grupo ia so pro UnitPrice, e logo abaixo
+                // "newItem.Quantity = ..." chama UpdatePriceBasedOnQuantity,
+                // que sobrescreve UnitPrice com NormalUnitPrice (varejo). O Total
+                // tambem sempre usou NormalUnitPrice. Resultado: revendedor via
+                // e pagava R$ 179,90 e o servidor gravava a venda a R$ 80,41.
+                PrecoVarejo     = product.SalePrice,
+                NormalUnitPrice = PrecoParaGrupo(_grupoPrecoCliente,
+                                      product.SalePrice, product.PrecoBRevendedor, product.PrecoCAtacadista),
                 WholesaleMinQuantity = product.WholesaleMinQuantity,
                 WholesalePrice = product.WholesalePrice,
                 PrecoBRevendedor = product.PrecoBRevendedor,
                 PrecoCAtacadista = product.PrecoCAtacadista,
-                UnitPrice = _grupoPrecoCliente switch
-                {
-                    ERP.Domain.Enums.GrupoPreco.B when product.PrecoBRevendedor > 0 => product.PrecoBRevendedor,
-                    ERP.Domain.Enums.GrupoPreco.C when product.PrecoCAtacadista > 0 => product.PrecoCAtacadista,
-                    _ => product.SalePrice
-                },
                 Ncm = product.NCM ?? "00000000",
                 Cest = product.CEST ?? string.Empty,
                 Cfop = product.CFOPPadrao ?? "5102",
@@ -1176,7 +1216,10 @@ public class PdvViewModel : BaseViewModel
         _selectedCustomerId = null;
         SelectedCustomerName = "Consumidor Final";
         _orcamentoCarregadoId = null;
-        RefreshTotals(); 
+        // S{N} FIX: grupo ficava B/C pra proxima venda (consumidor final via
+        // preco de revendedor no PDV, servidor cobrava varejo).
+        GrupoPrecoCliente = ERP.Domain.Enums.GrupoPreco.A;
+        RefreshTotals();
     }
 
     private async Task FinalizeSaleAsync()
