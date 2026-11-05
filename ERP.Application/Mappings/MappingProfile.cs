@@ -35,9 +35,11 @@ public class MappingProfile : Profile
                 dst.ParentProductId    = src.ParentProductId;
                 dst.ConversionFactor   = src.ConversionFactor;
                 dst.ParentProductName  = src.ParentProduct?.Name;
-                // S{N} FIX: grupo R. Filho sem custo proprio precisa do pai carregado;
-                // o ProductService completa esse caso (CompletarRepasseFilhosAsync).
-                dst.PrecoRepasse       = ERP.Domain.Services.RepassePolicy.PrecoDoProduto(src, src.ParentProduct);
+                // S{N} FIX: Preco B zerado = automatico (custo final + 25%). O DTO leva o valor
+                // EFETIVO, o mesmo que o SaleService cobra - PDV e tela de produto mostram ele.
+                // Filho sem custo proprio precisa do pai; o ProductService completa (CompletarPrecoBFilhosAsync).
+                if (src.PrecoBRevendedor <= 0)
+                    dst.PrecoBRevendedor = ERP.Domain.Services.RepassePolicy.PrecoDoProduto(src, src.ParentProduct);
             });
 
         CreateMap<CreateProductDto, Product>()

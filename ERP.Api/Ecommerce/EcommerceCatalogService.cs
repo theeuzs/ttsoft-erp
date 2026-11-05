@@ -159,7 +159,7 @@ public sealed class EcommerceCatalogService
 
     /// <summary>Igual ao "Custo Final Calculado" da tela: custo original + IPI. CostPrice so se o original estiver zerado.</summary>
     // S{N} FIX: internal para o lancamento de venda (EcommercePedidoService) usar exatamente a mesma conta do catalogo.
-    // A conta agora mora no dominio (RepassePolicy) e e a mesma do grupo de preco R do PDV.
+    // A conta agora mora no dominio (RepassePolicy) e e a mesma do Preco B automatico do PDV.
     internal static decimal CustoEfetivo(decimal costPrice, decimal originalCost, decimal ipiPercent, bool ehFilho, decimal conversionFactor,
         decimal? costPricePai, decimal? originalCostPai, decimal? ipiPercentPai)
         => ERP.Domain.Services.RepassePolicy.CustoEfetivo(costPrice, originalCost, ipiPercent, ehFilho, conversionFactor,

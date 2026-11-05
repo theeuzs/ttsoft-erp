@@ -176,7 +176,7 @@ public class SaleService : ISaleService
                         product.Name);
                     if (!descontoOk) throw new InvalidOperationException(descontoErro!);
 
-                    // S{N} FIX: grupo R (repasse) usa o custo do pai em produto filho sem custo proprio.
+                    // S{N} FIX: Preco B automatico usa o custo do pai em produto filho sem custo proprio.
                     var unitPriceNormal = product.GetPrecoParaGrupo(grupoPreco,
                         ReferenceEquals(produtoEstoque, product) ? null : produtoEstoque);
 

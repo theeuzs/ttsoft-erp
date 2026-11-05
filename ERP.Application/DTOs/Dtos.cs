@@ -49,9 +49,6 @@ public record ProductDto(
     public string? ParentProductName { get; set; }
     public decimal PrecoBRevendedor { get; set; } = 0;
     public decimal PrecoCAtacadista { get; set; } = 0;
-    // S{N} FIX: preco do grupo R (custo + IPI + 25%), calculado pelo servidor (RepassePolicy).
-    // Somente leitura: nao existe no Create/Update, nao e gravado. 0 = sem custo (PDV usa varejo).
-    public decimal PrecoRepasse     { get; set; } = 0;
     public DateTime? SalePriceChangedAt  { get; set; }
     public string?   SalePriceChangedBy  { get; set; }
     public DateTime? CostPriceChangedAt  { get; set; }

@@ -30,22 +30,31 @@ public class Product : BaseEntity
     public decimal SalePrice { get; set; }
 
     // ── Sprint C: Tabela de preços por grupo de cliente ───────────────────────
-    /// <summary>Preço Grupo B (Revendedor/Empreiteiro). 0 = usa SalePrice.</summary>
+    /// <summary>Preço Grupo B (Revendedor/Empreiteiro). S{N} FIX: 0 = AUTOMATICO, custo final
+    /// (original + IPI) + 25% (RepassePolicy); sem custo cadastrado, varejo. Valor > 0 = manual.</summary>
     public decimal PrecoBRevendedor { get; set; } = 0;
     /// <summary>Preço Grupo C (Atacadista/Grande conta). 0 = usa SalePrice.</summary>
     public decimal PrecoCAtacadista { get; set; } = 0;
 
     /// <summary>Retorna o preço correto conforme o grupo do cliente selecionado.</summary>
-    /// <param name="pai">S{N} FIX: produto pai, so usado pelo grupo R em produto filho sem custo proprio.</param>
+    /// <param name="pai">S{N} FIX: produto pai, so usado no Preco B automatico de produto filho sem custo proprio.</param>
     public decimal GetPrecoParaGrupo(ERP.Domain.Enums.GrupoPreco grupo, Product? pai = null) => grupo switch
     {
-        ERP.Domain.Enums.GrupoPreco.B when PrecoBRevendedor > 0 => PrecoBRevendedor,
+        ERP.Domain.Enums.GrupoPreco.B => PrecoBEfetivo(pai),
         ERP.Domain.Enums.GrupoPreco.C when PrecoCAtacadista > 0 => PrecoCAtacadista,
-        // S{N} FIX: sem custo cadastrado o repasse da 0 - cai pro varejo em vez de vender de graca.
-        ERP.Domain.Enums.GrupoPreco.R when ERP.Domain.Services.RepassePolicy.PrecoDoProduto(this, pai) > 0
-            => ERP.Domain.Services.RepassePolicy.PrecoDoProduto(this, pai),
         _ => SalePrice
     };
+
+    /// <summary>
+    /// S{N} FIX: Preco B que vale de fato - o manual (> 0) ou, se zerado, o automatico
+    /// custo final + 25%. Sem custo cadastrado cai pro varejo em vez de vender de graca.
+    /// </summary>
+    public decimal PrecoBEfetivo(Product? pai = null)
+    {
+        if (PrecoBRevendedor > 0) return PrecoBRevendedor;
+        var auto = ERP.Domain.Services.RepassePolicy.PrecoDoProduto(this, pai);
+        return auto > 0 ? auto : SalePrice;
+    }
 
     public decimal Stock { get; set; }
 

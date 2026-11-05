@@ -1,11 +1,9 @@
 namespace ERP.Domain.Services;
 
 /// <summary>
-/// S{N} FIX: preco de repasse (acordo da loja com o revendedor do canal proprio:
-/// custo + IPI + 25%). FONTE UNICA da conta: usada pelo grupo de preco R
-/// (Product.GetPrecoParaGrupo, PDV e SaleService) e pelo catalogo/pedidos do
-/// site Theuzs (EcommerceCatalogService). Nao existe campo gravado: o preco e
-/// sempre calculado do custo atual, entao nunca fica desatualizado.
+/// S{N} FIX: preco de revenda (custo final + IPI + 25%). FONTE UNICA da conta: usada
+/// pelo Preco B automatico (Product.PrecoBEfetivo - PDV, SaleService, tela de produto)
+/// e pelo catalogo/pedidos do site Theuzs (EcommerceCatalogService).
 /// </summary>
 public static class RepassePolicy
 {

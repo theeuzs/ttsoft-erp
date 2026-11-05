@@ -13,7 +13,7 @@ public sealed class EcommerceOptions
     public string ApiKey { get; set; } = string.Empty;
 
     /// <summary>Repasse para a loja = custo efetivo x FatorRepasse (acordo custo + 25%).</summary>
-    // S{N} FIX: mesmo fator do grupo de preco R do PDV. Se mudar Ecommerce__FatorRepasse no Azure,
+    // S{N} FIX: mesmo fator do Preco B automatico. Se mudar Ecommerce__FatorRepasse no Azure,
     // o site diverge do PDV (que usa RepassePolicy.FatorPadrao) - mude os dois juntos.
     public decimal FatorRepasse { get; set; } = ERP.Domain.Services.RepassePolicy.FatorPadrao;
 

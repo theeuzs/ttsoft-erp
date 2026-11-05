@@ -96,7 +96,7 @@ public class ProductService : IProductService
         // S{N} FIX: lista de entidades e DTOs na mesma ordem, pra completar o repasse dos filhos.
         var produtos = (await _uow.Products.SearchAsync(term)).ToList();
         var dtos = produtos.Select(p => _mapper.Map<ProductDto>(p)).ToList();
-        await CompletarRepasseFilhosAsync(produtos, dtos);
+        await CompletarPrecoBFilhosAsync(produtos, dtos);
         return dtos;
     }
 
@@ -115,27 +115,45 @@ public class ProductService : IProductService
     private async Task<ProductDto> MapearComRepasseAsync(Product product)
     {
         var dto = _mapper.Map<ProductDto>(product);
-        await CompletarRepasseFilhosAsync(new[] { product }, new[] { dto });
+        await CompletarPrecoBFilhosAsync(new[] { product }, new[] { dto });
         return dto;
     }
 
     /// <summary>
     /// S{N} FIX: as consultas do PDV nao carregam o produto pai, entao o mapping calcula 0 de
-    /// repasse para produto filho sem custo proprio (ex.: Barra 6m). Busca so esses pais e
-    /// recalcula com a mesma regra do SaleService (custo do pai x fator de conversao) -
-    /// senao o PDV mostraria varejo e o servidor gravaria o repasse.
+    /// Preco B automatico para produto filho sem custo proprio (ex.: Barra 6m). Busca so esses
+    /// pais e recalcula com a mesma regra do SaleService (custo do pai x fator de conversao) -
+    /// senao o PDV mostraria varejo e o servidor cobraria o Preco B.
     /// </summary>
-    private async Task CompletarRepasseFilhosAsync(IReadOnlyList<Product> produtos, IReadOnlyList<ProductDto> dtos)
+    private async Task CompletarPrecoBFilhosAsync(IReadOnlyList<Product> produtos, IReadOnlyList<ProductDto> dtos)
     {
         for (int i = 0; i < produtos.Count; i++)
         {
             var p = produtos[i];
-            if (dtos[i].PrecoRepasse > 0 || !p.IsProdutoFilho || p.ParentProductId is null) continue;
+            if (dtos[i].PrecoBRevendedor > 0 || !p.IsProdutoFilho || p.ParentProductId is null) continue;
 
             var pai = await _uow.Products.GetByIdAsync(p.ParentProductId.Value);
             if (pai is not null)
-                dtos[i].PrecoRepasse = ERP.Domain.Services.RepassePolicy.PrecoDoProduto(p, pai);
+                dtos[i].PrecoBRevendedor = ERP.Domain.Services.RepassePolicy.PrecoDoProduto(p, pai);
         }
+    }
+
+    /// <summary>
+    /// S{N} FIX: a tela recebe o Preco B EFETIVO e devolve ele no salvar. Se continua igual ao
+    /// automatico, grava 0 (= automatico) pra seguir o custo quando ele mudar por NF-e, pedido
+    /// de compra ou importacao. Valor diferente do automatico fica gravado como manual.
+    /// </summary>
+    private async Task NormalizarPrecoBAsync(Product product)
+    {
+        if (product.PrecoBRevendedor <= 0) { product.PrecoBRevendedor = 0; return; }
+
+        Product? pai = null;
+        if (product.IsProdutoFilho && product.ParentProductId is Guid paiId
+            && ERP.Domain.Services.RepassePolicy.PrecoDoProduto(product) <= 0)
+            pai = await _uow.Products.GetByIdAsync(paiId);
+
+        if (product.PrecoBRevendedor == ERP.Domain.Services.RepassePolicy.PrecoDoProduto(product, pai))
+            product.PrecoBRevendedor = 0;
     }
 
     public async Task<ProductDto> CreateAsync(CreateProductDto dto)
@@ -152,9 +170,10 @@ public class ProductService : IProductService
         }
 
         var product = _mapper.Map<Product>(dto);
+        await NormalizarPrecoBAsync(product);
         await _uow.Products.AddAsync(product);
         await _uow.CommitAsync();
-        return _mapper.Map<ProductDto>(product);
+        return await MapearComRepasseAsync(product);
     }
 
     public async Task<ProductDto> UpdateAsync(UpdateProductDto dto)
@@ -166,6 +185,7 @@ public class ProductService : IProductService
         bool costPriceChanged = product.OriginalCost != dto.OriginalCost;
 
         _mapper.Map(dto, product);
+        await NormalizarPrecoBAsync(product);
 
         product.UpdatedAt = DateTime.UtcNow;
 
@@ -182,7 +202,7 @@ public class ProductService : IProductService
         }
 
         await _uow.CommitAsync();
-        return _mapper.Map<ProductDto>(product);
+        return await MapearComRepasseAsync(product);
     }
 
     public async Task<int> GetLowStockCountAsync()

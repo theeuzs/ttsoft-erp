@@ -387,19 +387,12 @@
                                         <StackPanel>
                                             <TextBlock Text="💼 Preço B — Revendedor" Style="{StaticResource LabelStyle}"/>
                                             <TextBox Text="{Binding PrecoBRevendedor, UpdateSourceTrigger=LostFocus, StringFormat=N2, ConverterCulture=pt-BR}" Style="{StaticResource InputStyle}" FontWeight="Bold" Foreground="#7C3AED"
-                                                     ToolTip="Preço para clientes Grupo B (Revendedor/Empreiteiro). 0 = preço de varejo."/>
+                                                     ToolTip="Preço para clientes Grupo B (Revendedor). Automático: Custo Final Calculado (custo + IPI) + 25%, recalcula ao mudar custo/IPI. Pode digitar outro valor; 0 volta pro automático."/>
                                         </StackPanel>
                                         <StackPanel>
                                             <TextBlock Text="🏭 Preço C — Atacadista" Style="{StaticResource LabelStyle}"/>
                                             <TextBox Text="{Binding PrecoCAtacadista, UpdateSourceTrigger=LostFocus, StringFormat=N2, ConverterCulture=pt-BR}" Style="{StaticResource InputStyle}" FontWeight="Bold" Foreground="#B45309"
                                                      ToolTip="Preço para clientes Grupo C (Atacadista/Grande conta). 0 = preço de varejo."/>
-                                        </StackPanel>
-                                        <!-- S{N} FIX: grupo R - calculado, so leitura. Escondido junto com os custos (revela o custo). -->
-                                        <StackPanel Visibility="{Binding VisCusto}">
-                                            <TextBlock Text="🔁 Repasse (custo + IPI + 25%)" Style="{StaticResource LabelStyle}"/>
-                                            <TextBox Text="{Binding PrecoRepasseCalculado, Mode=OneWay, StringFormat=N2, ConverterCulture=pt-BR}" Style="{StaticResource InputStyle}" FontWeight="Bold" Foreground="#166534"
-                                                     IsReadOnly="True" Background="#F0FDF4"
-                                                     ToolTip="Preço do Grupo R (cliente de repasse). Calculado na hora: custo original + IPI, +25%. Não é editável nem gravado."/>
                                         </StackPanel>
                                     </WrapPanel>
 

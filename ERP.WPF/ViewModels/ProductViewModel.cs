@@ -242,17 +242,16 @@ public class ProductViewModel : BaseViewModel
     public decimal PrecoBRevendedor
     {
         get => _precoBRevendedor;
-        set { SetProperty(ref _precoBRevendedor, value); RecalcMargin(); }
+        // S{N} FIX: Preco B automatico - zerar a caixa volta pro calculado (custo final + 25%).
+        set { SetProperty(ref _precoBRevendedor, value <= 0 ? PrecoBAutomatico : value); RecalcMargin(); }
     }
 
-    // S{N} FIX: grupo R (repasse = custo + IPI + 25%). Somente exibicao - nao e gravado,
-    // o PDV e a venda calculam na hora pela mesma RepassePolicy. Com OriginalCost recalcula
-    // ao digitar; sem ele (CostPrice como reserva, ou produto filho) mostra o valor do servidor.
-    private decimal _precoRepasseServidor;
-    public decimal PrecoRepasseCalculado => OriginalCost > 0
+    // S{N} FIX: mesma conta do servidor e do site (RepassePolicy): Custo Final Calculado
+    // (custo original + IPI) x 1,25. 0 quando nao ha custo original na tela.
+    private decimal PrecoBAutomatico => OriginalCost > 0
         ? ERP.Domain.Services.RepassePolicy.Preco(
               ERP.Domain.Services.RepassePolicy.CustoDoCadastro(0m, OriginalCost, IpiPercent))
-        : _precoRepasseServidor;
+        : 0m;
 
     private decimal _precoCAtacadista;
     public decimal PrecoCAtacadista
@@ -496,7 +495,6 @@ public class ProductViewModel : BaseViewModel
         WholesaleMinQuantity = dto.WholesaleMinQuantity; WholesalePrice = dto.WholesalePrice;
         PrecoBRevendedor = dto.PrecoBRevendedor;
         PrecoCAtacadista = dto.PrecoCAtacadista;
-        _precoRepasseServidor = dto.PrecoRepasse; OnPropertyChanged(nameof(PrecoRepasseCalculado));
         NCM = dto.NCM; CEST = dto.CEST; CFOPPadrao = dto.CFOPPadrao; CSOSN = dto.CSOSN;
         // Achado (09/09) — datas salvas em UTC (correto) mas exibidas cruas,
         // sem converter pro horário do Brasil. Só ficou visível depois da
@@ -542,7 +540,6 @@ public class ProductViewModel : BaseViewModel
         _stockOriginal = 0;
         IsEditing      = false;
 
-        _precoRepasseServidor = 0;
         Name = string.Empty; Barcode = null; SKU = null; Unit = "UN"; OriginalCost = 0;
         IpiPercent = 0; IcmsPercent = 8.03m; SalePrice = 0;
         _stock = 0; OnPropertyChanged(nameof(Stock));
@@ -568,7 +565,9 @@ public class ProductViewModel : BaseViewModel
     {
         var prod = new ERP.Domain.Entities.Product { IpiPercent = IpiPercent, IcmsPercent = 0 };
         FinalCost = _motorFiscal.CalcularTributosVenda(prod, 1, OriginalCost).ValorTotalItem;
-        OnPropertyChanged(nameof(PrecoRepasseCalculado));
+        // S{N} FIX: mudou custo ou IPI -> Preco B recalcula (sobrescreve o manual, como combinado).
+        // No carregamento isso roda antes do PrecoB do banco ser atribuido, que vale por cima.
+        if (PrecoBAutomatico > 0) PrecoBRevendedor = PrecoBAutomatico;
         RecalcMargin();
     }
 
