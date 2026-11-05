@@ -130,7 +130,8 @@ public class ProductService : IProductService
         for (int i = 0; i < produtos.Count; i++)
         {
             var p = produtos[i];
-            if (dtos[i].PrecoBRevendedor > 0 || !p.IsProdutoFilho || p.ParentProductId is null) continue;
+            // S{N} FIX: dto nulo (mapper mockado nos testes) - nada a completar.
+            if (dtos[i] is null || dtos[i].PrecoBRevendedor > 0 || !p.IsProdutoFilho || p.ParentProductId is null) continue;
 
             var pai = await _uow.Products.GetByIdAsync(p.ParentProductId.Value);
             if (pai is not null)
