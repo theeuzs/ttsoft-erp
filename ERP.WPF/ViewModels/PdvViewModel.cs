@@ -52,6 +52,8 @@ public class CartItem : BaseViewModel
     // Sprint C: preços por grupo de cliente
     public decimal  PrecoBRevendedor     { get; set; } = 0;
     public decimal  PrecoCAtacadista     { get; set; } = 0;
+    // S{N} FIX: grupo R (custo + IPI + 25%), vem calculado do servidor (ProductDto.PrecoRepasse).
+    public decimal  PrecoRepasse         { get; set; } = 0;
 
     // S{N} FIX: preco de varejo original (SalePrice) guardado a parte.
     // NormalUnitPrice passa a ser o preco BASE do item para o cliente atual
@@ -572,10 +574,11 @@ public class PdvViewModel : BaseViewModel
     // S{N} FIX: mesma regra do Product.GetPrecoParaGrupo (servidor) - preco
     // do grupo quando > 0, senao varejo.
     private static decimal PrecoParaGrupo(ERP.Domain.Enums.GrupoPreco grupo,
-        decimal precoVarejo, decimal precoB, decimal precoC) => grupo switch
+        decimal precoVarejo, decimal precoB, decimal precoC, decimal precoRepasse) => grupo switch
     {
         ERP.Domain.Enums.GrupoPreco.B when precoB > 0 => precoB,
         ERP.Domain.Enums.GrupoPreco.C when precoC > 0 => precoC,
+        ERP.Domain.Enums.GrupoPreco.R when precoRepasse > 0 => precoRepasse,
         _ => precoVarejo
     };
 
@@ -591,7 +594,7 @@ public class PdvViewModel : BaseViewModel
             if (item.PrecoVarejo <= 0) continue;
 
             var precoBase = PrecoParaGrupo(_grupoPrecoCliente,
-                item.PrecoVarejo, item.PrecoBRevendedor, item.PrecoCAtacadista);
+                item.PrecoVarejo, item.PrecoBRevendedor, item.PrecoCAtacadista, item.PrecoRepasse);
 
             if (precoBase != item.NormalUnitPrice)
                 item.DefinirPrecoBase(precoBase);
@@ -602,6 +605,7 @@ public class PdvViewModel : BaseViewModel
         {
             ERP.Domain.Enums.GrupoPreco.B => "💼 Preço Revendedor",
             ERP.Domain.Enums.GrupoPreco.C => "🏭 Preço Atacadista",
+            ERP.Domain.Enums.GrupoPreco.R => "🔁 Preço Repasse",
             _                              => ""
         };
     }
@@ -1002,11 +1006,12 @@ public class PdvViewModel : BaseViewModel
                 // e pagava R$ 179,90 e o servidor gravava a venda a R$ 80,41.
                 PrecoVarejo     = product.SalePrice,
                 NormalUnitPrice = PrecoParaGrupo(_grupoPrecoCliente,
-                                      product.SalePrice, product.PrecoBRevendedor, product.PrecoCAtacadista),
+                                      product.SalePrice, product.PrecoBRevendedor, product.PrecoCAtacadista, product.PrecoRepasse),
                 WholesaleMinQuantity = product.WholesaleMinQuantity,
                 WholesalePrice = product.WholesalePrice,
                 PrecoBRevendedor = product.PrecoBRevendedor,
                 PrecoCAtacadista = product.PrecoCAtacadista,
+                PrecoRepasse     = product.PrecoRepasse,
                 Ncm = product.NCM ?? "00000000",
                 Cest = product.CEST ?? string.Empty,
                 Cfop = product.CFOPPadrao ?? "5102",

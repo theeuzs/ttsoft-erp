@@ -13,7 +13,9 @@ public sealed class EcommerceOptions
     public string ApiKey { get; set; } = string.Empty;
 
     /// <summary>Repasse para a loja = custo efetivo x FatorRepasse (acordo custo + 25%).</summary>
-    public decimal FatorRepasse { get; set; } = 1.25m;
+    // S{N} FIX: mesmo fator do grupo de preco R do PDV. Se mudar Ecommerce__FatorRepasse no Azure,
+    // o site diverge do PDV (que usa RepassePolicy.FatorPadrao) - mude os dois juntos.
+    public decimal FatorRepasse { get; set; } = ERP.Domain.Services.RepassePolicy.FatorPadrao;
 
     /// <summary>
     /// Sobra minima em reais POR LINHA: (preco de venda - repasse) x quantidade.

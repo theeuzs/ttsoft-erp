@@ -36,10 +36,14 @@ public class Product : BaseEntity
     public decimal PrecoCAtacadista { get; set; } = 0;
 
     /// <summary>Retorna o preço correto conforme o grupo do cliente selecionado.</summary>
-    public decimal GetPrecoParaGrupo(ERP.Domain.Enums.GrupoPreco grupo) => grupo switch
+    /// <param name="pai">S{N} FIX: produto pai, so usado pelo grupo R em produto filho sem custo proprio.</param>
+    public decimal GetPrecoParaGrupo(ERP.Domain.Enums.GrupoPreco grupo, Product? pai = null) => grupo switch
     {
         ERP.Domain.Enums.GrupoPreco.B when PrecoBRevendedor > 0 => PrecoBRevendedor,
         ERP.Domain.Enums.GrupoPreco.C when PrecoCAtacadista > 0 => PrecoCAtacadista,
+        // S{N} FIX: sem custo cadastrado o repasse da 0 - cai pro varejo em vez de vender de graca.
+        ERP.Domain.Enums.GrupoPreco.R when ERP.Domain.Services.RepassePolicy.PrecoDoProduto(this, pai) > 0
+            => ERP.Domain.Services.RepassePolicy.PrecoDoProduto(this, pai),
         _ => SalePrice
     };
 

@@ -149,6 +149,8 @@
                     <option value="A" selected="@(_form.GrupoPreco == "A")">A — Varejo (preço normal)</option>
                     <option value="B" selected="@(_form.GrupoPreco == "B")">B — Revendedor / Empreiteiro</option>
                     <option value="C" selected="@(_form.GrupoPreco == "C")">C — Atacadista / Grande conta</option>
+                    @* S{N} FIX: grupo R - antes salvar pelo Portal zeraria o cliente de repasse pra A *@
+                    <option value="R" selected="@(_form.GrupoPreco == "R")">R — Repasse (custo + IPI + 25%)</option>
                 </select>
             </div>
 
@@ -232,7 +234,7 @@
             Phone         = c.Phone ?? "",
             Email         = c.Email ?? "",
             City          = c.City ?? "",
-            GrupoPreco    = c.GrupoPreco == 1 ? "B" : c.GrupoPreco == 2 ? "C" : "A",
+            GrupoPreco    = c.GrupoPreco == 1 ? "B" : c.GrupoPreco == 2 ? "C" : c.GrupoPreco == 3 ? "R" : "A",
             LimiteCredito = c.LimiteCredito
         };
         _erro        = "";
@@ -267,7 +269,7 @@
                 zipCode       = _form.ZipCode,
                 street        = _form.Street,
                 number        = _form.Number,
-                grupoPreco    = _form.GrupoPreco == "B" ? 1 : _form.GrupoPreco == "C" ? 2 : 0, // 0=A, 1=B, 2=C
+                grupoPreco    = _form.GrupoPreco == "B" ? 1 : _form.GrupoPreco == "C" ? 2 : _form.GrupoPreco == "R" ? 3 : 0, // 0=A, 1=B, 2=C, 3=R
                 limiteCredito = _form.LimiteCredito
             };
 
@@ -299,18 +301,21 @@
     {
         1 => "#EDE9FE",  // B = Revendedor
         2 => "#FEF3C7",  // C = Atacadista
+        3 => "#DCFCE7",  // R = Repasse
         _ => "#F1F5F9"   // A = Varejo
     };
     private static string GrupoColor(int g) => g switch
     {
         1 => "#7C3AED",
         2 => "#92400E",
+        3 => "#166534",
         _ => "#64748B"
     };
     private static string GrupoLabel(int g) => g switch
     {
         1 => "B",
         2 => "C",
+        3 => "R",
         _ => "A"
     };
 

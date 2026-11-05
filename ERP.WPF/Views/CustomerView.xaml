@@ -357,7 +357,7 @@
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
                             <TextBlock FontSize="11" Foreground="{DynamicResource TextMuted}" Margin="0,0,0,20"
-                                       Text="A = Varejo (preço normal) | B = Revendedor | C = Atacadista"/>
+                                       Text="A = Varejo (preço normal) | B = Revendedor | C = Atacadista | R = Repasse (custo + IPI + 25%, calculado)"/>
                             <!-- Sprint D: Limite de crédito -->
                             <TextBlock Text="LIMITE DE CRÉDITO (R$)" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource CorAcento}" Margin="0,0,0,6"/>
                             <TextBox Text="{Binding LimiteCredito, UpdateSourceTrigger=LostFocus, StringFormat=N2, ConverterCulture=pt-BR}"
@@ -374,9 +374,9 @@
                                     <TextBlock Text="{Binding SituacaoCredito}" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource TextDark}"/>
                                     <TextBlock Margin="0,4,0,0" FontSize="12" Foreground="{DynamicResource TextMuted}">
                                         <Run Text="Devedor: "/>
-                                        <Run Text="{Binding SaldoDevedor, StringFormat=C, Mode=OneWay}"/>
+                                        <Run Text="{Binding SaldoDevedor, StringFormat=C, ConverterCulture=pt-BR, Mode=OneWay}"/>
                                         <Run Text="  |  Disponível: "/>
-                                        <Run Text="{Binding CreditoDisponivel, StringFormat=C, Mode=OneWay}"/>
+                                        <Run Text="{Binding TextoCreditoDisponivel, Mode=OneWay}"/>
                                     </TextBlock>
                                 </StackPanel>
                             </Border>

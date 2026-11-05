@@ -83,16 +83,21 @@ public class CustomerViewModel : BaseViewModel
     public decimal LimiteCredito
     {
         get => _limiteCredito;
-        set => SetProperty(ref _limiteCredito, value);
+        // S{N} FIX: painel de situacao nao atualizava ao digitar o limite.
+        set { SetProperty(ref _limiteCredito, value); OnPropertyChanged(nameof(CreditoDisponivel)); OnPropertyChanged(nameof(TextoCreditoDisponivel)); OnPropertyChanged(nameof(SituacaoCredito)); }
     }
 
     private decimal _saldoDevedor;
     public decimal SaldoDevedor
     {
         get => _saldoDevedor;
-        set { SetProperty(ref _saldoDevedor, value); OnPropertyChanged(nameof(CreditoDisponivel)); OnPropertyChanged(nameof(SituacaoCredito)); }
+        set { SetProperty(ref _saldoDevedor, value); OnPropertyChanged(nameof(CreditoDisponivel)); OnPropertyChanged(nameof(TextoCreditoDisponivel)); OnPropertyChanged(nameof(SituacaoCredito)); }
     }
     public decimal CreditoDisponivel => LimiteCredito > 0 ? Math.Max(0, LimiteCredito - SaldoDevedor) : decimal.MaxValue;
+    // S{N} FIX: a tela mostrava "$79,228,162,514,264,337,593,543,950,335.00" (decimal.MaxValue em en-US).
+    public string TextoCreditoDisponivel => LimiteCredito > 0
+        ? CreditoDisponivel.ToString("C", System.Globalization.CultureInfo.GetCultureInfo("pt-BR"))
+        : "Ilimitado";
     public string SituacaoCredito
     {
         get

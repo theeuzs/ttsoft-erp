@@ -394,6 +394,13 @@
                                             <TextBox Text="{Binding PrecoCAtacadista, UpdateSourceTrigger=LostFocus, StringFormat=N2, ConverterCulture=pt-BR}" Style="{StaticResource InputStyle}" FontWeight="Bold" Foreground="#B45309"
                                                      ToolTip="Preço para clientes Grupo C (Atacadista/Grande conta). 0 = preço de varejo."/>
                                         </StackPanel>
+                                        <!-- S{N} FIX: grupo R - calculado, so leitura. Escondido junto com os custos (revela o custo). -->
+                                        <StackPanel Visibility="{Binding VisCusto}">
+                                            <TextBlock Text="🔁 Repasse (custo + IPI + 25%)" Style="{StaticResource LabelStyle}"/>
+                                            <TextBox Text="{Binding PrecoRepasseCalculado, Mode=OneWay, StringFormat=N2, ConverterCulture=pt-BR}" Style="{StaticResource InputStyle}" FontWeight="Bold" Foreground="#166534"
+                                                     IsReadOnly="True" Background="#F0FDF4"
+                                                     ToolTip="Preço do Grupo R (cliente de repasse). Calculado na hora: custo original + IPI, +25%. Não é editável nem gravado."/>
+                                        </StackPanel>
                                     </WrapPanel>
 
                                     <StackPanel Grid.Column="1" Margin="10,0,0,0" Width="220" VerticalAlignment="Top" Visibility="{Binding VisCusto}">

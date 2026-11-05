@@ -176,7 +176,9 @@ public class SaleService : ISaleService
                         product.Name);
                     if (!descontoOk) throw new InvalidOperationException(descontoErro!);
 
-                    var unitPriceNormal = product.GetPrecoParaGrupo(grupoPreco);
+                    // S{N} FIX: grupo R (repasse) usa o custo do pai em produto filho sem custo proprio.
+                    var unitPriceNormal = product.GetPrecoParaGrupo(grupoPreco,
+                        ReferenceEquals(produtoEstoque, product) ? null : produtoEstoque);
 
                     bool ehAtacado = product.WholesalePrice.HasValue
                         && product.WholesaleMinQuantity.HasValue

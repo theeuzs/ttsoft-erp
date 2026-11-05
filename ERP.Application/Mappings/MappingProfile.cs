@@ -35,6 +35,9 @@ public class MappingProfile : Profile
                 dst.ParentProductId    = src.ParentProductId;
                 dst.ConversionFactor   = src.ConversionFactor;
                 dst.ParentProductName  = src.ParentProduct?.Name;
+                // S{N} FIX: grupo R. Filho sem custo proprio precisa do pai carregado;
+                // o ProductService completa esse caso (CompletarRepasseFilhosAsync).
+                dst.PrecoRepasse       = ERP.Domain.Services.RepassePolicy.PrecoDoProduto(src, src.ParentProduct);
             });
 
         CreateMap<CreateProductDto, Product>()

@@ -245,6 +245,15 @@ public class ProductViewModel : BaseViewModel
         set { SetProperty(ref _precoBRevendedor, value); RecalcMargin(); }
     }
 
+    // S{N} FIX: grupo R (repasse = custo + IPI + 25%). Somente exibicao - nao e gravado,
+    // o PDV e a venda calculam na hora pela mesma RepassePolicy. Com OriginalCost recalcula
+    // ao digitar; sem ele (CostPrice como reserva, ou produto filho) mostra o valor do servidor.
+    private decimal _precoRepasseServidor;
+    public decimal PrecoRepasseCalculado => OriginalCost > 0
+        ? ERP.Domain.Services.RepassePolicy.Preco(
+              ERP.Domain.Services.RepassePolicy.CustoDoCadastro(0m, OriginalCost, IpiPercent))
+        : _precoRepasseServidor;
+
     private decimal _precoCAtacadista;
     public decimal PrecoCAtacadista
     {
@@ -487,6 +496,7 @@ public class ProductViewModel : BaseViewModel
         WholesaleMinQuantity = dto.WholesaleMinQuantity; WholesalePrice = dto.WholesalePrice;
         PrecoBRevendedor = dto.PrecoBRevendedor;
         PrecoCAtacadista = dto.PrecoCAtacadista;
+        _precoRepasseServidor = dto.PrecoRepasse; OnPropertyChanged(nameof(PrecoRepasseCalculado));
         NCM = dto.NCM; CEST = dto.CEST; CFOPPadrao = dto.CFOPPadrao; CSOSN = dto.CSOSN;
         // Achado (09/09) — datas salvas em UTC (correto) mas exibidas cruas,
         // sem converter pro horário do Brasil. Só ficou visível depois da
@@ -532,6 +542,7 @@ public class ProductViewModel : BaseViewModel
         _stockOriginal = 0;
         IsEditing      = false;
 
+        _precoRepasseServidor = 0;
         Name = string.Empty; Barcode = null; SKU = null; Unit = "UN"; OriginalCost = 0;
         IpiPercent = 0; IcmsPercent = 8.03m; SalePrice = 0;
         _stock = 0; OnPropertyChanged(nameof(Stock));
@@ -557,6 +568,7 @@ public class ProductViewModel : BaseViewModel
     {
         var prod = new ERP.Domain.Entities.Product { IpiPercent = IpiPercent, IcmsPercent = 0 };
         FinalCost = _motorFiscal.CalcularTributosVenda(prod, 1, OriginalCost).ValorTotalItem;
+        OnPropertyChanged(nameof(PrecoRepasseCalculado));
         RecalcMargin();
     }
 

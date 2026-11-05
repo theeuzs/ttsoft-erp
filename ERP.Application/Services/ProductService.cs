@@ -88,22 +88,54 @@ public class ProductService : IProductService
     public async Task<ProductDto?> GetByIdAsync(Guid id)
     {
         var product = await _uow.Products.GetByIdAsync(id);
-        return product is null ? null : _mapper.Map<ProductDto>(product);
+        return product is null ? null : await MapearComRepasseAsync(product);
     }
 
     public async Task<IEnumerable<ProductDto>> SearchAsync(string term)
-        => _mapper.Map<IEnumerable<ProductDto>>(await _uow.Products.SearchAsync(term));
+    {
+        // S{N} FIX: lista de entidades e DTOs na mesma ordem, pra completar o repasse dos filhos.
+        var produtos = (await _uow.Products.SearchAsync(term)).ToList();
+        var dtos = produtos.Select(p => _mapper.Map<ProductDto>(p)).ToList();
+        await CompletarRepasseFilhosAsync(produtos, dtos);
+        return dtos;
+    }
 
     public async Task<ProductDto?> GetByBarcodeAsync(string barcode)
     {
         var product = await _uow.Products.GetByBarcodeAsync(barcode);
-        return product is null ? null : _mapper.Map<ProductDto>(product);
+        return product is null ? null : await MapearComRepasseAsync(product);
     }
 
     public async Task<ProductDto?> GetBySkuAsync(string sku)
     {
         var product = await _uow.Products.GetBySkuAsync(sku);
-        return product is null ? null : _mapper.Map<ProductDto>(product);
+        return product is null ? null : await MapearComRepasseAsync(product);
+    }
+
+    private async Task<ProductDto> MapearComRepasseAsync(Product product)
+    {
+        var dto = _mapper.Map<ProductDto>(product);
+        await CompletarRepasseFilhosAsync(new[] { product }, new[] { dto });
+        return dto;
+    }
+
+    /// <summary>
+    /// S{N} FIX: as consultas do PDV nao carregam o produto pai, entao o mapping calcula 0 de
+    /// repasse para produto filho sem custo proprio (ex.: Barra 6m). Busca so esses pais e
+    /// recalcula com a mesma regra do SaleService (custo do pai x fator de conversao) -
+    /// senao o PDV mostraria varejo e o servidor gravaria o repasse.
+    /// </summary>
+    private async Task CompletarRepasseFilhosAsync(IReadOnlyList<Product> produtos, IReadOnlyList<ProductDto> dtos)
+    {
+        for (int i = 0; i < produtos.Count; i++)
+        {
+            var p = produtos[i];
+            if (dtos[i].PrecoRepasse > 0 || !p.IsProdutoFilho || p.ParentProductId is null) continue;
+
+            var pai = await _uow.Products.GetByIdAsync(p.ParentProductId.Value);
+            if (pai is not null)
+                dtos[i].PrecoRepasse = ERP.Domain.Services.RepassePolicy.PrecoDoProduto(p, pai);
+        }
     }
 
     public async Task<ProductDto> CreateAsync(CreateProductDto dto)
