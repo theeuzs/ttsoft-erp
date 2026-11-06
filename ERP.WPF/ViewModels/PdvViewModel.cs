@@ -1168,6 +1168,11 @@ public class PdvViewModel : BaseViewModel
                 CartItems.Add(item);
             }
 
+            // S{N} FIX: o cliente vinha sem grupo de preco e os itens sem PrecoVarejo,
+            // entao revendedor via varejo enquanto o servidor (SaleService) cobrava o
+            // Preco B - so o item adicionado depois mudava. Aplica o grupo real do cliente.
+            await AplicarGrupoDoClienteSelecionadoAsync();
+
             RefreshTotals();
         }
 
@@ -1441,6 +1446,8 @@ public class PdvViewModel : BaseViewModel
 
             var orcamentoVencido = orcamento.DataValidade.Date < ERP.Domain.Common.FusoBrasilHelper.AgoraNoBrasil().Date;
             var mudancasDePreco = new List<string>();
+            // S{N} FIX: preco gravado no orcamento, pra avisar o que mudou ao aplicar o grupo.
+            var precoDoOrcamento = new Dictionary<CartItem, decimal>();
 
             if (orcamento.Itens != null)
             {
@@ -1483,7 +1490,18 @@ public class PdvViewModel : BaseViewModel
                         if (e.PropertyName == nameof(CartItem.Total)) RefreshTotals();
                     };
                     CartItems.Add(cartItem);
+                    precoDoOrcamento[cartItem] = item.UnitPrice;
                 }
+            }
+
+            // S{N} FIX: mesmo problema da venda suspensa - o servidor cobra o preco atual
+            // do grupo do cliente, nao o gravado no orcamento. Mostra o que vai ser cobrado.
+            await AplicarGrupoDoClienteSelecionadoAsync();
+            if (!orcamentoVencido)
+            {
+                foreach (var (ci, precoAntigo) in precoDoOrcamento)
+                    if (ci.NormalUnitPrice != precoAntigo)
+                        mudancasDePreco.Add($"{ci.ProductName}: R$ {precoAntigo:N2} → R$ {ci.NormalUnitPrice:N2}");
             }
 
             RefreshTotals();
@@ -1491,7 +1509,9 @@ public class PdvViewModel : BaseViewModel
             if (mudancasDePreco.Any())
             {
                 MessageBox.Show(
-                    "Este orçamento venceu e o preço de alguns itens mudou desde então — os valores foram atualizados:\n\n"
+                    (orcamentoVencido
+                        ? "Este orçamento venceu e o preço de alguns itens mudou desde então — os valores foram atualizados:\n\n"
+                        : "Preços atualizados para o preço atual do cliente (é o valor que o sistema cobra):\n\n")
                     + string.Join("\n", mudancasDePreco),
                     "Preços atualizados", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
@@ -1509,6 +1529,29 @@ public class PdvViewModel : BaseViewModel
     /// Se o produto não existir mais (excluído), o item fica sem dado fiscal em
     /// vez de travar o carregamento — o operador ainda consegue vender.
     /// </summary>
+    /// <summary>
+    /// S{N} FIX: busca o grupo de preco do cliente ja selecionado (venda suspensa ou
+    /// orcamento retomado so trazem Id/Nome) e reaplica nos itens. Mesmo grupo que o
+    /// SaleService usa pra cobrar. Falha na busca = varejo, com log.
+    /// </summary>
+    private async Task AplicarGrupoDoClienteSelecionadoAsync()
+    {
+        var grupo = ERP.Domain.Enums.GrupoPreco.A;
+        if (_selectedCustomerId is Guid clienteId)
+        {
+            try
+            {
+                var cliente = await _customerService.GetByIdAsync(clienteId);
+                if (cliente != null) grupo = (ERP.Domain.Enums.GrupoPreco)cliente.GrupoPreco;
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "PDV: falha ao buscar grupo de preco do cliente {ClienteId}", clienteId);
+            }
+        }
+        GrupoPrecoCliente = grupo;
+    }
+
     private async Task<ProductDto?> AplicarDadosFiscaisAsync(CartItem item)
     {
         var product = await _productService.GetByIdAsync(item.ProductId);
@@ -1528,6 +1571,11 @@ public class PdvViewModel : BaseViewModel
         item.Cfop            = product.CFOPPadrao ?? "5102";
         item.Csosn           = string.IsNullOrWhiteSpace(product.CSOSN) ? "102" : product.CSOSN;
         item.IcmsOrigem      = "0";
+        // S{N} FIX: sem isto o item retomado (suspensa/orcamento) ficava fora do
+        // AplicarPrecosGrupoAoCarrinho (PrecoVarejo = 0) e nunca recebia o Preco B.
+        item.PrecoVarejo      = product.SalePrice;
+        item.PrecoBRevendedor = product.PrecoBRevendedor;
+        item.PrecoCAtacadista = product.PrecoCAtacadista;
         item.ProdutoOriginal = new ERP.Domain.Entities.Product
         {
             IpiPercent  = product.IpiPercent,
