@@ -124,7 +124,17 @@ public class NfeRecebidaService : INfeRecebidaService
                 }
             }
 
-            await _ctx.SaveChangesAsync();
+            // S{N} FIX: o DbContext do WPF vive o programa todo. Se este save falhar, as notas
+            // pendentes ficavam rastreadas e eram reenviadas no proximo SaveChanges de QUALQUER tela
+            // (ex.: salvar orcamento falhava com o erro desta tela). Descarta e relanca.
+            try { await _ctx.SaveChangesAsync(); }
+            catch
+            {
+                foreach (var e in _ctx.ChangeTracker.Entries<Domain.Entities.NfeRecebida>().ToList())
+                    if (e.State is Microsoft.EntityFrameworkCore.EntityState.Added or Microsoft.EntityFrameworkCore.EntityState.Modified)
+                        e.State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+                throw;
+            }
 
             if (itensNestaPagina < tamanhoPagina || maiorVersaoNesteLote == versaoAtual)
                 break; // última página (veio menos que o limite, ou não avançou — evita laço infinito)

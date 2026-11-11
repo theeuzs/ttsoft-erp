@@ -1230,7 +1230,7 @@ namespace ERP.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Chave")
+                    b.HasIndex("TenantId", "Chave")
                         .IsUnique();
 
                     b.ToTable("NfesRecebidas");

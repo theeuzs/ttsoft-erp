@@ -621,7 +621,9 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<ContaReceberEvento>().HasIndex(e => e.ContaReceberId);
         modelBuilder.Entity<NotaFiscal>().HasIndex(n => n.VendaId);
         modelBuilder.Entity<NotaFiscal>().HasIndex(n => n.Chave);
-        modelBuilder.Entity<NfeRecebida>().HasIndex(n => n.Chave).IsUnique();
+        // S{N} FIX: unico por tenant+chave. Dois tenants com o mesmo CNPJ/token Focus (loja + tenant de casa)
+        // enxergam as mesmas notas; o indice so por Chave estourava "duplicate key" no segundo.
+        modelBuilder.Entity<NfeRecebida>().HasIndex(n => new { n.TenantId, n.Chave }).IsUnique();
 
         // Segunda camada de defesa contra duplicidade financeira (achado de
         // auditoria pré-Fase-2 do Offline-First, 08/2026) — um "if não existe,
